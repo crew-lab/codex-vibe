@@ -1,0 +1,62 @@
+---
+name: vibe-supervisor
+description: Use when a task benefits from delegating a bounded code review or isolated code edit to Vibe through the local Vibe Supervisor MCP tools. Do not use for unrestricted shell execution, deployment, or when workspace boundaries and user review cannot be preserved.
+---
+
+# Vibe Supervisor
+
+Use the local Vibe Supervisor tools to delegate bounded review and edit work while keeping run state and changes reviewable.
+
+## When To Use
+
+Use this skill when the user asks for a Vibe-assisted code review or a self-contained implementation task in an allowed local workspace. Keep the user’s original goal and constraints in the Vibe task description.
+
+Do not use it for production deployment, unrestricted shell access, credential handling, or workspaces outside the configured allowed roots. Vibe Supervisor is an application-level policy boundary, not an operating-system sandbox.
+
+## Inputs To Collect First
+
+- The canonical local workspace path. Confirm it is within a configured allowed root.
+- A concise task with expected outcome and relevant constraints.
+- Whether the requested work is review-only or may edit files.
+- For edits, the base Git reference and any files that must not change.
+
+Do not put secrets, API keys, or private user data in task text. Avoid asking for context files unless they are necessary and safe to persist.
+
+## Procedure
+
+### Step 1 — Check local availability
+
+Use `vibe-supervisor doctor --json` when configuring or diagnosing the local installation. Treat auth and desktop registration as unverified unless an explicit local check establishes them. Do not infer hosted auth from an environment variable.
+
+### Step 2 — Start the narrowest run
+
+For review, call `vibe_review_start` with the workspace path and a read-only task. For changes, call `vibe_edit_start` and specify the intended base reference. Keep task scope limited to the files and behavior needed.
+
+### Step 3 — Monitor safely
+
+Use `vibe_status` for progress. Continue only with actionable instructions that preserve the original scope. Permission and input requests must be answered based on the actual request details; deny unknown, incomplete, or out-of-scope requests.
+
+### Step 4 — Inspect outputs
+
+For a review, report its bounded findings and cite relevant paths. For an edit, use `vibe_result` to inspect the summary, changed-file list, diff statistics, and patch artifact. Read the patch before suggesting or performing application to the source checkout. Report test results and any limitations separately.
+
+### Step 5 — Close the run
+
+Call `vibe_close` when the user’s task is complete. Request worktree cleanup only after the exported artifact is verified and no further inspection is needed. If cleanup refuses because the worktree changed or contains unexported files, preserve it and report the reason.
+
+## Completion Checks
+
+- The run used the intended workspace and review/edit mode.
+- Results contain no credentials or hidden reasoning.
+- Every edit is represented in a reviewable patch and changed-file record.
+- The patch and tests were inspected before reporting completion.
+- The run was closed or its remaining state and artifacts were clearly reported.
+
+If a run fails, a version is unsupported, an artifact is missing, or a permission request cannot be safely classified, stop that path and report the stable error and available recovery action. Do not claim OS-level isolation.
+
+## References
+
+- [Vibe Supervisor README](../../README.md)
+- [Security model](../../docs/security.md)
+- [MCP tool reference](../../docs/protocol.md)
+- [Release acceptance status](../../docs/acceptance.md)

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "deterministic": [
+    { "name": "typecheck-lint-tests-build", "status": "RUN_BY_verify:release" },
+    { "name": "isolated-offline-tarball-and-mcp-smoke", "status": "RUN_BY_smoke:install" },
+    { "name": "secret-pattern-scan-and-spdx-inventory", "status": "RUN_BY_verify:release" },
+    { "name": "fake-acp-100-run-adversarial-soak", "status": "PASS", "evidence": "Independent local fake-peer acceptance run; no hosted inference." }
+  ],
+  "unverified": [
+    { "name": "hosted-auth-and-model-inference", "status": "UNVERIFIED" },
+    { "name": "real-codex-desktop-registration", "status": "UNVERIFIED" },
+    { "name": "macos-intel", "status": "UNVERIFIED" },
+    { "name": "clean-os-account", "status": "UNVERIFIED" },
+    { "name": "real-vibe-hosted-acp-soak", "status": "UNVERIFIED" }
+  ]
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+release/
+tmp/
+.cache/
+.env
+.env.*
+!.env.example
+.vibe-supervisor/
+vibe-supervisor.local.toml
