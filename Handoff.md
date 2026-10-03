@@ -1,6 +1,6 @@
 # Implementation handoff
 
-Status as of **2026-10-03**: implemented and locally verified release candidate, not a production 1.0 certification. Repository: `/Users/roman/src/github.com/codex-vibe`. Package: `vibe-supervisor@0.9.0-rc.1`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
+Status as of **2026-10-03**: implemented and locally verified release candidate, not a production 1.0 certification. Repository: `/Users/roman/src/github.com/crew-lab/codex-vibe`. Package: `vibe-supervisor@0.9.0-rc.1`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
 
 ## User intent and delivery history
 
