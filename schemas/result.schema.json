@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibe-supervisor.local/schemas/result.schema.json",
+  "title": "Vibe Supervisor result",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "run_id", "state", "backend", "summary", "workspace", "artifacts", "changed_files", "warnings"],
+  "properties": {
+    "schema_version": { "const": 1 }, "run_id": { "type": "string", "format": "uuid" }, "state": { "enum": ["completed", "failed", "cancelled", "closed", "recoverable"] }, "backend": { "enum": ["acp", "programmatic"] }, "stop_reason": { "type": "string" }, "summary": { "type": "string" },
+    "workspace": { "type": "object", "additionalProperties": false, "required": ["source", "worker"], "properties": { "source": { "type": "string" }, "worker": { "type": "string" } } },
+    "artifacts": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["name", "path", "sha256", "bytes", "media_type"], "properties": { "name": { "type": "string" }, "path": { "type": "string" }, "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "bytes": { "type": "integer", "minimum": 0 }, "media_type": { "type": "string" } } } },
+    "changed_files": { "type": "array", "items": { "type": "string" } }, "usage": { "type": "object" }, "warnings": { "type": "array", "items": { "type": "string" } }
+  }
+}

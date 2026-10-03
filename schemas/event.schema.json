@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibe-supervisor.local/schemas/event.schema.json",
+  "title": "Normalized redacted event record",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "seq", "timestamp", "run_id", "backend", "source", "type", "severity", "data"],
+  "properties": {
+    "schema_version": { "const": 1 }, "seq": { "type": "integer", "minimum": 1 }, "timestamp": { "type": "string", "format": "date-time" }, "run_id": { "type": "string", "format": "uuid" },
+    "backend": { "enum": ["acp", "programmatic"] }, "source": { "enum": ["supervisor", "vibe", "acp"] }, "type": { "type": "string", "minLength": 1, "maxLength": 128 }, "severity": { "enum": ["debug", "info", "warning", "error"] }, "data": { "type": "object" }
+  }
+}

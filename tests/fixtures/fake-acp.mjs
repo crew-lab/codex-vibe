@@ -1,0 +1,66 @@
+import { createInterface } from 'node:readline';
+
+const mode = process.env.FAKE_ACP_CASE ?? 'normal';
+let sessionId = 'fake-session-1';
+let promptCount = 0;
+let exited = false;
+const pending = new Map();
+
+function send(value) { process.stdout.write(`${JSON.stringify(value)}\n`); }
+function reply(id, result) { send({ jsonrpc: '2.0', id, result }); }
+function notification(method, params) { send({ jsonrpc: '2.0', method, params }); }
+
+async function handle(message) {
+  if (message.method === 'initialize') {
+    if (mode === 'early-exit') { process.exit(17); return; }
+    if (mode === 'broken-json') { process.stdout.write('{broken-json\n', () => process.exit(23)); return; }
+    reply(message.id, { protocolVersion: mode === 'wrong-protocol' ? 999 : 1, agentInfo: { name: 'fake-vibe', version: '2.25.8' }, agentCapabilities: { loadSession: true } });
+    return;
+  }
+  if (message.method === 'session/new') {
+    if (mode === 'wrong-mode') { reply(message.id, { sessionId, modes: { currentModeId: 'accept-edits' }, _meta: { workspace_trust: { status: 'untrusted' } } }); return; }
+    reply(message.id, { sessionId, modes: { currentModeId: 'plan' }, _meta: { workspace_trust: { status: 'untrusted' } } });
+    return;
+  }
+  if (message.method === 'session/load') {
+    reply(message.id, { modes: { currentModeId: 'plan' }, _meta: { workspace_trust: { status: 'untrusted' } } });
+    return;
+  }
+  if (message.method === 'session/set_config_option') { reply(message.id, {}); return; }
+  if (message.method === 'session/close') { reply(message.id, {}); return; }
+  if (message.method === 'session/cancel') { return; }
+  if (message.method === 'session/prompt') {
+    promptCount += 1;
+    if (mode === 'permission' && promptCount === 1) {
+      const filePath = process.env.FAKE_FILE_PATH ?? '/tmp/source.txt';
+      notification('session/update', { sessionId, update: { sessionUpdate: 'tool_call', toolCallId: 'tool-17', title: 'Read source', kind: 'read', rawInput: { path: filePath }, locations: [{ path: filePath }] } });
+      const answerPromise = new Promise((resolve) => pending.set('permission-request-1', resolve));
+      send({ jsonrpc: '2.0', id: 'permission-request-1', method: 'session/request_permission', params: { sessionId, toolCall: { toolCallId: 'tool-17' }, options: [{ optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' }, { optionId: 'reject-once', name: 'Reject once', kind: 'reject_once' }] } });
+      const answer = await answerPromise;
+      if (!answer?.result?.outcome) { reply(message.id, { stopReason: 'cancelled' }); return; }
+    }
+    if (mode === 'elicitation' && promptCount === 1) {
+      const answerPromise = new Promise((resolve) => pending.set('elicitation-request-1', resolve));
+      send({ jsonrpc: '2.0', id: 'elicitation-request-1', method: 'elicitation/create', params: { sessionId, mode: 'form', message: 'Confirm the safe operation', requestedSchema: { type: 'object', properties: { confirm: { type: 'boolean' } }, required: ['confirm'] } } });
+      const answer = await answerPromise;
+      if (answer?.result?.action !== 'accept' || answer.result.content?.confirm !== true) { reply(message.id, { stopReason: 'cancelled' }); return; }
+    }
+    if (mode === 'normal' || mode === 'soak' || mode === 'permission' || mode === 'load' || mode === 'elicitation') {
+      notification('session/update', { sessionId, update: { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'PRIVATE_THOUGHT_MUST_NOT_ESCAPE' } } });
+      notification('vibe/unknown_test_notification', { arbitrary: 'unknown notification is ignored' });
+      notification('session/update', { sessionId, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `reply-${promptCount}` } } });
+    }
+    reply(message.id, { stopReason: 'end_turn' });
+    return;
+  }
+  if (message.id !== undefined) send({ jsonrpc: '2.0', id: message.id, error: { code: -32601, message: `Unknown method ${message.method}` } });
+}
+
+createInterface({ input: process.stdin, crlfDelay: Infinity }).on('line', (line) => {
+  let message;
+  try { message = JSON.parse(line); }
+  catch { process.exit(23); return; }
+  const resolvePending = pending.get(message.id);
+  if (resolvePending && message.id !== undefined) { resolvePending(message.result); pending.delete(message.id); return; }
+  void handle(message).catch(() => { if (!exited) { exited = true; process.exit(24); } });
+});
