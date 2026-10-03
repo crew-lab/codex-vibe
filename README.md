@@ -9,6 +9,7 @@ The repository includes a private npm release candidate (`vibe-supervisor@0.9.0-
 - [Installation and usage](Read.md)
 - [Implementation handoff](Handoff.md)
 - [Contributor and agent instructions](AGENTS.md)
+- [Repository skills and installation](docs/skills.md)
 
 Start with the [functionality guide](docs/functionality.md) for supported workflows, MCP tools, run lifecycle, backends, results, and CLI commands.
 

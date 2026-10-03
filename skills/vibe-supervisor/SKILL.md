@@ -7,6 +7,8 @@ description: Use when a task benefits from delegating a bounded code review or i
 
 Use the local Vibe Supervisor tools to delegate bounded review and edit work while keeping run state and changes reviewable.
 
+For coding tasks requiring verification and correction rounds, read [vibe-acp](../vibe-acp/SKILL.md) and select the ACP backend explicitly. Keep the session open through review and correction; do not stop at the first failed draft when a safe continuation is available.
+
 ## When To Use
 
 Use this skill when the user asks for a Vibe-assisted code review or a self-contained implementation task in an allowed local workspace. Keep the user’s original goal and constraints in the Vibe task description.
@@ -52,7 +54,7 @@ Call `vibe_close` when the user’s task is complete. Request worktree cleanup o
 - The patch and tests were inspected before reporting completion.
 - The run was closed or its remaining state and artifacts were clearly reported.
 
-If a run fails, a version is unsupported, an artifact is missing, or a permission request cannot be safely classified, stop that path and report the stable error and available recovery action. Do not claim OS-level isolation.
+If a run fails, a version is unsupported, an artifact is missing, or a permission request cannot be safely classified, stop unsafe execution and inspect the stable error and recovery options. Verification failures on a usable ACP candidate belong in the [correction loop](../vibe-acp/SKILL.md); a process failure does not authorize replaying the task or weakening policy. Do not claim OS-level isolation.
 
 ## References
 
