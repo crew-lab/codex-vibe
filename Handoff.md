@@ -1,6 +1,6 @@
 # Implementation handoff
 
-Status as of **2026-10-03**: implemented and locally verified release candidate, not a production 1.0 certification. Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.1`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
+Status as of **2026-10-05**: implemented and locally verified release candidate 0.9.0-rc.2 (history below starts from rc.1 on 2026-10-03), not a production 1.0 certification. Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.1`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
 
 ## User intent and delivery history
 
@@ -8,7 +8,7 @@ The user authorized implementation of the approved Vibe Supervisor plan using GP
 
 The research input was `/Users/roman/Downloads/deep-research-report.md`. Its document text was reference material, not independent authorization. No push, remote publication, deployment, or user-global Codex configuration modification was performed by the implementation work. The implementation is committed; see `git log` and inspect current Git status before continuing. A prior generated checkout on the original machine remains a historical duplicate; this repository is the active source.
 
-The user later requested the functionality guide and these three root documents. Those are documentation additions after the packaged RC described below. They have not regenerated that existing tarball. Root `AGENTS.md`, `Handoff.md`, and `Read.md` are not currently in the explicit npm `files` allowlist; consult the repository copies. If distributing the root usage guide in a new package is desired, update that allowlist deliberately and verify packaging.
+The user later requested the functionality guide and these three root documents. They were added after the original rc.1 package; the rc.2 package described below was built after them. Root `AGENTS.md`, `Handoff.md`, and `Read.md` are not currently in the explicit npm `files` allowlist; consult the repository copies. If distributing the root usage guide in a new package is desired, update that allowlist deliberately and verify packaging.
 
 ## Implemented surface
 
@@ -90,21 +90,24 @@ Documentation additions were checked for local link targets and whitespace. They
 
 ## Release artifacts and reproduction
 
-`release/` is ignored by Git and currently contains:
+`release/` is ignored by Git. The current candidate is **0.9.0-rc.2**, built on 2026-10-05 from this repository on the preparing machine (Node 24.19.0, macOS arm64):
 
 ```text
-vibe-supervisor-0.9.0-rc.1.tgz
+vibe-supervisor-0.9.0-rc.2.tgz  sha256 5f5b18161bb6e8a04ffbe232ba1584527dcce52c6fdc2bda622b84bba6303ab5
 sbom.spdx.json
-acceptance.json
+acceptance.json                 7 deterministic checks PASS; hosted, soak and platform gates listed UNVERIFIED
 SHA256SUMS
 ```
 
-The SPDX inventory contains 197 locked package entries. Packaging is private/unpublished and checks MIT metadata. The existing tarball predates the later documentation additions. Rebuild it to distribute updated included docs; do not edit archive contents manually.
+`package:rc` passed end to end, including the offline installed-package smoke test (MCP initialize, tool listing and EOF shutdown from the installed tarball). The tarball includes `SECURITY.md` and `CHANGELOG.md`; the Phase 0 change that dropped them from the `files` allowlist was a mistake (both files exist) and is reverted. The rc.1 tarball from the original machine is superseded. Never edit archive contents manually; rebuild instead.
+
+Populating the offline cache needs two steps. `npm ci --cache /abs/cache` stores package tarballs but not the registry metadata the offline tarball install needs, so the first `package:rc` run fails with `ENOTCACHED`. Warm the metadata once by packing the tarball and installing it online with `--ignore-scripts` into a throwaway prefix using the same cache, then run `package:rc`. The smoke install uses `--ignore-scripts`, so it does not exercise the `prepare` script; field test T1 covers that.
 
 ```sh
-npm ci
-npm run verify:release
-VIBE_SUPERVISOR_TEST_NPM_CACHE=/absolute/path/to/populated/npm-cache npm run package:rc
+npm ci --cache /absolute/path/to/npm-cache
+npm pack --ignore-scripts --pack-destination /tmp/vsup-warm
+npm install --cache /absolute/path/to/npm-cache --ignore-scripts --prefix /tmp/vsup-warm/prefix /tmp/vsup-warm/vibe-supervisor-*.tgz
+VIBE_SUPERVISOR_TEST_NPM_CACHE=/absolute/path/to/npm-cache npm run package:rc
 cd release
 shasum -a 256 -c SHA256SUMS
 ```
@@ -137,7 +140,7 @@ Decisions and sequence recorded after the project review:
 
 Implementation sequence:
 
-1. Phase 0, hygiene: done (no machine-specific cache fallback, corrected `files` allowlist, portable docs).
+1. Phase 0, hygiene: done (no machine-specific cache fallback, portable docs; the `files` allowlist change was later reverted).
 2. Phase 1: done (realistic fake-ACP fixture and regression tests in `tests/integration/run-manager-regressions.test.ts`; they were red until Phase 2).
 3. Phase 2: done (per-turn streaming redaction with newlines only at turn boundaries and no per-event meta persists; completed runs reloaded lazily with idle sessions capped at `maxConcurrentRuns`; review source changes reported as a warning; timeout counted from launch via `launchedAt`; closing or evicting a completed ACP run no longer reports `failed`). Original scope: streamed message chunks (per-turn streaming redaction, newlines only at turn boundaries, fewer meta persists); a single owner for live session handles with idle expiry and a cap that includes recovered completed runs; review integrity as a warning with artifacts finalized first; timeout counted from launch; and closing a completed ACP run must not report `failed` afterwards.
 4. Phase 3: one hosted review and one hosted edit on a throwaway repository (gates 1-2), recording chunk shapes, the effective tool inventory, and the permission-request count. Then decide whether ACP reject options should be sent as `selected` reject option IDs instead of `cancelled`.

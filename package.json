@@ -1,13 +1,29 @@
 {
   "name": "vibe-supervisor",
-  "version": "0.9.0-rc.1",
+  "version": "0.9.0-rc.2",
   "private": true,
   "description": "Codex MCP supervisor for delegated Mistral Vibe runs",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=20.19" },
-  "bin": { "vibe-supervisor": "dist/cli.js" },
-  "files": ["dist", "schemas", "docs", "examples", "skills", ".codex-plugin", ".mcp.json", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "bin": {
+    "vibe-supervisor": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "schemas",
+    "docs",
+    "examples",
+    "skills",
+    ".codex-plugin",
+    ".mcp.json",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
