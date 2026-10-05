@@ -56,7 +56,7 @@ async function handle(message) {
       const answerPromise = new Promise((resolve) => pending.set('elicitation-request-1', resolve));
       send({ jsonrpc: '2.0', id: 'elicitation-request-1', method: 'elicitation/create', params: { sessionId, mode: 'form', message: 'Confirm the safe operation', requestedSchema: { type: 'object', properties: { confirm: { type: 'boolean' } }, required: ['confirm'] } } });
       const answer = await answerPromise;
-      if (answer?.result?.action !== 'accept' || answer.result.content?.confirm !== true) { reply(message.id, { stopReason: 'cancelled' }); return; }
+      if (answer?.action !== 'accept' || answer.content?.confirm !== true) { reply(message.id, { stopReason: 'cancelled' }); return; }
     }
     if (mode === 'normal' || mode === 'soak' || mode === 'permission' || mode === 'load' || mode === 'elicitation') {
       notification('session/update', { sessionId, update: { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'PRIVATE_THOUGHT_MUST_NOT_ESCAPE' } } });
