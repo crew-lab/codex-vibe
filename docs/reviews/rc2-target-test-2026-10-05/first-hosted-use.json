@@ -1,0 +1,123 @@
+{
+  "tested_at": "2026-10-05T20:45:24.792Z",
+  "credential_mode": "browser login; MISTRAL_API_KEY omitted from supervisor environment",
+  "run_id": "0c196301-5a37-4136-885d-78b735ef8472",
+  "observations": [
+    {
+      "tools": [
+        "vibe_review_start",
+        "vibe_edit_start",
+        "vibe_status",
+        "vibe_continue",
+        "vibe_respond",
+        "vibe_result",
+        "vibe_cancel",
+        "vibe_close"
+      ]
+    },
+    {
+      "tool": "vibe_review_start",
+      "elapsed_ms": 7899,
+      "response_bytes": 1419,
+      "value": {
+        "run_id": "0c196301-5a37-4136-885d-78b735ef8472",
+        "state": "failed",
+        "backend": "programmatic",
+        "mode": "review",
+        "source_workspace": "/Users/roman/.local/share/vibe-supervisor/field-workspace",
+        "worker_workspace": "/Users/roman/.local/share/vibe-supervisor/field-workspace",
+        "created_at": "2026-10-05T20:45:16.876Z",
+        "next_action": "Read the compact result above; call vibe_close when done.",
+        "error": {
+          "code": "VSUP_BACKEND_CRASHED",
+          "message": "Vibe exited with code 1",
+          "remediation": "Inspect the backend stderr log and start a new run.",
+          "retryable": false
+        },
+        "result": {
+          "run_id": "0c196301-5a37-4136-885d-78b735ef8472",
+          "state": "failed",
+          "backend": "programmatic",
+          "summary": "Vibe run ended before normal completion.",
+          "warnings": [],
+          "integrity": {
+            "status": "verified",
+            "write_tool_observed": false
+          },
+          "error": {
+            "code": "VSUP_BACKEND_CRASHED",
+            "message": "Vibe exited with code 1",
+            "remediation": "Inspect the backend stderr log and start a new run.",
+            "retryable": false
+          },
+          "changed_files": [],
+          "changed_files_total": 0,
+          "artifacts": [
+            {
+              "name": "transcript.md",
+              "path": "/private/tmp/codex-vibe-rc2-approved-use-wXrnJM/runs/0c196301-5a37-4136-885d-78b735ef8472/transcript.md"
+            },
+            {
+              "name": "events.ndjson",
+              "path": "/private/tmp/codex-vibe-rc2-approved-use-wXrnJM/runs/0c196301-5a37-4136-885d-78b735ef8472/events.ndjson"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "vibe_result",
+      "elapsed_ms": 1,
+      "response_bytes": 1316,
+      "value": {
+        "schema_version": 1,
+        "run_id": "0c196301-5a37-4136-885d-78b735ef8472",
+        "state": "failed",
+        "backend": "programmatic",
+        "summary": "Vibe run ended before normal completion.",
+        "workspace": {
+          "source": "/Users/roman/.local/share/vibe-supervisor/field-workspace",
+          "worker": "/Users/roman/.local/share/vibe-supervisor/field-workspace"
+        },
+        "artifacts": [
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/codex-vibe-rc2-approved-use-wXrnJM/runs/0c196301-5a37-4136-885d-78b735ef8472/transcript.md",
+            "sha256": "e375ae03a6ccea29e358db3940fc7adf12ae0343f75cb329fe3b75e394dd950c",
+            "bytes": 59,
+            "media_type": "text/markdown"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/codex-vibe-rc2-approved-use-wXrnJM/runs/0c196301-5a37-4136-885d-78b735ef8472/events.ndjson",
+            "sha256": "bf1df1775895f1c5833274978f3165b2ac14573474bd1760c064f77bb8af2e94",
+            "bytes": 554,
+            "media_type": "application/x-ndjson"
+          }
+        ],
+        "changed_files": [],
+        "warnings": [],
+        "integrity": {
+          "status": "verified",
+          "write_tool_observed": false
+        },
+        "error": {
+          "code": "VSUP_BACKEND_CRASHED",
+          "message": "Vibe exited with code 1",
+          "remediation": "Inspect the backend stderr log and start a new run.",
+          "retryable": false
+        },
+        "transcript": "<vibe_stop_event>Turn limit of 4 reached</vibe_stop_event>\n"
+      }
+    },
+    {
+      "tool": "vibe_close",
+      "elapsed_ms": 13,
+      "response_bytes": 113,
+      "value": {
+        "run_id": "0c196301-5a37-4136-885d-78b735ef8472",
+        "state": "closed"
+      }
+    }
+  ]
+}

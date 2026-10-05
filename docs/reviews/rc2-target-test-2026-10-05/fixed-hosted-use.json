@@ -1,0 +1,107 @@
+{
+  "tested_at": "2026-10-05T21:08:42.464Z",
+  "credential_mode": "browser login; MISTRAL_API_KEY omitted from supervisor environment",
+  "run_id": "d879d0a5-dba1-4c0b-9974-6d39eae87b32",
+  "observations": [
+    {
+      "tools": [
+        "vibe_review_start",
+        "vibe_edit_start",
+        "vibe_status",
+        "vibe_continue",
+        "vibe_respond",
+        "vibe_result",
+        "vibe_cancel",
+        "vibe_close"
+      ]
+    },
+    {
+      "tool": "vibe_review_start",
+      "elapsed_ms": 7978,
+      "response_bytes": 1518,
+      "value": {
+        "run_id": "d879d0a5-dba1-4c0b-9974-6d39eae87b32",
+        "state": "completed",
+        "backend": "programmatic",
+        "mode": "review",
+        "source_workspace": "/Users/roman/.local/share/vibe-supervisor/field-workspace",
+        "worker_workspace": "/Users/roman/.local/share/vibe-supervisor/field-workspace",
+        "created_at": "2026-10-05T21:08:34.470Z",
+        "next_action": "Read the compact result above; call vibe_close when done.",
+        "result": {
+          "run_id": "d879d0a5-dba1-4c0b-9974-6d39eae87b32",
+          "state": "completed",
+          "backend": "programmatic",
+          "stop_reason": "end_turn",
+          "summary": "## Plan: Identify Arithmetic Bug\n\n**Findings:**\n- README.md: States `src/a/add.js` is supposed to add two numbers\n- src/a/add.js:1: `export function add(a, b) { return a - b; }`\n\n**Bug:** The function uses subtraction (`-`) instead of addition (`+`).\n\n**Correction:** Change `return a - b;` to `return a + b;` in **src/a/add.js:1**\n\nThis is the smallest possible fix — a single character change.\n\nPlan complete. Switch modes if you approve.",
+          "warnings": [],
+          "integrity": {
+            "status": "verified",
+            "write_tool_observed": false
+          },
+          "changed_files": [],
+          "changed_files_total": 0,
+          "artifacts": [
+            {
+              "name": "transcript.md",
+              "path": "/private/tmp/codex-vibe-rc2-fixed-use-Depobr/runs/d879d0a5-dba1-4c0b-9974-6d39eae87b32/transcript.md"
+            },
+            {
+              "name": "events.ndjson",
+              "path": "/private/tmp/codex-vibe-rc2-fixed-use-Depobr/runs/d879d0a5-dba1-4c0b-9974-6d39eae87b32/events.ndjson"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "vibe_result",
+      "elapsed_ms": 1,
+      "response_bytes": 1999,
+      "value": {
+        "schema_version": 1,
+        "run_id": "d879d0a5-dba1-4c0b-9974-6d39eae87b32",
+        "state": "completed",
+        "backend": "programmatic",
+        "stop_reason": "end_turn",
+        "summary": "## Plan: Identify Arithmetic Bug\n\n**Findings:**\n- README.md: States `src/a/add.js` is supposed to add two numbers\n- src/a/add.js:1: `export function add(a, b) { return a - b; }`\n\n**Bug:** The function uses subtraction (`-`) instead of addition (`+`).\n\n**Correction:** Change `return a - b;` to `return a + b;` in **src/a/add.js:1**\n\nThis is the smallest possible fix — a single character change.\n\nPlan complete. Switch modes if you approve.",
+        "workspace": {
+          "source": "/Users/roman/.local/share/vibe-supervisor/field-workspace",
+          "worker": "/Users/roman/.local/share/vibe-supervisor/field-workspace"
+        },
+        "artifacts": [
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/codex-vibe-rc2-fixed-use-Depobr/runs/d879d0a5-dba1-4c0b-9974-6d39eae87b32/transcript.md",
+            "sha256": "d5d24ad8e8857c9a7bab0ab9289b63185ecadfe420bf0dc624895804c41cca34",
+            "bytes": 443,
+            "media_type": "text/markdown"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/codex-vibe-rc2-fixed-use-Depobr/runs/d879d0a5-dba1-4c0b-9974-6d39eae87b32/events.ndjson",
+            "sha256": "e453bfe37fa42323afa2c8ac7b7fc7cd07ab5b2ae8743b27beab139ae579c52b",
+            "bytes": 667,
+            "media_type": "application/x-ndjson"
+          }
+        ],
+        "changed_files": [],
+        "warnings": [],
+        "integrity": {
+          "status": "verified",
+          "write_tool_observed": false
+        },
+        "transcript": "## Plan: Identify Arithmetic Bug\n\n**Findings:**\n- README.md: States `src/a/add.js` is supposed to add two numbers\n- src/a/add.js:1: `export function add(a, b) { return a - b; }`\n\n**Bug:** The function uses subtraction (`-`) instead of addition (`+`).\n\n**Correction:** Change `return a - b;` to `return a + b;` in **src/a/add.js:1**\n\nThis is the smallest possible fix — a single character change.\n\nPlan complete. Switch modes if you approve.\n"
+      }
+    },
+    {
+      "tool": "vibe_close",
+      "elapsed_ms": 13,
+      "response_bytes": 113,
+      "value": {
+        "run_id": "d879d0a5-dba1-4c0b-9974-6d39eae87b32",
+        "state": "closed"
+      }
+    }
+  ]
+}

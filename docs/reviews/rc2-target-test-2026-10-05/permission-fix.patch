@@ -1,0 +1,201 @@
+diff --git a/docs/compatibility.md b/docs/compatibility.md
+index 66b9fc8..d8a83e0 100644
+--- a/docs/compatibility.md
++++ b/docs/compatibility.md
+@@ -13 +13,3 @@ Vibe's ACP entrypoint always initializes both `user` and `project` harness sourc
+-The recommended read-only profile sets `VIBE_DEFAULT_AGENT=plan`, `VIBE_ENABLED_AGENTS=["plan"]`, and `VIBE_ENABLED_TOOLS=["read_file","grep"]`, and passes those settings as environment values or writes their equivalent into the isolated profile's known config. For each enabled file tool, set `permission = "never"` and configure an allowlist containing both the exact canonical root and its recursive descendants (`<root>` and `<root>/**`). This allowlist is necessary: with no matching path-specific decision, `NEVER` is also the fallback for in-workspace paths. Put secret-file deny patterns before the allowlist, since Vibe checks denylist first; include root-level patterns (`<root>/.env`, `<root>/.env.*`, `<root>/.envrc`, `<root>/.envrc.*`) and recursive forms (`<root>/**/.env`, etc.). A dynamic invocation of the installed resolver confirmed that the `**` form does not match the root directory itself, so both are needed. Vibe's resolver resolves symlinks before checking workspace membership and path patterns. The profile must reject every unexpected ACP permission request. The stock sensitive-file check can still produce an `ASK` request for a sensitive path inside the workspace even when the normal file permission is `ALWAYS`; never grant that request by default.
++The recommended read-only profile sets `VIBE_DEFAULT_AGENT=plan`, `VIBE_ENABLED_AGENTS=["plan"]`, and `VIBE_ENABLED_TOOLS=["read_file","grep"]`, and passes those settings as environment values or writes their equivalent into the isolated profile's known config. For each enabled file tool, set `permission = "never"` and configure the encoded literal grant `vibe-path:directory_recursive:<canonical-root>`. The pinned resolver authorizes the root and descendants at any depth; the legacy `<root>/**` form only covers immediate children. This allowlist is necessary: with no matching path-specific decision, `NEVER` is also the fallback for in-workspace paths. Put secret-file deny patterns before the allowlist, since Vibe checks denylist first; include root-level patterns (`<root>/.env`, `<root>/.env.*`, `<root>/.envrc`, `<root>/.envrc.*`) and recursive forms (`<root>/**/.env`, etc.). Do not substitute a global `always` fallback for a recursive grant. Vibe's resolver resolves symlinks before checking workspace membership and path patterns. The profile must reject every unexpected ACP permission request. The stock sensitive-file check can still produce an `ASK` request for a sensitive path inside the workspace even when the normal file permission is `ALWAYS`; never grant that request by default.
++
++Vibe applies agent-profile overrides after environment settings. The supervisor therefore writes its own owner-only `plan.toml` or `accept-edits.toml` into the run's private `$VIBE_HOME/agents`. The pinned AgentRegistry explicitly supports shadowing built-in names through these files. The generated profile retains the environment's path grants, denylists, and exclusions, sets enabled file tools to a `never` fallback, and restricts the enabled-tool list to the run mode. It replaces Plan's private-plans-only read override and Accept Edits' global-write override without inheriting any user or project agent. Definitions are regenerated on recovery; unsafe symlink paths fail closed. Mode IDs stay `plan` and `accept-edits` for ACP compatibility.
+@@ -89,0 +92,4 @@ Findings above were checked in `/Users/roman/.local/share/uv/tools/mistral-vibe/
++
++## Installed profile regression check
++
++With pinned Vibe installed, run `VIBE_SUPERVISOR_TEST_VIBE_PYTHON=/absolute/path/to/vibe/python npm test -- tests/unit/profile.test.ts`. The optional fixture uses the real agent registry, configuration layers, and file resolver for review and edit, with network connections disabled and no provider credential. It checks immediate/deep descendants, secret and reserved paths, sibling/outside paths, and symlinks to outside. Without this explicit interpreter, the two installed-runtime tests are skipped; ordinary profile tests still run. This fixture does not prove hosted edit, ACP continuation, or recovery.
+diff --git a/docs/functionality.md b/docs/functionality.md
+index 05d0df0..a80f341 100644
+--- a/docs/functionality.md
++++ b/docs/functionality.md
+@@ -110,0 +111,4 @@ For details, read [security.md](security.md), [compatibility.md](compatibility.m
++
++## Workspace permission profiles
++
++File tools use a literal recursive workspace grant with a `never` fallback and secret/reserved-path denials. Supervisor-generated agent definitions in each private VIBE_HOME preserve these rules after Vibe selects Plan or Accept Edits. They do not inherit user or project agents. Reviews enable only read/search; edits add write/edit in the detached worktree, with no global write permission.
+diff --git a/src/backends/profile.ts b/src/backends/profile.ts
+index 37c7539..67c270c 100644
+--- a/src/backends/profile.ts
++++ b/src/backends/profile.ts
+@@ -4 +4,2 @@ import type { RunMode, StartRunInput } from '../contracts.js';
+-import { createPrivateDir } from '../security/paths.js';
++import { createPrivateDir, createPrivateFile } from '../security/paths.js';
++import { stringify } from 'smol-toml';
+@@ -27,2 +28,2 @@ function setToolPathPolicy(env: NodeJS.ProcessEnv, name: string, root: string, p
+-  // Vibe checks denylist first, then allowlist. Include the root itself because
+-  // its path matcher does not let **/path match path at the root level.
++  // The pinned resolver checks denylist first. Encoded recursive grants include
++  // the root and all descendants without the depth limit of legacy path globs.
+@@ -30 +31 @@ function setToolPathPolicy(env: NodeJS.ProcessEnv, name: string, root: string, p
+-  env[`${prefix}__ALLOWLIST`] = JSON.stringify([absolute, `${absolute}/**`]);
++  env[`${prefix}__ALLOWLIST`] = JSON.stringify([`vibe-path:directory_recursive:${absolute}`]);
+@@ -108,0 +110,17 @@ export async function createVibeChildProfile(input: StartRunInput, mode: RunMode
++  // Vibe 2.25.8 applies agent overrides after environment configuration. Its
++  // built-in Plan replaces read grants and Accept Edits makes writes global.
++  // Supervisor-owned profiles shadow those built-ins in the private VIBE_HOME;
++  // they never inherit user/project agents and retain the same mode IDs for ACP.
++  const agentDirectory = path.join(vibeHome, 'agents');
++  await createPrivateDir(agentDirectory);
++  const agentTools: Record<string, { permission: string }> = Object.fromEntries(
++    tools.map((tool) => [tool, { permission: tool === 'bash' ? 'ask' : 'never' }]),
++  );
++  await createPrivateFile(path.join(agentDirectory, `${env.VIBE_DEFAULT_AGENT}.toml`), stringify({
++    display_name: mode === 'review' ? 'Plan' : 'Accept Edits',
++    description: 'Supervisor-owned workspace policy',
++    safety: mode === 'review' ? 'safe' : 'destructive',
++    enabled_tools: tools,
++    disabled_tools: ['exit_plan_mode'],
++    tools: agentTools,
++  }), 'w');
+diff --git a/tests/fixtures/vibe-profile-check.py b/tests/fixtures/vibe-profile-check.py
+new file mode 100644
+index 0000000..7530d77
+--- /dev/null
++++ b/tests/fixtures/vibe-profile-check.py
+@@ -0,0 +1,67 @@
++"""No-provider check of the pinned Vibe's real agent loader and path resolver."""
++import asyncio
++import json
++import os
++from pathlib import Path
++import socket
++import sys
++
++# This fixture must never make a provider or experiment request.
++def refuse_network(*args, **kwargs):
++    raise RuntimeError("Network is disabled in the installed-profile fixture")
++socket.socket.connect = refuse_network
++socket.create_connection = refuse_network
++
++import vibe
++from vibe.core.agents.manager import AgentManager
++from vibe.core.config.harness_files import HarnessFilesManager, init_harness_files_manager
++from vibe.core.config.layers.default import DefaultConfigLayer
++from vibe.core.config.layers.environment import EnvironmentLayer
++from vibe.core.config.layers.agent_profile import AgentProfileLayer
++from vibe.core.config.orchestrator import ConfigOrchestrator
++from vibe.core.config.vibe_schema import VibeConfigSchema
++from vibe.core.tools.base import BaseToolConfig
++from vibe.core.tools.permissions import ToolPermission
++from vibe.core.tools.utils import resolve_file_tool_permission
++from vibe.core.workspace import Workspace
++
++async def main():
++    assert vibe.__version__ == "2.25.8", "Wrong installed Vibe version"
++    root = Path(sys.argv[1]).resolve()
++    init_harness_files_manager('user', 'project')
++    defaults = DefaultConfigLayer(schema=VibeConfigSchema)
++    orchestrator = await ConfigOrchestrator.create(
++        schema=VibeConfigSchema,
++        layers=[defaults, EnvironmentLayer(schema=VibeConfigSchema), AgentProfileLayer()],
++        default_layer_resolver=lambda: defaults,
++    )
++    mode = os.environ['VIBE_DEFAULT_AGENT']
++    manager = AgentManager(orchestrator, initial_agent=mode, harness_files=HarnessFilesManager(sources=('user', 'project'), cwd=root))
++    assert manager.active_profile.source_path == Path(os.environ['VIBE_HOME']) / 'agents' / (mode + '.toml'), 'Built-in fallback selected'
++    config = manager.config
++    expected = ['read_file', 'grep'] + (['write_file', 'edit'] if mode == 'accept-edits' else [])
++    assert set(config.enabled_tools) == set(expected), 'Unexpected tool inventory'
++    assert set(manager.available_agents) == {mode}, 'Unexpected agent inventory'
++    workspace = Workspace.for_session(root)
++    cases = {'root': root, 'immediate': root/'file.txt', 'nested': root/'src/a/b.ts', 'deep': root/'a/b/c/d/e.ts',
++             'secret': root/'.env', 'nested_secret': root/'src/a/.env', 'key': root/'src/a/key.pem',
++             'git': root/'.git/config', 'nested_reserved': root/'src/a/.agents/private.txt',
++             'outside': root.parent/'outside.txt', 'sibling': root.parent/(root.name+'-sibling')/'file.txt',
++             'symlink': root/'escape'}
++    result = {}
++    for name in expected:
++        tool = BaseToolConfig.model_validate(config.tools[name])
++        assert tool.permission == ToolPermission.NEVER, (name, 'unsafe fallback')
++        decisions = {}
++        for label, target in cases.items():
++            decision = resolve_file_tool_permission(str(target), tool_name=name, allowlist=tool.allowlist,
++                denylist=tool.denylist, config_permission=tool.permission, sensitive_patterns=tool.sensitive_patterns,
++                workspace=workspace)
++            permission = decision.permission if decision is not None else tool.permission
++            expected_permission = ToolPermission.ALWAYS if label in ('root','immediate','nested','deep') else ToolPermission.NEVER
++            assert permission == expected_permission, (name,label,permission,expected_permission)
++            decisions[label] = permission.value
++        result[name] = decisions
++    print(json.dumps({'mode':mode,'enabled_tools':config.enabled_tools,'decisions':result}))
++
++asyncio.run(main())
+diff --git a/tests/unit/profile.test.ts b/tests/unit/profile.test.ts
+new file mode 100644
+index 0000000..eebc122
+--- /dev/null
++++ b/tests/unit/profile.test.ts
+@@ -0,0 +1,65 @@
++import { afterEach, describe, expect, it } from 'vitest';
++import { mkdtemp, mkdir, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
++import { spawnSync } from 'node:child_process';
++import os from 'node:os';
++import path from 'node:path';
++import { parse } from 'smol-toml';
++import { createVibeChildProfile } from '../../src/backends/profile.js';
++import type { RunMode, StartRunInput } from '../../src/contracts.js';
++
++const scratch: string[] = [];
++afterEach(async () => { await Promise.all(scratch.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))); });
++async function fixture(mode: RunMode) {
++  const dir = await realpath(await mkdtemp(path.join(os.tmpdir(), 'vibe-profile-'))); scratch.push(dir);
++  const root = path.join(dir, 'workspace'); await mkdir(root);
++  const runDirectory = path.join(dir, 'run'); await mkdir(runDirectory);
++  const input: StartRunInput = { runId: 'profile-test', mode, task: '', cwd: root, workerWorkspace: root, runDirectory,
++    limits: { timeoutSeconds: 30, maxTurns: 1, maxEventBytes: 4096, maxTranscriptBytes: 4096, maxArtifactBytes: 4096 } };
++  return { dir, root, input, profile: await createVibeChildProfile(input, mode) };
++}
++
++describe('supervisor-owned agent profiles', () => {
++  it.each(['review', 'edit'] as const)('retains never fallback and recursive grants for %s after agent selection', async (mode) => {
++    const { root, input, profile } = await fixture(mode);
++    const agent = mode === 'review' ? 'plan' : 'accept-edits';
++    const file = path.join(profile.vibeHome, 'agents', `${agent}.toml`);
++    const config = parse(await readFile(file, 'utf8'));
++    const names = mode === 'review' ? ['read_file', 'grep'] : ['read_file', 'grep', 'write_file', 'edit'];
++    expect(config.enabled_tools).toEqual(names);
++    expect(config.tools).toEqual(Object.fromEntries(names.map((name) => [name, { permission: 'never' }])));
++    expect((await stat(file)).mode & 0o777).toBe(0o600);
++    expect((await stat(path.dirname(file))).mode & 0o777).toBe(0o700);
++    for (const name of names) {
++      expect(JSON.parse(profile.env[`VIBE_TOOLS__${name.toUpperCase()}__ALLOWLIST`] as string)).toEqual([`vibe-path:directory_recursive:${root}`]);
++    }
++    // Recovery rebuilds the supervisor definition rather than inheriting changes.
++    await writeFile(file, 'safety = "yolo"\n');
++    await createVibeChildProfile(input, mode);
++    expect(parse(await readFile(file, 'utf8')).safety).toBe(mode === 'review' ? 'safe' : 'destructive');
++  });
++
++  it('refuses a symlinked private agent definition during recovery', async () => {
++    const { dir, input, profile } = await fixture('review');
++    const file = path.join(profile.vibeHome, 'agents', 'plan.toml');
++    const target = path.join(dir, 'outside.toml'); await writeFile(target, 'untouched');
++    await rm(file); await symlink(target, file);
++    await expect(createVibeChildProfile(input, 'review')).rejects.toThrow(/regular file/);
++    expect(await readFile(target, 'utf8')).toBe('untouched');
++  });
++});
++
++const python = process.env.VIBE_SUPERVISOR_TEST_VIBE_PYTHON;
++describe.skipIf(!python)('installed Vibe 2.25.8 permissions (no inference)', () => {
++  it.each(['review', 'edit'] as const)('checks real agent layering and path boundaries for %s', async (mode) => {
++    const { dir, root, profile } = await fixture(mode);
++    const outside = path.join(dir, 'outside.txt'); await writeFile(outside, 'fixture');
++    await symlink(outside, path.join(root, 'escape'));
++    const env = { ...profile.env }; delete env.MISTRAL_API_KEY;
++    const result = spawnSync(python as string, [path.resolve('tests/fixtures/vibe-profile-check.py'), root], {
++      cwd: root, env, encoding: 'utf8', timeout: 30_000, maxBuffer: 128 * 1024,
++    });
++    expect(result.error, result.stderr).toBeUndefined();
++    expect(result.status, result.stderr).toBe(0);
++    expect(JSON.parse(result.stdout).mode).toBe(mode === 'review' ? 'plan' : 'accept-edits');
++  });
++});

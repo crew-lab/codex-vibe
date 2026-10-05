@@ -1,0 +1,30 @@
+[
+  {
+    "name": "read_file",
+    "public_result": "Tool 'read_file' is permanently disabled"
+  },
+  {
+    "name": "read_file",
+    "public_result": "Tool 'read_file' is permanently disabled"
+  },
+  {
+    "name": "bash",
+    "public_result": "<tool_error>bash: Unknown tool 'bash'</tool_error>"
+  },
+  {
+    "name": "bash",
+    "public_result": "<tool_error>bash: Unknown tool 'bash'</tool_error>"
+  },
+  {
+    "name": "grep",
+    "public_result": "Tool 'grep' is permanently disabled"
+  },
+  {
+    "name": "grep",
+    "public_result": "matches: /Users/roman/.local/share/vibe-supervisor/field-workspace/README.md:1:# Vibe field test\n/Users/roman/.local/share/vibe-supervisor/field-workspace/README.md:3:The nested file src/a/add.js is supposed to add two numbers.\nmatch_count: 2\npattern: .\nwas_truncated: False"
+  },
+  {
+    "name": "read_file",
+    "public_result": "Tool 'read_file' is permanently disabled"
+  }
+]

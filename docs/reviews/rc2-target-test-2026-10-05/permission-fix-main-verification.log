@@ -1,0 +1,120 @@
+
+> vibe-supervisor@0.9.0-rc.1 verify:release
+> npm run lint && npm run typecheck && npm test && npm run build && npm run acceptance && npm run secret-scan && npm run sbom
+
+
+> vibe-supervisor@0.9.0-rc.1 lint
+> eslint .
+
+
+> vibe-supervisor@0.9.0-rc.1 typecheck
+> tsc --noEmit
+
+
+> vibe-supervisor@0.9.0-rc.1 test
+> vitest run
+
+
+ RUN  v4.0.18 /Users/roman/src/github.com/crew-lab/codex-vibe
+
+ ✓ tests/unit/tool-schemas.test.ts (4 tests) 5ms
+ ✓ tests/unit/config.test.ts (7 tests) 40ms
+ ✓ tests/integration/mcp-tools.test.ts (2 tests) 26ms
+ ✓ tests/unit/cli.test.ts (3 tests) 41ms
+ ✓ tests/unit/profile.test.ts (5 tests) 581ms
+ ✓ tests/unit/core-run-manager.test.ts (8 tests) 1048ms
+     ✓ exports an edit worktree patch and removes only the verified worktree  555ms
+ ✓ tests/security/security-primitives.test.ts (14 tests) 2953ms
+     ✓ refuses cleanup after post-export changes and retains the worktree  366ms
+     ✓ removes a cleanly verified worktree after export  346ms
+     ✓ rejects termination within a bound when group and direct-child signaling fail  1511ms
+ ✓ tests/integration/acp-backend.test.ts (11 tests) 6303ms
+     ✓ completes 100 independent initialized prompt turns without leaking private reasoning  5655ms
+
+ Test Files  8 passed (8)
+      Tests  54 passed (54)
+   Start at  23:07:33
+   Duration  6.59s (transform 664ms, setup 0ms, import 1.16s, tests 11.00s, environment 1ms)
+
+
+> vibe-supervisor@0.9.0-rc.1 build
+> tsc && node scripts/copy-runtime-assets.mjs
+
+Copied the pinned Vibe launch shim into dist/backends/runtime.
+
+> vibe-supervisor@0.9.0-rc.1 acceptance
+> node scripts/acceptance.mjs
+
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-05T21:07:41.027Z",
+  "deterministic_checks": [
+    {
+      "name": "private-package",
+      "status": "PASS",
+      "detail": "Package remains unpublished/private while the source is MIT licensed."
+    },
+    {
+      "name": "node-engine",
+      "status": "PASS",
+      "detail": "Node 24.21.0"
+    },
+    {
+      "name": "runtime-shim",
+      "status": "PASS",
+      "detail": "Pinned Python launcher exists in the compiled package tree."
+    },
+    {
+      "name": "cli-build",
+      "status": "PASS",
+      "detail": "Compiled CLI entrypoint exists."
+    },
+    {
+      "name": "cli-version",
+      "status": "PASS",
+      "detail": "0.9.0-rc.1"
+    },
+    {
+      "name": "test-fixture-excluded",
+      "status": "PASS",
+      "detail": "Test-only shim fixture is absent from dist."
+    }
+  ],
+  "unverified_release_gates": [
+    {
+      "name": "hosted-vibe-auth",
+      "status": "UNVERIFIED",
+      "reason": "No hosted model request was made."
+    },
+    {
+      "name": "codex-desktop-registration",
+      "status": "UNVERIFIED",
+      "reason": "No user Codex config was changed during packaging."
+    },
+    {
+      "name": "macos-intel",
+      "status": "UNVERIFIED",
+      "reason": "Only this host architecture can be tested here."
+    },
+    {
+      "name": "clean-account-install",
+      "status": "UNVERIFIED",
+      "reason": "A fresh OS account is not available in this workspace."
+    },
+    {
+      "name": "real-vibe-hosted-acp-soak",
+      "status": "UNVERIFIED",
+      "reason": "Fake-peer lifecycle coverage passed; a 100-run soak against hosted Vibe has not been performed."
+    }
+  ]
+}
+
+> vibe-supervisor@0.9.0-rc.1 secret-scan
+> node scripts/secret-scan.mjs
+
+Secret scan passed: no recognized credential formats found.
+
+> vibe-supervisor@0.9.0-rc.1 sbom
+> node scripts/sbom.mjs
+
+Wrote SPDX SBOM with 197 locked package entries to dist/sbom.spdx.json.

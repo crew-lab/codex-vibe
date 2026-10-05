@@ -1,0 +1,60 @@
+{
+  "run_id": "d879d0a5-dba1-4c0b-9974-6d39eae87b32",
+  "active_model": "mistral-medium-3.5",
+  "agent_profile": "plan",
+  "tools_available": [
+    "grep",
+    "read_file"
+  ],
+  "effective_file_policy": {
+    "read_file": {
+      "permission": "never",
+      "allowlist": [
+        "vibe-path:directory_recursive:/Users/roman/.local/share/vibe-supervisor/field-workspace"
+      ]
+    },
+    "grep": {
+      "permission": "never",
+      "allowlist": [
+        "vibe-path:directory_recursive:/Users/roman/.local/share/vibe-supervisor/field-workspace"
+      ]
+    }
+  },
+  "stats": {
+    "steps": 4,
+    "session_prompt_tokens": 12122,
+    "session_completion_tokens": 738,
+    "session_cached_tokens": 2048,
+    "tool_calls_agreed": 2,
+    "tool_calls_rejected": 0,
+    "tool_calls_hook_denied": 0,
+    "tool_calls_failed": 1,
+    "tool_calls_succeeded": 2,
+    "context_tokens": 4658,
+    "last_turn_prompt_tokens": 4417,
+    "last_turn_completion_tokens": 241,
+    "last_turn_cached_tokens": 0,
+    "last_turn_duration": 2.4621814579950296,
+    "tokens_per_second": 97.8806818715335,
+    "input_price_per_million": 1.5,
+    "output_price_per_million": 7.5,
+    "cached_input_price_per_million": 0.15,
+    "session_total_llm_tokens": 12860,
+    "last_turn_total_tokens": 4658,
+    "session_cost": 0.0209532
+  },
+  "tool_results": [
+    {
+      "name": "read_file",
+      "public_result": "file_path: /Users/roman/.local/share/vibe-supervisor/field-workspace/README.md\ncontent:         1→# Vibe field test\n        2→\n        3→The nested file src/a/add.js is supposed to add two numbers.\nnum_lines: 3\nstart_line: 1\nrequested_offset: None\nrequested_limit: 2000\ntotal_lines: 3\nwas_truncated: False"
+    },
+    {
+      "name": "read_file",
+      "public_result": "file_path: /Users/roman/.local/share/vibe-supervisor/field-workspace/src/a/add.js\ncontent:         1→export function add(a, b) { return a - b; }\nnum_lines: 1\nstart_line: 1\nrequested_offset: None\nrequested_limit: 2000\ntotal_lines: 1\nwas_truncated: False"
+    },
+    {
+      "name": "write_file",
+      "public_result": "<tool_error>write_file: Unknown tool 'write_file'</tool_error>"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "status": "PASS",
+  "configured_command": "/Users/roman/.nvm/versions/node/v24.21.0/bin/node",
+  "configured_args": [
+    "/Users/roman/.local/share/vibe-supervisor/rc2/node_modules/vibe-supervisor/dist/cli.js",
+    "serve",
+    "--stdio"
+  ],
+  "tool_timeout_sec": 600,
+  "tools": [
+    "vibe_review_start",
+    "vibe_edit_start",
+    "vibe_status",
+    "vibe_continue",
+    "vibe_respond",
+    "vibe_result",
+    "vibe_cancel",
+    "vibe_close"
+  ],
+  "unknown_run_returns_error": true,
+  "hosted_inference": false
+}

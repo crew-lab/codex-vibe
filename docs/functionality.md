@@ -108,3 +108,7 @@ The supervisor enforces application-level permissions, environment filtering, wo
 This is a local release candidate. Automated protocol fixtures, unit/integration tests, packaging smoke tests, and local compatibility probes have passed. Hosted inference, authenticated real-session tool inventory, a real hosted ACP soak, and Codex desktop integration remain unverified. Plugin manifests are scaffolds rather than evidence of successful installation.
 
 For details, read [security.md](security.md), [compatibility.md](compatibility.md), [acceptance.md](acceptance.md), and [plugin-scaffold.md](plugin-scaffold.md).
+
+## Workspace permission profiles
+
+File tools use a literal recursive workspace grant with a `never` fallback and secret/reserved-path denials. Supervisor-generated agent definitions in each private VIBE_HOME preserve these rules after Vibe selects Plan or Accept Edits. They do not inherit user or project agents. Reviews enable only read/search; edits add write/edit in the detached worktree, with no global write permission.

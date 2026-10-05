@@ -1,0 +1,59 @@
+{
+  "run_id": "0c196301-5a37-4136-885d-78b735ef8472",
+  "active_model": "mistral-medium-3.5",
+  "agent_profile": "plan",
+  "tools_available": [
+    "grep",
+    "read_file"
+  ],
+  "effective_file_policy": {
+    "read_file": {
+      "permission": "never",
+      "allowlist": [
+        "/private/tmp/codex-vibe-rc2-approved-use-wXrnJM/runs/0c196301-5a37-4136-885d-78b735ef8472/vibe-home/plans/*"
+      ]
+    },
+    "grep": {
+      "permission": "never",
+      "allowlist": [
+        "/Users/roman/.local/share/vibe-supervisor/field-workspace",
+        "/Users/roman/.local/share/vibe-supervisor/field-workspace/**"
+      ]
+    },
+    "write_file": {
+      "permission": "never",
+      "allowlist": [
+        "/private/tmp/codex-vibe-rc2-approved-use-wXrnJM/runs/0c196301-5a37-4136-885d-78b735ef8472/vibe-home/plans/*"
+      ]
+    },
+    "edit": {
+      "permission": "never",
+      "allowlist": [
+        "/private/tmp/codex-vibe-rc2-approved-use-wXrnJM/runs/0c196301-5a37-4136-885d-78b735ef8472/vibe-home/plans/*"
+      ]
+    }
+  },
+  "stats": {
+    "steps": 5,
+    "session_prompt_tokens": 15634,
+    "session_completion_tokens": 432,
+    "session_cached_tokens": 13312,
+    "tool_calls_agreed": 1,
+    "tool_calls_rejected": 4,
+    "tool_calls_hook_denied": 0,
+    "tool_calls_failed": 2,
+    "tool_calls_succeeded": 1,
+    "context_tokens": 4297,
+    "last_turn_prompt_tokens": 4134,
+    "last_turn_completion_tokens": 163,
+    "last_turn_cached_tokens": 3840,
+    "last_turn_duration": 1.7480684999973164,
+    "tokens_per_second": 93.24577383566505,
+    "input_price_per_million": 1.5,
+    "output_price_per_million": 7.5,
+    "cached_input_price_per_million": 0.15,
+    "session_total_llm_tokens": 16066,
+    "last_turn_total_tokens": 4297,
+    "session_cost": 0.0087198
+  }
+}
