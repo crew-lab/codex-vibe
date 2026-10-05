@@ -1,6 +1,6 @@
 # Release acceptance status
 
-`npm run verify:release` runs deterministic repository checks, tests, build, acceptance checks, a secret-pattern scan, and an SPDX inventory. `npm run smoke:install` packs and installs the tarball offline in a temporary prefix, then initializes the installed stdio server and lists tools with the official MCP client. Supply an existing populated npm cache through `VIBE_SUPERVISOR_TEST_NPM_CACHE`; the smoke test never falls back to network access.
+`npm run verify:release` runs deterministic repository checks, the Vitest suite, the Vibe-free Python tests (`npm run test:python`), build, acceptance checks, a secret-pattern scan, and an SPDX inventory. `npm run smoke:install` packs and installs the tarball offline in a temporary prefix, then initializes the installed stdio server and lists tools with the official MCP client. Supply an existing populated npm cache through `VIBE_SUPERVISOR_TEST_NPM_CACHE`; the smoke test never falls back to network access.
 
 The machine-readable report is `docs/acceptance.json`. Local fake-peer ACP coverage, including the 100-run adversarial lifecycle soak, has passed. It establishes protocol and supervisor lifecycle behavior against the fake peer only. These gates remain **UNVERIFIED** and must not be reported as passing: real Vibe hosted authentication/model inference, a 100-run soak against hosted Vibe, Codex desktop visibility on a real user config, macOS Intel, and a clean OS account. The integration is currently opt-in; programmatic is the default.
 
