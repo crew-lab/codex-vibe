@@ -149,7 +149,7 @@ shasum -a 256 -c SHA256SUMS
 For a separate local installation prefix:
 
 ```sh
-npm install --prefix /absolute/path/to/local-prefix /absolute/path/to/vibe-supervisor-0.9.0-rc.1.tgz
+npm install --prefix /absolute/path/to/local-prefix /absolute/path/to/vibe-supervisor-0.9.0-rc.2.tgz
 /absolute/path/to/local-prefix/node_modules/.bin/vibe-supervisor --version
 ```
 

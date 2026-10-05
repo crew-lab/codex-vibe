@@ -330,6 +330,65 @@ describe('ACP reject and cancel semantics', () => {
   });
 });
 
+describe('ACP refusal of requests the supervisor cannot evaluate', () => {
+  const rejectOnly = [{ optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' }, { optionId: 'reject-once', name: 'Reject once', kind: 'reject_once' }];
+  const noSelectedAllow = (outcomes: unknown[]) => outcomes.every((entry) => !JSON.stringify(entry).includes('allow'));
+
+  it('selects reject-once for an uncorrelated request and lets the turn end', async () => {
+    const h = await harness('uncorrelated', rejectOnly);
+    const started = await h.backend.start(h.input, h.callbacks);
+    await waitFor(() => h.updates, (value) => value.some((entry) => entry.state === 'completed'));
+    const outcomes = await h.outcomes();
+    expect(outcomes).toEqual([{ outcome: { outcome: 'selected', optionId: 'reject-once' } }]);
+    expect(noSelectedAllow(outcomes)).toBe(true);
+    expect(h.updates.find((entry) => entry.state === 'completed')?.update?.result?.stopReason).toBe('end_turn');
+    const denied = h.events.find((event) => event.type === 'permission_denied') as { data?: { outcome?: string } } | undefined;
+    expect(denied?.data?.outcome).toBe('rejected');
+    await h.backend.close(started.handle);
+  });
+
+  it('prefers reject_once over reject_always', async () => {
+    const h = await harness('uncorrelated', [{ optionId: 'reject-always', name: 'Reject always', kind: 'reject_always' }, { optionId: 'reject-once', name: 'Reject once', kind: 'reject_once' }]);
+    const started = await h.backend.start(h.input, h.callbacks);
+    await waitFor(() => h.updates, (value) => value.some((entry) => entry.state === 'completed'));
+    expect(await h.outcomes()).toEqual([{ outcome: { outcome: 'selected', optionId: 'reject-once' } }]);
+    await h.backend.close(started.handle);
+  });
+
+  it('falls back to reject_always when it is the only reject option', async () => {
+    const h = await harness('uncorrelated', [{ optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' }, { optionId: 'reject-always', name: 'Reject always', kind: 'reject_always' }]);
+    const started = await h.backend.start(h.input, h.callbacks);
+    await waitFor(() => h.updates, (value) => value.some((entry) => entry.state === 'completed'));
+    expect(await h.outcomes()).toEqual([{ outcome: { outcome: 'selected', optionId: 'reject-always' } }]);
+    await h.backend.close(started.handle);
+  });
+
+  it('answers cancelled for an uncorrelated request when only allow options are offered', async () => {
+    const h = await harness('uncorrelated', [{ optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' }, { optionId: 'allow-always', name: 'Allow always', kind: 'allow_always' }]);
+    const started = await h.backend.start(h.input, h.callbacks);
+    const outcomes = await waitFor(() => h.outcomes(), (value) => value.length > 0);
+    expect(outcomes).toEqual([{ outcome: { outcome: 'cancelled' } }]);
+    const denied = h.events.find((event) => event.type === 'permission_denied') as { data?: { outcome?: string } } | undefined;
+    expect(denied?.data?.outcome).toBe('cancelled');
+    await h.backend.close(started.handle);
+  });
+
+  it('selects reject for an overlapping duplicate request and keeps the first pending', async () => {
+    const h = await harness('duplicate', rejectOnly);
+    const started = await h.backend.start(h.input, h.callbacks);
+    const pending = await h.pending;
+    const duplicate = await waitFor(() => h.outcomes(), (value) => value.length > 0);
+    expect(duplicate).toEqual([{ outcome: { outcome: 'selected', optionId: 'reject-once' } }]);
+    await h.backend.respond(started.handle, { requestId: pending.requestId, kind: 'permission', optionId: 'reject-once' });
+    await waitFor(() => h.updates, (value) => value.some((entry) => entry.state === 'completed'));
+    const outcomes = await h.outcomes();
+    expect(outcomes).toEqual([{ outcome: { outcome: 'selected', optionId: 'reject-once' } }, { outcome: { outcome: 'selected', optionId: 'reject-once' } }]);
+    expect(noSelectedAllow(outcomes)).toBe(true);
+    expect(h.updates.find((entry) => entry.state === 'completed')?.update?.result?.stopReason).toBe('end_turn');
+    await h.backend.close(started.handle);
+  });
+});
+
 describe('policy auto-deny through RunManager', () => {
   it('answers an out-of-root permission with the selected reject option and completes the run', async () => {
     const root = await makeRoot();

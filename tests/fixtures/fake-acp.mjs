@@ -52,6 +52,25 @@ async function handle(message) {
       if (!outcome || outcome.outcome === 'cancelled') { reply(message.id, { stopReason: 'cancelled' }); return; }
       if (outcome.outcome === 'selected' && String(outcome.optionId).startsWith('reject')) chunk('permission rejected, continuing');
     }
+    if (mode === 'uncorrelated' && promptCount === 1) {
+      const answerPromise = new Promise((resolve) => pending.set('permission-request-1', resolve));
+      send({ jsonrpc: '2.0', id: 'permission-request-1', method: 'session/request_permission', params: { sessionId, toolCall: { toolCallId: 'tool-never-announced' }, options: permissionOptions() } });
+      const outcome = (await answerPromise)?.outcome;
+      if (!outcome || outcome.outcome === 'cancelled') { reply(message.id, { stopReason: 'cancelled' }); return; }
+      chunk('permission rejected, continuing');
+    }
+    if (mode === 'duplicate' && promptCount === 1) {
+      const filePath = process.env.FAKE_FILE_PATH ?? '/tmp/source.txt';
+      notification('session/update', { sessionId, update: { sessionUpdate: 'tool_call', toolCallId: 'tool-17', title: 'Read source', kind: 'read', rawInput: { path: filePath }, locations: [{ path: filePath }] } });
+      notification('session/update', { sessionId, update: { sessionUpdate: 'tool_call', toolCallId: 'tool-18', title: 'Read source', kind: 'read', rawInput: { path: filePath }, locations: [{ path: filePath }] } });
+      const first = new Promise((resolve) => pending.set('permission-request-1', resolve));
+      const second = new Promise((resolve) => pending.set('permission-request-2', resolve));
+      send({ jsonrpc: '2.0', id: 'permission-request-1', method: 'session/request_permission', params: { sessionId, toolCall: { toolCallId: 'tool-17' }, options: permissionOptions() } });
+      send({ jsonrpc: '2.0', id: 'permission-request-2', method: 'session/request_permission', params: { sessionId, toolCall: { toolCallId: 'tool-18' }, options: permissionOptions() } });
+      const outcomes = (await Promise.all([first, second])).map((answer) => answer?.outcome);
+      if (outcomes.some((outcome) => !outcome || outcome.outcome === 'cancelled')) { reply(message.id, { stopReason: 'cancelled' }); return; }
+      chunk('permission rejected, continuing');
+    }
     if (mode === 'elicitation' && promptCount === 1) {
       const answerPromise = new Promise((resolve) => pending.set('elicitation-request-1', resolve));
       send({ jsonrpc: '2.0', id: 'elicitation-request-1', method: 'elicitation/create', params: { sessionId, mode: 'form', message: 'Confirm the safe operation', requestedSchema: { type: 'object', properties: { confirm: { type: 'boolean' } }, required: ['confirm'] } } });

@@ -123,6 +123,11 @@ function toPermissionRequest(params: RequestPermissionRequest, id: string, known
   return { requestId: id, kind: 'permission', title: `Vibe requests permission for ${name}`, options: params.options.map((option) => ({ optionId: option.optionId, name: option.name, kind: option.kind })), tool: { ...(typeof call.kind === 'string' ? { kind: call.kind } : {}), locations: safeLocations, rawInput: safeData(rawInput) } };
 }
 
+function refusalOutcome(options: ReadonlyArray<{ optionId: string; kind?: string }>): { outcome: { outcome: 'cancelled' } | { outcome: 'selected'; optionId: string } } {
+  const reject = options.find((option) => option.kind === 'reject_once') ?? options.find((option) => option.kind === 'reject_always');
+  return reject ? { outcome: { outcome: 'selected', optionId: reject.optionId } } : { outcome: { outcome: 'cancelled' } };
+}
+
 export class AcpBackend implements SupervisorBackend {
   readonly kind = 'acp' as const;
   constructor(private readonly config: SupervisorConfig, private readonly dataDirectory = config.paths?.dataDir) {}
@@ -219,8 +224,9 @@ export class AcpBackend implements SupervisorBackend {
         const id = String(context.requestId);
         const pending = toPermissionRequest(context.params, id, known);
         if (!pending || state.request) {
-          await state.callbacks.onEvent({ source: 'acp', type: 'permission_denied', severity: 'warning', data: { reason: 'Permission request lacked a correlated, normalized tool action and path', toolCallId } });
-          return { outcome: { outcome: 'cancelled' } };
+          const refusal = refusalOutcome(context.params.options);
+          await state.callbacks.onEvent({ source: 'acp', type: 'permission_denied', severity: 'warning', data: { reason: pending ? 'Another permission request was already pending' : 'Permission request lacked a correlated, normalized tool action and path', toolCallId, outcome: refusal.outcome.outcome === 'selected' ? 'rejected' : 'cancelled' } });
+          return refusal;
         }
         let resolve!: (response: unknown) => void;
         const decision = new Promise<unknown>((done) => { resolve = done; });
