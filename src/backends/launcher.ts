@@ -23,7 +23,7 @@ export async function resolveCommand(command: string, env: NodeJS.ProcessEnv): P
   return resolved;
 }
 
-async function pythonFor(executable: string, env: NodeJS.ProcessEnv): Promise<string> {
+export async function pythonFor(executable: string, env: NodeJS.ProcessEnv): Promise<string> {
   const handle = await open(executable, 'r');
   let firstLine: string;
   try {

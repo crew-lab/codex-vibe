@@ -16,6 +16,7 @@
     "test:security": "vitest run tests/security",
     "build": "tsc && node scripts/copy-runtime-assets.mjs",
     "acceptance": "node scripts/acceptance.mjs",
+    "compat:probe": "node scripts/compat-probe.mjs",
     "smoke:install": "node scripts/smoke-install.mjs",
     "sbom": "node scripts/sbom.mjs",
     "secret-scan": "node scripts/secret-scan.mjs",

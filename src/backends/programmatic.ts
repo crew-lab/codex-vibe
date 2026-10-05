@@ -12,10 +12,10 @@ import type { SupervisorConfig } from '../contracts.js';
 import { spawnManaged } from '../process/managed.js';
 import { assertNoProjectVibeExtensions, createVibeChildProfile } from './profile.js';
 import { buildVibeLaunch } from './launcher.js';
+import { SUPPORTED_VIBE } from './pinned.js';
 import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 
 const execFileAsync = promisify(execFile);
-const SUPPORTED_VIBE = '2.25.8';
 
 interface ProgrammaticHandle extends BackendRunHandle {
   opaque: { process: ReturnType<typeof spawnManaged>; done: boolean; home: string; vibeHome: string; summary: string };

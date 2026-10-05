@@ -13,12 +13,12 @@ import { spawnManaged } from '../process/managed.js';
 import { assertNoProjectVibeExtensions, createVibeChildProfile } from './profile.js';
 import type { VibeChildProfile } from './profile.js';
 import { buildVibeLaunch } from './launcher.js';
+import { ACP_PROTOCOL_VERSION, SUPPORTED_VIBE } from './pinned.js';
 import type { VibeLaunch } from './launcher.js';
 import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { resolveCanonicalRoot } from '../security/paths.js';
 
-const SUPPORTED_VIBE = '2.25.8';
-const PROTOCOL_VERSION = 1;
+const PROTOCOL_VERSION = ACP_PROTOCOL_VERSION;
 const MAX_WIRE_BYTES = 1024 * 1024;
 
 type Deferred<T> = { promise: Promise<T>; resolve(value: T): void; reject(reason: unknown): void };
@@ -139,18 +139,22 @@ export class AcpBackend implements SupervisorBackend {
       const child = spawnManaged(launch.command, launch.args, { cwd: root, env: launch.env, forwardEnv: Object.keys(launch.env), stdio: ['pipe', 'pipe', 'pipe'], maxStdoutBytes: 1024 * 1024, maxStderrBytes: 4096 });
       let version: string | undefined;
       let initialized = false;
+      let protocolVersion: number | undefined;
+      let loadSession: boolean | undefined;
       const stream = ndJsonStream(Writable.toWeb(child.child.stdin!) as WritableStream<Uint8Array>, Readable.toWeb(child.child.stdout!) as ReadableStream<Uint8Array>, { maxMessageBytes: MAX_WIRE_BYTES });
       const probe = client({ name: 'vibe-supervisor-probe' });
       const connected = probe.connectWith(stream, async (cx) => {
         const init = await cx.request('initialize', { protocolVersion: PROTOCOL_VERSION, clientInfo: { name: 'vibe-supervisor', version: '0.9.0' } });
         version = init.agentInfo?.version ?? undefined;
+        protocolVersion = init.protocolVersion;
+        loadSession = init.agentCapabilities?.loadSession === true;
         initialized = init.protocolVersion === PROTOCOL_VERSION && version === SUPPORTED_VIBE;
       });
       const timer = setTimeout(() => { void child.terminate(1000); }, 15_000);
       try { await Promise.race([connected, child.done.then(() => { throw new Error('ACP exited during initialize probe'); })]); }
       finally { clearTimeout(timer); await child.terminate(250); }
       const available = initialized;
-      return { available, backend: this.kind, executable: this.executable(), ...(version ? { version } : {}), supportsContinue: available, supportsPermissionResponse: available, details: { reason: available ? 'ACP initialize passed under isolated HOME/VIBE_HOME; authenticated session/new is verified during start' : `Requires exactly Vibe ${SUPPORTED_VIBE}` } };
+      return { available, backend: this.kind, executable: this.executable(), ...(version ? { version } : {}), supportsContinue: available, supportsPermissionResponse: available, details: { ...(protocolVersion !== undefined ? { protocolVersion } : {}), ...(loadSession !== undefined ? { loadSession } : {}), reason: available ? 'ACP initialize passed under isolated HOME/VIBE_HOME; authenticated session/new is verified during start' : `Requires exactly Vibe ${SUPPORTED_VIBE}` } };
     } catch (error) {
       return { available: false, backend: this.kind, executable: this.executable(), supportsContinue: false, supportsPermissionResponse: false, details: { reason: 'ACP initialize probe failed.', error: redactSecrets(String(error)) } };
     } finally { if (home) await rm(home, { recursive: true, force: true }); if (vibeHome) await rm(vibeHome, { recursive: true, force: true }); await rm(root, { recursive: true, force: true }); }

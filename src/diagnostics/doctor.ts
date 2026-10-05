@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createPrivateDir, isPathWithinRoot } from '../security/paths.js';
 import { executableSearchPath, getDataDir } from '../config/config.js';
+import { SUPPORTED_VIBE } from '../backends/pinned.js';
 import type { SupervisorConfig } from '../contracts.js';
 
 export interface DoctorCheck { name: string; ok: boolean; status?: 'ok' | 'missing' | 'unverified'; version?: string; message: string }
@@ -67,8 +68,8 @@ export async function runDoctor(config: SupervisorConfig): Promise<DoctorReport>
       try {
         const version = await probe(vibe, ['--version'], tmpRoot);
         const match = version.match(/\b(\d+)\.(\d+)\.(\d+)/);
-        const supported = Boolean(match && `${match[1]}.${match[2]}.${match[3]}` === '2.25.8');
-        checks.push({ name: 'vibe', ok: supported, status: supported ? 'ok' : 'unverified', version, message: supported ? 'Exact supported Vibe version 2.25.8 verified in an isolated temporary home.' : 'The compatibility shim is pinned to Vibe 2.25.8; another or unparseable version is unverified.' });
+        const supported = Boolean(match && `${match[1]}.${match[2]}.${match[3]}` === SUPPORTED_VIBE);
+        checks.push({ name: 'vibe', ok: supported, status: supported ? 'ok' : 'unverified', version, message: supported ? `Exact supported Vibe version ${SUPPORTED_VIBE} verified in an isolated temporary home.` : `The compatibility shim is pinned to Vibe ${SUPPORTED_VIBE}; another or unparseable version is unverified.` });
       }
       catch { checks.push({ name: 'vibe', ok: false, message: 'Vibe was found but its bounded version probe failed.' }); }
     } else checks.push({ name: 'vibe', ok: false, message: 'Vibe was not found on PATH or in configuration.' });
