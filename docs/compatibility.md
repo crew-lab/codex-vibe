@@ -59,6 +59,27 @@ Probe scratch is in `work/compatibility/`. The script launches `/Users/roman/.lo
 
 The dummy-key probe was only a local initialization/session-creation check. It did not validate hosted authentication, model generation, or MCP startup. ACP callback flows and cancellation were exercised with the fake subprocess integration fixture, and on-disk logger filtering was exercised against the real installed logger without a prompt. Those checks do not establish behavior during a hosted inference turn.
 
+## Revalidating a Vibe release
+
+```sh
+npm run build
+npm run compat:probe -- --out compat-report.json
+```
+
+Options: `--vibe <path>`, `--vibe-acp <path>` (both default to `PATH` lookup, as the backends do), `--python <path>` (default: the interpreter named by the `vibe` entrypoint shebang, as the launcher derives it), `--out <file>`, `--help`. The JSON report (timestamp, Node/OS/arch, resolved executable paths, pinned versions, one record per check) is always printed to stdout. The exit code is non-zero if any check is `FAIL`; `MANUAL` and `SKIPPED` do not fail the run. A missing Vibe install is a `FAIL` on the first check. The script needs `dist/` and a real Vibe install, so it is not part of `verify:release`. No prompt is sent, no key is used, and ACP logging stays disabled.
+
+| Check | Proves |
+|---|---|
+| `vibe_cli_version` | `vibe --version` equals the pinned version (single source: `src/backends/pinned.ts`). |
+| `acp_initialize` | ACP `initialize` through the pinned launcher shim under isolated `HOME`/`VIBE_HOME` returns the exact pinned version and `protocolVersion` 1. |
+| `acp_load_session_advertised` | `agentCapabilities.loadSession` is `true`, the precondition for `session/load` recovery. |
+| `launcher_logger_fixture` | `src/backends/runtime/test_vibe_supervisor_launcher.py` exits 0 with the Vibe interpreter: persistence redaction still works against the installed logger. |
+| `shim_pin_consistent` | `EXPECTED_VERSION` in the Python shim equals the TypeScript pin (the shim keeps its own copy because it runs inside the child). |
+| `tool_path_resolver` | MANUAL. The stock `read_file`/`grep` resolver (exact-root and recursive allowlist, denylist first, `NEVER` fallback) is an internal Vibe API this repository does not document precisely enough to call without guessing. Re-run the scratch check from the results table above with the Vibe interpreter and compare against `core/tools/builtins/read_file.py`, `grep.py` and `core/tools/utils.py`. |
+| `effective_tool_inventory`, `hosted_inference` | MANUAL. These need an authenticated hosted session (Handoff Phase 3). |
+
+Dependent checks report `SKIPPED` when a prerequisite fails. To support a new Vibe release, first re-inspect the installed sources listed below, then update the pin in `src/backends/pinned.ts` and the shim, and only then run the probe. Record the outcome by keeping the JSON report with the release evidence, pasting the PASS/FAIL/MANUAL summary and the Vibe version into the results table above, and listing each MANUAL check as verified or still unverified. A green probe does not replace the manual checks.
+
 ## Implementation references in the installed package
 
 Findings above were checked in `/Users/roman/.local/share/uv/tools/mistral-vibe/lib/python3.12/site-packages/vibe/`: `core/paths/_vibe_home.py`, `core/paths/_agents_home.py`, `core/config/default_orchestrator.py`, `core/config/harness_files/_harness_manager.py`, `core/config/layers/environment.py`, `core/config/vibe_schema.py`, `core/tools/builtins/read_file.py`, `core/tools/builtins/grep.py`, `core/tools/utils.py`, `acp/entrypoint.py`, `acp/acp_logger.py`, `acp/agent.py`, `acp/utils.py`, `core/agents/manager.py`, and `core/agents/models.py`. These are implementation details, not public compatibility guarantees; capability and effective-profile checks must be repeated for each supported version.
