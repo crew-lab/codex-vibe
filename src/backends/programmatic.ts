@@ -80,7 +80,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
     const chunks = createStreamingOutputParser(async (text) => {
       const redacted = redactSecrets(text, profile.env.MISTRAL_API_KEY ? [profile.env.MISTRAL_API_KEY] : []);
       latestSummary = redacted.slice(-input.limits.maxTranscriptBytes);
-      await callbacks.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: redacted } });
+      await callbacks.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: `${redacted}\n` } });
     }, input.limits.maxEventBytes);
     const stderrRedactor = new StreamingRedactor(profile.env.MISTRAL_API_KEY ? [profile.env.MISTRAL_API_KEY] : []);
     let outputLimited = false;

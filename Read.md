@@ -14,7 +14,7 @@ Provision the pinned Vibe installation using your normal Python tool management 
 ## Install from the source checkout
 
 ```sh
-cd /Users/roman/src/github.com/crew-lab/codex-vibe
+cd /path/to/cdx-vibe
 npm ci
 npm run build
 node dist/cli.js --version
@@ -81,7 +81,7 @@ Reload your client configuration using its normal workflow and verify that all e
 Other stdio MCP clients can launch the server directly:
 
 ```sh
-node /Users/roman/src/github.com/crew-lab/codex-vibe/dist/cli.js serve --stdio
+node /path/to/cdx-vibe/dist/cli.js serve --stdio
 ```
 
 The client owns stdin/stdout; server stdout contains protocol frames. This command is not an interactive task prompt.

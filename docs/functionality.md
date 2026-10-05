@@ -4,7 +4,7 @@ Codex Vibe exposes a local Model Context Protocol (MCP) server that delegates co
 
 ## Review and editing
 
-**Review runs** read an allowed workspace using Vibe's `read_file` and `grep` tools. They produce a public response and recorded events. The supervisor checks workspace integrity; the review profile does not enable editing, shell, or network tools. Optional `context_files` identify approved context paths for the task.
+**Review runs** read an allowed workspace using Vibe's `read_file` and `grep` tools. They produce a public response and recorded events. The supervisor compares the source workspace before and after the run. A change during a review does not fail the run: it adds a warning to the result that findings may not match the current files, and artifacts are still written. The review profile does not enable editing, shell, or network tools. Optional `context_files` identify approved context paths for the task.
 
 **Edit runs** require a Git repository. The supervisor creates a detached worktree from `base_ref` (default: `HEAD`) and enables `read_file`, `grep`, `write_file`, and `edit` there. The worker edits that worktree, leaving the source checkout unchanged. Exported changes are relative to the chosen base; callers should not assume uncommitted source changes are copied into the worker.
 
@@ -49,9 +49,11 @@ See [protocol.md](protocol.md) and `src/mcp/schemas.ts` for the protocol and exa
 
 Runs enter a queue, start a worker, and advance through backend initialization to execution. ACP runs may pause in `waiting_permission` or `waiting_input`. Normal outcomes are `completed`, `failed`, or `cancelled`; closing releases worker resources and records `closed`.
 
-The default capacity is two active runs and eight queued runs. Configured turn counts, deadlines, output limits, and idle lifetime bound work. State, sequenced events, and public transcripts are persisted in private run directories. A data-directory owner lock prevents two supervisors from managing the same storage concurrently.
+The default capacity is two active runs and eight queued runs. Configured turn counts, deadlines, output limits, and idle lifetime bound work. The `timeout_seconds` deadline counts from the moment a run launches, not from when it was queued; queued runs have no deadline timer. State, sequenced events, and public transcripts are persisted in private run directories. A data-directory owner lock prevents two supervisors from managing the same storage concurrently.
 
-After a restart, the supervisor reads saved records. ACP recovery uses `session/load` only when the backend advertises support and saved paths and profiles pass validation. Replayed updates are suppressed during loading. The original task is never automatically resubmitted, and pending permission/input requests are not restored. A recovered session needs explicit continuation. Programmatic runs cannot resume an interactive session; saved records remain available for inspection.
+After a restart, the supervisor reads saved records. ACP recovery uses `session/load` only when the backend advertises support and saved paths and profiles pass validation. Replayed updates are suppressed during loading. The original task is never automatically resubmitted, and pending permission/input requests are not restored. A recovered session needs explicit continuation.
+
+After an ACP turn completes, its session stays live for `worker_idle_ttl_seconds`, and at most `max_concurrent_runs` completed sessions are kept live at once; the least recently completed idle session is closed first (recorded as an `idle_evicted` or `idle_expired` event) while the run stays `completed`. Completed runs found after a restart are not reloaded at startup; `vibe_continue` lazily reloads the saved session, which needs a free run slot. Closing or cancelling a run never turns a completed run into `failed` because of the backend process exiting afterwards. A backend-reported state change that is invalid for the run's current state is ignored and recorded as a `diagnostic` warning event with `reason` `ignored_backend_state_transition`, the reported and current states, and a redacted, bounded message. Programmatic runs cannot resume an interactive session; saved records remain available for inspection.
 
 ## Backends
 

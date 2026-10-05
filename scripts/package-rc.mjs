@@ -5,7 +5,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const cache = process.env.VIBE_SUPERVISOR_TEST_NPM_CACHE ?? '/Users/roman/Documents/Codex/2026-10-03/p/work/npm-cache';
+const cache = process.env.VIBE_SUPERVISOR_TEST_NPM_CACHE;
+if (!cache || !path.isAbsolute(cache)) throw new Error('Set VIBE_SUPERVISOR_TEST_NPM_CACHE to an absolute path of a populated offline npm cache.');
 await access(path.join(cache, '_cacache')).catch(() => { throw new Error('A populated offline npm cache is required; set VIBE_SUPERVISOR_TEST_NPM_CACHE.'); });
 const releaseDir = path.join(root, 'release');
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));

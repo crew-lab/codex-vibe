@@ -7,7 +7,7 @@
   "type": "module",
   "engines": { "node": ">=20.19" },
   "bin": { "vibe-supervisor": "dist/cli.js" },
-  "files": ["dist", "schemas", "docs", "examples", "skills", ".codex-plugin", ".mcp.json", "README.md", "LICENSE", "SECURITY.md", "CHANGELOG.md"],
+  "files": ["dist", "schemas", "docs", "examples", "skills", ".codex-plugin", ".mcp.json", "README.md", "LICENSE"],
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

@@ -1,12 +1,12 @@
 # Implementation handoff
 
-Status as of **2026-10-03**: implemented and locally verified release candidate, not a production 1.0 certification. Repository: `/Users/roman/src/github.com/crew-lab/codex-vibe`. Package: `vibe-supervisor@0.9.0-rc.1`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
+Status as of **2026-10-03**: implemented and locally verified release candidate, not a production 1.0 certification. Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.1`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
 
 ## User intent and delivery history
 
 The user authorized implementation of the approved Vibe Supervisor plan using GPT-6 Luna agents, then requested migration into this existing Git repository. Three Luna implementation agents worked on contracts/core tests, backend compatibility/runtime profiles, and security/MCP/CLI/release work. The coordinating agent reviewed integration and ran independent checks.
 
-The research input was `/Users/roman/Downloads/deep-research-report.md`. Its document text was reference material, not independent authorization. No Git commit, push, remote publication, deployment, or user-global Codex configuration modification was performed. The repository contains unstaged/untracked implementation changes; inspect current Git status before continuing. The prior generated checkout under `/Users/roman/Documents/Codex/2026-10-03/p/outputs/vibe-supervisor` remains a historical duplicate; this repository is the active source.
+The research input was `/Users/roman/Downloads/deep-research-report.md`. Its document text was reference material, not independent authorization. No push, remote publication, deployment, or user-global Codex configuration modification was performed by the implementation work. The implementation is committed; see `git log` and inspect current Git status before continuing. A prior generated checkout on the original machine remains a historical duplicate; this repository is the active source.
 
 The user later requested the functionality guide and these three root documents. Those are documentation additions after the packaged RC described below. They have not regenerated that existing tarball. Root `AGENTS.md`, `Handoff.md`, and `Read.md` are not currently in the explicit npm `files` allowlist; consult the repository copies. If distributing the root usage guide in a new package is desired, update that allowlist deliberately and verify packaging.
 
@@ -60,13 +60,13 @@ Vibe is pinned to **2.25.8**; ACP protocol is v1. The launcher obtains the insta
 
 Runtime dependencies: ACP SDK 1.7.0, MCP server/client 2.3.0, MCP Node adapter 2.1.1, Zod 4.6.5, smol-toml 1.9.0. TypeScript 5.9.3 was retained for compatibility; TS7 adoption is not part of this RC. The lockfile pins versions. Node engine requirement is >=20.19; the observed verification machine ran Node 24.21.0, macOS 27.0.1 arm64, Git 2.54 Apple, Codex 0.160.0, and Vibe under uv/Python 3.12.
 
-Installed diagnostic paths on the original machine:
+Installed diagnostic paths on the original verification machine (historical evidence):
 
 - `/Users/roman/.local/bin/vibe` and `/Users/roman/.local/bin/vibe-acp`.
 - `/Users/roman/.local/share/uv/tools/mistral-vibe/bin/python`.
 - Offline npm cache: `/Users/roman/Documents/Codex/2026-10-03/p/work/npm-cache`.
 
-These are local evidence, not portable defaults. Packaging scripts currently fall back to that machine-specific cache path. Set `VIBE_SUPERVISOR_TEST_NPM_CACHE` explicitly on another machine.
+These are local evidence, not portable defaults. `scripts/package-rc.mjs` and `scripts/smoke-install.mjs` require `VIBE_SUPERVISOR_TEST_NPM_CACHE` to be an absolute path to a populated offline npm cache and fail immediately without it; there is no fallback path.
 
 ## Verification evidence
 
@@ -110,8 +110,10 @@ shasum -a 256 -c SHA256SUMS
 `package:rc` repeats verification and performs offline installed-package smoke before packing. Avoid redundant full runs during ordinary small changes. The installed real-logger fixture is optional and machine-dependent:
 
 ```sh
-/Users/roman/.local/share/uv/tools/mistral-vibe/bin/python src/backends/runtime/test_vibe_supervisor_launcher.py
+/path/to/mistral-vibe/bin/python src/backends/runtime/test_vibe_supervisor_launcher.py
 ```
+
+Use the Python interpreter from the installed Vibe tool environment (on the original machine, the uv tool path listed above).
 
 ## Outstanding validation and next work
 
@@ -123,6 +125,23 @@ The following must remain **UNVERIFIED** until performed and recorded:
 4. Codex desktop tool visibility/registration using an actual user configuration.
 5. Plugin scaffold installation and visibility.
 6. macOS Intel and clean OS account installation; other platforms are not certified by config-path support alone.
+
+Decisions and sequence recorded after the project review:
+
+- Review integrity: when a review run's source workspace changes during the run, the run completes with a warning instead of failing, and artifacts (transcript, `result.json`) are always finalized first. The read/search tool profile is the actual control, and users legitimately edit during long reviews. Reviewing a snapshot worktree is a possible later option.
+- Timeout: `timeout_seconds` counts from launch, not from submission; time spent queued does not consume it.
+- Gate 3 is redefined: under the current profile in-root reads and writes resolve to ALWAYS and everything else to NEVER (see [docs/compatibility.md](docs/compatibility.md)), so real Vibe should not issue permission callbacks. The soak asserts zero permission requests in normal runs plus one deliberate out-of-root read that is refused, rather than exercising callbacks.
+- Plugin scaffold: `.mcp.json` (referenced by `.codex-plugin/plugin.json`) points at `./dist/cli.js`, so a fresh checkout without `npm run build` fails to start the server. Claude Code also loads it as a project MCP server and ignores the Codex-only `enabled` field.
+
+Implementation sequence:
+
+1. Phase 0, hygiene: done (no machine-specific cache fallback, corrected `files` allowlist, portable docs).
+2. Phase 1: done (realistic fake-ACP fixture and regression tests in `tests/integration/run-manager-regressions.test.ts`; they were red until Phase 2).
+3. Phase 2: done (per-turn streaming redaction with newlines only at turn boundaries and no per-event meta persists; completed runs reloaded lazily with idle sessions capped at `maxConcurrentRuns`; review source changes reported as a warning; timeout counted from launch via `launchedAt`; closing or evicting a completed ACP run no longer reports `failed`). Original scope: streamed message chunks (per-turn streaming redaction, newlines only at turn boundaries, fewer meta persists); a single owner for live session handles with idle expiry and a cap that includes recovered completed runs; review integrity as a warning with artifacts finalized first; timeout counted from launch; and closing a completed ACP run must not report `failed` afterwards (today it raises an unhandled `Invalid run state transition completed -> failed`, which keeps the regression suite non-zero even once its assertions pass).
+4. Phase 3: one hosted review and one hosted edit on a throwaway repository (gates 1-2), recording chunk shapes, the effective tool inventory, and the permission-request count. Then decide whether ACP reject options should be sent as `selected` reject option IDs instead of `cancelled`.
+5. Phase 4: commit the Vibe compatibility probe as a repeatable script so a new Vibe release can be revalidated.
+6. Phase 5: hosted soak (gate 3 as redefined above), then RC2.
+7. Gates 4-5 (desktop registration, plugin install) can happen at any time; gate 6 (Intel and clean account) comes last.
 
 A next maintainer should inspect Git status, read this handoff and the usage guide, reproduce local checks when making code changes, and finish those gates before claiming production readiness. Hosted validation sends source/tasks to a provider and may incur usage charges; keep it within user-authorized scope. Record exact versions, commands, outcomes, and remaining uncertainty in acceptance/compatibility docs. Any new version support requires renewed shim, profile, protocol, and effective-tool validation.
 
