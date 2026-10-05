@@ -37,6 +37,7 @@ interface Runtime {
   cancelRequested: boolean;
   started: boolean;
   sourceSnapshot?: string;
+  snapshotWarning?: string;
   verifiedPatch?: { patchPath: string; sha256: string };
   deferredResponses: BackendRespondInput[];
   idleTimer?: NodeJS.Timeout;
@@ -339,8 +340,10 @@ export class RunManager {
     if (isTerminal(runtime.record.state) || runtime.record.state === "completed") return { run_id: input.run_id, state: runtime.record.state };
     runtime.cancelRequested = true;
     this.removeFromPending(runtime);
-    if (runtime.handle && runtime.backend) {
-      try { await runtime.backend.cancel(runtime.handle); } catch { /* State remains cancelled; diagnostics are redacted and generic. */ }
+    const sessionBackend = runtime.backend; const sessionHandle = runtime.handle;
+    if (sessionHandle && sessionBackend) {
+      delete runtime.handle;
+      try { await sessionBackend.cancel(sessionHandle); } catch { /* State remains cancelled; diagnostics are redacted and generic. */ }
     }
     if (!isTerminal(runtime.record.state)) {
       await this.finalizeArtifacts(runtime, "cancelled").catch(() => undefined);
@@ -495,8 +498,13 @@ export class RunManager {
         const worktree = await createDetachedWorktree(runtime.record.sourceWorkspace, runtime.record.workerWorkspace, baseRef);
         runtime.record.worktree = worktree; runtime.record.workerWorkspace = worktree.path; workerWorkspace = worktree.path;
       } else {
-        runtime.sourceSnapshot = await hashWorkspace(runtime.record.sourceWorkspace);
-        runtime.record.workspaceSnapshotSha256 = runtime.sourceSnapshot;
+        try {
+          runtime.sourceSnapshot = await hashWorkspace(runtime.record.sourceWorkspace);
+          runtime.record.workspaceSnapshotSha256 = runtime.sourceSnapshot;
+        } catch {
+          delete runtime.sourceSnapshot; delete runtime.record.workspaceSnapshotSha256;
+          runtime.snapshotWarning = SNAPSHOT_UNAVAILABLE_WARNING;
+        }
         await this.persist(runtime);
       }
       if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
@@ -528,6 +536,7 @@ export class RunManager {
       const normalized = normalizeError(error);
       await this.setState(runtime, "failed", { error: normalized, finishedAt: new Date().toISOString() }).catch(() => undefined);
       await this.finalizeArtifacts(runtime, "failed").catch(() => undefined);
+      await this.releaseSession(runtime);
       this.releaseSlot(runtime);
     }
   }
@@ -646,7 +655,11 @@ export class RunManager {
         runtime.cancelRequested = true;
         await this.setState(runtime, "failed", { error: supervisorError("VSUP_PERMISSION_REQUIRED", "The requested tool action is outside the configured safety policy."), finishedAt: new Date().toISOString() });
         this.releaseSlot(runtime);
-        if (runtime.handle && runtime.backend) setImmediate(() => { void runtime.backend?.cancel(runtime.handle!).catch(() => undefined); });
+        const sessionBackend = runtime.backend; const sessionHandle = runtime.handle;
+        if (sessionHandle && sessionBackend) {
+          delete runtime.handle;
+          setImmediate(() => { void sessionBackend.cancel(sessionHandle).catch(() => undefined); });
+        }
       }
     });
   }
@@ -654,7 +667,7 @@ export class RunManager {
   private async applyBackendState(runtime: Runtime, state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "acp">>): Promise<void> {
     if (isTerminal(runtime.record.state) || runtime.record.state === "closing") return;
     if (runtime.record.state === "completed" && (state === "failed" || state === "cancelled" || state === "completed")) {
-      if (state === "failed" && runtime.handle) { if (runtime.idleTimer) clearTimeout(runtime.idleTimer); delete runtime.handle; }
+      if (state === "failed") await this.releaseSession(runtime);
       return;
     }
     if (update?.usage) runtime.record.usage = update.usage;
@@ -671,6 +684,7 @@ export class RunManager {
         this.scheduleIdleExpiration(runtime);
       } catch (error) {
         await this.setState(runtime, "failed", { error: error instanceof Error && "code" in error ? normalizeError(error) : supervisorError("VSUP_ARTIFACT_ERROR", "Could not finish and verify the run artifacts."), finishedAt: new Date().toISOString() });
+        await this.releaseSession(runtime);
       }
       this.releaseSlot(runtime);
       this.enforceIdleSessionCap();
@@ -680,6 +694,7 @@ export class RunManager {
       await this.addReviewIntegrityWarning(runtime);
       await this.finalizeArtifacts(runtime, "failed").catch(() => undefined);
       await this.setState(runtime, "failed", { finishedAt: new Date().toISOString(), ...(update?.error ? { error: update.error } : {}) });
+      await this.releaseSession(runtime);
       this.releaseSlot(runtime); return;
     }
     if (state === "cancelled") {
@@ -689,6 +704,7 @@ export class RunManager {
         await this.setState(runtime, "failed", { error: runtime.pendingFailure, finishedAt: new Date().toISOString() });
         delete runtime.pendingFailure;
       } else await this.setState(runtime, "cancelled", { finishedAt: new Date().toISOString() });
+      await this.releaseSession(runtime);
       this.releaseSlot(runtime); return;
     }
     await this.setState(runtime, state, update);
@@ -723,7 +739,7 @@ export class RunManager {
       summary,
       artifacts,
       changedFiles: patchInfo?.changedFiles ?? [],
-      warnings: [...(runtime.record.result?.warnings ?? [])]
+      warnings: [...(runtime.record.result?.warnings ?? []), ...(runtime.snapshotWarning && !(runtime.record.result?.warnings ?? []).includes(runtime.snapshotWarning) ? [runtime.snapshotWarning] : [])]
     };
     const resultWire = {
       schema_version: 1, run_id: runtime.record.runId, state: resultState, backend: runtime.record.backend,
@@ -761,7 +777,7 @@ export class RunManager {
     if (isTerminal(runtime.record.state) || runtime.record.state === "completed") return;
     runtime.cancelRequested = true; runtime.pendingFailure = supervisorError("VSUP_TIMEOUT", "The run exceeded its configured timeout."); this.removeFromPending(runtime);
     const backend = runtime.backend; const handle = runtime.handle;
-    if (backend && handle) await backend.cancel(handle).catch(() => undefined);
+    if (backend && handle) { delete runtime.handle; await backend.cancel(handle).catch(() => undefined); }
     await this.serial(runtime, async () => {
       if (isTerminal(runtime.record.state) || runtime.record.state === "completed") return;
       await this.appendEvent(runtime, { source: "supervisor", type: "timeout", severity: "warning", data: { timeout_seconds: runtime.record.limits.timeoutSeconds } });
@@ -822,6 +838,13 @@ export class RunManager {
     runtime.idleTimer.unref?.();
   }
 
+  private async releaseSession(runtime: Runtime): Promise<void> {
+    if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
+    const backend = runtime.backend; const handle = runtime.handle;
+    delete runtime.handle;
+    if (backend && handle) await backend.close(handle).catch(() => undefined);
+  }
+
   private async releaseIdleHandle(runtime: Runtime, eventType: "idle_expired" | "idle_evicted"): Promise<void> {
     if (runtime.record.state !== "completed" || runtime.slot || !runtime.handle || !runtime.backend) return;
     if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
@@ -875,7 +898,7 @@ export class RunManager {
     runtime.cancelRequested = true;
     runtime.pendingFailure = error;
     const backend = runtime.backend; const handle = runtime.handle;
-    if (backend && handle && !isTerminal(runtime.record.state)) await backend.cancel(handle).catch(() => undefined);
+    if (backend && handle && !isTerminal(runtime.record.state)) { delete runtime.handle; await backend.cancel(handle).catch(() => undefined); }
     await this.serial(runtime, async () => {
       if (isTerminal(runtime.record.state)) return;
       await this.setState(runtime, "failed", { error, finishedAt: new Date().toISOString() });
@@ -943,7 +966,12 @@ async function describeArtifact(name: string, file: string, mediaType: string): 
   return { name, path: file, sha256: createHash("sha256").update(bytes).digest("hex"), bytes: bytes.byteLength, mediaType } as NonNullable<RunRecord["result"]>["artifacts"] extends (infer A)[] | undefined ? A : never;
 }
 
-async function hashWorkspace(root: string): Promise<string> {
+const SNAPSHOT_UNAVAILABLE_WARNING = "The source workspace could not be snapshotted (too large or unreadable); review integrity was not checked.";
+
+export interface WorkspaceHashLimits { maxFiles: number; maxBytes: number }
+const DEFAULT_HASH_LIMITS: WorkspaceHashLimits = { maxFiles: 200_000, maxBytes: 2 * 1024 * 1024 * 1024 };
+
+export async function hashWorkspace(root: string, limits: WorkspaceHashLimits = DEFAULT_HASH_LIMITS): Promise<string> {
   const hash = createHash("sha256");
   let totalBytes = 0; let count = 0;
   const visit = async (directory: string): Promise<void> => {
@@ -957,7 +985,7 @@ async function hashWorkspace(root: string): Promise<string> {
       if (info.isDirectory()) { hash.update(`D${relative}\0`); await visit(absolute); continue; }
       if (!info.isFile()) continue;
       count += 1; totalBytes += info.size;
-      if (count > 200_000 || totalBytes > 2 * 1024 * 1024 * 1024) throw codedError("VSUP_OUTPUT_LIMIT", "Workspace snapshot exceeded its safety limits.");
+      if (count > limits.maxFiles || totalBytes > limits.maxBytes) throw codedError("VSUP_OUTPUT_LIMIT", "Workspace snapshot exceeded its safety limits.");
       hash.update(`F${relative}\0`);
       const handle = await open(absolute, "r");
       try { const buffer = Buffer.allocUnsafe(64 * 1024); while (true) { const { bytesRead } = await handle.read(buffer, 0, buffer.length, null); if (!bytesRead) break; hash.update(buffer.subarray(0, bytesRead)); } }

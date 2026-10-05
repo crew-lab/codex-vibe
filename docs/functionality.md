@@ -55,6 +55,8 @@ After a restart, the supervisor reads saved records. ACP recovery uses `session/
 
 After an ACP turn completes, its session stays live for `worker_idle_ttl_seconds`, and at most `max_concurrent_runs` completed sessions are kept live at once; the least recently completed idle session is closed first (recorded as an `idle_evicted` or `idle_expired` event) while the run stays `completed`. Completed runs found after a restart are not reloaded at startup; `vibe_continue` lazily reloads the saved session, which needs a free run slot. Closing or cancelling a run never turns a completed run into `failed` because of the backend process exiting afterwards. A backend-reported state change that is invalid for the run's current state is ignored and recorded as a `diagnostic` warning event with `reason` `ignored_backend_state_transition`, the reported and current states, and a redacted, bounded message. Programmatic runs cannot resume an interactive session; saved records remain available for inspection.
 
+A review snapshots the source workspace at launch to detect changes. If the snapshot cannot be taken (more than 200,000 files, more than 2 GB, or an unreadable entry), the review still proceeds and the result carries a warning that review integrity was not checked. Every path that moves a run to `failed` (backend-reported failure, artifact finalization failure, deadline, output limits, launch errors) releases the worker process and session handle once; a failed run never keeps a live worker.
+
 ## Backends
 
 | Capability | Programmatic (default) | ACP (opt-in) |
