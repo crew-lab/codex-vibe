@@ -1,15 +1,18 @@
 """Pinned Vibe runtime shim. This file runs inside the isolated child only."""
 from __future__ import annotations
 
+import atexit
 import inspect
 import os
 import re
-import stat
+import selectors
 import signal
+import stat
+import subprocess
 import sys
 import threading
 import time
-from typing import Any
+from typing import Any, Callable, Optional
 
 EXPECTED_VERSION = "2.25.8"
 # Set restrictive permissions before importing Vibe or creating its state.
@@ -20,6 +23,13 @@ ENTRYPOINTS = {
 }
 PROMPT_FILE_ENV = "VIBE_SUPERVISOR_PROMPT_FILE"
 MAX_PROMPT_BYTES = 4 * 1024 * 1024
+ORIGINAL_HOME_ENV = "VIBE_SUPERVISOR_ORIGINAL_HOME"
+CREDENTIAL_ENV = "MISTRAL_API_KEY"
+SECURITY_BINARY = "/usr/bin/security"
+KEYCHAIN_SERVICES = ("ai.mistral.vibe", "vibe")
+SECURITY_PATH = "/usr/bin:/bin"
+KEYCHAIN_TIMEOUT_SECONDS = 5.0
+MAX_KEYCHAIN_OUTPUT_BYTES = 8 * 1024
 _SECRET_PATTERNS = (
     re.compile(r"\bBearer\s+[A-Za-z0-9._~+/-]+=*", re.IGNORECASE),
     re.compile(r"\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b"),
@@ -66,6 +76,156 @@ def consume_prompt_file(environ: Any, argv: list[str], expected_directory: str) 
     except UnicodeDecodeError as exc:
         raise RuntimeError("Prompt file is not valid UTF-8") from exc
     return [argv[0], "--prompt", text, *argv[1:]]
+
+
+Runner = Callable[[list, dict, float, int], "tuple[int, bytes]"]
+
+
+def _run_bounded(argv: list, env: dict, timeout: float, limit: int) -> "tuple[int, bytes]":
+    process = subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, shell=False, close_fds=True)
+    deadline = time.monotonic() + timeout
+    chunks: list = []
+    total = 0
+    try:
+        descriptor = process.stdout.fileno()
+        with selectors.DefaultSelector() as selector:
+            selector.register(descriptor, selectors.EVENT_READ)
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not selector.select(remaining):
+                    raise TimeoutError("keychain lookup timed out")
+                data = os.read(descriptor, 4096)
+                if not data:
+                    break
+                total += len(data)
+                if total > limit:
+                    raise OverflowError("keychain output too large")
+                chunks.append(data)
+        try:
+            process.wait(timeout=max(0.01, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired as exc:
+            raise TimeoutError("keychain lookup timed out") from exc
+        return process.returncode, b"".join(chunks)
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.stdout.close()
+        process.wait()
+
+
+def trusted_original_home(raw: Optional[str]) -> Optional[str]:
+    if not raw or "\0" in raw or not os.path.isabs(raw) or os.path.normpath(raw) != raw:
+        return None
+    try:
+        info = os.lstat(raw)
+    except OSError:
+        return None
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+        return None
+    return raw
+
+
+def _decode_credential(output: bytes) -> Optional[str]:
+    try:
+        text = output.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    if text.endswith("\n"):
+        text = text[:-1]
+    if not text or any(character in text for character in ("\0", "\r", "\n")):
+        return None
+    return text
+
+
+def lookup_keychain_credential(home: str, runner: Runner = _run_bounded, executable: str = SECURITY_BINARY) -> "tuple[Optional[str], str]":
+    environment = {"HOME": home, "PATH": SECURITY_PATH}
+    reason = "not-found"
+    for service in KEYCHAIN_SERVICES:
+        argv = [executable, "find-generic-password", "-a", CREDENTIAL_ENV, "-s", service, "-w"]
+        try:
+            code, output = runner(argv, environment, KEYCHAIN_TIMEOUT_SECONDS, MAX_KEYCHAIN_OUTPUT_BYTES)
+        except TimeoutError:
+            reason = "timeout"
+            continue
+        except OverflowError:
+            reason = "oversize"
+            continue
+        except Exception:
+            reason = "error"
+            continue
+        if code != 0:
+            reason = "not-found"
+            continue
+        credential = _decode_credential(output)
+        if credential is None:
+            reason = "invalid-output"
+            continue
+        return credential, "found"
+    return None, reason
+
+
+def resolve_credential(
+    environ: Any,
+    original_home: Optional[str],
+    platform: str = sys.platform,
+    runner: Runner = _run_bounded,
+    executable: str = SECURITY_BINARY,
+) -> str:
+    if environ.get(CREDENTIAL_ENV):
+        return "environment"
+    environ.pop(CREDENTIAL_ENV, None)
+    if platform != "darwin":
+        return "skipped-platform"
+    home = trusted_original_home(original_home)
+    if home is None:
+        return "skipped-home"
+    credential, reason = lookup_keychain_credential(home, runner, executable)
+    if credential is None:
+        return reason
+    environ[CREDENTIAL_ENV] = credential
+    return "keychain"
+
+
+class RedactingStream:
+    def __init__(self, stream: Any, secret: str) -> None:
+        self._stream = stream
+        self._secret = secret
+        self._pending = ""
+        self._lock = threading.Lock()
+
+    def _drain(self, include_partial: bool, final: bool = False) -> None:
+        text = self._pending.replace(self._secret, "[REDACTED]")
+        if final:
+            cut = len(text)
+        else:
+            cut = text.rfind("\n") + 1
+            if include_partial:
+                cut = max(cut, len(text) - (len(self._secret) - 1))
+        if cut:
+            self._stream.write(text[:cut])
+        self._pending = text[cut:]
+
+    def write(self, text: str) -> int:
+        with self._lock:
+            self._pending += text
+            self._drain(include_partial=len(self._pending) > 65536)
+        return len(text)
+
+    def flush(self, final: bool = False) -> None:
+        with self._lock:
+            self._drain(include_partial=True, final=final)
+        self._stream.flush()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._stream, name)
+
+
+def _install_stderr_redaction(secret: str) -> None:
+    if len(secret) < 4:
+        return
+    stream = RedactingStream(sys.stderr, secret)
+    sys.stderr = stream
+    atexit.register(lambda: stream.flush(final=True))
 
 
 def _redact(value: Any) -> Any:
@@ -160,6 +320,7 @@ def _start_parent_watchdog() -> None:
 
 
 def main() -> None:
+    original_home = os.environ.pop(ORIGINAL_HOME_ENV, None)
     _start_parent_watchdog()
     import vibe
 
@@ -174,6 +335,11 @@ def main() -> None:
     elif os.environ.pop(PROMPT_FILE_ENV, None) is not None:
         raise SystemExit("A prompt file is only valid for the programmatic entrypoint")
     _patch_session_logger()
+    status = resolve_credential(os.environ, original_home)
+    if status == "keychain":
+        _install_stderr_redaction(os.environ[CREDENTIAL_ENV])
+    elif status not in ("environment", "skipped-platform"):
+        sys.stderr.write(f"vibe-supervisor: no Keychain credential resolved ({status}); Vibe will use its own authentication\n")
     # Suppress Vibe's info-level prompt logging. The isolated VIBE_HOME still
     # retains recovery messages after recursive reasoning/key redaction.
     os.environ["LOG_LEVEL"] = "ERROR"
