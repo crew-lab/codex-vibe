@@ -16,10 +16,11 @@ Provision the pinned Vibe installation using your normal Python tool management 
 ```sh
 cd /path/to/cdx-vibe
 npm ci
-npm run build
 node dist/cli.js --version
 node dist/cli.js init
 ```
+
+`npm ci` also builds `dist/` (the `prepare` script runs `npm run build`), and an MCP client such as the checked-in `.mcp.json` starts `./dist/cli.js`, so run `npm ci` in a fresh checkout before starting the server. `npm ci --omit=dev` cannot build. Run `npm run build` after source updates.
 
 `init` prints the configuration path and refuses to overwrite an existing configuration. On macOS the default is:
 
