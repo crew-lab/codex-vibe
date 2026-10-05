@@ -90,10 +90,10 @@ Documentation additions were checked for local link targets and whitespace. They
 
 ## Release artifacts and reproduction
 
-`release/` is ignored by Git. The current candidate is **0.9.0-rc.2**, built on 2026-10-05 from this repository on the preparing machine (Node 24.19.0, macOS arm64):
+`release/` is ignored by Git. The current candidate is **0.9.0-rc.2**, rebuilt on 2026-10-05 from commit `88a52dc` (after the cold-review fixes) on the preparing machine (Node 24.19.0, macOS arm64):
 
 ```text
-vibe-supervisor-0.9.0-rc.2.tgz  sha256 5f5b18161bb6e8a04ffbe232ba1584527dcce52c6fdc2bda622b84bba6303ab5
+vibe-supervisor-0.9.0-rc.2.tgz  sha256 37a97be02ef8afaa6dad259fb476754e88ba1e77ebed2f819d7d9e725d970225
 sbom.spdx.json
 acceptance.json                 7 deterministic checks PASS; hosted, soak and platform gates listed UNVERIFIED
 SHA256SUMS
