@@ -44,35 +44,101 @@ function normalizeError(error: unknown): SupervisorError {
   return supervisorError('VSUP_INTERNAL', 'The request could not be completed.');
 }
 
-function bounded(value: unknown, maxChars: number): { structuredContent: Record<string, unknown>; text: string } {
+type JsonRecord = Record<string, unknown>;
+
+const SUMMARY_MARKER = '\n… [summary truncated: middle omitted] …\n';
+
+function isRecord(value: unknown): value is JsonRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function capTail(value: string, limit: number): string {
+  return value.length <= limit ? value : `… [truncated] ${value.slice(value.length - limit)}`;
+}
+
+function capHead(value: string, limit: number): string {
+  return value.length <= limit ? value : `${value.slice(0, limit)} … [truncated]`;
+}
+
+function capSummary(value: string, limit: number): string {
+  if (value.length <= limit) return value;
+  const budget = Math.max(0, limit - SUMMARY_MARKER.length);
+  const head = Math.ceil(budget * 0.6);
+  return `${value.slice(0, head)}${SUMMARY_MARKER}${value.slice(value.length - (budget - head))}`;
+}
+
+function trimList(scope: JsonRecord, key: string, totalKey: string, keep: number): boolean {
+  const list = scope[key];
+  if (!Array.isArray(list) || list.length <= keep) return false;
+  if (typeof scope[totalKey] !== 'number') scope[totalKey] = list.length;
+  scope[key] = key === 'events' ? list.slice(-keep) : list.slice(0, keep);
+  return true;
+}
+
+function reduceOnce(scope: JsonRecord, step: number, maxChars: number, excess: number): string[] {
+  const done: string[] = [];
+  if (step === 0 && typeof scope.patch === 'string') {
+    const artifacts = Array.isArray(scope.artifacts) ? scope.artifacts.filter(isRecord) : [];
+    const patchPath = artifacts.find((artifact) => artifact.name === 'diff.patch')?.path;
+    if (scope.patch_path === undefined && typeof patchPath === 'string') scope.patch_path = patchPath;
+    if (scope.patch_bytes === undefined) scope.patch_bytes = Buffer.byteLength(scope.patch);
+    delete scope.patch;
+    done.push('patch');
+  } else if (step === 1 && typeof scope.transcript === 'string' && scope.transcript.length > Math.floor(maxChars / 8)) {
+    scope.transcript = capTail(scope.transcript, Math.floor(maxChars / 8)); scope.transcript_truncated = true;
+    done.push('transcript');
+  } else if (step === 2 && typeof scope.diff_stat === 'string' && scope.diff_stat.length > Math.floor(maxChars / 16)) {
+    scope.diff_stat = capHead(scope.diff_stat, Math.floor(maxChars / 16));
+    done.push('diff_stat');
+  } else if (step === 3) {
+    if (trimList(scope, 'changed_files', 'changed_files_total', 10)) done.push('changed_files');
+    if (trimList(scope, 'changedFiles', 'changedFilesTotal', 10)) done.push('changedFiles');
+    if (trimList(scope, 'events', 'events_total', 10)) done.push('events');
+    for (const key of ['text', 'output', 'preview']) if (typeof scope[key] === 'string' && (scope[key] as string).length > Math.floor(maxChars / 4)) { scope[key] = capHead(scope[key] as string, Math.floor(maxChars / 4)); done.push(key); }
+  } else if (step === 4 && typeof scope.summary === 'string' && scope.summary.length > SUMMARY_MARKER.length + 200) {
+    scope.summary = capSummary(scope.summary, Math.max(SUMMARY_MARKER.length + 200, scope.summary.length - excess - 64));
+    done.push('summary');
+  }
+  return done;
+}
+
+function emergency(object: JsonRecord, reduced: JsonRecord, fields: string[], maxChars: number): string {
+  const nested = isRecord(reduced.result) ? reduced.result : {};
+  const compact: JsonRecord = { truncated: true, run_id: object.run_id ?? object.runId ?? '', ...(object.state === undefined ? {} : { state: object.state }) };
+  const tryAdd = (key: string, value: unknown): void => {
+    if (value === undefined) return;
+    compact[key] = value;
+    if (JSON.stringify(compact).length > maxChars) delete compact[key];
+  };
+  for (const key of ['error', 'warnings', 'integrity', 'patch_path', 'pending_request', 'next_action']) tryAdd(key, reduced[key] ?? nested[key]);
+  const artifacts = Array.isArray(reduced.artifacts) ? reduced.artifacts : Array.isArray(nested.artifacts) ? nested.artifacts : [];
+  if (artifacts.length) tryAdd('artifacts', artifacts.slice(0, 1).filter(isRecord).map((artifact) => ({ name: artifact.name, path: artifact.path, sha256: artifact.sha256 })));
+  tryAdd('truncated_fields', fields.slice(0, 20));
+  const result = JSON.stringify(compact);
+  return result.length > maxChars ? JSON.stringify({ truncated: true, run_id: object.run_id ?? object.runId ?? '' }) : result;
+}
+
+export function bounded(value: unknown, maxChars: number): { structuredContent: Record<string, unknown>; text: string } {
   const safe = sanitizeForPersistence(value);
-  const object = safe && typeof safe === 'object' && !Array.isArray(safe) ? safe as Record<string, unknown> : { result: safe };
+  const object = isRecord(safe) ? safe : { result: safe };
   const serialized = JSON.stringify(object);
   if (serialized.length <= maxChars) return { structuredContent: object, text: serialized };
-  const reduced: Record<string, unknown> = { ...object, truncated: true };
-  // Keep the run and artifact handles intact; shrink verbose text and event/file lists first.
-  for (const key of ['transcript', 'summary', 'text', 'output', 'preview']) {
-    if (typeof reduced[key] === 'string') reduced[key] = `${(reduced[key] as string).slice(0, Math.max(0, Math.floor(maxChars / 4)))}… [truncated]`;
-  }
-  for (const key of ['events', 'changedFiles', 'warnings']) {
-    if (Array.isArray(reduced[key])) reduced[key] = (reduced[key] as unknown[]).slice(-20);
+  const fields: string[] = [];
+  const reduced: JsonRecord = { ...object };
+  if (isRecord(reduced.result)) reduced.result = { ...reduced.result };
+  reduced.truncated = true; reduced.truncated_fields = fields;
+  const scopes: [string, JsonRecord][] = [['', reduced]];
+  if (isRecord(reduced.result)) scopes.push(['result.', reduced.result]);
+  const measure = () => JSON.stringify(reduced).length;
+  search: for (let step = 0; step <= 4; step += 1) {
+    for (const [prefix, scope] of scopes) {
+      const excess = measure() - maxChars;
+      if (excess <= 0) break search;
+      for (const field of reduceOnce(scope, step, maxChars, excess)) fields.push(`${prefix}${field}`);
+    }
   }
   let result = JSON.stringify(reduced);
-  if (result.length > maxChars) {
-    const compact: Record<string, unknown> = { truncated: true };
-    for (const key of ['run_id', 'runId', 'state', 'status', 'artifacts', 'patchPath', 'patch_path', 'diffPath', 'diff_path']) {
-      if (reduced[key] !== undefined) compact[key] = reduced[key];
-    }
-    result = JSON.stringify(compact);
-    if (result.length > maxChars) {
-      const artifacts = Array.isArray(compact.artifacts) ? compact.artifacts as Record<string, unknown>[] : [];
-      compact.artifacts = artifacts.slice(0, 1).map((artifact) => ({ name: artifact.name, path: artifact.path, sha256: artifact.sha256 }));
-      result = JSON.stringify(compact);
-    }
-  }
-  if (result.length > maxChars) {
-    result = JSON.stringify({ truncated: true, run_id: object.run_id ?? object.runId ?? '' });
-  }
+  if (result.length > maxChars) result = emergency(object, reduced, fields, maxChars);
   return { structuredContent: JSON.parse(result) as Record<string, unknown>, text: result };
 }
 

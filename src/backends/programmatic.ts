@@ -11,7 +11,8 @@ import { supervisorError } from '../contracts.js';
 import type { SupervisorConfig } from '../contracts.js';
 import { spawnManaged } from '../process/managed.js';
 import { assertNoProjectVibeExtensions, createVibeChildProfile } from './profile.js';
-import { buildVibeLaunch } from './launcher.js';
+import { buildVibeLaunch, removePromptFile } from './launcher.js';
+import type { VibeLaunch } from './launcher.js';
 import { SUPPORTED_VIBE } from './pinned.js';
 import { executableProbeKey, ProbeCache } from './probe-cache.js';
 import type { ProbeOptions } from './probe-cache.js';
@@ -74,7 +75,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
     if (!capabilities.available) throw supervisorError('VSUP_VIBE_VERSION_UNSUPPORTED', `Vibe CLI is unavailable or is not the tested version ${SUPPORTED_VIBE}`, capabilities.details);
     await assertNoProjectVibeExtensions(input.cwd);
     await assertNoProjectVibeExtensions(input.workerWorkspace);
-    const profile = await createVibeChildProfile(input, input.mode);
+    const profile = await createVibeChildProfile(input, input.mode, { forwardOriginalHome: true });
     profile.env.VIBE_SUPERVISOR_WORKER_TIMEOUT_SECONDS = String(input.limits.timeoutSeconds);
     const agent = input.mode === 'review' ? 'plan' : 'accept-edits';
     const toolNames = input.mode === 'review' ? ['read_file', 'grep'] : ['read_file', 'grep', 'write_file', 'edit'];
@@ -93,31 +94,44 @@ export class ProgrammaticBackend implements SupervisorBackend {
     const stderrRedactor = new StreamingRedactor(profile.env.MISTRAL_API_KEY ? [profile.env.MISTRAL_API_KEY] : []);
     let outputLimited = false;
     let parserFailed = false;
-    const launch = await buildVibeLaunch(executable(this.config), 'programmatic', args, profile, input.runDirectory, { promptText: prompt });
-    const child = spawnManaged(launch.command, launch.args, {
-      cwd: input.workerWorkspace, env: launch.env,
-      forwardEnv: Object.keys(launch.env),
-      maxStdoutBytes: input.limits.maxTranscriptBytes,
-      maxStderrBytes: input.limits.maxEventBytes,
-      onLimit: (stream) => {
-        outputLimited = true;
-        if (stream === 'stdout') void callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', 'Vibe programmatic output exceeded the configured transcript limit.') });
-      },
-      onStdout: (chunk) => { outputChain = outputChain.then(() => chunks.push(chunk)).catch(async (error: unknown) => {
-        if (!parserFailed) { parserFailed = true; await callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', redactSecrets(String(error), profile.env.MISTRAL_API_KEY ? [profile.env.MISTRAL_API_KEY] : [])) }); }
-        await child.terminate();
-      }); },
-      onStderr: (chunk) => {
-        const text = stderrRedactor.push(chunk);
-        if (text) stderrChain = stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text } })).then(() => undefined).catch(() => undefined);
+    const discardPromptFile = async (): Promise<void> => {
+      if (await removePromptFile(input.runDirectory) === 'refused') {
+        await callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: 'The task prompt file was not a regular file inside the run directory and was left in place.' } });
       }
-    });
+    };
+    let launch: VibeLaunch;
+    let child: ReturnType<typeof spawnManaged>;
+    try {
+      launch = await buildVibeLaunch(executable(this.config), 'programmatic', args, profile, input.runDirectory, { promptText: prompt });
+      child = spawnManaged(launch.command, launch.args, {
+        cwd: input.workerWorkspace, env: launch.env,
+        forwardEnv: Object.keys(launch.env),
+        maxStdoutBytes: input.limits.maxTranscriptBytes,
+        maxStderrBytes: input.limits.maxEventBytes,
+        onLimit: (stream) => {
+          outputLimited = true;
+          if (stream === 'stdout') void callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', 'Vibe programmatic output exceeded the configured transcript limit.') });
+        },
+        onStdout: (chunk) => { outputChain = outputChain.then(() => chunks.push(chunk)).catch(async (error: unknown) => {
+          if (!parserFailed) { parserFailed = true; await callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', redactSecrets(String(error), profile.env.MISTRAL_API_KEY ? [profile.env.MISTRAL_API_KEY] : [])) }); }
+          await child.terminate();
+        }); },
+        onStderr: (chunk) => {
+          const text = stderrRedactor.push(chunk);
+          if (text) stderrChain = stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text } })).then(() => undefined).catch(() => undefined);
+        }
+      });
+    } catch (error) {
+      await discardPromptFile().catch(() => undefined);
+      throw error;
+    }
     const opaque = { process: child, done: false, home: profile.home, vibeHome: profile.vibeHome, get summary() { return latestSummary; } };
     const handle: ProgrammaticHandle = { runId: input.runId, backend: this.kind, opaque };
     const processRecord = { ...(child.child.pid === undefined ? {} : { pid: child.child.pid }), executable: launch.command, version: SUPPORTED_VIBE };
     await callbacks.onState('running', { process: processRecord });
     void child.done.then(async ({ code, signal }) => {
       opaque.done = true;
+      await discardPromptFile();
       if (outputLimited || parserFailed) return;
       if (code === 0) {
         await outputChain;
@@ -131,6 +145,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
       }
     }).catch(async (error: unknown) => {
       opaque.done = true;
+      await discardPromptFile().catch(() => undefined);
       await callbacks.onState('failed', { error: supervisorError('VSUP_BACKEND_CRASHED', redactSecrets(String(error))) });
     });
     return { handle, initialState: 'running' as const, process: processRecord };

@@ -155,7 +155,8 @@ function resultToWire(result: NonNullable<RunRecord["result"]>): JsonObject {
     ...(result.summary ? { summary: result.summary } : {}),
     ...(result.artifacts ? { artifacts: result.artifacts.map((artifact) => ({ name: artifact.name, path: artifact.path, sha256: artifact.sha256, bytes: artifact.bytes, media_type: artifact.mediaType })) } : {}),
     ...(result.changedFiles ? { changed_files: result.changedFiles } : {}),
-    ...(result.warnings ? { warnings: result.warnings } : {})
+    ...(result.warnings ? { warnings: result.warnings } : {}),
+    ...(result.integrity ? { integrity: integrityToWire(result.integrity) } : {})
   };
 }
 
@@ -165,7 +166,30 @@ function resultFromWire(value: JsonObject): NonNullable<RunRecord["result"]> {
     ...(typeof value.summary === "string" ? { summary: value.summary } : {}),
     ...(Array.isArray(value.changed_files) ? { changedFiles: value.changed_files.filter((item): item is string => typeof item === "string") } : {}),
     ...(Array.isArray(value.warnings) ? { warnings: value.warnings.filter((item): item is string => typeof item === "string") } : {}),
-    ...(Array.isArray(value.artifacts) ? { artifacts: value.artifacts.filter(isObject).map((item) => ({ name: stringValue(item.name), path: stringValue(item.path), sha256: stringValue(item.sha256), bytes: numberValue(item.bytes), mediaType: stringValue(item.media_type) })) } : {})
+    ...(Array.isArray(value.artifacts) ? { artifacts: value.artifacts.filter(isObject).map((item) => ({ name: stringValue(item.name), path: stringValue(item.path), sha256: stringValue(item.sha256), bytes: numberValue(item.bytes), mediaType: stringValue(item.media_type) })) } : {}),
+    ...(isObject(value.integrity) ? { integrity: integrityFromWire(value.integrity) } : {})
+  };
+}
+
+export function integrityToWire(integrity: NonNullable<NonNullable<RunRecord["result"]>["integrity"]>): JsonObject {
+  return {
+    status: integrity.status,
+    write_tool_observed: integrity.writeToolObserved,
+    ...(integrity.changedPaths ? { changed_paths: integrity.changedPaths } : {}),
+    ...(integrity.changedPathsTotal === undefined ? {} : { changed_paths_total: integrity.changedPathsTotal }),
+    ...(integrity.reason ? { reason: integrity.reason } : {})
+  };
+}
+
+function integrityFromWire(value: JsonObject): NonNullable<NonNullable<RunRecord["result"]>["integrity"]> {
+  const status = value.status;
+  if (status !== "verified" && status !== "changed" && status !== "unverified") throw new TypeError("Invalid persisted integrity status");
+  return {
+    status,
+    writeToolObserved: value.write_tool_observed === true,
+    ...(Array.isArray(value.changed_paths) ? { changedPaths: value.changed_paths.filter((item): item is string => typeof item === "string") } : {}),
+    ...(typeof value.changed_paths_total === "number" ? { changedPathsTotal: value.changed_paths_total } : {}),
+    ...(typeof value.reason === "string" ? { reason: value.reason } : {})
   };
 }
 

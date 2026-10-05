@@ -46,7 +46,7 @@ class HomeCase(unittest.TestCase):
 class LookupTest(HomeCase):
     def lookup(self, results):
         recorder = Recorder(results)
-        return LAUNCHER.lookup_keychain_credential(self.home, recorder), recorder
+        return LAUNCHER.lookup_keychain_credential(self.home, recorder)[:2], recorder
 
     def test_success_strips_exactly_one_trailing_newline(self) -> None:
         (value, reason), _ = self.lookup([(0, CANARY.encode() + b"\n")])
@@ -90,6 +90,52 @@ class LookupTest(HomeCase):
             self.assertEqual((value, reason), (None, expected))
 
 
+class ExitStatusTest(HomeCase):
+    def reason_for(self, results):
+        recorder = Recorder(results)
+        return LAUNCHER.lookup_keychain_credential(self.home, recorder)[:2]
+
+    def test_security_exit_statuses_map_to_distinct_reasons(self) -> None:
+        cases = {44: "not-found", 36: "locked", 51: "denied", 128: "denied", 1: "error-1", 45: "error-45", 255: "error-255"}
+        for code, expected in cases.items():
+            self.assertEqual(self.reason_for([(code, b"")]), (None, expected), code)
+
+    def test_exit_status_codes_match_the_low_byte_of_the_documented_osstatus(self) -> None:
+        for status, code in ((-25300, 44), (-25308, 36), (-25293, 51), (-128, 128)):
+            self.assertEqual(status & 0xFF, code)
+
+    def test_most_actionable_reason_wins_regardless_of_service_order(self) -> None:
+        ordered = [(36, b""), (51, b""), "timeout", "oversize", (0, b"\n"), (1, b""), (44, b"")]
+        labels = ["locked", "denied", "timeout", "oversize", "invalid-output", "error-1", "not-found"]
+        def result(entry):
+            if entry == "timeout":
+                return TimeoutError()
+            if entry == "oversize":
+                return OverflowError()
+            return entry
+        for high in range(len(ordered)):
+            for low in range(high + 1, len(ordered)):
+                for first, second in ((high, low), (low, high)):
+                    reason = self.reason_for([result(ordered[first]), result(ordered[second])])[1]
+                    self.assertEqual(reason, labels[high], (labels[first], labels[second]))
+
+    def test_exception_in_the_runner_ranks_with_other_errors(self) -> None:
+        self.assertEqual(self.reason_for([OSError("boom"), (44, b"")])[1], "error")
+        self.assertEqual(self.reason_for([(44, b""), OSError("boom")])[1], "error")
+        self.assertEqual(self.reason_for([OSError("boom"), (51, b"")])[1], "denied")
+
+    def test_per_service_reasons_are_reported_without_any_value(self) -> None:
+        recorder = Recorder([(36, CANARY.encode()), (44, CANARY.encode())])
+        value, reason, detail = LAUNCHER.lookup_keychain_credential(self.home, recorder)
+        self.assertEqual((value, reason, detail), (None, "locked", "ai.mistral.vibe=locked,vibe=not-found"))
+        self.assertNotIn(CANARY, detail)
+
+    def test_failed_lookup_status_carries_the_reason_and_service_detail(self) -> None:
+        recorder = Recorder([(36, b""), (44, b"")])
+        status = LAUNCHER.resolve_credential({}, self.home, "darwin", recorder)
+        self.assertEqual(status, "locked (ai.mistral.vibe=locked,vibe=not-found)")
+
+
 class FakeSecurityTest(HomeCase):
     def script(self, body: str) -> str:
         path = os.path.join(self.root, "fake-security")
@@ -101,7 +147,7 @@ class FakeSecurityTest(HomeCase):
         record = os.path.join(self.root, "record.txt")
         fake = self.script(f'printf "%s\\n" "$@" > {record}\nenv >> {record}\nprintf "{CANARY}\\n"\n')
         with mock.patch.dict(os.environ, {"VIBE_HOME": "/private/vibe", KEY: "ambient"}):
-            value, reason = LAUNCHER.lookup_keychain_credential(self.home, executable=fake)
+            value, reason, _ = LAUNCHER.lookup_keychain_credential(self.home, executable=fake)
         self.assertEqual((value, reason), (CANARY, "found"))
         lines = Path(record).read_text().splitlines()
         self.assertEqual(lines[:6], ["find-generic-password", "-a", "MISTRAL_API_KEY", "-s", "ai.mistral.vibe", "-w"])
@@ -113,23 +159,23 @@ class FakeSecurityTest(HomeCase):
 
     def test_real_runner_nonzero_exit_and_stderr_are_discarded(self) -> None:
         fake = self.script(f'echo "{CANARY}" >&2\nexit 44\n')
-        self.assertEqual(LAUNCHER.lookup_keychain_credential(self.home, executable=fake), (None, "not-found"))
+        self.assertEqual(LAUNCHER.lookup_keychain_credential(self.home, executable=fake)[:2], (None, "not-found"))
 
     def test_real_runner_times_out_and_kills_the_process(self) -> None:
         fake = self.script("exec sleep 30\n")
         with mock.patch.object(LAUNCHER, "KEYCHAIN_TIMEOUT_SECONDS", 0.3), mock.patch.object(LAUNCHER, "KEYCHAIN_SERVICES", ("only",)):
             started = LAUNCHER.time.monotonic()
-            self.assertEqual(LAUNCHER.lookup_keychain_credential(self.home, executable=fake), (None, "timeout"))
+            self.assertEqual(LAUNCHER.lookup_keychain_credential(self.home, executable=fake)[:2], (None, "timeout"))
             self.assertLess(LAUNCHER.time.monotonic() - started, 5)
 
     def test_real_runner_rejects_oversized_output(self) -> None:
         fake = self.script("head -c 20000 /dev/zero | tr '\\0' 'a'\n")
         with mock.patch.object(LAUNCHER, "KEYCHAIN_SERVICES", ("only",)):
-            self.assertEqual(LAUNCHER.lookup_keychain_credential(self.home, executable=fake), (None, "oversize"))
+            self.assertEqual(LAUNCHER.lookup_keychain_credential(self.home, executable=fake)[:2], (None, "oversize"))
 
     def test_real_runner_missing_executable_returns_nothing(self) -> None:
         with mock.patch.object(LAUNCHER, "KEYCHAIN_SERVICES", ("only",)):
-            self.assertEqual(LAUNCHER.lookup_keychain_credential(self.home, executable=os.path.join(self.root, "absent")), (None, "error"))
+            self.assertEqual(LAUNCHER.lookup_keychain_credential(self.home, executable=os.path.join(self.root, "absent"))[:2], (None, "error"))
 
 
 class OriginalHomeTest(HomeCase):
@@ -147,6 +193,48 @@ class OriginalHomeTest(HomeCase):
     def test_rejects_a_directory_owned_by_someone_else(self) -> None:
         with mock.patch.object(LAUNCHER.os, "getuid", return_value=os.getuid() + 1):
             self.assertIsNone(LAUNCHER.trusted_original_home(self.home))
+
+
+class OriginalHomeReasonTest(HomeCase):
+    def reason(self, value):
+        return LAUNCHER.check_original_home(value)
+
+    def test_a_trailing_slash_is_accepted_and_stripped(self) -> None:
+        self.assertEqual(self.reason(self.home + "/"), (self.home, "ok"))
+        self.assertEqual(self.reason(self.home + "//"), (self.home, "ok"))
+        self.assertEqual(LAUNCHER.trusted_original_home(self.home + "/"), self.home)
+
+    def test_each_rejection_has_a_specific_reason(self) -> None:
+        link = os.path.join(self.root, "link")
+        os.symlink(self.home, link)
+        file_path = os.path.join(self.root, "file")
+        Path(file_path).write_text("x")
+        cases = [
+            (None, "unset"), ("", "unset"),
+            ("relative/home", "not-absolute"),
+            ("/", "not-normalized"), ("//", "not-normalized"),
+            (self.home + "/../original-home", "not-normalized"),
+            (self.home + "\0x", "not-normalized"),
+            (self.root + "/a//b", "not-normalized"),
+            (os.path.join(self.root, "missing"), "missing"),
+            (link, "symlink"), (link + "/", "symlink"),
+            (file_path, "not-directory"),
+        ]
+        for value, reason in cases:
+            self.assertEqual(self.reason(value), (None, reason), value)
+        with mock.patch.object(LAUNCHER.os, "getuid", return_value=os.getuid() + 1):
+            self.assertEqual(self.reason(self.home), (None, "not-owner"))
+
+    def test_resolve_reports_the_specific_skip_reason_and_does_not_look_up(self) -> None:
+        recorder = Recorder([(0, CANARY.encode() + b"\n")])
+        status = LAUNCHER.resolve_credential({}, "relative", "darwin", recorder)
+        self.assertEqual((status, recorder.calls), ("skipped-home:not-absolute", []))
+
+    def test_resolve_uses_the_lookup_for_a_trailing_slash_home(self) -> None:
+        recorder = Recorder([(0, CANARY.encode() + b"\n")])
+        environ = {}
+        self.assertEqual(LAUNCHER.resolve_credential(environ, self.home + "/", "darwin", recorder), "keychain")
+        self.assertEqual(recorder.calls[0][1]["HOME"], self.home)
 
 
 class ResolveCredentialTest(HomeCase):
@@ -181,14 +269,14 @@ class ResolveCredentialTest(HomeCase):
     def test_empty_environment_value_is_removed_when_lookup_fails(self) -> None:
         environ = {KEY: "", "KEEP": "1"}
         status, _ = self.resolve(environ, results=((44, b""),))
-        self.assertEqual(status, "not-found")
+        self.assertEqual(status, "not-found (ai.mistral.vibe=not-found,vibe=not-found)")
         self.assertEqual(environ, {"KEEP": "1"})
 
     def test_invalid_original_home_skips_the_lookup(self) -> None:
         for value in (None, "relative", os.path.join(self.root, "missing")):
             environ = {}
             status, recorder = self.resolve(environ, original_home=value)
-            self.assertEqual(status, "skipped-home")
+            self.assertTrue(status.startswith("skipped-home:"), status)
             self.assertEqual((environ, recorder.calls), ({}, []))
 
     def test_other_platforms_skip_the_lookup(self) -> None:
@@ -263,6 +351,14 @@ class MainTest(HomeCase):
         self.assertNotIn(ORIGINAL_HOME, outcome)
         self.assertIn("not-found", stderr.getvalue())
         self.assertNotIn(CANARY, stderr.getvalue())
+
+    def test_diagnostic_names_the_skip_reason_and_per_service_reasons(self) -> None:
+        for original, expected in (("relative", "skipped-home:not-absolute"), (self.home + "/", "locked (ai.mistral.vibe=locked,vibe=not-found)")):
+            runner = Recorder([(36, b""), (44, b"")])
+            stderr = io.StringIO()
+            with mock.patch.object(sys, "stderr", stderr):
+                self.run_main(LAUNCHER.EXPECTED_VERSION, {"VIBE_SUPERVISOR_ENTRYPOINT": "acp", ORIGINAL_HOME: original}, runner)
+            self.assertIn(expected, stderr.getvalue())
 
     def test_explicit_credential_skips_lookup_and_diagnostic(self) -> None:
         runner = Recorder([(0, CANARY.encode() + b"\n")])

@@ -82,6 +82,17 @@ async function handle(message) {
       notification('vibe/unknown_test_notification', { arbitrary: 'unknown notification is ignored' });
       notification('session/update', { sessionId, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `reply-${promptCount}` } } });
     }
+    if (mode === 'partial-wait') {
+      chunk('first complete line\n');
+      chunk('partial line without newline');
+      await new Promise(() => {});
+    }
+    if (mode === 'partial-crash') {
+      chunk('first complete line\n');
+      chunk('partial line without newline');
+      process.stdout.write('', () => process.exit(3));
+      await new Promise(() => {});
+    }
     if (mode === 'chunked') { chunk('Hel'); chunk('lo '); chunk('world'); }
     if (mode === 'split-secret') { chunk('token sk-abcdef'); chunk('1234567890xyz done'); }
     reply(message.id, { stopReason: 'end_turn' });

@@ -352,16 +352,17 @@ describe("vibe_result detail", () => {
     } finally { await manager.shutdown(); }
   });
 
-  it("accepts the deprecated summary value as the compact shape", async () => {
+  it("accepts the deprecated summary value and returns the full shape with a deprecation notice", async () => {
     const { source, manager, backend } = await setup();
     try {
       const runId = await runningRun(manager, source);
       await backend.callbacks?.onState("completed", { result: { summary: "Review done" } });
       expect(toolSchemas.vibe_result.parse({ run_id: runId, detail: "summary" }).detail).toBe("summary");
       const viaSummary = await manager.result({ run_id: runId, detail: "summary" });
-      expect(viaSummary).toEqual(await manager.result({ run_id: runId }));
-      expect(viaSummary.workspace).toBeUndefined();
-      expect(viaSummary.changed_files_total).toBe(0);
+      const full = await manager.result({ run_id: runId, detail: "full" });
+      expect(viaSummary).toEqual({ ...full, deprecation: "detail=summary is deprecated; use detail=compact (default) or detail=full." });
+      expect(viaSummary.workspace).toBeDefined();
+      expect(viaSummary.changed_files_total).toBeUndefined();
     } finally { await manager.shutdown(); }
   });
 
