@@ -72,7 +72,7 @@ These are local evidence, not portable defaults. `scripts/package-rc.mjs` and `s
 
 Historical: the last full implementation release verification passed **49 tests across 7 files**, lint, typecheck, build, deterministic acceptance, secret-pattern scan, and SPDX inventory. Counts: tool schemas 4; config 7; MCP integration 2; CLI 3; core 8; security 14; ACP integration 11. This is a historical result, not a substitute for checking later changes.
 
-Current suite as of the lifecycle fixes after Phase 4: 10 files / 75 tests (`npx vitest run`), plus 11 Vibe-free Python tests in `src/backends/runtime/test_prompt_file.py` (`python3 src/backends/runtime/test_prompt_file.py`).
+Current suite as of the lifecycle fixes after Phase 4: 10 files / 75 tests (`npx vitest run`), plus 40 Vibe-free Python tests in `src/backends/runtime/test_prompt_file.py` and `src/backends/runtime/test_keychain_credential.py` (`npm run test:python`, also part of `verify:release`).
 
 ACP fake-subprocess coverage includes 100 independently initialized prompt runs, unknown notifications and thought filtering, correlated permissions and expired IDs, form responses, live continuation, loading without original-task replay, malformed JSON, early exit, wrong protocol/mode, and cancellation. It verifies local protocol/lifecycle behavior rather than hosted inference.
 
@@ -167,7 +167,7 @@ The 2026-10-03 hosted attempts in [docs/acceptance.md](docs/acceptance.md) and t
 - ~~Fix B2 with a mocked `security` binary~~ Done: `src/backends/runtime/test_keychain_credential.py` and `tests/unit/original-home.test.ts`.
 - Vibe cannot be installed on the preparing machine, so B1 and B3 move to the target machine (see "Work on the target machine before hosted tests" below). Anything that needs the installed Vibe package belongs in the field test plan, not here.
 - Build a fresh RC (`0.9.0-rc.2`) with an explicitly populated offline npm cache, run `package:rc` and `smoke:install` (this also verifies gap 6), and deliver the tarball with `SHA256SUMS` alongside the checkout.
-- Run `python3 src/backends/runtime/test_prompt_file.py` from `verify:release` so CI covers it.
+- ~~Run the Vibe-free Python tests from `verify:release` so CI covers them~~ Done: `npm run test:python` runs `test_prompt_file.py` and `test_keychain_credential.py`, and `verify:release` calls it right after `npm test`. `test_vibe_supervisor_launcher.py` is excluded because it needs an installed Vibe.
 - Run a cold review of `ee0b7cb..HEAD` before delivery.
 
 ## Work on the target machine before hosted tests
@@ -187,7 +187,7 @@ Record every step in a new dated section of [docs/acceptance.md](docs/acceptance
 | ID | Step | Expected result | Covers |
 |---|---|---|---|
 | T0 | Record the environment: macOS version and arch, Node, Git, Vibe (`vibe --version`), the Vibe Python path, Codex version, and the repository commit. | All recorded. | Evidence baseline |
-| T1 | Fresh clone, `npm ci`, `npm run verify:release`, `python3 src/backends/runtime/test_prompt_file.py`. | `npm ci` builds `dist/` through `prepare`; all checks green. | Gap 6, gap 5, regression suite |
+| T1 | Fresh clone, `npm ci`, `npm run verify:release` (includes `npm run test:python`). | `npm ci` builds `dist/` through `prepare`; all checks green. | Gap 6, gap 5, regression suite |
 | T2 | Populate an offline cache explicitly (`npm ci --cache /abs/cache`), then `VIBE_SUPERVISOR_TEST_NPM_CACHE=/abs/cache npm run package:rc`, then `cd release && shasum -a 256 -c SHA256SUMS`. | RC built, offline install smoke passes, checksums verify. | Gap 6, packaging |
 | T3 | `npm run compat:probe -- --out /tmp/compat.json`. | `vibe_cli_version`, `acp_initialize`, `acp_load_session_advertised`, `launcher_logger_fixture`, and `shim_pin_consistent` PASS. | Phase 4, pinned launcher |
 | T4 | Perform the probe's MANUAL `tool_path_resolver` steps for both `read_file` and `grep`, including a nested file such as `src/a/b.ts`, a root `.env`, an outside path, and a symlink to outside. | In-root immediate and nested files ALWAYS; the others NEVER. Expected to FAIL on nested files until B1 is fixed. | B1, gate 3 premise |

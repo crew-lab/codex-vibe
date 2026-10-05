@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:python": "python3 -m unittest src/backends/runtime/test_prompt_file.py src/backends/runtime/test_keychain_credential.py",
     "test:integration": "vitest run tests/integration",
     "test:security": "vitest run tests/security",
     "build": "tsc && node scripts/copy-runtime-assets.mjs",
@@ -23,7 +24,7 @@
     "secret-scan": "node scripts/secret-scan.mjs",
     "checksum": "node scripts/checksum.mjs",
     "package:rc": "node scripts/package-rc.mjs",
-    "verify:release": "npm run lint && npm run typecheck && npm run build && npm test && npm run acceptance && npm run secret-scan && npm run sbom",
+    "verify:release": "npm run lint && npm run typecheck && npm run build && npm test && npm run test:python && npm run acceptance && npm run secret-scan && npm run sbom",
     "prepack": "npm run verify:release",
     "pack:dry-run": "npm pack --dry-run --ignore-scripts"
   },
