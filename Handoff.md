@@ -154,6 +154,33 @@ Recorded gaps after Phase 4:
 5. `verify:release` ran tests before build: fixed (order is now lint, typecheck, build, test, acceptance, secret-scan, sbom; the compat-probe self-build fallback is kept for standalone `npx vitest run`).
 6. `.mcp.json` needed `npm run build` in a fresh checkout: fixed (`prepare` runs the build on `npm ci` / `npm install`). Unverified: the offline tarball smoke test (`smoke:install`), which needs a populated npm cache; by npm semantics and `--ignore-scripts` on its pack and install steps `prepare` does not run there.
 
+## Platform research (2026-10-05)
+
+Gathered from official release pages and docs via summarized fetches; treat exact wording as lightly verified and recheck on the target machine.
+
+- **Codex:** CLI 0.160.0 (2026-10-01) is the latest stable release; 0.162.0-alpha.14 is a pre-release. No separate desktop-app version was found. Models are now GPT-6 branded: Astra (most capable), GPT-6.1 Sol (default since 0.159.1), and GPT-6 Luna (efficient, about 100x cheaper per input token than Astra). GPT-5.5 retires from ChatGPT products on 2026-10-14; nothing in this repository pins it. Usage is metered in credits per token, MCP tool results count toward it, and cached input costs about 10%. MCP server options include `tool_timeout_sec` (default 60), `startup_timeout_sec` (default 10), `enabled_tools`, `disabled_tools`, and per-tool `tools.<tool>.output_token_limit`.
+- **Vibe:** 2.25.8 (2026-09-23) is the latest release, so the pin is current. Since 2.25.5 the unified harness is stable and the legacy harness, which this supervisor forces with `--legacy-harness`, is an escape hatch reported as deprecated. The changelog does not mention the nested-glob (B1) or Keychain (B2) issues. Vibe supports `--max-price`, `--max-tokens`, and per-agent `active_model`; the supervisor pins no model, so the model used in a fresh isolated home is undefined.
+- **Mistral models:** Devstral 2 (256K context, $0.40 input / $2 output per million tokens) and Devstral Small 2 ($0.10 / $0.30).
+- **ACP:** v1 is the stable version and v2 is a draft (2026-07-20). A user rejection is `selected` with a reject-kind option; `cancelled` is only for a cancelled prompt turn, and the client must answer pending permission requests with `cancelled` when it cancels the turn.
+
+Token and speed work decided after the research, all implemented and tested against fake backends only:
+
+1. Done: `vibe_status`, `vibe_review_start` and `vibe_edit_start` take `wait_seconds` (0–300) and return on a new event, a state change, a pending request, or a state where the coordinator must act. The wait is event-driven and honors MCP request cancellation and shutdown. `configure-codex` writes `tool_timeout_sec = 600`.
+2. Done: `limits.mcp_result_format` (`text` default, `structured`, `both`) sends the JSON once; `max_mcp_result_chars` defaults to 8000; `vibe_result` defaults to `detail: "compact"` with patches up to 4000 bytes inline (`summary` is kept as a deprecated alias); `vibe_status` defaults to 10 events. Measured on a typical edit run: status 4912 → 1403 bytes, result 4102 → 2115, start 1064 → 559. The `text` default assumes Codex reads the text block (check R1).
+3. Done: probes are cached per backend instance (10 minutes on success, 30 s on failure, keyed on the executable and launcher interpreter path and stat, single-flight, with a `fresh` bypass). In the fixture setup, a run's availability checks drop from two spawns to none once the cache is warm.
+4. Done: rejections are sent as the selected reject option; `cancel()` and `close()` answer a pending permission request `cancelled` (an elicitation `cancel`), send `session/cancel`, and allow up to 500 ms for the turn to end before terminating. Uncorrelated or duplicate permission requests still get `cancelled` as a fail-closed refusal. Unverified against real Vibe: that it continues after a selected reject, and that 500 ms is enough.
+
+Also found while fixing item 4: the fake ACP fixture read `answer.result.outcome`, so allow and reject both ended the turn `cancelled`. The permission mode is fixed; the elicitation mode reads `answer.result.action` the same way and still needs the same fix.
+
+Considered but not implemented: a Codex profile that runs the coordinator on Luna with low reasoning effort (user configuration, not repository code), pinning Vibe's `active_model` and passing `--max-price` per run (needs a model choice), and replacing the full-tree review hash with a git-based fingerprint.
+
+Target-machine checks added by the research (run alongside the field test plan):
+
+- **R1:** confirm whether Codex passes a tool result's text, its structured content, or both to the model, and whether it forwards MCP progress notifications. This decides how far result shaping can go.
+- **R2:** confirm a waiting `vibe_status` call completes within the registered `tool_timeout_sec` in both the CLI and the desktop app.
+- **R3:** validate the permission profile under Vibe's unified harness (without `--legacy-harness`) before Vibe removes the legacy harness: repeat T4, T9 and T12 in both harnesses and record any differences.
+- **R4:** record which model a fresh isolated home actually uses (from the run's private session records) before deciding whether to pin `active_model`.
+
 ## Known blockers from the hosted attempts
 
 The 2026-10-03 hosted attempts in [docs/acceptance.md](docs/acceptance.md) and the correction request in [docs/reviews/vibe-draft-corrections.md](docs/reviews/vibe-draft-corrections.md) found three P1 defects in the unmodified supervisor. None of the later lifecycle work addressed them, so the field tests below are expected to fail at these points until they are fixed:

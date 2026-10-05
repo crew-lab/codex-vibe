@@ -111,7 +111,7 @@ For an edit, call `vibe_edit_start`:
 }
 ```
 
-Save the returned run ID. Poll `vibe_status` with `run_id`; use event sequence numbers as `after_seq` for subsequent polls. Fetch `vibe_result` with the same ID after completion. Edit artifacts include a patch, diff statistics, and changed-file paths. Inspect the patch and apply it yourself if appropriate; the supervisor does not modify the original checkout. The edit starts from the chosen Git base, not an automatic copy of source working-tree changes.
+Save the returned run ID. Pass `wait_seconds` (0 to 300) to a start tool to wait inside the call until the run needs action; a finished run then returns its compact result directly. Otherwise call `vibe_status` with `run_id` and `wait_seconds`, using the last event sequence number as `after_seq`; it returns on a new event, state change, pending request, or a state needing action. Fetch `vibe_result` with the same ID after completion; it is compact by default, and `detail: "full"` adds workspace paths and artifact digests. Edit results include a diff stat, the patch (inline when small, otherwise by path), and changed-file paths. Inspect the patch and apply it yourself if appropriate; the supervisor does not modify the original checkout. The edit starts from the chosen Git base, not an automatic copy of source working-tree changes.
 
 Call `vibe_cancel` to stop work or `vibe_close` to close the run. `cleanup_worktree: true` requests safe worktree removal; leave it false if you need to inspect the worker files. Cleanup is refused when exports are stale or residual data cannot be safely accounted for.
 

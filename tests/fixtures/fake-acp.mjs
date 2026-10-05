@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline';
-import { writeFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const mode = process.env.FAKE_ACP_CASE ?? 'normal';
@@ -11,6 +11,11 @@ const pending = new Map();
 if (process.env.FAKE_PID_DIR) writeFileSync(path.join(process.env.FAKE_PID_DIR, String(process.pid)), '');
 
 function chunk(text) { notification('session/update', { sessionId, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } }); }
+
+function permissionOptions() {
+  if (process.env.FAKE_PERMISSION_OPTIONS) return JSON.parse(process.env.FAKE_PERMISSION_OPTIONS);
+  return [{ optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' }, { optionId: 'reject-once', name: 'Reject once', kind: 'reject_once' }];
+}
 
 function send(value) { process.stdout.write(`${JSON.stringify(value)}\n`); }
 function reply(id, result) { send({ jsonrpc: '2.0', id, result }); }
@@ -41,9 +46,11 @@ async function handle(message) {
       const filePath = process.env.FAKE_FILE_PATH ?? '/tmp/source.txt';
       notification('session/update', { sessionId, update: { sessionUpdate: 'tool_call', toolCallId: 'tool-17', title: 'Read source', kind: 'read', rawInput: { path: filePath }, locations: [{ path: filePath }] } });
       const answerPromise = new Promise((resolve) => pending.set('permission-request-1', resolve));
-      send({ jsonrpc: '2.0', id: 'permission-request-1', method: 'session/request_permission', params: { sessionId, toolCall: { toolCallId: 'tool-17' }, options: [{ optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' }, { optionId: 'reject-once', name: 'Reject once', kind: 'reject_once' }] } });
+      send({ jsonrpc: '2.0', id: 'permission-request-1', method: 'session/request_permission', params: { sessionId, toolCall: { toolCallId: 'tool-17' }, options: permissionOptions() } });
       const answer = await answerPromise;
-      if (!answer?.result?.outcome) { reply(message.id, { stopReason: 'cancelled' }); return; }
+      const outcome = answer?.outcome;
+      if (!outcome || outcome.outcome === 'cancelled') { reply(message.id, { stopReason: 'cancelled' }); return; }
+      if (outcome.outcome === 'selected' && String(outcome.optionId).startsWith('reject')) chunk('permission rejected, continuing');
     }
     if (mode === 'elicitation' && promptCount === 1) {
       const answerPromise = new Promise((resolve) => pending.set('elicitation-request-1', resolve));
@@ -69,6 +76,9 @@ createInterface({ input: process.stdin, crlfDelay: Infinity }).on('line', (line)
   try { message = JSON.parse(line); }
   catch { process.exit(23); return; }
   const resolvePending = pending.get(message.id);
-  if (resolvePending && message.id !== undefined) { resolvePending(message.result); pending.delete(message.id); return; }
+  if (resolvePending && message.id !== undefined) {
+    if (process.env.FAKE_OUTCOME_FILE) appendFileSync(process.env.FAKE_OUTCOME_FILE, `${JSON.stringify(message.result)}\n`);
+    resolvePending(message.result); pending.delete(message.id); return;
+  }
   void handle(message).catch(() => { if (!exited) { exited = true; process.exit(24); } });
 });

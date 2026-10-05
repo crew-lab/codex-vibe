@@ -14,12 +14,15 @@ import { assertNoProjectVibeExtensions, createVibeChildProfile } from './profile
 import type { VibeChildProfile } from './profile.js';
 import { buildVibeLaunch } from './launcher.js';
 import { ACP_PROTOCOL_VERSION, SUPPORTED_VIBE } from './pinned.js';
+import { executableProbeKey, ProbeCache } from './probe-cache.js';
+import type { ProbeOptions } from './probe-cache.js';
 import type { VibeLaunch } from './launcher.js';
 import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { resolveCanonicalRoot } from '../security/paths.js';
 
 const PROTOCOL_VERSION = ACP_PROTOCOL_VERSION;
 const MAX_WIRE_BYTES = 1024 * 1024;
+const CANCEL_TURN_GRACE_MS = 500;
 
 type Deferred<T> = { promise: Promise<T>; resolve(value: T): void; reject(reason: unknown): void };
 function deferred<T>(): Deferred<T> {
@@ -43,7 +46,7 @@ interface AcpState {
   vibeHome: string;
   ready: Deferred<BackendStartResult>;
   commands: Queue<{ kind: 'prompt'; message: string } | { kind: 'close' }>;
-  request?: { requestId: string; kind: 'permission' | 'elicitation'; resolve: (response: unknown) => void; options: Array<{ optionId: string; kind?: string }> };
+  request?: { requestId: string; kind: 'permission' | 'elicitation'; resolve: (response: unknown) => void; cancelled: unknown; options: Array<{ optionId: string; kind?: string }> };
   sessionId?: string;
   connected: Promise<void>;
   closed: boolean;
@@ -57,6 +60,7 @@ interface AcpState {
   recovering: boolean;
   suppressReplay: boolean;
   turnRedactor?: StreamingRedactor;
+  activeTurn?: Promise<void>;
 }
 interface AcpHandle extends BackendRunHandle { opaque: AcpState }
 
@@ -122,13 +126,19 @@ function toPermissionRequest(params: RequestPermissionRequest, id: string, known
 export class AcpBackend implements SupervisorBackend {
   readonly kind = 'acp' as const;
   constructor(private readonly config: SupervisorConfig, private readonly dataDirectory = config.paths?.dataDir) {}
+  private readonly probeCache = new ProbeCache();
   protected executable(): string { return this.config.paths?.vibeAcp ?? 'vibe-acp'; }
   /** Test subclasses can attach an ACP fixture process; production uses the pinned shim only. */
   protected buildLaunch(args: readonly string[], profile: VibeChildProfile, runDirectory: string): Promise<VibeLaunch> {
     return buildVibeLaunch(this.executable(), 'acp', args, profile, runDirectory);
   }
 
-  async probe(): Promise<BackendCapabilities> {
+  async probe(options: ProbeOptions = {}): Promise<BackendCapabilities> {
+    const key = await executableProbeKey(this.executable(), { interpreter: true });
+    return this.probeCache.get(key, options.fresh === true, () => this.runProbe());
+  }
+
+  protected async runProbe(): Promise<BackendCapabilities> {
     const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'vibe-supervisor-acp-probe-')));
     let home = '';
     let vibeHome = '';
@@ -214,7 +224,7 @@ export class AcpBackend implements SupervisorBackend {
         }
         let resolve!: (response: unknown) => void;
         const decision = new Promise<unknown>((done) => { resolve = done; });
-        state.request = { requestId: id, kind: 'permission', resolve, options: pending.kind === 'permission' ? pending.options : [] };
+        state.request = { requestId: id, kind: 'permission', resolve, cancelled: { outcome: { outcome: 'cancelled' } }, options: pending.kind === 'permission' ? pending.options : [] };
         await state.callbacks.onPendingRequest(pending);
         const response = await decision as { outcome: { outcome: 'cancelled' } | { outcome: 'selected'; optionId: string } };
         delete state.request;
@@ -228,7 +238,7 @@ export class AcpBackend implements SupervisorBackend {
         const pending: PendingRequest = { requestId: id, kind: 'elicitation', title: redactSecrets(req.message, secret ? [secret] : []), schema: safeSchema };
         let resolve!: (response: unknown) => void;
         const decision = new Promise<unknown>((done) => { resolve = done; });
-        state.request = { requestId: id, kind: 'elicitation', resolve, options: [] };
+        state.request = { requestId: id, kind: 'elicitation', resolve, cancelled: { action: 'cancel' }, options: [] };
         await state.callbacks.onPendingRequest(pending);
         const response = await decision as { action: 'accept' | 'decline' | 'cancel'; content?: Record<string, string | number | boolean | string[]> };
         delete state.request;
@@ -267,10 +277,14 @@ export class AcpBackend implements SupervisorBackend {
         if (!task || task.kind === 'close' || state.closed) break;
         await state.callbacks.onState('running', { ...(result.acp ? { acp: result.acp } : {}) });
         state.turnRedactor = new StreamingRedactor(secret ? [secret] : []);
-        const response = await cx.request('session/prompt', { sessionId, prompt: [{ type: 'text', text: task.message }] });
+        const turn = cx.request('session/prompt', { sessionId, prompt: [{ type: 'text', text: task.message }] });
+        state.activeTurn = turn.then(() => undefined, () => undefined);
+        const response = await turn;
+        delete state.activeTurn;
         const tail = state.turnRedactor.flush();
         delete state.turnRedactor;
         if (tail) await state.callbacks.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: tail } });
+        if (state.closed) break;
         await state.callbacks.onState('completed', { ...(result.acp ? { acp: result.acp } : {}), result: { stopReason: response.stopReason } });
       }
       try { await cx.request('session/close', { sessionId }); } catch { /* close is best-effort after bounded session completion */ }
@@ -318,19 +332,37 @@ export class AcpBackend implements SupervisorBackend {
       if (!response.optionId) throw supervisorError('VSUP_INVALID_ARGUMENT', 'An ACP permission response must select an offered option');
       const option = pending.options.find((candidate) => candidate.optionId === response.optionId);
       if (!option || option.kind === 'allow_always') throw supervisorError('VSUP_PERMISSION_DENIED', 'Only an offered one-time permission choice can be selected');
-      const result = option.kind === 'reject_once' || option.kind === 'reject_always' ? { outcome: { outcome: 'cancelled' } } : { outcome: { outcome: 'selected', optionId: option.optionId } };
-      pending.resolve(result); await state.callbacks.onPendingRequest(undefined); return;
+      pending.resolve({ outcome: { outcome: 'selected', optionId: option.optionId } }); await state.callbacks.onPendingRequest(undefined); return;
     }
     pending.resolve({ action: response.action ?? 'decline', ...(response.action === 'accept' && response.content ? { content: response.content } : {}) });
     await state.callbacks.onPendingRequest(undefined);
   }
+  private cancelPendingRequest(state: AcpState): boolean {
+    const pending = state.request;
+    if (!pending) return false;
+    delete state.request;
+    pending.resolve(pending.cancelled);
+    return true;
+  }
+  private async awaitTurnEnd(state: AcpState): Promise<void> {
+    if (!state.activeTurn) return;
+    let timer: NodeJS.Timeout | undefined;
+    await Promise.race([state.activeTurn, new Promise<void>((done) => { timer = setTimeout(done, CANCEL_TURN_GRACE_MS); })]);
+    if (timer) clearTimeout(timer);
+  }
   async cancel(handle: BackendRunHandle): Promise<void> {
     const state = (handle as AcpHandle).opaque; state.released = true; state.closed = true; closeQueue(state.commands);
+    const answered = this.cancelPendingRequest(state);
     if (state.sessionId && state.context) { try { await state.context.notify('session/cancel', { sessionId: state.sessionId }); } catch { /* process shutdown remains authoritative */ } }
+    if (answered) await this.awaitTurnEnd(state);
     await state.process.terminate();
   }
   async close(handle: BackendRunHandle): Promise<void> {
     const state = (handle as AcpHandle).opaque; state.released = true; state.closed = true; enqueue(state.commands, { kind: 'close' }); closeQueue(state.commands);
+    if (this.cancelPendingRequest(state)) {
+      if (state.sessionId && state.context) { try { await state.context.notify('session/cancel', { sessionId: state.sessionId }); } catch { /* process shutdown remains authoritative */ } }
+      await this.awaitTurnEnd(state);
+    }
     // Retain session history and private homes for restart recovery/retention cleanup.
     await state.process.terminate();
   }

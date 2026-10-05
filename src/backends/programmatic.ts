@@ -13,6 +13,8 @@ import { spawnManaged } from '../process/managed.js';
 import { assertNoProjectVibeExtensions, createVibeChildProfile } from './profile.js';
 import { buildVibeLaunch } from './launcher.js';
 import { SUPPORTED_VIBE } from './pinned.js';
+import { executableProbeKey, ProbeCache } from './probe-cache.js';
+import type { ProbeOptions } from './probe-cache.js';
 import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 
 const execFileAsync = promisify(execFile);
@@ -32,9 +34,15 @@ function parsedVersion(stdout: string, stderr: string): string | undefined {
 
 export class ProgrammaticBackend implements SupervisorBackend {
   readonly kind = 'programmatic' as const;
+  private readonly probeCache = new ProbeCache();
   constructor(private readonly config: SupervisorConfig) {}
 
-  async probe(): Promise<BackendCapabilities> {
+  async probe(options: ProbeOptions = {}): Promise<BackendCapabilities> {
+    const key = await executableProbeKey(executable(this.config), { interpreter: false });
+    return this.probeCache.get(key, options.fresh === true, () => this.runProbe());
+  }
+
+  protected async runProbe(): Promise<BackendCapabilities> {
     const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'vibe-supervisor-probe-')));
     try {
       const profile = await createVibeChildProfile({

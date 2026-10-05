@@ -3,6 +3,7 @@ import { z } from "zod";
 const runId = z.string().uuid({ version: "v4" });
 const workspace = z.string().min(1).max(4096);
 const task = z.string().min(1).max(100_000);
+const waitSeconds = z.number().int().min(0).max(300).default(0);
 const backend = z.enum(["auto", "acp", "programmatic"]).default("auto");
 
 export const reviewStartSchema = z.object({
@@ -11,7 +12,8 @@ export const reviewStartSchema = z.object({
   context_files: z.array(z.string().min(1).max(4096)).max(50).default([]),
   backend,
   max_turns: z.number().int().min(1).max(50).default(12),
-  timeout_seconds: z.number().int().min(30).max(7200).default(1800)
+  timeout_seconds: z.number().int().min(30).max(7200).default(1800),
+  wait_seconds: waitSeconds
 }).strict();
 
 export const editStartSchema = z.object({
@@ -21,13 +23,15 @@ export const editStartSchema = z.object({
   backend,
   allow_shell: z.boolean().default(false),
   max_turns: z.number().int().min(1).max(50).default(20),
-  timeout_seconds: z.number().int().min(30).max(7200).default(2400)
+  timeout_seconds: z.number().int().min(30).max(7200).default(2400),
+  wait_seconds: waitSeconds
 }).strict();
 
 export const statusSchema = z.object({
   run_id: runId,
   after_seq: z.number().int().min(0).default(0),
-  max_events: z.number().int().min(0).max(100).default(20)
+  max_events: z.number().int().min(0).max(100).default(10),
+  wait_seconds: waitSeconds
 }).strict();
 
 export const continueSchema = z.object({ run_id: runId, message: task }).strict();
@@ -45,7 +49,7 @@ export const respondSchema = z.discriminatedUnion("kind", [
 
 export const resultSchema = z.object({
   run_id: runId,
-  detail: z.enum(["summary", "full"]).default("summary"),
+  detail: z.enum(["compact", "summary", "full"]).default("compact"),
   include_transcript: z.boolean().default(false)
 }).strict();
 
