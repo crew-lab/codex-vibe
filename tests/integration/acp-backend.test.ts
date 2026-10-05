@@ -41,11 +41,11 @@ async function createRoot() {
   return { root, input };
 }
 
-function callbacks(events: unknown[], states: string[], onPendingRequest?: (pending: PendingRequest) => void): BackendCallbacks {
+function callbacks(events: unknown[], states: string[], onPendingRequest?: (pending: PendingRequest) => void, results: unknown[] = []): BackendCallbacks {
   return {
     onEvent: (event) => { events.push(event); },
     onPendingRequest: (request) => { if (request) onPendingRequest?.(request); },
-    onState: (state) => { states.push(state); }
+    onState: (state, update) => { states.push(state); if (state === 'completed') results.push(update?.result); }
   };
 }
 
@@ -103,19 +103,38 @@ describe('ACP backend subprocess contract', () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
-  it('surfaces a safe form elicitation, accepts its schema-valid content, and expires the request afterward', async () => {
+  async function runElicitation(answer: { action: 'accept' | 'decline' | 'cancel'; content?: Record<string, unknown> }) {
     const { root, input } = await createRoot(); const backend = new FakeAcpBackend('elicitation');
-    const events: unknown[] = []; const states: string[] = []; let pendingResolve!: (request: PendingRequest) => void;
+    const events: unknown[] = []; const states: string[] = []; const results: unknown[] = []; let pendingResolve!: (request: PendingRequest) => void;
     const pendingPromise = new Promise<PendingRequest>((resolve) => { pendingResolve = resolve; });
     try {
-      const started = await backend.start(input, callbacks(events, states, pendingResolve));
+      const started = await backend.start(input, callbacks(events, states, pendingResolve, results));
       const pending = await pendingPromise;
       expect(pending).toMatchObject({ requestId: 'elicitation-request-1', kind: 'elicitation', schema: { type: 'object' } });
-      await backend.respond(started.handle, { requestId: pending.requestId, kind: 'elicitation', action: 'accept', content: { confirm: true } });
+      await backend.respond(started.handle, { requestId: pending.requestId, kind: 'elicitation', ...answer });
       await waitForState(states, 'completed');
-      await expect(backend.respond(started.handle, { requestId: pending.requestId, kind: 'elicitation', action: 'accept', content: { confirm: true } })).rejects.toMatchObject({ code: 'VSUP_REQUEST_EXPIRED' });
+      await expect(backend.respond(started.handle, { requestId: pending.requestId, kind: 'elicitation', ...answer })).rejects.toMatchObject({ code: 'VSUP_REQUEST_EXPIRED' });
       await backend.close(started.handle);
+      return { results, json: JSON.stringify(events) };
     } finally { await rm(root, { recursive: true, force: true }); }
+  }
+
+  it('continues the turn after an accepted schema-valid elicitation and expires the request afterward', async () => {
+    const { results, json } = await runElicitation({ action: 'accept', content: { confirm: true } });
+    expect(results).toEqual([{ stopReason: 'end_turn' }]);
+    expect(json).toContain('reply-1');
+  });
+
+  it('ends the turn cancelled when the elicitation is declined', async () => {
+    const { results, json } = await runElicitation({ action: 'decline' });
+    expect(results).toEqual([{ stopReason: 'cancelled' }]);
+    expect(json).not.toContain('reply-1');
+  });
+
+  it('ends the turn cancelled when the elicitation is answered with cancel', async () => {
+    const { results, json } = await runElicitation({ action: 'cancel' });
+    expect(results).toEqual([{ stopReason: 'cancelled' }]);
+    expect(json).not.toContain('reply-1');
   });
 
   it('accepts continuation on the same ACP session as a distinct prompt turn', async () => {

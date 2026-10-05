@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const distBackends = path.join(root, 'dist', 'backends');
+const distRoot = process.env.VIBE_SUPERVISOR_DIST_DIR ? path.resolve(process.env.VIBE_SUPERVISOR_DIST_DIR) : path.join(root, 'dist');
+const distBackends = path.join(distRoot, 'backends');
 const fixturePath = path.join(root, 'src', 'backends', 'runtime', 'test_vibe_supervisor_launcher.py');
 const shimPath = path.join(root, 'src', 'backends', 'runtime', 'vibe_supervisor_launcher.py');
 
@@ -41,7 +42,7 @@ function check(name, status, detail) { return { name, status, detail }; }
 async function loadDist() {
   try { await access(path.join(distBackends, 'acp.js')); }
   catch { throw new Error('dist/ is missing: run npm run build first'); }
-  const load = (relative) => import(new URL(`file://${path.join(root, 'dist', relative)}`).href);
+  const load = (relative) => import(new URL(`file://${path.join(distRoot, relative)}`).href);
   const [pinned, acp, programmatic, launcher, redaction, environment] = await Promise.all([
     load('backends/pinned.js'), load('backends/acp.js'), load('backends/programmatic.js'),
     load('backends/launcher.js'), load('security/redaction.js'), load('security/environment.js'),

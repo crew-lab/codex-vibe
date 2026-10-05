@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { access, chmod, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -14,17 +14,15 @@ interface Report { checks: Array<{ name: string; status: string; detail: string 
 function run(args: string[]): { status: number | null; stdout: string; stderr: string } {
   const result = spawnSync(process.execPath, [script, ...args], {
     encoding: 'utf8', timeout: 90_000,
-    env: { ...process.env, MISTRAL_API_KEY: SECRET, COMPAT_PROBE_CANARY: SECRET },
+    env: { ...process.env, VIBE_SUPERVISOR_DIST_DIR: process.env.VIBE_SUPERVISOR_TEST_DIST, MISTRAL_API_KEY: SECRET, COMPAT_PROBE_CANARY: SECRET },
   });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 function statusOf(report: Report, name: string): string | undefined { return report.checks.find((entry) => entry.name === name)?.status; }
 
 beforeAll(async () => {
-  try { await access(path.join(repo, 'dist', 'backends', 'acp.js')); }
-  catch { spawnSync('npm', ['run', 'build'], { cwd: repo, encoding: 'utf8', timeout: 180_000 }); }
   scratch = await realpath(await mkdtemp(path.join(os.tmpdir(), 'compat-probe-test-')));
-}, 240_000);
+});
 
 afterAll(async () => { if (scratch) await rm(scratch, { recursive: true, force: true }); });
 
