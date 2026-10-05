@@ -70,7 +70,9 @@ These are local evidence, not portable defaults. `scripts/package-rc.mjs` and `s
 
 ## Verification evidence
 
-The last full implementation release verification passed **49 tests across 7 files**, lint, typecheck, build, deterministic acceptance, secret-pattern scan, and SPDX inventory. Counts: tool schemas 4; config 7; MCP integration 2; CLI 3; core 8; security 14; ACP integration 11. This is a historical result, not a substitute for checking later changes.
+Historical: the last full implementation release verification passed **49 tests across 7 files**, lint, typecheck, build, deterministic acceptance, secret-pattern scan, and SPDX inventory. Counts: tool schemas 4; config 7; MCP integration 2; CLI 3; core 8; security 14; ACP integration 11. This is a historical result, not a substitute for checking later changes.
+
+Current suite as of the lifecycle fixes after Phase 4: 9 files / 72 tests (`npx vitest run`).
 
 ACP fake-subprocess coverage includes 100 independently initialized prompt runs, unknown notifications and thought filtering, correlated permissions and expired IDs, form responses, live continuation, loading without original-task replay, malformed JSON, early exit, wrong protocol/mode, and cancellation. It verifies local protocol/lifecycle behavior rather than hosted inference.
 
@@ -121,7 +123,7 @@ The following must remain **UNVERIFIED** until performed and recorded:
 
 1. Real provider authentication and hosted Vibe model generation for reviews and edits.
 2. Effective enabled-tool inventory in a real authenticated session.
-3. A 100-run soak against real hosted Vibe/ACP, including callbacks, continuation, cancellation, and reconnect/load.
+3. A 100-run soak against real hosted Vibe/ACP, with zero permission requests in normal runs plus one deliberate out-of-root read that is refused (see the redefinition below), continuation, cancellation, and reconnect/load.
 4. Codex desktop tool visibility/registration using an actual user configuration.
 5. Plugin scaffold installation and visibility.
 6. macOS Intel and clean OS account installation; other platforms are not certified by config-path support alone.
@@ -137,11 +139,20 @@ Implementation sequence:
 
 1. Phase 0, hygiene: done (no machine-specific cache fallback, corrected `files` allowlist, portable docs).
 2. Phase 1: done (realistic fake-ACP fixture and regression tests in `tests/integration/run-manager-regressions.test.ts`; they were red until Phase 2).
-3. Phase 2: done (per-turn streaming redaction with newlines only at turn boundaries and no per-event meta persists; completed runs reloaded lazily with idle sessions capped at `maxConcurrentRuns`; review source changes reported as a warning; timeout counted from launch via `launchedAt`; closing or evicting a completed ACP run no longer reports `failed`). Original scope: streamed message chunks (per-turn streaming redaction, newlines only at turn boundaries, fewer meta persists); a single owner for live session handles with idle expiry and a cap that includes recovered completed runs; review integrity as a warning with artifacts finalized first; timeout counted from launch; and closing a completed ACP run must not report `failed` afterwards (today it raises an unhandled `Invalid run state transition completed -> failed`, which keeps the regression suite non-zero even once its assertions pass).
+3. Phase 2: done (per-turn streaming redaction with newlines only at turn boundaries and no per-event meta persists; completed runs reloaded lazily with idle sessions capped at `maxConcurrentRuns`; review source changes reported as a warning; timeout counted from launch via `launchedAt`; closing or evicting a completed ACP run no longer reports `failed`). Original scope: streamed message chunks (per-turn streaming redaction, newlines only at turn boundaries, fewer meta persists); a single owner for live session handles with idle expiry and a cap that includes recovered completed runs; review integrity as a warning with artifacts finalized first; timeout counted from launch; and closing a completed ACP run must not report `failed` afterwards.
 4. Phase 3: one hosted review and one hosted edit on a throwaway repository (gates 1-2), recording chunk shapes, the effective tool inventory, and the permission-request count. Then decide whether ACP reject options should be sent as `selected` reject option IDs instead of `cancelled`.
 5. Phase 4: done (`npm run compat:probe`, see "Revalidating a Vibe release" in `docs/compatibility.md`; the pin now lives in `src/backends/pinned.ts`). The script was NOT run against a real Vibe on this machine (none installed), so it is untested against real Vibe until someone runs it; the tool-path resolver check, tool inventory and hosted inference stay MANUAL.
 6. Phase 5: hosted soak (gate 3 as redefined above), then RC2.
 7. Gates 4-5 (desktop registration, plugin install) can happen at any time; gate 6 (Intel and clean account) comes last.
+
+Recorded gaps after Phase 4:
+
+1. Large or unreadable repos failing review at launch: fixed (a failed launch snapshot becomes a result warning and the integrity comparison is skipped).
+2. Failed runs keeping a live session: fixed (every path to `failed` releases the backend session once).
+3. Message events are emitted at newline or turn end, so `vibe_status` does not stream text live: accepted, end-of-turn delivery is fine.
+4. The programmatic backend passes the task via `--prompt` argv, so it is visible in `ps`; ACP is not affected: open.
+5. `verify:release` runs tests before build, so the compat-probe tests build `dist` themselves: open, one-line reorder.
+6. `.mcp.json` needs `npm run build` in a fresh checkout: open.
 
 A next maintainer should inspect Git status, read this handoff and the usage guide, reproduce local checks when making code changes, and finish those gates before claiming production readiness. Hosted validation sends source/tasks to a provider and may incur usage charges; keep it within user-authorized scope. Record exact versions, commands, outcomes, and remaining uncertainty in acceptance/compatibility docs. Any new version support requires renewed shim, profile, protocol, and effective-tool validation.
 

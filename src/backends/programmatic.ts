@@ -166,8 +166,6 @@ function extractAssistantText(entry: unknown): string {
   const obj = cleaned as Record<string, unknown>;
   const role = obj.role ?? obj.speaker;
   if (role !== 'assistant' && role !== 'agent') return '';
-  // Vibe 2.25.8's programmatic streaming format serializes PublicMessageEntry.text
-  // as a plain string; this is the public answer, not hidden reasoning.
   if (typeof obj.text === 'string') return obj.text;
   const parts: string[] = [];
   const visit = (value: unknown): void => {
