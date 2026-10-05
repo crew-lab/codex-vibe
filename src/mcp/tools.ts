@@ -1,13 +1,13 @@
 import { McpServer } from '@modelcontextprotocol/server';
-import { supervisorError, type SupervisorError, type SupervisorErrorCode, type ReviewStartToolInput, type EditStartToolInput, type StatusToolInput, type ContinueToolInput, type RespondToolInput, type ResultToolInput, type CancelToolInput, type CloseToolInput } from '../contracts.js';
+import { supervisorError, type SupervisorError, type SupervisorErrorCode, type ReviewStartToolInput, type EditStartToolInput, type StatusToolInput, type ContinueToolInput, type RespondToolInput, type ResultToolInput, type CancelToolInput, type CloseToolInput, type McpResultFormat, type WaitOptions } from '../contracts.js';
 import { toolSchemas, type ToolName } from './schemas.js';
 import { sanitizeForPersistence } from '../persistence/atomic.js';
 
 /** Narrow adapter expected from the run manager; MCP owns validation and wire shaping. */
 export interface RunManagerTools {
-  reviewStart(input: ReviewStartToolInput): Promise<unknown>;
-  editStart(input: EditStartToolInput): Promise<unknown>;
-  status(input: StatusToolInput): Promise<unknown>;
+  reviewStart(input: ReviewStartToolInput, options?: WaitOptions): Promise<unknown>;
+  editStart(input: EditStartToolInput, options?: WaitOptions): Promise<unknown>;
+  status(input: StatusToolInput, options?: WaitOptions): Promise<unknown>;
   continue(input: ContinueToolInput): Promise<unknown>;
   respond(input: RespondToolInput): Promise<unknown>;
   result(input: ResultToolInput): Promise<unknown>;
@@ -17,16 +17,17 @@ export interface RunManagerTools {
 
 export interface ToolRegistrationOptions {
   maxResultChars: number;
+  resultFormat: McpResultFormat;
   onError?: (error: SupervisorError) => void;
 }
 
 const DEFINITIONS: Record<ToolName, { title: string; description: string; readOnly: boolean; destructive: boolean }> = {
-  vibe_review_start: { title: 'Start read-only Vibe review', description: 'Start an independent review run in the selected workspace.', readOnly: false, destructive: false },
-  vibe_edit_start: { title: 'Start isolated Vibe edit', description: 'Start an edit run in a detached Git worktree. Review its patch before applying it.', readOnly: false, destructive: true },
-  vibe_status: { title: 'Get Vibe run status', description: 'Read run state and recent normalized events.', readOnly: true, destructive: false },
+  vibe_review_start: { title: 'Start read-only Vibe review', description: 'Start an independent review run in the selected workspace. Set wait_seconds to wait for the run to need action.', readOnly: false, destructive: false },
+  vibe_edit_start: { title: 'Start isolated Vibe edit', description: 'Start an edit run in a detached Git worktree. Review its patch before applying it. Set wait_seconds to wait for the run to need action.', readOnly: false, destructive: true },
+  vibe_status: { title: 'Get Vibe run status', description: 'Read run state and recent normalized events. Set wait_seconds to block until something changes instead of polling.', readOnly: true, destructive: false },
   vibe_continue: { title: 'Continue Vibe run', description: 'Send a follow-up instruction to an active run.', readOnly: false, destructive: false },
   vibe_respond: { title: 'Respond to Vibe request', description: 'Answer a pending permission or input request.', readOnly: false, destructive: false },
-  vibe_result: { title: 'Get Vibe result', description: 'Read the run summary, artifacts, patch metadata, and optionally its transcript.', readOnly: true, destructive: false },
+  vibe_result: { title: 'Get Vibe result', description: 'Read the compact run result (default) or the full record with detail=full.', readOnly: true, destructive: false },
   vibe_cancel: { title: 'Cancel Vibe run', description: 'Request cancellation of an active run.', readOnly: false, destructive: false },
   vibe_close: { title: 'Close Vibe run', description: 'Close a run and optionally remove its verified worktree.', readOnly: false, destructive: true },
 };
@@ -75,11 +76,28 @@ function bounded(value: unknown, maxChars: number): { structuredContent: Record<
   return { structuredContent: JSON.parse(result) as Record<string, unknown>, text: result };
 }
 
+function pointerText(structured: Record<string, unknown>): string {
+  const pointer: Record<string, unknown> = {};
+  for (const key of ['run_id', 'state']) if (typeof structured[key] === 'string') pointer[key] = structured[key];
+  const error = structured.error;
+  if (error && typeof error === 'object' && typeof (error as { code?: unknown }).code === 'string') pointer.error = (error as { code: string }).code;
+  pointer.see = 'structuredContent';
+  return JSON.stringify(pointer);
+}
+
+function shapeResult(structured: Record<string, unknown>, text: string, format: McpResultFormat): { content: { type: 'text'; text: string }[]; structuredContent?: Record<string, unknown> } {
+  if (format === 'text') return { content: [{ type: 'text', text }] };
+  if (format === 'structured') return { content: [{ type: 'text', text: pointerText(structured) }], structuredContent: structured };
+  return { content: [{ type: 'text', text }], structuredContent: structured };
+}
+
+interface ToolContext { mcpReq?: { signal?: AbortSignal } }
+
 export function registerSupervisorTools(server: McpServer, manager: RunManagerTools, options: ToolRegistrationOptions): void {
-  const handlers: Record<ToolName, (input: Record<string, unknown>) => Promise<unknown>> = {
-    vibe_review_start: (input) => manager.reviewStart(input as unknown as ReviewStartToolInput),
-    vibe_edit_start: (input) => manager.editStart(input as unknown as EditStartToolInput),
-    vibe_status: (input) => manager.status(input as unknown as StatusToolInput),
+  const handlers: Record<ToolName, (input: Record<string, unknown>, wait: WaitOptions) => Promise<unknown>> = {
+    vibe_review_start: (input, wait) => manager.reviewStart(input as unknown as ReviewStartToolInput, wait),
+    vibe_edit_start: (input, wait) => manager.editStart(input as unknown as EditStartToolInput, wait),
+    vibe_status: (input, wait) => manager.status(input as unknown as StatusToolInput, wait),
     vibe_continue: (input) => manager.continue(input as unknown as ContinueToolInput),
     vibe_respond: (input) => manager.respond(input as unknown as RespondToolInput),
     vibe_result: (input) => manager.result(input as unknown as ResultToolInput),
@@ -98,13 +116,14 @@ export function registerSupervisorTools(server: McpServer, manager: RunManagerTo
         idempotentHint: name === 'vibe_status' || name === 'vibe_result',
         openWorldHint: name === 'vibe_review_start' || name === 'vibe_edit_start' || name === 'vibe_continue' || name === 'vibe_respond',
       },
-    }, async (input: unknown) => {
+    }, async (input: unknown, context: ToolContext) => {
       try {
         // The SDK validates registered schemas as well; parse here for strict, stable errors before dispatch.
         const parsed = toolSchemas[name].parse(input) as Record<string, unknown>;
-        const result = await handlers[name](parsed);
+        const signal = context?.mcpReq?.signal;
+        const result = await handlers[name](parsed, signal ? { signal } : {});
         const output = bounded(result, options.maxResultChars);
-        return { content: [{ type: 'text' as const, text: output.text }], structuredContent: output.structuredContent };
+        return shapeResult(output.structuredContent, output.text, options.resultFormat);
       } catch (cause) {
         const error = cause && typeof cause === 'object' && 'issues' in cause
           ? supervisorError('VSUP_INVALID_ARGUMENT', 'Tool arguments failed schema validation.')
@@ -117,11 +136,7 @@ export function registerSupervisorTools(server: McpServer, manager: RunManagerTo
         if (JSON.stringify({ error: safeError }).length > options.maxResultChars) safeError.message = 'The request failed; inspect the stable code and remediation.';
         options.onError?.(safeError);
         const text = `${safeError.code}: ${safeError.message} ${safeError.remediation}`.slice(0, options.maxResultChars);
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text }],
-          structuredContent: { error: safeError },
-        };
+        return { isError: true, ...shapeResult({ error: safeError }, text, options.resultFormat) };
       }
     });
   }

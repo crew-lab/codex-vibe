@@ -20,10 +20,11 @@ const APP_VERSION = '0.9.0-rc.1';
 
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
 function fail(message: string, code = 1): never { process.exitCode = code; throw Object.assign(new Error(message), { code: 'VSUP_INVALID_ARGUMENT' }); }
+const CODEX_TOOL_TIMEOUT_SECONDS = 600;
 function quoteToml(value: string): string { return JSON.stringify(value); }
 function defaultConfigToml(): string {
   const limits = DEFAULT_CONFIG.limits;
-  return `version = 1\nbackend = "${DEFAULT_CONFIG.backend}"\nallowed_workspace_roots = []\nmax_concurrent_runs = 2\nmax_queued_runs = 8\nworker_idle_ttl_seconds = 600\n\n[retention]\ndays = 7\npreserve_failed_runs = true\n\n[limits]\nreview_timeout_seconds = ${limits.reviewTimeoutSeconds}\nedit_timeout_seconds = ${limits.editTimeoutSeconds}\nmax_turns_review = ${limits.maxTurnsReview}\nmax_turns_edit = ${limits.maxTurnsEdit}\nmax_event_bytes = ${limits.maxEventBytes}\nmax_transcript_bytes = ${limits.maxTranscriptBytes}\nmax_artifact_bytes = ${limits.maxArtifactBytes}\nmax_mcp_result_chars = ${limits.maxMcpResultChars}\n\n[phase1]\nallow_temporary_trust = false\n\n[security]\nallow_shell_in_review = false\nallow_shell_in_edit = false\nallow_network_tools = false\nlog_raw_acp = false\npersist_reasoning = false\n`;
+  return `version = 1\nbackend = "${DEFAULT_CONFIG.backend}"\nallowed_workspace_roots = []\nmax_concurrent_runs = 2\nmax_queued_runs = 8\nworker_idle_ttl_seconds = 600\n\n[retention]\ndays = 7\npreserve_failed_runs = true\n\n[limits]\nreview_timeout_seconds = ${limits.reviewTimeoutSeconds}\nedit_timeout_seconds = ${limits.editTimeoutSeconds}\nmax_turns_review = ${limits.maxTurnsReview}\nmax_turns_edit = ${limits.maxTurnsEdit}\nmax_event_bytes = ${limits.maxEventBytes}\nmax_transcript_bytes = ${limits.maxTranscriptBytes}\nmax_artifact_bytes = ${limits.maxArtifactBytes}\nmax_mcp_result_chars = ${limits.maxMcpResultChars}\nmcp_result_format = "${limits.mcpResultFormat}"\n\n[phase1]\nallow_temporary_trust = false\n\n[security]\nallow_shell_in_review = false\nallow_shell_in_edit = false\nallow_network_tools = false\nlog_raw_acp = false\npersist_reasoning = false\n`;
 }
 
 async function initConfig(): Promise<void> {
@@ -53,7 +54,7 @@ async function configureCodex(scope: 'user' | 'project', dryRun: boolean, projec
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   const executable = process.execPath;
   const cliPath = path.resolve(process.argv[1] ?? 'dist/cli.js');
-  const block = `[mcp_servers.vibe-supervisor]\ncommand = ${quoteToml(executable)}\nargs = [${quoteToml(cliPath)}, "serve", "--stdio"]\n`;
+  const block = `[mcp_servers.vibe-supervisor]\ncommand = ${quoteToml(executable)}\nargs = [${quoteToml(cliPath)}, "serve", "--stdio"]\ntool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SECONDS}\n`;
   let original = '';
   try { original = await readFile(file, 'utf8'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   let updated: string;
@@ -62,10 +63,10 @@ async function configureCodex(scope: 'user' | 'project', dryRun: boolean, projec
   const servers = parsedExisting.mcp_servers;
   if (servers !== undefined && (!servers || typeof servers !== 'object' || Array.isArray(servers))) fail('Codex config mcp_servers must be a table; no changes were made.', 2);
   const existingEntry = servers && typeof servers === 'object' ? (servers as Record<string, unknown>)['vibe-supervisor'] : undefined;
-  const target = { command: executable, args: [cliPath, 'serve', '--stdio'] };
+  const target = { command: executable, args: [cliPath, 'serve', '--stdio'], tool_timeout_sec: CODEX_TOOL_TIMEOUT_SECONDS };
   if (existingEntry && typeof existingEntry === 'object' && !Array.isArray(existingEntry)) {
     const entry = existingEntry as Record<string, unknown>;
-    if (entry.command === target.command && JSON.stringify(entry.args) === JSON.stringify(target.args) && Object.keys(entry).length === 2) {
+    if (entry.command === target.command && JSON.stringify(entry.args) === JSON.stringify(target.args) && entry.tool_timeout_sec === target.tool_timeout_sec && Object.keys(entry).length === 3) {
       print({ changed: false, file, config: block }); return;
     }
   }

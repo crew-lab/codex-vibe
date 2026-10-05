@@ -21,7 +21,8 @@ const configSchema = z.object({
     max_event_bytes: z.number().int().min(1024).max(1_073_741_824).default(52_428_800),
     max_transcript_bytes: z.number().int().min(1024).max(1_073_741_824).default(10_485_760),
     max_artifact_bytes: z.number().int().min(1024).max(2_147_483_648).default(104_857_600),
-    max_mcp_result_chars: z.number().int().min(1000).max(1_000_000).default(50_000)
+    max_mcp_result_chars: z.number().int().min(1000).max(1_000_000).default(8000),
+    mcp_result_format: z.enum(["text", "structured", "both"]).default("text")
   }).strict().prefault({}),
   phase1: z.object({ allow_temporary_trust: z.boolean().default(false) }).strict().prefault({}),
   security: z.object({
@@ -52,7 +53,8 @@ export function validateConfig(input: unknown): SupervisorConfig {
       maxEventBytes: parsed.limits.max_event_bytes,
       maxTranscriptBytes: parsed.limits.max_transcript_bytes,
       maxArtifactBytes: parsed.limits.max_artifact_bytes,
-      maxMcpResultChars: parsed.limits.max_mcp_result_chars
+      maxMcpResultChars: parsed.limits.max_mcp_result_chars,
+      mcpResultFormat: parsed.limits.mcp_result_format
     },
     phase1: { allowTemporaryTrust: parsed.phase1.allow_temporary_trust },
     security: {

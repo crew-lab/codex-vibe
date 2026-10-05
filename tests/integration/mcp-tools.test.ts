@@ -45,7 +45,7 @@ describe('MCP stdio tool surface', () => {
       cancel: vi.fn(async () => ({ cancelled: true })),
       close: vi.fn(async () => ({ closed: true })),
     } satisfies RunManagerTools;
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits, maxMcpResultChars: 500 } } });
+    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits, maxMcpResultChars: 500, mcpResultFormat: 'both' } } });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
@@ -74,7 +74,7 @@ describe('MCP stdio tool surface', () => {
       editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})), continue: vi.fn(async () => ({})),
       respond: vi.fn(async () => ({})), result: vi.fn(async () => ({})), cancel: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
     } satisfies RunManagerTools;
-    const server = createSupervisorMcpServer(manager, { config: DEFAULT_CONFIG });
+    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits, mcpResultFormat: 'both' } } });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));

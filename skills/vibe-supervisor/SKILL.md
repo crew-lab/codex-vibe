@@ -32,15 +32,15 @@ Use `vibe-supervisor doctor --json` when configuring or diagnosing the local ins
 
 ### Step 2 — Start the narrowest run
 
-For review, call `vibe_review_start` with the workspace path and a read-only task. For changes, call `vibe_edit_start` and specify the intended base reference. Keep task scope limited to the files and behavior needed.
+For review, call `vibe_review_start` with the workspace path and a read-only task. For changes, call `vibe_edit_start` and specify the intended base reference. Keep task scope limited to the files and behavior needed. Pass `wait_seconds` (120 to 300) so the start call itself waits until the run needs action; if the run finished, the response already holds the compact result.
 
 ### Step 3 — Monitor safely
 
-Use `vibe_status` for progress. Continue only with actionable instructions that preserve the original scope. Permission and input requests must be answered based on the actual request details; deny unknown, incomplete, or out-of-scope requests.
+Do not poll turn by turn. While the run is not finished, call `vibe_status` with `wait_seconds` (up to 300) and `after_seq` set to the last event received; it returns on a new event, state change, pending request, or a state that needs you (`completed`, `failed`, `cancelled`, `waiting_permission`, `waiting_input`, `recoverable`). Continue only with actionable instructions that preserve the original scope. Permission and input requests must be answered based on the actual request details; deny unknown, incomplete, or out-of-scope requests.
 
 ### Step 4 — Inspect outputs
 
-For a review, report its bounded findings and cite relevant paths. For an edit, use `vibe_result` to inspect the summary, changed-file list, diff statistics, and patch artifact. Read the patch before suggesting or performing application to the source checkout. Report test results and any limitations separately.
+For a review, report its bounded findings and cite relevant paths. For an edit, call `vibe_result` (compact by default) for the summary, changed-file list, diff stat, and the patch, inline when small or at `patch_path` otherwise. Use `detail: "full"` only when digests or workspace paths are needed. Read the patch before suggesting or performing application to the source checkout. Report test results and any limitations separately.
 
 ### Step 5 — Close the run
 

@@ -131,6 +131,8 @@ export interface SupervisorEvent {
   data: Record<string, unknown>;
 }
 
+export type McpResultFormat = "text" | "structured" | "both";
+
 export interface SupervisorConfig {
   version: 1;
   backend: BackendPreference;
@@ -148,6 +150,7 @@ export interface SupervisorConfig {
     maxTranscriptBytes: number;
     maxArtifactBytes: number;
     maxMcpResultChars: number;
+    mcpResultFormat: McpResultFormat;
   };
   phase1: { allowTemporaryTrust: boolean };
   security: {
@@ -228,18 +231,20 @@ export interface StartToolInput {
   backend?: BackendPreference;
   max_turns?: number;
   timeout_seconds?: number;
+  wait_seconds?: number;
 }
 export interface ReviewStartToolInput extends StartToolInput { context_files?: string[] }
 export interface EditStartToolInput extends StartToolInput {
   base_ref?: string;
   allow_shell?: boolean;
 }
-export interface StatusToolInput { run_id: string; after_seq?: number; max_events?: number }
+export interface StatusToolInput { run_id: string; after_seq?: number; max_events?: number; wait_seconds?: number }
+export interface WaitOptions { signal?: AbortSignal }
 export interface ContinueToolInput { run_id: string; message: string }
 export type RespondToolInput =
   | { run_id: string; request_id: string; kind: "permission"; option_id: string }
   | { run_id: string; request_id: string; kind: "elicitation"; action: "accept" | "decline" | "cancel"; content?: Record<string, unknown> };
-export interface ResultToolInput { run_id: string; detail?: "summary" | "full"; include_transcript?: boolean }
+export interface ResultToolInput { run_id: string; detail?: "compact" | "summary" | "full"; include_transcript?: boolean }
 export interface CancelToolInput { run_id: string }
 export interface CloseToolInput { run_id: string; cleanup_worktree?: boolean }
 

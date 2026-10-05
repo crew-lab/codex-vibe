@@ -1,6 +1,6 @@
 # Functionality
 
-Codex Vibe exposes a local Model Context Protocol (MCP) server that delegates code review and editing tasks to Mistral Vibe. The supervisor manages workspace access, worker processes, run state, and result artifacts. A client starts a run, polls its progress, and retrieves the outcome.
+Codex Vibe exposes a local Model Context Protocol (MCP) server that delegates code review and editing tasks to Mistral Vibe. The supervisor manages workspace access, worker processes, run state, and result artifacts. A client starts a run, waits for it inside a tool call, and retrieves the outcome.
 
 ## Review and editing
 
@@ -18,12 +18,12 @@ The server runs over stdio, with protocol frames on stdout and diagnostics on st
 
 | Tool | Function and principal inputs |
 |---|---|
-| `vibe_review_start` | Start a review with `task` and `cwd`; optionally provide `context_files`, `backend`, `max_turns`, and `timeout_seconds`. |
-| `vibe_edit_start` | Start an edit with `task` and `cwd`; optionally provide `base_ref`, `backend`, `max_turns`, and `timeout_seconds`. Keep `allow_shell` false. |
-| `vibe_status` | Read state and bounded events for `run_id`. Use `after_seq` to fetch subsequent events and `max_events` to limit the response. |
+| `vibe_review_start` | Start a review with `task` and `cwd`; optionally provide `context_files`, `backend`, `max_turns`, `timeout_seconds`, and `wait_seconds`. |
+| `vibe_edit_start` | Start an edit with `task` and `cwd`; optionally provide `base_ref`, `backend`, `max_turns`, `timeout_seconds`, and `wait_seconds`. Keep `allow_shell` false. |
+| `vibe_status` | Read state and bounded events for `run_id`. Use `after_seq` to fetch subsequent events, `max_events` (default 10) to limit the response, and `wait_seconds` (0 to 300) to block until an event, state change, pending request, or a state needing action. |
 | `vibe_continue` | Send a follow-up `message` to a run whose ACP session supports continuation. |
 | `vibe_respond` | Answer the current `request_id`: select an offered `option_id` for a permission request, or accept, decline, or cancel an elicitation request. |
-| `vibe_result` | Retrieve the summary and artifact references for `run_id`; select `detail` and optionally `include_transcript`. |
+| `vibe_result` | Retrieve the summary and artifact references for `run_id`; `detail` is `compact` (default) or `full`; optionally set `include_transcript`. |
 | `vibe_cancel` | Request cancellation and terminate the managed worker. |
 | `vibe_close` | Close a run; optionally request verified worktree removal with `cleanup_worktree`. |
 
@@ -42,9 +42,9 @@ See [protocol.md](protocol.md) and `src/mcp/schemas.ts` for the protocol and exa
    }
    ```
 
-3. Save the returned run ID and poll `vibe_status`. Starting a run does not wait for the delegated task to finish.
+3. Save the returned run ID. Without `wait_seconds` a start returns at once; with it (for example 120 to 300) the start call waits until the run needs action and then includes the compact result if the run has finished. Otherwise call `vibe_status` with `wait_seconds` repeatedly instead of polling turn by turn.
 4. For an ACP run waiting for permission or input, inspect the current request before calling `vibe_respond`. Unknown, expired, or unsafe responses fail closed.
-5. Fetch `vibe_result` when work completes, fails, or is cancelled. Inspect the summary, warnings, and any available edit patch.
+5. Fetch `vibe_result` (compact by default) when work completes, fails, or is cancelled. Inspect the summary, warnings, and any available edit patch.
 6. Close the run. Worktree removal is optional and is refused if the saved patch no longer matches the worktree or residual files cannot be safely accounted for.
 
 ## Run lifecycle and recovery
@@ -73,11 +73,11 @@ Both adapters are pinned to Mistral Vibe **2.25.8** and use a private launch pro
 
 ## Results and retained data
 
-Results include state, a public summary, changed-file paths, warnings, and artifact references where available. Each artifact reference includes its path, SHA-256 digest, byte count, and media type.
+Compact results (the default) include state, a public summary, up to 50 changed-file paths with a total, warnings, a diff stat, the patch inline when it is at most 4000 bytes, and artifact `name` and `path`. `detail: "full"` adds workspace paths and, per artifact, the SHA-256 digest, byte count, and media type.
 
 - All finalized runs can expose a public `transcript.md` and sequenced `events.ndjson`.
 - Edit runs additionally export `diff.patch`, `diff.stat`, and `changed-files.json`, including supported binary and untracked changes.
-- MCP response size and transcript/event/artifact limits keep returned and retained data bounded. A failed or unfinished run may have incomplete artifacts.
+- MCP response size (`max_mcp_result_chars`, default 8000, and `mcp_result_format`) and transcript/event/artifact limits keep returned and retained data bounded. A failed or unfinished run may have incomplete artifacts.
 - Known secret patterns are redacted and reasoning/thought fields are excluded from persisted public output. Filtering does not guarantee detection of every secret format.
 - Retention defaults to seven days with failed runs preserved. Private Vibe histories are retained for recovery and handled by supervisor cleanup.
 
@@ -91,7 +91,7 @@ After `npm ci` and `npm run build`, invoke commands as `node dist/cli.js <comman
 | `config validate [path]` | Check a TOML configuration. |
 | `doctor --json` | Report local prerequisites without a hosted model request. |
 | `serve --stdio` | Run the MCP server. |
-| `configure-codex --user --dry-run` | Preview the user MCP configuration entry. Omit `--dry-run` to write it with a backup; `--project` selects project scope. |
+| `configure-codex --user --dry-run` | Preview the user MCP configuration entry, which includes `tool_timeout_sec = 600` so long waits are not cut off. Omit `--dry-run` to write it with a backup; `--project` selects project scope. |
 | `test-acp` | Check ACP initialization and compatibility without sending a model prompt. |
 | `runs list` | List saved runs. |
 | `runs show <run-id>` | Inspect a saved run. |

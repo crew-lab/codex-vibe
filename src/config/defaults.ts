@@ -16,7 +16,8 @@ export const DEFAULT_CONFIG: SupervisorConfig = {
     maxEventBytes: 52_428_800,
     maxTranscriptBytes: 10_485_760,
     maxArtifactBytes: 104_857_600,
-    maxMcpResultChars: 50_000
+    maxMcpResultChars: 8000,
+    mcpResultFormat: "text"
   },
   phase1: { allowTemporaryTrust: false },
   security: {

@@ -4,7 +4,7 @@ import path from "node:path";
 import type {
   BackendCallbacks, BackendKind, BackendRespondInput, BackendRunHandle,
   PendingRequest, ReviewStartToolInput, EditStartToolInput, StatusToolInput, ContinueToolInput,
-  RespondToolInput, ResultToolInput, CancelToolInput, CloseToolInput, RunLimits, RunMode, RunRecord, RunState, SupervisorBackend,
+  RespondToolInput, ResultToolInput, WaitOptions, CancelToolInput, CloseToolInput, RunLimits, RunMode, RunRecord, RunState, SupervisorBackend,
   SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent
 } from "../contracts.js";
 import { SCHEMA_VERSION, supervisorError } from "../contracts.js";
@@ -45,6 +45,7 @@ interface Runtime {
   pendingFailure?: SupervisorError;
   completionOrder: number;
   persistChain: Promise<void>;
+  waiters: Set<() => void>;
 }
 
 type StartResult = {
@@ -57,10 +58,19 @@ type StartResult = {
   created_at: string;
   next_action: string;
   base_ref?: string;
+  pending_request?: Record<string, unknown>;
+  error?: SupervisorError;
+  result?: Record<string, unknown>;
 };
 
 const MAX_META_BYTES = 1_048_576;
 const MAX_INLINE_TRANSCRIPT = 32_768;
+const COMPACT_TRANSCRIPT_CHARS = 4000;
+const COMPACT_PATCH_BYTES = 4000;
+const COMPACT_DIFF_STAT_CHARS = 2000;
+const COMPACT_CHANGED_FILES = 50;
+const COORDINATOR_ACTION_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "failed", "cancelled", "closed", "waiting_permission", "waiting_input", "recoverable"]);
+const SETTLED_RESULT_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "failed", "cancelled"]);
 const DEFAULT_REMEDIATION = "Inspect the run status and supervisor diagnostics, then retry if safe.";
 
 export class RunManager {
@@ -158,21 +168,58 @@ export class RunManager {
     this.initialized = true;
   }
 
-  async reviewStart(value: ReviewStartToolInput): Promise<StartResult> {
+  async reviewStart(value: ReviewStartToolInput, wait?: WaitOptions): Promise<StartResult> {
     const input = parseInput(reviewStartSchema, value);
-    return this.start("review", input.task, input.cwd, input.backend, {
+    const started = await this.start("review", input.task, input.cwd, input.backend, {
       maxTurns: input.max_turns, timeoutSeconds: input.timeout_seconds,
       contextFiles: input.context_files, allowShell: false
     });
+    return this.awaitStartOutcome(started, input.wait_seconds, wait?.signal);
   }
 
-  async editStart(value: EditStartToolInput): Promise<StartResult> {
+  async editStart(value: EditStartToolInput, wait?: WaitOptions): Promise<StartResult> {
     const input = parseInput(editStartSchema, value);
     if (input.allow_shell) throw codedError("VSUP_PERMISSION_DENIED", "Shell access is unavailable because this release has no certified kernel sandbox.");
-    return this.start("edit", input.task, input.cwd, input.backend, {
+    const started = await this.start("edit", input.task, input.cwd, input.backend, {
       maxTurns: input.max_turns, timeoutSeconds: input.timeout_seconds,
       baseRef: input.base_ref, allowShell: input.allow_shell
     });
+    return this.awaitStartOutcome(started, input.wait_seconds, wait?.signal);
+  }
+
+  private async awaitStartOutcome(started: StartResult, waitSeconds: number, signal?: AbortSignal): Promise<StartResult> {
+    if (waitSeconds <= 0) return started;
+    const runtime = this.requireRun(started.run_id);
+    await this.waitUntil(runtime, () => COORDINATOR_ACTION_STATES.has(runtime.record.state) || runtime.record.pendingRequest !== undefined, waitSeconds, signal);
+    const record = runtime.record;
+    const settled = SETTLED_RESULT_STATES.has(record.state);
+    return {
+      ...started, state: record.state, backend: record.backend, worker_workspace: record.workerWorkspace,
+      next_action: settled ? "Read the compact result above; call vibe_close when done." : "Call vibe_status with wait_seconds until the run needs action.",
+      ...(record.pendingRequest ? { pending_request: pendingToWire(record.pendingRequest) } : {}),
+      ...(record.error ? { error: record.error } : {}),
+      ...(settled ? { result: await this.compactResult(runtime, false) } : {})
+    };
+  }
+
+  private waitUntil(runtime: Runtime, ready: () => boolean, seconds: number, signal?: AbortSignal): Promise<void> {
+    if (seconds <= 0 || this.stopping || signal?.aborted || ready()) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const finish = (): void => {
+        clearTimeout(timer);
+        runtime.waiters.delete(check);
+        signal?.removeEventListener("abort", finish);
+        resolve();
+      };
+      const check = (): void => { if (this.stopping || ready()) finish(); };
+      const timer = setTimeout(finish, seconds * 1000);
+      runtime.waiters.add(check);
+      signal?.addEventListener("abort", finish, { once: true });
+    });
+  }
+
+  private notify(runtime: Runtime): void {
+    for (const check of [...runtime.waiters]) check();
   }
 
   private async start(mode: RunMode, task: string, cwd: string, requested: "auto" | BackendKind, options: { maxTurns: number; timeoutSeconds: number; contextFiles?: string[]; baseRef?: string; allowShell: boolean }): Promise<StartResult> {
@@ -223,13 +270,15 @@ export class RunManager {
     return {
       run_id: id, state: runtime.record.state, backend: runtime.record.backend, mode,
       source_workspace: source, worker_workspace: workerWorkspace, created_at: now,
-      next_action: "Call vibe_status with this run_id.",
+      next_action: "Call vibe_status with this run_id and wait_seconds.",
       ...(mode === "edit" ? { base_ref: options.baseRef ?? "HEAD" } : {})
     };
   }
 
-  async status(value: StatusToolInput): Promise<Record<string, unknown>> {
+  async status(value: StatusToolInput, wait?: WaitOptions): Promise<Record<string, unknown>> {
     const input = parseInput(statusSchema, value); const runtime = this.requireRun(input.run_id);
+    const initialState = runtime.record.state;
+    await this.waitUntil(runtime, () => runtime.eventSeq > input.after_seq || runtime.record.state !== initialState || runtime.record.pendingRequest !== undefined || COORDINATOR_ACTION_STATES.has(runtime.record.state), input.wait_seconds, wait?.signal);
     const events = runtime.events.filter((event) => event.seq > input.after_seq).slice(0, input.max_events).map((event) => ({
       seq: event.seq, type: event.type,
       ...(typeof event.data.title === "string" ? { title: event.data.title } : {}),
@@ -316,6 +365,7 @@ export class RunManager {
   async result(value: ResultToolInput): Promise<Record<string, unknown>> {
     const input = parseInput(resultSchema, value); const runtime = this.requireRun(input.run_id); const record = runtime.record;
     const result = record.result;
+    if (input.detail !== "full") return this.compactResult(runtime, input.include_transcript);
     if (!result) return { run_id: record.runId, state: record.state, backend: record.backend, summary: "Run has not produced a result yet.", artifacts: [], changed_files: [], warnings: [], ...(record.error ? { error: record.error } : {}) };
     const output: Record<string, unknown> = {
       schema_version: 1, run_id: record.runId, state: record.state, backend: record.backend,
@@ -333,6 +383,55 @@ export class RunManager {
       } catch { /* Transcript is optional and may be absent. */ }
     }
     return output;
+  }
+
+  private async compactResult(runtime: Runtime, includeTranscript: boolean): Promise<Record<string, unknown>> {
+    const record = runtime.record; const result = record.result;
+    const output: Record<string, unknown> = { run_id: record.runId, state: record.state, backend: record.backend };
+    if (!result) {
+      output.summary = "Run has not produced a result yet.";
+      output.warnings = [];
+      if (record.error) output.error = record.error;
+      return output;
+    }
+    const artifacts = result.artifacts ?? []; const files = result.changedFiles ?? [];
+    if (result.stopReason) output.stop_reason = result.stopReason;
+    output.summary = result.summary ?? "";
+    output.warnings = result.warnings ?? [];
+    if (record.error) output.error = record.error;
+    if (record.mode === "edit") output.worker = record.workerWorkspace;
+    output.changed_files = files.slice(0, COMPACT_CHANGED_FILES);
+    output.changed_files_total = files.length;
+    const stat = artifacts.find((artifact) => artifact.name === "diff.stat");
+    const statText = stat ? await this.readArtifactText(runtime, stat.path, MAX_META_BYTES) : undefined;
+    if (statText) output.diff_stat = statText.slice(0, COMPACT_DIFF_STAT_CHARS);
+    const patch = artifacts.find((artifact) => artifact.name === "diff.patch");
+    if (patch && patch.bytes > 0) {
+      const patchText = patch.bytes <= COMPACT_PATCH_BYTES ? await this.readArtifactText(runtime, patch.path, COMPACT_PATCH_BYTES) : undefined;
+      if (patchText !== undefined) output.patch = patchText;
+      else { output.patch_path = patch.path; output.patch_bytes = patch.bytes; }
+    }
+    output.artifacts = artifacts.map((artifact) => ({ name: artifact.name, path: artifact.path }));
+    if (includeTranscript) {
+      const transcriptPath = path.join(runtime.directory, "transcript.md");
+      const text = await this.readArtifactText(runtime, transcriptPath, record.limits.maxTranscriptBytes);
+      if (text !== undefined) {
+        output.transcript = text.length > COMPACT_TRANSCRIPT_CHARS ? text.slice(-COMPACT_TRANSCRIPT_CHARS) : text;
+        if (text.length > COMPACT_TRANSCRIPT_CHARS) output.transcript_truncated = true;
+        output.transcript_path = transcriptPath;
+      }
+    }
+    return output;
+  }
+
+  private async readArtifactText(runtime: Runtime, file: string, maxBytes: number): Promise<string | undefined> {
+    try {
+      const resolved = path.resolve(file);
+      if (!isPathWithinRoot(runtime.directory, resolved)) return undefined;
+      const info = await lstat(resolved);
+      if (info.isSymbolicLink() || !info.isFile() || info.size > maxBytes) return undefined;
+      return await readFile(resolved, "utf8");
+    } catch { return undefined; }
   }
 
   async cancel(value: CancelToolInput): Promise<Record<string, unknown>> {
@@ -396,6 +495,7 @@ export class RunManager {
 
   async shutdown(): Promise<void> {
     this.stopping = true;
+    for (const runtime of this.runs.values()) this.notify(runtime);
     const active = [...this.runs.values()].filter((runtime) => runtime.slot || runtime.record.state === "queued" || Boolean(runtime.handle));
     await Promise.all(active.map(async (runtime) => {
       await runtime.serial;
@@ -474,7 +574,7 @@ export class RunManager {
   }
 
   private makeRuntime(record: RunRecord, directory: string, task: string, contextFiles: string[], allowShell: boolean, backendPreference: "auto" | BackendKind, events: SupervisorEvent[] = []): Runtime {
-    return { record, directory, task, contextFiles, allowShell, backendPreference, events, eventSeq: events.at(-1)?.seq ?? 0, transcript: "", serial: Promise.resolve(), slot: false, cancelRequested: false, started: false, deferredResponses: [], transcriptOverflow: false, completionOrder: 0, persistChain: Promise.resolve() };
+    return { record, directory, task, contextFiles, allowShell, backendPreference, events, eventSeq: events.at(-1)?.seq ?? 0, transcript: "", serial: Promise.resolve(), slot: false, cancelRequested: false, started: false, deferredResponses: [], transcriptOverflow: false, completionOrder: 0, persistChain: Promise.resolve(), waiters: new Set() };
   }
 
   private async loadDefaultBackends(): Promise<void> {
@@ -608,6 +708,7 @@ export class RunManager {
       throw error;
     }
     runtime.events.push(full); runtime.eventSeq = full.seq;
+    this.notify(runtime);
   }
 
   private endTranscriptTurn(runtime: Runtime): void {
@@ -803,6 +904,7 @@ export class RunManager {
     if ((isTerminal(state) || state === "completed") && runtime.timer) clearTimeout(runtime.timer);
     await this.persist(runtime);
     if (isTerminal(state)) this.persisted.set(runtime.record.runId, runtime.record);
+    this.notify(runtime);
   }
 
   private async persist(runtime: Runtime): Promise<void> {

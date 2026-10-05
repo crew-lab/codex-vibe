@@ -39,7 +39,7 @@ For the observed draft, actionable feedback would identify the TypeScript enviro
 |---|---|
 | ACP completed with a patch | Independently review and test before acceptance. |
 | Candidate fails tests but session is usable | Send specific corrections through `vibe_continue`; fetch fresh results afterward. |
-| Running or waiting for permission/input | Poll or answer the current validated request; do not issue another prompt. |
+| Running or waiting for permission/input | Call `vibe_status` with `wait_seconds` or answer the current validated request; do not issue another prompt. |
 | Failed, cancelled, closed, or expired session | Inspect artifacts and recovery capability; do not assume continuation or replay. |
 | Programmatic run | No same-session continuation; preserve/export the candidate before planning a new run. |
 | Claimed completion with empty patch | Compare against the task; text generation alone does not establish coding success. |
