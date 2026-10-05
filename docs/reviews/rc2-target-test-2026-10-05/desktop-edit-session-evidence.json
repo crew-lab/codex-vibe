@@ -1,0 +1,80 @@
+[
+  {
+    "run_id": "0644977e-82c7-4fa3-ac6f-f47beb8a88ee",
+    "worktree_removed": true,
+    "sessions": [
+      {
+        "model": "mistral-medium-3.5",
+        "agent": "accept-edits",
+        "tools_available": [
+          "edit",
+          "grep",
+          "read_file",
+          "write_file"
+        ],
+        "stats": {
+          "steps": 4,
+          "session_prompt_tokens": 12718,
+          "session_completion_tokens": 323,
+          "session_cached_tokens": 10112,
+          "tool_calls_agreed": 3,
+          "tool_calls_rejected": 0,
+          "tool_calls_hook_denied": 0,
+          "tool_calls_failed": 0,
+          "tool_calls_succeeded": 3,
+          "context_tokens": 4578,
+          "last_turn_prompt_tokens": 4525,
+          "last_turn_completion_tokens": 53,
+          "last_turn_cached_tokens": 4224,
+          "last_turn_duration": 0.7576929999995627,
+          "tokens_per_second": 69.94917466576909,
+          "input_price_per_million": 1.5,
+          "output_price_per_million": 7.5,
+          "cached_input_price_per_million": 0.15,
+          "session_total_llm_tokens": 13041,
+          "last_turn_total_tokens": 4578,
+          "session_cost": 0.0078483
+        }
+      }
+    ]
+  },
+  {
+    "run_id": "d00fe37d-8c7f-4500-b0c1-6285b678ab2e",
+    "worktree_removed": true,
+    "sessions": [
+      {
+        "model": "mistral-medium-3.5",
+        "agent": "accept-edits",
+        "tools_available": [
+          "edit",
+          "grep",
+          "read_file",
+          "write_file"
+        ],
+        "stats": {
+          "steps": 7,
+          "session_prompt_tokens": 21961,
+          "session_completion_tokens": 745,
+          "session_cached_tokens": 4096,
+          "tool_calls_agreed": 5,
+          "tool_calls_rejected": 0,
+          "tool_calls_hook_denied": 0,
+          "tool_calls_failed": 0,
+          "tool_calls_succeeded": 5,
+          "context_tokens": 5122,
+          "last_turn_prompt_tokens": 4900,
+          "last_turn_completion_tokens": 222,
+          "last_turn_cached_tokens": 0,
+          "last_turn_duration": 2.333834917000786,
+          "tokens_per_second": 95.12240920848527,
+          "input_price_per_million": 1.5,
+          "output_price_per_million": 7.5,
+          "cached_input_price_per_million": 0.15,
+          "session_total_llm_tokens": 22706,
+          "last_turn_total_tokens": 5122,
+          "session_cost": 0.0329994
+        }
+      }
+    ]
+  }
+]

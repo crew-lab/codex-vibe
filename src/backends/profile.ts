@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { lstat } from 'node:fs/promises';
 import type { RunMode, StartRunInput } from '../contracts.js';
-import { createPrivateDir } from '../security/paths.js';
+import { createPrivateDir, createPrivateFile } from '../security/paths.js';
+import { stringify } from 'smol-toml';
 import { buildChildEnvironment, ORIGINAL_HOME_ENV } from '../security/environment.js';
 
 const SENSITIVE_NAMES = ['.env', '.env.*', '.envrc', '.envrc.*', '*.pem', '*.key', '*.p12', '*.pfx'];
@@ -24,10 +25,10 @@ function setToolPathPolicy(env: NodeJS.ProcessEnv, name: string, root: string, p
   ]);
   const reservedFiles = RESERVED_FILES.flatMap((name) => [`${absolute}/${name}`, `${absolute}/**/${name}`]);
   env[`${prefix}__PERMISSION`] = permission;
-  // Vibe checks denylist first, then allowlist. Include the root itself because
-  // its path matcher does not let **/path match path at the root level.
+  // The pinned resolver checks denylist first. Encoded recursive grants include
+  // the root and all descendants without the depth limit of legacy path globs.
   env[`${prefix}__DENYLIST`] = JSON.stringify([...reserved, ...reservedFiles, ...rootSecrets, ...nestedSecrets]);
-  env[`${prefix}__ALLOWLIST`] = JSON.stringify([absolute, `${absolute}/**`]);
+  env[`${prefix}__ALLOWLIST`] = JSON.stringify([`vibe-path:directory_recursive:${absolute}`]);
   env[`${prefix}__SENSITIVE_PATTERNS`] = JSON.stringify([
     `${absolute}/.env`, `${absolute}/.env.*`, `${absolute}/.envrc`, `${absolute}/.envrc.*`,
     `${absolute}/**/.env`, `${absolute}/**/.env.*`, `${absolute}/**/.envrc`, `${absolute}/**/.envrc.*`,
@@ -106,5 +107,22 @@ export async function createVibeChildProfile(input: StartRunInput, mode: RunMode
     for (const tool of ['write_file', 'edit']) setToolPathPolicy(env, tool, input.workerWorkspace, 'never');
     if (allowShell) env.VIBE_TOOLS__BASH__PERMISSION = 'ask';
   }
+  // Vibe 2.25.8 applies agent overrides after environment configuration. Its
+  // built-in Plan replaces read grants and Accept Edits makes writes global.
+  // Supervisor-owned profiles shadow those built-ins in the private VIBE_HOME;
+  // they never inherit user/project agents and retain the same mode IDs for ACP.
+  const agentDirectory = path.join(vibeHome, 'agents');
+  await createPrivateDir(agentDirectory);
+  const agentTools: Record<string, { permission: string }> = Object.fromEntries(
+    tools.map((tool) => [tool, { permission: tool === 'bash' ? 'ask' : 'never' }]),
+  );
+  await createPrivateFile(path.join(agentDirectory, `${env.VIBE_DEFAULT_AGENT}.toml`), stringify({
+    display_name: mode === 'review' ? 'Plan' : 'Accept Edits',
+    description: 'Supervisor-owned workspace policy',
+    safety: mode === 'review' ? 'safe' : 'destructive',
+    enabled_tools: tools,
+    disabled_tools: ['exit_plan_mode'],
+    tools: agentTools,
+  }), 'w');
   return { home, vibeHome, env };
 }

@@ -1,0 +1,7 @@
+{
+  "immediate": "always",
+  "nested": "NO_GRANT (fallback never)",
+  "secret": "never",
+  "symlink": "NO_GRANT (fallback never)",
+  "outside": "NO_GRANT (fallback never)"
+}

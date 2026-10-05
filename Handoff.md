@@ -1,6 +1,22 @@
 # Implementation handoff
 
-Status as of **2026-10-05**: implemented and locally verified release candidate 0.9.0-rc.2 (history below starts from rc.1 on 2026-10-03), not a production 1.0 certification. Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.1`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
+Status as of **2026-10-05**: implemented and locally verified release candidate 0.9.0-rc.2 (history below starts from rc.1 on 2026-10-03), not a production 1.0 certification. Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.2`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
+
+## Target-machine results (2026-10-05)
+
+The locally patched rc.2 is installed and registered in the desktop app at `~/.local/share/vibe-supervisor/rc2-permission-fix/node_modules/vibe-supervisor`. All eight supervisor tools are visible after restart. This is a locally patched build retaining version `0.9.0-rc.2`, not a new published release. Its tarball SHA-256 is `df769930b6160c103ba8f0ba310588af38c2f9d462f71189ddbcda948dccb64d`.
+
+B1 and B3 are fixed: recursive workspace grants use Vibe's encoded directory resolver, and private Plan/Accept Edits agent files preserve the supervisor's tool inventory and permissions. Installed Vibe 2.25.8 resolver tests verified deep reads, sensitive-path exclusions, outside-root rejection, and symlink rejection in both modes. Browser-login authentication succeeded during real hosted runs, providing target-machine evidence for B2.
+
+| Desktop hosted check | Result |
+| --- | --- |
+| Review `958f15a5-93bb-48cd-8312-4c9ce3f9cdab` | Correct nested-file diagnosis, no source changes; closed. |
+| Programmatic edit `0644977e-82c7-4fa3-ac6f-f47beb8a88ee` | Correct patch, four arithmetic cases passed; source unchanged; closed and worktree removed. |
+| ACP edit and continuation `d00fe37d-8c7f-4500-b0c1-6285b678ab2e` | Correct code patch and requested README addition; four cases passed; source unchanged; closed and worktree removed. Continuation reached the six-turn cap (`max_turn_requests`), so the generic completed status does not prove a normal final response. |
+
+Patched rc.2 packaging passed 184 TypeScript tests, 51 Python tests, lint, typecheck, build, acceptance validation, secret scan, SBOM generation, and offline installed-package MCP smoke. The two real-installed profile tests were also exercised with the pinned Vibe interpreter. See [the full evidence report](docs/reviews/rc2-target-test-2026-10-05/Read.md), [acceptance](docs/acceptance.md), and [chat usage](docs/chat-usage.md). Hosted edit costs from run metadata total approximately $0.04085; Codex token savings have not been measured.
+
+Cancellation, permission/input callbacks, restart/load recovery, idle expiry, the 100-run hosted soak, plugin installation, Intel, and clean-account installation remain unverified. Earlier blocker descriptions and field plans below are historical and superseded where this section records evidence.
 
 ## User intent and delivery history
 
@@ -126,18 +142,18 @@ Use the Python interpreter from the installed Vibe tool environment (on the orig
 
 The following must remain **UNVERIFIED** until performed and recorded:
 
-1. Real provider authentication and hosted Vibe model generation for reviews and edits.
-2. Effective enabled-tool inventory in a real authenticated session.
-3. A 100-run soak against real hosted Vibe/ACP, with zero permission requests in normal runs plus one deliberate out-of-root read that is refused (see the redefinition below), continuation, cancellation, and reconnect/load.
-4. Codex desktop tool visibility/registration using an actual user configuration.
-5. Plugin scaffold installation and visibility.
-6. macOS Intel and clean OS account installation; other platforms are not certified by config-path support alone.
+1. Hosted cancellation, permission/input callbacks, restart/load recovery, and idle expiry.
+2. A 100-run real hosted Vibe/ACP soak, including refused out-of-root reads, continuation, cancellation, and reconnect/load.
+3. Plugin scaffold installation and visibility.
+4. macOS Intel and clean OS account installation; other platforms are not certified by config-path support alone.
+
+Hosted authentication, effective mode/tool inventory, desktop registration, review, isolated edits, and ACP continuation now have the scoped evidence above. This does not certify the remaining lifecycle gates.
 
 Decisions and sequence recorded after the project review:
 
 - Review integrity: when a review run's source workspace changes during the run, the run completes with a warning instead of failing, and artifacts (transcript, `result.json`) are always finalized first. The read/search tool profile is the actual control, and users legitimately edit during long reviews. Reviewing a snapshot worktree is a possible later option.
 - Timeout: `timeout_seconds` counts from launch, not from submission; time spent queued does not consume it.
-- Gate 3 is redefined: the profile is designed so in-root reads and writes resolve to ALWAYS and everything else to NEVER (see [docs/compatibility.md](docs/compatibility.md)), so real Vibe should not issue permission callbacks. The soak asserts zero permission requests in normal runs plus one deliberate out-of-root read that is refused, rather than exercising callbacks. Caveat: the hosted attempt in [docs/acceptance.md](docs/acceptance.md) showed that the current `<root>/**` allowlist does not authorize nested descendants (blocker B1 below), so "in-root resolves to ALWAYS" is only true for immediate children today.
+- Gate 3 is redefined: the profile is designed so in-root reads and writes resolve to ALWAYS and everything else to NEVER (see [docs/compatibility.md](docs/compatibility.md)), so real Vibe should not issue permission callbacks. The soak asserts zero permission requests in normal runs plus one deliberate out-of-root read that is refused, rather than exercising callbacks. Historical caveat (B1 fixed and installed-resolver verified on 2026-10-05): the hosted attempt in [docs/acceptance.md](docs/acceptance.md) showed that the current `<root>/**` allowlist does not authorize nested descendants (blocker B1 below), so "in-root resolves to ALWAYS" is only true for immediate children today.
 - Plugin scaffold: `.mcp.json` (referenced by `.codex-plugin/plugin.json`) points at `./dist/cli.js`, so a fresh checkout without `npm run build` fails to start the server. Claude Code also loads it as a project MCP server and ignores the Codex-only `enabled` field.
 
 Implementation sequence:
@@ -208,7 +224,7 @@ Open questions left as is: a probe cached as available after an in-place Vibe up
 
 ## Known blockers from the hosted attempts
 
-The 2026-10-03 hosted attempts in [docs/acceptance.md](docs/acceptance.md) and the correction request in [docs/reviews/vibe-draft-corrections.md](docs/reviews/vibe-draft-corrections.md) found three P1 defects in the unmodified supervisor. None of the later lifecycle work addressed them, so the field tests below are expected to fail at these points until they are fixed:
+The 2026-10-03 hosted attempts in [docs/acceptance.md](docs/acceptance.md) and the correction request in [docs/reviews/vibe-draft-corrections.md](docs/reviews/vibe-draft-corrections.md) found three P1 defects in the unmodified supervisor. The target-machine work on 2026-10-05 fixed B1/B3 and verified hosted authentication for B2; the descriptions below preserve the original diagnosis:
 
 - **B1, nested path grants.** Vibe 2.25.8 matches absolute glob allowlists with `PurePath.match`, so the `<root>/**` patterns written by `src/backends/profile.ts` authorize immediate children but not nested files. Hosted reviews saw `read_file` report "permanently disabled". The intended fix is Vibe's encoded `vibe-path:directory_recursive:<canonical-root>` grant, keeping the `never` fallback, denylist, and sensitive patterns. It must be verified against the installed resolver, not by environment-string assertions.
 - **B2, browser-login credential under private HOME.** Fixed with a mocked `security` only; real Keychain lookup unverified until the target machine confirms it (see "Work on the target machine before hosted tests"). Original problem: The `ai.mistral.vibe` / `MISTRAL_API_KEY` Keychain item is found with the real HOME but not with the worker's fresh HOME, so hosted runs fail authentication unless `MISTRAL_API_KEY` is exported. The correction request specifies the fix: a bounded, exact-argv Keychain lookup in the shim using the original HOME context only for that subprocess, run after version/entrypoint validation, with explicit nonempty environment credentials taking precedence, and the context removed before Vibe starts.

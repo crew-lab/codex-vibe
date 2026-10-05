@@ -1,0 +1,171 @@
+
+> vibe-supervisor@0.9.0-rc.2 verify:release
+> npm run lint && npm run typecheck && npm run build && npm test && npm run test:python && npm run acceptance && npm run secret-scan && npm run sbom
+
+
+> vibe-supervisor@0.9.0-rc.2 lint
+> eslint .
+
+
+> vibe-supervisor@0.9.0-rc.2 typecheck
+> tsc --noEmit
+
+
+> vibe-supervisor@0.9.0-rc.2 build
+> tsc && node scripts/copy-runtime-assets.mjs
+
+Copied the pinned Vibe launch shim into dist/backends/runtime.
+
+> vibe-supervisor@0.9.0-rc.2 test
+> vitest run
+
+
+ RUN  v4.0.18 /private/tmp/codex-vibe-rc2-test
+
+ ✓ tests/unit/redaction.test.ts (22 tests) 7ms
+ ✓ tests/integration/mcp-tools.test.ts (2 tests) 68ms
+ ✓ tests/unit/cli.test.ts (3 tests) 100ms
+ ✓ tests/unit/original-home.test.ts (3 tests) 90ms
+ ✓ tests/unit/config.test.ts (7 tests) 47ms
+ ✓ tests/unit/launcher.test.ts (3 tests) 105ms
+ ✓ tests/unit/tool-schemas.test.ts (4 tests) 5ms
+ ✓ tests/unit/compat-probe.test.ts (3 tests) 609ms
+     ✓ fails closed when the ACP peer reports a different version  470ms
+ ✓ tests/unit/core-run-manager.test.ts (8 tests) 1886ms
+     ✓ exports an edit worktree patch and removes only the verified worktree  871ms
+ ✓ tests/integration/probe-and-reject.test.ts (22 tests) 2233ms
+ ✓ tests/integration/backend-fixes.test.ts (12 tests) 2697ms
+     ✓ emits the buffered partial line before cancel returns, exactly once  409ms
+     ✓ emits the buffered partial line before close returns, exactly once  380ms
+     ✓ removes the prompt file when spawning throws  339ms
+ ✓ tests/integration/review-fixes.test.ts (16 tests) 2862ms
+     ✓ omits integrity for edit runs  464ms
+     ✓ compactResult gives a patch path when inlining would exceed the result cap  422ms
+     ✓ compactResult still inlines a patch that fits the cap  340ms
+ ✓ tests/security/security-primitives.test.ts (14 tests) 3701ms
+     ✓ captures tracked staged and unstaged edits plus binary/newline filenames without mutating index  452ms
+     ✓ rejects configured clean filters before they can execute  338ms
+     ✓ refuses cleanup after post-export changes and retains the worktree  593ms
+     ✓ removes a cleanly verified worktree after export  463ms
+     ✓ rejects termination within a bound when group and direct-child signaling fail  1509ms
+ ✓ tests/integration/token-shaping.test.ts (27 tests) 5056ms
+     ✓ an edit start keeps the worker path and returns the compact patch  465ms
+     ✓ inlines a small patch and trims artifacts and workspace  385ms
+     ✓ references a patch larger than 4000 bytes by path instead of inlining it  327ms
+     ✓ caps changed_files at 50 and reports the total  1358ms
+     ✓ caps the inline transcript in compact mode and points at the file  300ms
+ ✓ tests/integration/acp-backend.test.ts (13 tests) 5393ms
+     ✓ completes 100 independent initialized prompt turns without leaking private reasoning  4699ms
+ ✓ tests/integration/run-manager-regressions.test.ts (20 tests) 13154ms
+     ✓ concatenates streamed ACP chunks into a transcript without inserting newlines between chunks  588ms
+     ✓ redacts a secret that is split across consecutive ACP message chunks  563ms
+     ✓ leaves no vibe-acp process alive after a restart recovers a completed run and its idle TTL elapses  519ms
+     ✓ lazily reloads a recovered completed ACP run on continue and runs a second prompt  613ms
+     ✓ turns a source workspace change during a review into a warning instead of failing the run  446ms
+     ✓ records a diagnostic event when a backend reports a state transition that is invalid for the run  470ms
+     ✓ starts the run timeout when the run launches rather than when it is queued  531ms
+     ✓ closing a completed ACP run reports closed without a failed transition  911ms
+     ✓ idle expiry of a completed ACP run keeps it completed without a failed transition  2917ms
+     ✓ shutting down with a completed but unclosed ACP run produces no unhandled rejection  901ms
+     ✓ bounds live idle ACP sessions to maxConcurrentRuns  599ms
+     ✓ proceeds with a warning when the source workspace cannot be snapshotted  376ms
+     ✓ fails the run when saving the record right after a successful snapshot fails  344ms
+     ✓ hashWorkspace enforces file count and byte limits with an output-limit error  321ms
+     ✓ releases the ACP worker process when artifact finalization fails a completed turn  728ms
+       ✓ when the backend reports failed while its process is still alive  485ms
+       ✓ when a completed run fails during artifact finalization  480ms
+       ✓ when a failure is reported after the run already completed  480ms
+       ✓ when the transcript limit fails the run  488ms
+       ✓ when the deadline expires  390ms
+
+ Test Files  16 passed (16)
+      Tests  179 passed (179)
+   Start at  20:13:47
+   Duration  14.41s (transform 1.24s, setup 0ms, import 2.76s, tests 38.01s, environment 1ms)
+
+
+> vibe-supervisor@0.9.0-rc.2 test:python
+> python3 -m unittest src/backends/runtime/test_prompt_file.py src/backends/runtime/test_keychain_credential.py
+
+...................................................
+----------------------------------------------------------------------
+Ran 51 tests in 0.913s
+
+OK
+
+> vibe-supervisor@0.9.0-rc.2 acceptance
+> node scripts/acceptance.mjs
+
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-05T18:14:03.428Z",
+  "deterministic_checks": [
+    {
+      "name": "private-package",
+      "status": "PASS",
+      "detail": "Package remains unpublished/private while the source is MIT licensed."
+    },
+    {
+      "name": "node-engine",
+      "status": "PASS",
+      "detail": "Node 24.21.0"
+    },
+    {
+      "name": "runtime-shim",
+      "status": "PASS",
+      "detail": "Pinned Python launcher exists in the compiled package tree."
+    },
+    {
+      "name": "cli-build",
+      "status": "PASS",
+      "detail": "Compiled CLI entrypoint exists."
+    },
+    {
+      "name": "cli-version",
+      "status": "PASS",
+      "detail": "0.9.0-rc.2"
+    },
+    {
+      "name": "test-fixture-excluded",
+      "status": "PASS",
+      "detail": "Test-only shim fixture is absent from dist."
+    }
+  ],
+  "unverified_release_gates": [
+    {
+      "name": "hosted-vibe-auth",
+      "status": "UNVERIFIED",
+      "reason": "No hosted model request was made."
+    },
+    {
+      "name": "codex-desktop-registration",
+      "status": "UNVERIFIED",
+      "reason": "No user Codex config was changed during packaging."
+    },
+    {
+      "name": "macos-intel",
+      "status": "UNVERIFIED",
+      "reason": "Only this host architecture can be tested here."
+    },
+    {
+      "name": "clean-account-install",
+      "status": "UNVERIFIED",
+      "reason": "A fresh OS account is not available in this workspace."
+    },
+    {
+      "name": "real-vibe-hosted-acp-soak",
+      "status": "UNVERIFIED",
+      "reason": "Fake-peer lifecycle coverage passed; a 100-run soak against hosted Vibe has not been performed."
+    }
+  ]
+}
+
+> vibe-supervisor@0.9.0-rc.2 secret-scan
+> node scripts/secret-scan.mjs
+
+Secret scan passed: no recognized credential formats found.
+
+> vibe-supervisor@0.9.0-rc.2 sbom
+> node scripts/sbom.mjs
+
+Wrote SPDX SBOM with 197 locked package entries to dist/sbom.spdx.json.

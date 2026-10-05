@@ -1,0 +1,31 @@
+{
+  "run_id": "958f15a5-93bb-48cd-8312-4c9ce3f9cdab",
+  "model": "mistral-medium-3.5",
+  "stats": {
+    "steps": 3,
+    "session_prompt_tokens": 7888,
+    "session_completion_tokens": 482,
+    "session_cached_tokens": 5120,
+    "tool_calls_agreed": 2,
+    "tool_calls_rejected": 0,
+    "tool_calls_hook_denied": 0,
+    "tool_calls_failed": 0,
+    "tool_calls_succeeded": 2,
+    "context_tokens": 4386,
+    "last_turn_prompt_tokens": 4169,
+    "last_turn_completion_tokens": 217,
+    "last_turn_cached_tokens": 3712,
+    "last_turn_duration": 2.2861843330028933,
+    "tokens_per_second": 94.91798052651836,
+    "input_price_per_million": 1.5,
+    "output_price_per_million": 7.5,
+    "cached_input_price_per_million": 0.15,
+    "session_total_llm_tokens": 8370,
+    "last_turn_total_tokens": 4386,
+    "session_cost": 0.008535
+  },
+  "tools_available": [
+    "grep",
+    "read_file"
+  ]
+}
