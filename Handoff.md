@@ -101,6 +101,8 @@ SHA256SUMS
 
 `package:rc` passed end to end, including the offline installed-package smoke test (MCP initialize, tool listing and EOF shutdown from the installed tarball). The tarball includes `SECURITY.md` and `CHANGELOG.md`; the Phase 0 change that dropped them from the `files` allowlist was a mistake (both files exist) and is reverted. The rc.1 tarball from the original machine is superseded. Never edit archive contents manually; rebuild instead.
 
+The delivered copy of these four files is kept on the preparing machine at `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.2/` (Git-ignored); verify it with `shasum -a 256 -c SHA256SUMS` in that folder before installing on the target machine.
+
 Populating the offline cache needs two steps. `npm ci --cache /abs/cache` stores package tarballs but not the registry metadata the offline tarball install needs, so the first `package:rc` run fails with `ENOTCACHED`. Warm the metadata once by packing the tarball and installing it online with `--ignore-scripts` into a throwaway prefix using the same cache, then run `package:rc`. The smoke install uses `--ignore-scripts`, so it does not exercise the `prepare` script; field test T1 covers that.
 
 ```sh
