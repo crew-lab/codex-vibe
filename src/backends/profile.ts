@@ -2,7 +2,7 @@ import path from 'node:path';
 import { lstat } from 'node:fs/promises';
 import type { RunMode, StartRunInput } from '../contracts.js';
 import { createPrivateDir } from '../security/paths.js';
-import { buildChildEnvironment } from '../security/environment.js';
+import { buildChildEnvironment, ORIGINAL_HOME_ENV } from '../security/environment.js';
 
 const SENSITIVE_NAMES = ['.env', '.env.*', '.envrc', '.envrc.*', '*.pem', '*.key', '*.p12', '*.pfx'];
 const RESERVED_DIRS = ['.git', '.vibe', '.agents'];
@@ -79,6 +79,8 @@ export async function createVibeChildProfile(input: StartRunInput, mode: RunMode
   await createPrivateDir(vibeHome);
 
   const env = buildChildEnvironment(process.env);
+  const originalHome = process.env.HOME;
+  if (originalHome && path.isAbsolute(originalHome)) env[ORIGINAL_HOME_ENV] = originalHome;
   env.HOME = home;
   env.VIBE_HOME = vibeHome;
   env.VIBE_ACP_LOGGING_ENABLED = '0';
