@@ -49,12 +49,14 @@ interface AcpState {
   closed: boolean;
   readySettled: boolean;
   failureReported: boolean;
+  released: boolean;
   toolCalls: Map<string, Record<string, unknown>>;
   callbacks: BackendCallbacks;
   input: StartRunInput;
   context?: ClientContext;
   recovering: boolean;
   suppressReplay: boolean;
+  turnRedactor?: StreamingRedactor;
 }
 interface AcpHandle extends BackendRunHandle { opaque: AcpState }
 
@@ -170,14 +172,14 @@ export class AcpBackend implements SupervisorBackend {
       onLimit: () => { outputLimited = true; outputLimitReported = true; void callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', 'Vibe ACP output exceeded the configured limit.') }); },
       onStderr: (text) => { const safe = stderrRedactor.push(text); if (safe) stderrChain = stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: safe } })).then(() => undefined).catch(() => undefined); }
     });
-    const state: AcpState = { process: child, home: profile.home, vibeHome: profile.vibeHome, ready: deferred<BackendStartResult>(), commands: makeQueue(), connected: Promise.resolve(), closed: false, readySettled: false, failureReported: false, toolCalls: new Map(), callbacks, input, recovering: false, suppressReplay: false };
+    const state: AcpState = { process: child, home: profile.home, vibeHome: profile.vibeHome, ready: deferred<BackendStartResult>(), commands: makeQueue(), connected: Promise.resolve(), closed: false, readySettled: false, failureReported: false, released: false, toolCalls: new Map(), callbacks, input, recovering: false, suppressReplay: false };
     state.connected = this.connect(state, launch.env.MISTRAL_API_KEY);
     state.connected.catch(async (error: unknown) => {
       state.closed = true;
       if (!state.readySettled) { state.readySettled = true; state.ready.reject(error); }
       await child.terminate();
       const message = redactSecrets(String(error), launch.env.MISTRAL_API_KEY ? [launch.env.MISTRAL_API_KEY] : []);
-      if (!state.failureReported) { state.failureReported = true; await callbacks.onState('failed', { error: supervisorError(/missing api key|unauthorized|\b401\b/i.test(message) ? 'VSUP_AUTH_REQUIRED' : 'VSUP_ACP_INIT_FAILED', message) }); }
+      if (!state.failureReported && !state.released) { state.failureReported = true; await callbacks.onState('failed', { error: supervisorError(/missing api key|unauthorized|\b401\b/i.test(message) ? 'VSUP_AUTH_REQUIRED' : 'VSUP_ACP_INIT_FAILED', message) }); }
     });
     child.done.then(({ code, signal }) => {
       closeQueue(state.commands);
@@ -260,7 +262,11 @@ export class AcpBackend implements SupervisorBackend {
         const task = await dequeue(state.commands);
         if (!task || task.kind === 'close' || state.closed) break;
         await state.callbacks.onState('running', { ...(result.acp ? { acp: result.acp } : {}) });
+        state.turnRedactor = new StreamingRedactor(secret ? [secret] : []);
         const response = await cx.request('session/prompt', { sessionId, prompt: [{ type: 'text', text: task.message }] });
+        const tail = state.turnRedactor.flush();
+        delete state.turnRedactor;
+        if (tail) await state.callbacks.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: tail } });
         await state.callbacks.onState('completed', { ...(result.acp ? { acp: result.acp } : {}), result: { stopReason: response.stopReason } });
       }
       try { await cx.request('session/close', { sessionId }); } catch { /* close is best-effort after bounded session completion */ }
@@ -278,13 +284,17 @@ export class AcpBackend implements SupervisorBackend {
       const id = update.toolCallId;
       if (typeof id === 'string') state.toolCalls.set(id, { ...(state.toolCalls.get(id) ?? {}), ...update });
     }
-    const clean = safeData(update, secret);
-    if (!clean || typeof clean !== 'object') return;
     if (type === 'agent_message_chunk') {
       const c = update.content as Record<string, unknown> | undefined;
-      const content = c?.type === 'text' && typeof c.text === 'string' ? redactSecrets(c.text, secret ? [secret] : []) : undefined;
+      if (c?.type !== 'text' || typeof c.text !== 'string') return;
+      const redactor = state.turnRedactor ?? (state.turnRedactor = new StreamingRedactor(secret ? [secret] : []));
+      const content = redactor.push(c.text);
       if (content) await state.callbacks.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: content } });
-    } else if (type === 'usage_update') {
+      return;
+    }
+    const clean = safeData(update, secret);
+    if (!clean || typeof clean !== 'object') return;
+    if (type === 'usage_update') {
       await state.callbacks.onEvent({ source: 'acp', type: 'usage', severity: 'info', data: clean as Record<string, unknown> });
     } else {
       await state.callbacks.onEvent({ source: 'acp', type: typeof type === 'string' ? type : 'update', severity: 'info', data: clean as Record<string, unknown> });
@@ -311,12 +321,12 @@ export class AcpBackend implements SupervisorBackend {
     await state.callbacks.onPendingRequest(undefined);
   }
   async cancel(handle: BackendRunHandle): Promise<void> {
-    const state = (handle as AcpHandle).opaque; state.closed = true; closeQueue(state.commands);
+    const state = (handle as AcpHandle).opaque; state.released = true; state.closed = true; closeQueue(state.commands);
     if (state.sessionId && state.context) { try { await state.context.notify('session/cancel', { sessionId: state.sessionId }); } catch { /* process shutdown remains authoritative */ } }
     await state.process.terminate();
   }
   async close(handle: BackendRunHandle): Promise<void> {
-    const state = (handle as AcpHandle).opaque; state.closed = true; enqueue(state.commands, { kind: 'close' }); closeQueue(state.commands);
+    const state = (handle as AcpHandle).opaque; state.released = true; state.closed = true; enqueue(state.commands, { kind: 'close' }); closeQueue(state.commands);
     // Retain session history and private homes for restart recovery/retention cleanup.
     await state.process.terminate();
   }
@@ -366,14 +376,14 @@ export class AcpBackend implements SupervisorBackend {
       maxStdoutBytes: record.limits.maxTranscriptBytes, maxStderrBytes: record.limits.maxEventBytes,
       onStderr: (chunk) => { const safe = redactor.push(chunk); if (safe) eventChain = eventChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: safe } })).then(() => undefined); }
     });
-    const state: AcpState = { process, home: profile.home, vibeHome: profile.vibeHome, ready: deferred<BackendStartResult>(), commands: makeQueue(), connected: Promise.resolve(), closed: false, readySettled: false, failureReported: false, toolCalls: new Map(), callbacks, input, sessionId: acp.sessionId, recovering: true, suppressReplay: true };
+    const state: AcpState = { process, home: profile.home, vibeHome: profile.vibeHome, ready: deferred<BackendStartResult>(), commands: makeQueue(), connected: Promise.resolve(), closed: false, readySettled: false, failureReported: false, released: false, toolCalls: new Map(), callbacks, input, sessionId: acp.sessionId, recovering: true, suppressReplay: true };
     state.connected = this.connect(state, launch.env.MISTRAL_API_KEY);
     state.connected.catch(async (error: unknown) => {
       state.closed = true;
       if (!state.readySettled) { state.readySettled = true; state.ready.reject(error); }
       await process.terminate();
       const message = redactSecrets(String(error), launch.env.MISTRAL_API_KEY ? [launch.env.MISTRAL_API_KEY] : []);
-      if (!state.failureReported) { state.failureReported = true; await callbacks.onState('failed', { error: supervisorError('VSUP_RECOVERY_ERROR', message) }); }
+      if (!state.failureReported && !state.released) { state.failureReported = true; await callbacks.onState('failed', { error: supervisorError('VSUP_RECOVERY_ERROR', message) }); }
     });
     process.done.then(async ({ code, signal }) => {
       closeQueue(state.commands);

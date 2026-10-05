@@ -105,6 +105,7 @@ export interface RunRecord {
   worktree?: WorktreeRecord;
   createdAt: string;
   updatedAt: string;
+  launchedAt?: string;
   startedAt?: string;
   finishedAt?: string;
   taskSha256: string;

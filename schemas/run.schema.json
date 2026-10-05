@@ -13,7 +13,7 @@
     "state": { "enum": ["queued", "starting", "negotiating", "ready", "running", "waiting_permission", "waiting_input", "completed", "failed", "cancelled", "closing", "closed", "orphaned", "recoverable"] },
     "source_workspace": { "type": "string" }, "worker_workspace": { "type": "string" },
     "worktree": { "type": "object", "additionalProperties": false, "required": ["path", "base_ref", "created_by_supervisor"], "properties": { "path": { "type": "string" }, "base_ref": { "type": "string" }, "created_by_supervisor": { "type": "boolean" } } },
-    "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" }, "started_at": { "type": "string", "format": "date-time" }, "finished_at": { "type": "string", "format": "date-time" },
+    "created_at": { "type": "string", "format": "date-time" }, "updated_at": { "type": "string", "format": "date-time" }, "launched_at": { "type": "string", "format": "date-time" }, "started_at": { "type": "string", "format": "date-time" }, "finished_at": { "type": "string", "format": "date-time" },
     "task_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "workspace_snapshot_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "process": { "type": "object", "additionalProperties": false, "properties": { "pid": { "type": "integer" }, "executable": { "type": "string" }, "version": { "type": "string" } } },
     "acp": { "type": "object", "additionalProperties": true },

@@ -49,7 +49,8 @@ export async function createPrivateDir(dir: string): Promise<void> {
       if (info.isSymbolicLink() || !info.isDirectory()) throw new WorkspacePathError('Private directory path contains a symlink or non-directory');
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      await mkdir(current, { mode: 0o700 });
+      try { await mkdir(current, { mode: 0o700 }); }
+      catch (mkdirError) { if ((mkdirError as NodeJS.ErrnoException).code !== 'EEXIST') throw mkdirError; }
       const info = await lstat(current);
       if (info.isSymbolicLink() || !info.isDirectory()) throw new WorkspacePathError('Private directory changed during creation');
     }

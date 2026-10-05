@@ -32,6 +32,7 @@ export function runToWire(run: RunRecord): JsonObject {
     } } : {}),
     created_at: run.createdAt,
     updated_at: run.updatedAt,
+    ...(run.launchedAt ? { launched_at: run.launchedAt } : {}),
     ...(run.startedAt ? { started_at: run.startedAt } : {}),
     ...(run.finishedAt ? { finished_at: run.finishedAt } : {}),
     task_sha256: run.taskSha256,
@@ -93,6 +94,7 @@ export function runFromWire(value: unknown): RunRecord {
       maxArtifactBytes: numberValue(limits.max_artifact_bytes)
     }
   };
+  if (typeof value.launched_at === "string") run.launchedAt = value.launched_at;
   if (typeof value.started_at === "string") run.startedAt = value.started_at;
   if (typeof value.finished_at === "string") run.finishedAt = value.finished_at;
   if (typeof value.workspace_snapshot_sha256 === "string") {

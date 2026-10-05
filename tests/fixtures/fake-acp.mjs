@@ -1,10 +1,16 @@
 import { createInterface } from 'node:readline';
+import { writeFileSync } from 'node:fs';
+import path from 'node:path';
 
 const mode = process.env.FAKE_ACP_CASE ?? 'normal';
 let sessionId = 'fake-session-1';
 let promptCount = 0;
 let exited = false;
 const pending = new Map();
+
+if (process.env.FAKE_PID_DIR) writeFileSync(path.join(process.env.FAKE_PID_DIR, String(process.pid)), '');
+
+function chunk(text) { notification('session/update', { sessionId, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } }); }
 
 function send(value) { process.stdout.write(`${JSON.stringify(value)}\n`); }
 function reply(id, result) { send({ jsonrpc: '2.0', id, result }); }
@@ -50,6 +56,8 @@ async function handle(message) {
       notification('vibe/unknown_test_notification', { arbitrary: 'unknown notification is ignored' });
       notification('session/update', { sessionId, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `reply-${promptCount}` } } });
     }
+    if (mode === 'chunked') { chunk('Hel'); chunk('lo '); chunk('world'); }
+    if (mode === 'split-secret') { chunk('token sk-abcdef'); chunk('1234567890xyz done'); }
     reply(message.id, { stopReason: 'end_turn' });
     return;
   }

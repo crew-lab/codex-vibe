@@ -12,6 +12,7 @@ import { cancelSchema, closeSchema, continueSchema, editStartSchema, resultSchem
 import { atomicWriteJson, sanitizeForPersistence } from "../persistence/atomic.js";
 import { appendNdjson, readNdjsonRecovering } from "../persistence/ndjson.js";
 import { createPrivateDir, resolveCanonicalRoot, isPathWithinRoot, assertPathWithinRoot } from "../security/paths.js";
+import { redactSecrets } from "../security/redaction.js";
 import { assertNotSupervisorChild } from "../security/environment.js";
 import { createDetachedWorktree, exportDirtySnapshot, removeVerifiedWorktree, resolveBaseCommit } from "../git/worktree.js";
 import { eventFromWire, eventToWire, runFromWire, runToWire } from "./serialization.js";
@@ -41,6 +42,8 @@ interface Runtime {
   idleTimer?: NodeJS.Timeout;
   transcriptOverflow: boolean;
   pendingFailure?: SupervisorError;
+  completionOrder: number;
+  persistChain: Promise<void>;
 }
 
 type StartResult = {
@@ -72,6 +75,7 @@ export class RunManager {
   private initialized = false;
   private stopping = false;
   private activeSlots = 0;
+  private completionCounter = 0;
 
   constructor(private readonly config: SupervisorConfig, private readonly dataDir: string, backends: readonly SupervisorBackend[] = []) {
     this.runRoot = path.join(path.resolve(dataDir), "runs");
@@ -116,6 +120,11 @@ export class RunManager {
         if (isTerminal(record.state)) {
           this.runs.set(record.runId, runtime); this.persisted.set(record.runId, record); continue;
         }
+        if (record.state === "completed") {
+          const completedBackend = this.backends.get(record.backend);
+          if (completedBackend) runtime.backend = completedBackend;
+          this.runs.set(record.runId, runtime); continue;
+        }
         // Requests cannot survive a process restart because the ACP request handle is process-local.
         if (record.pendingRequest) {
           delete record.pendingRequest;
@@ -126,10 +135,6 @@ export class RunManager {
           runtime.backend = backend;
           try {
             const handle = await backend.recover(record, this.callbacks(runtime));
-            if (handle && record.state === "completed") {
-              runtime.handle = handle; runtime.backend = backend;
-              this.runs.set(record.runId, runtime); continue;
-            }
             if (handle && this.activeSlots < this.config.maxConcurrentRuns) {
               runtime.handle = handle; runtime.slot = true; this.activeSlots += 1;
               if (runtime.record.state === "recoverable") await this.setState(runtime, "ready");
@@ -139,10 +144,10 @@ export class RunManager {
             if (handle) await backend.close(handle).catch(() => undefined);
           } catch { /* Persist a recoverable record below; never resubmit its task. */ }
         }
-        if (record.state !== "completed") record.state = "recoverable";
+        record.state = "recoverable";
         record.updatedAt = new Date().toISOString();
         delete record.pendingRequest;
-        if (!record.error && record.state !== "completed") record.error = supervisorError("VSUP_SESSION_NOT_RESUMABLE", "No resumable backend session was recovered.");
+        if (!record.error) record.error = supervisorError("VSUP_SESSION_NOT_RESUMABLE", "No resumable backend session was recovered.");
         runtime.record = record; runtime.events = events; this.runs.set(record.runId, runtime); this.persisted.set(record.runId, record);
         await this.persist(runtime);
       } catch {
@@ -213,8 +218,6 @@ export class RunManager {
       await rm(runtime.directory, { recursive: true, force: true }).catch(() => undefined);
       throw error;
     }
-    runtime.timer = setTimeout(() => { void this.deadline(runtime); }, options.timeoutSeconds * 1000);
-    runtime.timer.unref?.();
     if (slot) void this.launch(runtime);
     return {
       run_id: id, state: runtime.record.state, backend: runtime.record.backend, mode,
@@ -246,26 +249,33 @@ export class RunManager {
       const backend = this.backends.get(runtime.record.backend);
       if (backend) runtime.backend = backend;
     }
-    if (runtime.backend && !runtime.handle) {
+    const lazyRecovery = runtime.record.state === "completed";
+    if (runtime.backend && !runtime.handle && !lazyRecovery) {
       const handle = await runtime.backend.recover(runtime.record, this.callbacks(runtime));
       if (handle) runtime.handle = handle;
     }
-    if (!runtime.backend || !runtime.handle) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available for continuation.");
+    if (!runtime.backend || (!runtime.handle && !lazyRecovery)) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available for continuation.");
     const capability = await runtime.backend.probe();
     if (!capability.supportsContinue) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "The active backend does not support continuing this session.");
     if (runtime.record.pendingRequest || (runtime.record.state !== "completed" && runtime.record.state !== "ready" && runtime.record.state !== "recoverable")) throw codedError("VSUP_INVALID_STATE", "This run cannot accept a continuation in its current state.");
     if (runtime.record.state === "completed") {
-      if (!runtime.slot) {
-        if (this.activeSlots >= this.config.maxConcurrentRuns) throw codedError("VSUP_LIMIT_EXCEEDED", "No active run slot is available for continuation.");
-        runtime.slot = true; this.activeSlots += 1;
+      if (runtime.slot) throw codedError("VSUP_INVALID_STATE", "A continuation for this run is already starting.");
+      if (this.activeSlots >= this.config.maxConcurrentRuns) throw codedError("VSUP_LIMIT_EXCEEDED", "No active run slot is available for continuation.");
+      runtime.slot = true; this.activeSlots += 1;
+      if (!runtime.handle) {
+        let recovered: BackendRunHandle | undefined;
+        try { recovered = await runtime.backend.recover(runtime.record, this.callbacks(runtime)); }
+        catch { recovered = undefined; }
+        if (!recovered) { this.releaseSlot(runtime); throw codedError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available for continuation."); }
+        runtime.handle = recovered;
       }
       if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
       delete runtime.record.finishedAt;
-      await this.setState(runtime, "running", { startedAt: new Date().toISOString() });
-      runtime.timer = setTimeout(() => { void this.deadline(runtime); }, runtime.record.limits.timeoutSeconds * 1000);
-      runtime.timer.unref?.();
+      runtime.record.launchedAt = new Date().toISOString();
+      await this.setState(runtime, "running", { startedAt: runtime.record.launchedAt });
+      this.armDeadline(runtime, runtime.record.limits.timeoutSeconds * 1000);
     }
-    await runtime.backend.continue(runtime.handle, input.message);
+    await runtime.backend.continue(runtime.handle!, input.message);
     return { run_id: runtime.record.runId, state: runtime.record.state };
   }
 
@@ -385,6 +395,7 @@ export class RunManager {
     this.stopping = true;
     const active = [...this.runs.values()].filter((runtime) => runtime.slot || runtime.record.state === "queued" || Boolean(runtime.handle));
     await Promise.all(active.map(async (runtime) => {
+      await runtime.serial;
       runtime.cancelRequested = true;
       this.removeFromPending(runtime);
       if (runtime.handle && runtime.backend) await runtime.backend.close(runtime.handle).catch(() => undefined);
@@ -460,7 +471,7 @@ export class RunManager {
   }
 
   private makeRuntime(record: RunRecord, directory: string, task: string, contextFiles: string[], allowShell: boolean, backendPreference: "auto" | BackendKind, events: SupervisorEvent[] = []): Runtime {
-    return { record, directory, task, contextFiles, allowShell, backendPreference, events, eventSeq: events.at(-1)?.seq ?? 0, transcript: "", serial: Promise.resolve(), slot: false, cancelRequested: false, started: false, deferredResponses: [], transcriptOverflow: false };
+    return { record, directory, task, contextFiles, allowShell, backendPreference, events, eventSeq: events.at(-1)?.seq ?? 0, transcript: "", serial: Promise.resolve(), slot: false, cancelRequested: false, started: false, deferredResponses: [], transcriptOverflow: false, completionOrder: 0, persistChain: Promise.resolve() };
   }
 
   private async loadDefaultBackends(): Promise<void> {
@@ -473,6 +484,8 @@ export class RunManager {
 
   private async launch(runtime: Runtime): Promise<void> {
     if (runtime.cancelRequested || isTerminal(runtime.record.state)) { this.releaseSlot(runtime); return; }
+    runtime.record.launchedAt = new Date().toISOString();
+    this.armDeadline(runtime, runtime.record.limits.timeoutSeconds * 1000);
     try {
       let workerWorkspace = runtime.record.sourceWorkspace;
       let baseRef: string | undefined;
@@ -536,12 +549,18 @@ export class RunManager {
     return {
       onEvent: (event) => this.stopping ? undefined : this.serial(runtime, async () => this.appendEvent(runtime, event)),
       onPendingRequest: (pending) => this.stopping ? undefined : this.receivePending(runtime, pending),
-      onState: (state, update) => this.stopping ? undefined : this.serial(runtime, async () => this.applyBackendState(runtime, state, update))
+      onState: (state, update) => this.stopping ? undefined : this.serial(runtime, async () => this.applyBackendState(runtime, state, update)).catch((error: unknown) => this.recordIgnoredTransition(runtime, state, error))
     };
   }
 
-  private async appendEvent(runtime: Runtime, event: Parameters<BackendCallbacks["onEvent"]>[0]): Promise<void> {
-    if (isTerminal(runtime.record.state)) return;
+  private async recordIgnoredTransition(runtime: Runtime, reportedState: RunState, error: unknown): Promise<void> {
+    if ((error as { code?: unknown } | null)?.code !== "VSUP_INVALID_STATE") throw error;
+    const message = redactSecrets(error instanceof Error ? error.message : "Invalid run state transition.").slice(0, 512);
+    await this.serial(runtime, async () => this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "warning", data: { reason: "ignored_backend_state_transition", backend_state: reportedState, run_state: runtime.record.state, message } }, true)).catch(() => undefined);
+  }
+
+  private async appendEvent(runtime: Runtime, event: Parameters<BackendCallbacks["onEvent"]>[0], allowTerminal = false): Promise<void> {
+    if (isTerminal(runtime.record.state) && !allowTerminal) return;
     const type = String(event.type).slice(0, 128);
     let data = event.data ?? {};
     if (/reasoning|thought/i.test(type)) {
@@ -580,12 +599,15 @@ export class RunManager {
       throw error;
     }
     runtime.events.push(full); runtime.eventSeq = full.seq;
-    await this.persist(runtime);
+  }
+
+  private endTranscriptTurn(runtime: Runtime): void {
+    if (runtime.transcript && !runtime.transcript.endsWith("\n")) runtime.transcript += "\n";
   }
 
   private appendTranscript(runtime: Runtime, text: string): boolean {
     const safe = String(text);
-    const next = `${runtime.transcript}${safe}\n`;
+    const next = `${runtime.transcript}${safe}`;
     if (Buffer.byteLength(next) > runtime.record.limits.maxTranscriptBytes) return false;
     runtime.transcript = next;
     return true;
@@ -630,34 +652,41 @@ export class RunManager {
   }
 
   private async applyBackendState(runtime: Runtime, state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "acp">>): Promise<void> {
-    if (isTerminal(runtime.record.state)) return;
+    if (isTerminal(runtime.record.state) || runtime.record.state === "closing") return;
+    if (runtime.record.state === "completed" && (state === "failed" || state === "cancelled" || state === "completed")) {
+      if (state === "failed" && runtime.handle) { if (runtime.idleTimer) clearTimeout(runtime.idleTimer); delete runtime.handle; }
+      return;
+    }
     if (update?.usage) runtime.record.usage = update.usage;
     if (update?.result) runtime.record.result = update.result;
     if (update?.process) runtime.record.process = update.process;
     if (update?.acp) runtime.record.acp = update.acp;
     if (state === "completed") {
+      this.endTranscriptTurn(runtime);
       try {
-        if (runtime.record.mode === "review" && runtime.record.workspaceSnapshotSha256 && await hashWorkspace(runtime.record.sourceWorkspace) !== runtime.record.workspaceSnapshotSha256) throw codedError("VSUP_WORKSPACE_INVALID", "Review mode modified the source workspace; the original workspace failed its integrity check.");
+        await this.addReviewIntegrityWarning(runtime);
         await this.finalizeArtifacts(runtime, "completed");
         await this.setState(runtime, "completed", { finishedAt: new Date().toISOString() });
+        runtime.completionOrder = ++this.completionCounter;
         this.scheduleIdleExpiration(runtime);
       } catch (error) {
         await this.setState(runtime, "failed", { error: error instanceof Error && "code" in error ? normalizeError(error) : supervisorError("VSUP_ARTIFACT_ERROR", "Could not finish and verify the run artifacts."), finishedAt: new Date().toISOString() });
       }
       this.releaseSlot(runtime);
+      this.enforceIdleSessionCap();
       return;
     }
     if (state === "failed") {
+      await this.addReviewIntegrityWarning(runtime);
       await this.finalizeArtifacts(runtime, "failed").catch(() => undefined);
-      const integrityError = await this.reviewIntegrityError(runtime);
-      await this.setState(runtime, "failed", { finishedAt: new Date().toISOString(), ...(integrityError ? { error: integrityError } : update?.error ? { error: update.error } : {}) });
+      await this.setState(runtime, "failed", { finishedAt: new Date().toISOString(), ...(update?.error ? { error: update.error } : {}) });
       this.releaseSlot(runtime); return;
     }
     if (state === "cancelled") {
+      await this.addReviewIntegrityWarning(runtime);
       await this.finalizeArtifacts(runtime, "cancelled").catch(() => undefined);
-      const integrityError = await this.reviewIntegrityError(runtime);
-      if (runtime.pendingFailure || integrityError) {
-        await this.setState(runtime, "failed", { error: integrityError ?? runtime.pendingFailure!, finishedAt: new Date().toISOString() });
+      if (runtime.pendingFailure) {
+        await this.setState(runtime, "failed", { error: runtime.pendingFailure, finishedAt: new Date().toISOString() });
         delete runtime.pendingFailure;
       } else await this.setState(runtime, "cancelled", { finishedAt: new Date().toISOString() });
       this.releaseSlot(runtime); return;
@@ -761,7 +790,9 @@ export class RunManager {
   }
 
   private async persist(runtime: Runtime): Promise<void> {
-    await atomicWriteJson(path.join(runtime.directory, "meta.json"), runToWire(runtime.record));
+    const write = runtime.persistChain.then(() => atomicWriteJson(path.join(runtime.directory, "meta.json"), runToWire(runtime.record)));
+    runtime.persistChain = write.then(() => undefined, () => undefined);
+    await write;
   }
 
   private serial<T>(runtime: Runtime, fn: () => Promise<T>): Promise<T> {
@@ -778,37 +809,56 @@ export class RunManager {
 
   private resumeDeadline(runtime: Runtime): void {
     if (runtime.record.state === "completed") return;
-    const deadline = Date.parse(runtime.record.createdAt) + runtime.record.limits.timeoutSeconds * 1000;
+    const deadline = Date.parse(runtime.record.launchedAt ?? runtime.record.startedAt ?? runtime.record.createdAt) + runtime.record.limits.timeoutSeconds * 1000;
     const remaining = deadline - Date.now();
     if (remaining <= 0) { void this.deadline(runtime); return; }
-    runtime.timer = setTimeout(() => { void this.deadline(runtime); }, remaining);
-    runtime.timer.unref?.();
+    this.armDeadline(runtime, remaining);
   }
 
   private scheduleIdleExpiration(runtime: Runtime): void {
     if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
     if (!runtime.handle || !runtime.backend) return;
-    const expire = async (): Promise<void> => {
-      if (runtime.record.state !== "completed" || runtime.slot || !runtime.handle || !runtime.backend) return;
-      const backend = runtime.backend; const handle = runtime.handle;
-      await backend.close(handle).catch(() => undefined);
-      if (runtime.handle === handle) delete runtime.handle;
-      await this.serial(runtime, async () => {
-        if (runtime.record.state === "completed") await this.appendEvent(runtime, { source: "supervisor", type: "idle_expired", severity: "info", data: { idle_ttl_seconds: this.config.workerIdleTtlSeconds } });
-      });
-    };
-    runtime.idleTimer = setTimeout(() => { void expire(); }, this.config.workerIdleTtlSeconds * 1000);
+    runtime.idleTimer = setTimeout(() => { void this.releaseIdleHandle(runtime, "idle_expired"); }, this.config.workerIdleTtlSeconds * 1000);
     runtime.idleTimer.unref?.();
   }
 
-  private async reviewIntegrityError(runtime: Runtime): Promise<SupervisorError | undefined> {
+  private async releaseIdleHandle(runtime: Runtime, eventType: "idle_expired" | "idle_evicted"): Promise<void> {
+    if (runtime.record.state !== "completed" || runtime.slot || !runtime.handle || !runtime.backend) return;
+    if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
+    const backend = runtime.backend; const handle = runtime.handle;
+    delete runtime.handle;
+    await backend.close(handle).catch(() => undefined);
+    await this.serial(runtime, async () => {
+      if (runtime.record.state === "completed") await this.appendEvent(runtime, { source: "supervisor", type: eventType, severity: "info", data: { idle_ttl_seconds: this.config.workerIdleTtlSeconds, max_idle_sessions: this.config.maxConcurrentRuns } });
+    }).catch(() => undefined);
+  }
+
+  private enforceIdleSessionCap(): void {
+    const idle = [...this.runs.values()].filter((candidate) => candidate.record.state === "completed" && !candidate.slot && candidate.handle).sort((a, b) => a.completionOrder - b.completionOrder);
+    for (const evicted of idle.slice(0, Math.max(0, idle.length - this.config.maxConcurrentRuns))) void this.releaseIdleHandle(evicted, "idle_evicted");
+  }
+
+  private armDeadline(runtime: Runtime, milliseconds: number): void {
+    if (runtime.timer) clearTimeout(runtime.timer);
+    runtime.timer = setTimeout(() => { void this.deadline(runtime); }, milliseconds);
+    runtime.timer.unref?.();
+  }
+
+  private async addReviewIntegrityWarning(runtime: Runtime): Promise<void> {
+    const warning = await this.reviewIntegrityWarning(runtime);
+    if (!warning) return;
+    const warnings = runtime.record.result?.warnings ?? [];
+    if (!warnings.includes(warning)) runtime.record.result = { ...runtime.record.result, warnings: [...warnings, warning] };
+  }
+
+  private async reviewIntegrityWarning(runtime: Runtime): Promise<string | undefined> {
     if (runtime.record.mode !== "review" || !runtime.record.workspaceSnapshotSha256) return undefined;
     try {
       return await hashWorkspace(runtime.record.sourceWorkspace) === runtime.record.workspaceSnapshotSha256
         ? undefined
-        : supervisorError("VSUP_WORKSPACE_INVALID", "Review mode modified the source workspace; the original workspace failed its integrity check.");
+        : "The source workspace changed during the review; findings may not match the current files.";
     } catch {
-      return supervisorError("VSUP_WORKSPACE_INVALID", "Could not verify that review mode left the source workspace unchanged.");
+      return "The source workspace could not be verified after the review; findings may not match the current files.";
     }
   }
 
