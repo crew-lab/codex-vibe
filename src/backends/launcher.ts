@@ -7,6 +7,8 @@ import { createPrivateFile } from '../security/paths.js';
 import type { VibeChildProfile } from './profile.js';
 
 const execFileAsync = promisify(execFile);
+export const PROMPT_FILE_ENV = 'VIBE_SUPERVISOR_PROMPT_FILE';
+export const PROMPT_FILE_NAME = 'task-prompt.txt';
 const SHIM_ASSET = new URL('./runtime/vibe_supervisor_launcher.py', import.meta.url);
 
 export interface VibeLaunch {
@@ -47,6 +49,7 @@ export async function buildVibeLaunch(
   args: readonly string[],
   profile: VibeChildProfile,
   runDirectory: string,
+  options: { promptText?: string } = {},
 ): Promise<VibeLaunch> {
   const resolved = await resolveCommand(executable, profile.env);
   const python = await pythonFor(resolved, profile.env);
@@ -58,7 +61,13 @@ export async function buildVibeLaunch(
     const existing = await readFile(shim);
     if (!existing.equals(content)) throw new Error('Run directory contains a different Vibe launcher shim');
   }
-  const env = { ...profile.env, VIBE_SUPERVISOR_ENTRYPOINT: entrypoint };
+  const env: NodeJS.ProcessEnv = { ...profile.env, VIBE_SUPERVISOR_ENTRYPOINT: entrypoint };
+  if (options.promptText !== undefined) {
+    if (entrypoint !== 'programmatic') throw new Error('Only the programmatic launch accepts a prompt file');
+    const promptFile = path.join(runDirectory, PROMPT_FILE_NAME);
+    await createPrivateFile(promptFile, options.promptText);
+    env[PROMPT_FILE_ENV] = promptFile;
+  }
   return { command: python, args: [shim, ...args], env };
 }
 

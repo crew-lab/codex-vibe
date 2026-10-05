@@ -72,7 +72,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
     const toolNames = input.mode === 'review' ? ['read_file', 'grep'] : ['read_file', 'grep', 'write_file', 'edit'];
     const contextPrefix = (input.contextFiles ?? []).map((file) => `Approved context path: ${file}`).join('\n');
     const prompt = contextPrefix ? `${contextPrefix}\n\nTask:\n${input.task}` : input.task;
-    const args = ['--prompt', prompt, '--agent', agent, '--max-turns', String(input.limits.maxTurns), '--output', 'streaming', '--legacy-harness'];
+    const args = ['--agent', agent, '--max-turns', String(input.limits.maxTurns), '--output', 'streaming', '--legacy-harness'];
     for (const tool of toolNames) args.push('--enabled-tools', tool);
     let latestSummary = '';
     let outputChain = Promise.resolve();
@@ -85,7 +85,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
     const stderrRedactor = new StreamingRedactor(profile.env.MISTRAL_API_KEY ? [profile.env.MISTRAL_API_KEY] : []);
     let outputLimited = false;
     let parserFailed = false;
-    const launch = await buildVibeLaunch(executable(this.config), 'programmatic', args, profile, input.runDirectory);
+    const launch = await buildVibeLaunch(executable(this.config), 'programmatic', args, profile, input.runDirectory, { promptText: prompt });
     const child = spawnManaged(launch.command, launch.args, {
       cwd: input.workerWorkspace, env: launch.env,
       forwardEnv: Object.keys(launch.env),

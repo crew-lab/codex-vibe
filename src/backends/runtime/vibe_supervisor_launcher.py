@@ -4,6 +4,7 @@ from __future__ import annotations
 import inspect
 import os
 import re
+import stat
 import signal
 import sys
 import threading
@@ -17,12 +18,54 @@ ENTRYPOINTS = {
     "acp": "vibe.acp.entrypoint",
     "programmatic": "vibe.cli.entrypoint",
 }
+PROMPT_FILE_ENV = "VIBE_SUPERVISOR_PROMPT_FILE"
+MAX_PROMPT_BYTES = 4 * 1024 * 1024
 _SECRET_PATTERNS = (
     re.compile(r"\bBearer\s+[A-Za-z0-9._~+/-]+=*", re.IGNORECASE),
     re.compile(r"\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b"),
     re.compile(r"\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret)\s*[:=]\s*[^\s,;]+", re.IGNORECASE),
     re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"),
 )
+
+
+def consume_prompt_file(environ: Any, argv: list[str], expected_directory: str) -> list[str]:
+    raw_path = environ.pop(PROMPT_FILE_ENV, None)
+    if not raw_path:
+        raise RuntimeError("Programmatic launch requires a supervisor prompt file")
+    if "--prompt" in argv or "-p" in argv:
+        raise RuntimeError("Programmatic launch must not receive a prompt on the command line")
+    if not os.path.isabs(raw_path):
+        raise RuntimeError("Prompt file path must be absolute")
+    directory = os.path.realpath(os.path.dirname(raw_path))
+    if directory != os.path.realpath(expected_directory):
+        raise RuntimeError("Prompt file is outside the run directory")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    try:
+        descriptor = os.open(raw_path, flags)
+    except OSError as exc:
+        raise RuntimeError(f"Cannot open prompt file: {exc.strerror}") from exc
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            raise RuntimeError("Prompt file is not a regular file")
+        if info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise RuntimeError("Prompt file must be owner-only and owned by the current user")
+        if info.st_size > MAX_PROMPT_BYTES:
+            raise RuntimeError("Prompt file exceeds the size limit")
+        data = os.read(descriptor, MAX_PROMPT_BYTES + 1)
+    finally:
+        os.close(descriptor)
+    try:
+        os.unlink(raw_path)
+    except OSError as exc:
+        raise RuntimeError(f"Cannot delete prompt file: {exc.strerror}") from exc
+    if len(data) > MAX_PROMPT_BYTES:
+        raise RuntimeError("Prompt file exceeds the size limit")
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RuntimeError("Prompt file is not valid UTF-8") from exc
+    return [argv[0], "--prompt", text, *argv[1:]]
 
 
 def _redact(value: Any) -> Any:
@@ -126,6 +169,10 @@ def main() -> None:
     module_name = ENTRYPOINTS.get(kind)
     if module_name is None:
         raise SystemExit("VIBE_SUPERVISOR_ENTRYPOINT must be 'acp' or 'programmatic'")
+    if kind == "programmatic":
+        sys.argv = consume_prompt_file(os.environ, sys.argv, os.path.dirname(os.path.realpath(__file__)))
+    elif os.environ.pop(PROMPT_FILE_ENV, None) is not None:
+        raise SystemExit("A prompt file is only valid for the programmatic entrypoint")
     _patch_session_logger()
     # Suppress Vibe's info-level prompt logging. The isolated VIBE_HOME still
     # retains recovery messages after recursive reasoning/key redaction.

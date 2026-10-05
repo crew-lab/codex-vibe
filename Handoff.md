@@ -72,7 +72,7 @@ These are local evidence, not portable defaults. `scripts/package-rc.mjs` and `s
 
 Historical: the last full implementation release verification passed **49 tests across 7 files**, lint, typecheck, build, deterministic acceptance, secret-pattern scan, and SPDX inventory. Counts: tool schemas 4; config 7; MCP integration 2; CLI 3; core 8; security 14; ACP integration 11. This is a historical result, not a substitute for checking later changes.
 
-Current suite as of the lifecycle fixes after Phase 4: 9 files / 72 tests (`npx vitest run`).
+Current suite as of the lifecycle fixes after Phase 4: 10 files / 75 tests (`npx vitest run`), plus 11 Vibe-free Python tests in `src/backends/runtime/test_prompt_file.py` (`python3 src/backends/runtime/test_prompt_file.py`).
 
 ACP fake-subprocess coverage includes 100 independently initialized prompt runs, unknown notifications and thought filtering, correlated permissions and expired IDs, form responses, live continuation, loading without original-task replay, malformed JSON, early exit, wrong protocol/mode, and cancellation. It verifies local protocol/lifecycle behavior rather than hosted inference.
 
@@ -150,9 +150,9 @@ Recorded gaps after Phase 4:
 1. Large or unreadable repos failing review at launch: fixed (a failed launch snapshot becomes a result warning and the integrity comparison is skipped).
 2. Failed runs keeping a live session: fixed (every path to `failed` releases the backend session once).
 3. Message events are emitted at newline or turn end, so `vibe_status` does not stream text live: accepted, end-of-turn delivery is fine.
-4. The programmatic backend passes the task via `--prompt` argv, so it is visible in `ps`; ACP is not affected: open.
-5. `verify:release` runs tests before build, so the compat-probe tests build `dist` themselves: open, one-line reorder.
-6. `.mcp.json` needs `npm run build` in a fresh checkout: open.
+4. The programmatic backend passed the task via `--prompt` argv, visible in `ps`: fixed (the task goes through an owner-only prompt file that the shim reads and deletes; ACP is unchanged). Unverified: the real Vibe end-to-end run of this path, because Vibe is not installed on the fixing machine; only the shim logic, a fake `vibe` package, and the TypeScript launch args were exercised.
+5. `verify:release` ran tests before build: fixed (order is now lint, typecheck, build, test, acceptance, secret-scan, sbom; the compat-probe self-build fallback is kept for standalone `npx vitest run`).
+6. `.mcp.json` needed `npm run build` in a fresh checkout: fixed (`prepare` runs the build on `npm ci` / `npm install`). Unverified: the offline tarball smoke test (`smoke:install`), which needs a populated npm cache; by npm semantics and `--ignore-scripts` on its pack and install steps `prepare` does not run there.
 
 A next maintainer should inspect Git status, read this handoff and the usage guide, reproduce local checks when making code changes, and finish those gates before claiming production readiness. Hosted validation sends source/tasks to a provider and may incur usage charges; keep it within user-authorized scope. Record exact versions, commands, outcomes, and remaining uncertainty in acceptance/compatibility docs. Any new version support requires renewed shim, profile, protocol, and effective-tool validation.
 

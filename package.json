@@ -15,6 +15,7 @@
     "test:integration": "vitest run tests/integration",
     "test:security": "vitest run tests/security",
     "build": "tsc && node scripts/copy-runtime-assets.mjs",
+    "prepare": "npm run build",
     "acceptance": "node scripts/acceptance.mjs",
     "compat:probe": "node scripts/compat-probe.mjs",
     "smoke:install": "node scripts/smoke-install.mjs",
@@ -22,7 +23,7 @@
     "secret-scan": "node scripts/secret-scan.mjs",
     "checksum": "node scripts/checksum.mjs",
     "package:rc": "node scripts/package-rc.mjs",
-    "verify:release": "npm run lint && npm run typecheck && npm test && npm run build && npm run acceptance && npm run secret-scan && npm run sbom",
+    "verify:release": "npm run lint && npm run typecheck && npm run build && npm test && npm run acceptance && npm run secret-scan && npm run sbom",
     "prepack": "npm run verify:release",
     "pack:dry-run": "npm pack --dry-run --ignore-scripts"
   },
