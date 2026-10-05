@@ -113,16 +113,31 @@ def _run_bounded(argv: list, env: dict, timeout: float, limit: int) -> "tuple[in
         process.wait()
 
 
-def trusted_original_home(raw: Optional[str]) -> Optional[str]:
-    if not raw or "\0" in raw or not os.path.isabs(raw) or os.path.normpath(raw) != raw:
-        return None
+def check_original_home(raw: Optional[str]) -> "tuple[Optional[str], str]":
+    if not raw:
+        return None, "unset"
+    if "\0" in raw:
+        return None, "not-normalized"
+    if not os.path.isabs(raw):
+        return None, "not-absolute"
+    path = raw.rstrip("/")
+    if not path or os.path.normpath(path) != path:
+        return None, "not-normalized"
     try:
-        info = os.lstat(raw)
+        info = os.lstat(path)
     except OSError:
-        return None
-    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
-        return None
-    return raw
+        return None, "missing"
+    if stat.S_ISLNK(info.st_mode):
+        return None, "symlink"
+    if not stat.S_ISDIR(info.st_mode):
+        return None, "not-directory"
+    if info.st_uid != os.getuid():
+        return None, "not-owner"
+    return path, "ok"
+
+
+def trusted_original_home(raw: Optional[str]) -> Optional[str]:
+    return check_original_home(raw)[0]
 
 
 def _decode_credential(output: bytes) -> Optional[str]:
@@ -137,31 +152,42 @@ def _decode_credential(output: bytes) -> Optional[str]:
     return text
 
 
-def lookup_keychain_credential(home: str, runner: Runner = _run_bounded, executable: str = SECURITY_BINARY) -> "tuple[Optional[str], str]":
+KEYCHAIN_EXIT_REASONS = {44: "not-found", 36: "locked", 51: "denied", 128: "denied"}
+KEYCHAIN_REASON_PRIORITY = ("locked", "denied", "timeout", "oversize", "invalid-output", "error", "not-found")
+
+
+def _reason_rank(reason: str) -> int:
+    base = "error" if reason.startswith("error") else reason
+    return KEYCHAIN_REASON_PRIORITY.index(base)
+
+
+def lookup_keychain_credential(home: str, runner: Runner = _run_bounded, executable: str = SECURITY_BINARY) -> "tuple[Optional[str], str, str]":
     environment = {"HOME": home, "PATH": SECURITY_PATH}
-    reason = "not-found"
+    reasons: list = []
     for service in KEYCHAIN_SERVICES:
         argv = [executable, "find-generic-password", "-a", CREDENTIAL_ENV, "-s", service, "-w"]
         try:
             code, output = runner(argv, environment, KEYCHAIN_TIMEOUT_SECONDS, MAX_KEYCHAIN_OUTPUT_BYTES)
         except TimeoutError:
-            reason = "timeout"
+            reasons.append((service, "timeout"))
             continue
         except OverflowError:
-            reason = "oversize"
+            reasons.append((service, "oversize"))
             continue
         except Exception:
-            reason = "error"
+            reasons.append((service, "error"))
             continue
         if code != 0:
-            reason = "not-found"
+            reasons.append((service, KEYCHAIN_EXIT_REASONS.get(code, f"error-{code}")))
             continue
         credential = _decode_credential(output)
         if credential is None:
-            reason = "invalid-output"
+            reasons.append((service, "invalid-output"))
             continue
-        return credential, "found"
-    return None, reason
+        return credential, "found", ""
+    detail = ",".join(f"{service}={reason}" for service, reason in reasons)
+    top = min((reason for _, reason in reasons), key=_reason_rank, default="not-found")
+    return None, top, detail
 
 
 def resolve_credential(
@@ -176,12 +202,12 @@ def resolve_credential(
     environ.pop(CREDENTIAL_ENV, None)
     if platform != "darwin":
         return "skipped-platform"
-    home = trusted_original_home(original_home)
+    home, home_reason = check_original_home(original_home)
     if home is None:
-        return "skipped-home"
-    credential, reason = lookup_keychain_credential(home, runner, executable)
+        return f"skipped-home:{home_reason}"
+    credential, reason, detail = lookup_keychain_credential(home, runner, executable)
     if credential is None:
-        return reason
+        return f"{reason} ({detail})"
     environ[CREDENTIAL_ENV] = credential
     return "keychain"
 

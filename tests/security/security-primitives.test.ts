@@ -50,16 +50,18 @@ describe('workspace and child environment boundaries', () => {
 });
 
 describe('redaction and private persistence', () => {
-  it('redacts split secrets and refuses to emit oversized partial lines', () => {
+  it('redacts split secrets and keeps oversized lines without leaking', () => {
     const sentinel = 'CUSTOM_SENTINEL_VALUE';
     const input = `{"message":"${sentinel}"}\n`;
     const stream = new StreamingRedactor([sentinel], { maxPendingChars: 2048, keepChars: 512 });
     const output = stream.push(input.slice(0, 11)) + stream.push(input.slice(11, 20)) + stream.push(input.slice(20)) + stream.flush();
     expect(output).not.toContain(sentinel);
     const huge = new StreamingRedactor([], { maxPendingChars: 1024, keepChars: 512 });
-    expect(huge.push('x'.repeat(2048))).toContain('[REDACTED]');
-    expect(huge.push('Bearer secret-that-must-be-discarded')).toBe('');
-    expect(huge.push('\nvisible\n')).toContain('visible');
+    const emitted = huge.push('x'.repeat(2048));
+    expect(emitted).toBe('x'.repeat(1536));
+    const rest = huge.push(' Bearer secret-that-must-be-discarded\nvisible\n');
+    expect(rest).not.toContain('secret-that-must-be-discarded');
+    expect(rest).toContain('visible');
   });
 
   it('preserves JSON syntax, strips reasoning, redacts sentinels and recovers a torn NDJSON tail', async () => {

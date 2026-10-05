@@ -179,7 +179,7 @@ export class AcpBackend implements SupervisorBackend {
     const capabilities = await this.probe();
     if (!capabilities.available) throw supervisorError('VSUP_ACP_INIT_FAILED', `Vibe ACP initialize failed or its version is not exactly ${SUPPORTED_VIBE}`, capabilities.details);
     await assertNoProjectVibeExtensions(input.cwd); await assertNoProjectVibeExtensions(input.workerWorkspace);
-    const profile = await createVibeChildProfile(input, input.mode);
+    const profile = await createVibeChildProfile(input, input.mode, { forwardOriginalHome: true });
     profile.env.VIBE_SUPERVISOR_WORKER_TIMEOUT_SECONDS = String(input.limits.timeoutSeconds);
     const launch = await this.buildLaunch([], profile, input.runDirectory);
     const stderrRedactor = new StreamingRedactor(launch.env.MISTRAL_API_KEY ? [launch.env.MISTRAL_API_KEY] : []);
@@ -285,11 +285,11 @@ export class AcpBackend implements SupervisorBackend {
         state.turnRedactor = new StreamingRedactor(secret ? [secret] : []);
         const turn = cx.request('session/prompt', { sessionId, prompt: [{ type: 'text', text: task.message }] });
         state.activeTurn = turn.then(() => undefined, () => undefined);
-        const response = await turn;
-        delete state.activeTurn;
-        const tail = state.turnRedactor.flush();
-        delete state.turnRedactor;
-        if (tail) await state.callbacks.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: tail } });
+        let response;
+        try { response = await turn; }
+        catch (error) { await this.emitTurnTail(state); throw error; }
+        finally { delete state.activeTurn; }
+        await this.emitTurnTail(state);
         if (state.closed) break;
         await state.callbacks.onState('completed', { ...(result.acp ? { acp: result.acp } : {}), result: { stopReason: response.stopReason } });
       }
@@ -343,6 +343,13 @@ export class AcpBackend implements SupervisorBackend {
     pending.resolve({ action: response.action ?? 'decline', ...(response.action === 'accept' && response.content ? { content: response.content } : {}) });
     await state.callbacks.onPendingRequest(undefined);
   }
+  private async emitTurnTail(state: AcpState): Promise<void> {
+    const redactor = state.turnRedactor;
+    if (!redactor) return;
+    delete state.turnRedactor;
+    const tail = redactor.flush();
+    if (tail) await state.callbacks.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: tail } });
+  }
   private cancelPendingRequest(state: AcpState): boolean {
     const pending = state.request;
     if (!pending) return false;
@@ -361,6 +368,7 @@ export class AcpBackend implements SupervisorBackend {
     const answered = this.cancelPendingRequest(state);
     if (state.sessionId && state.context) { try { await state.context.notify('session/cancel', { sessionId: state.sessionId }); } catch { /* process shutdown remains authoritative */ } }
     if (answered) await this.awaitTurnEnd(state);
+    await this.emitTurnTail(state);
     await state.process.terminate();
   }
   async close(handle: BackendRunHandle): Promise<void> {
@@ -369,6 +377,7 @@ export class AcpBackend implements SupervisorBackend {
       if (state.sessionId && state.context) { try { await state.context.notify('session/cancel', { sessionId: state.sessionId }); } catch { /* process shutdown remains authoritative */ } }
       await this.awaitTurnEnd(state);
     }
+    await this.emitTurnTail(state);
     // Retain session history and private homes for restart recovery/retention cleanup.
     await state.process.terminate();
   }
@@ -406,7 +415,7 @@ export class AcpBackend implements SupervisorBackend {
     } catch { return undefined; }
 
     const input: StartRunInput = { runId: record.runId, mode: record.mode, task: '', cwd: record.sourceWorkspace, workerWorkspace: record.workerWorkspace, runDirectory, limits: record.limits };
-    const profile = await createVibeChildProfile(input, record.mode);
+    const profile = await createVibeChildProfile(input, record.mode, { forwardOriginalHome: true });
     profile.env.VIBE_SUPERVISOR_WORKER_TIMEOUT_SECONDS = String(record.limits.timeoutSeconds);
     let launch: VibeLaunch;
     try { launch = await this.buildLaunch([], profile, runDirectory); }

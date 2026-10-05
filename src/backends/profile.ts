@@ -71,8 +71,14 @@ export async function assertNoProjectVibeExtensions(root: string): Promise<void>
   }
 }
 
+export interface VibeChildProfileOptions {
+  allowShell?: boolean;
+  forwardOriginalHome?: boolean;
+}
+
 /** Build Vibe's complete child environment from the supervisor's small allowlist. */
-export async function createVibeChildProfile(input: StartRunInput, mode: RunMode, allowShell = false): Promise<VibeChildProfile> {
+export async function createVibeChildProfile(input: StartRunInput, mode: RunMode, options: VibeChildProfileOptions = {}): Promise<VibeChildProfile> {
+  const allowShell = options.allowShell === true;
   const home = path.join(input.runDirectory, 'child-home');
   const vibeHome = path.join(input.runDirectory, 'vibe-home');
   await createPrivateDir(home);
@@ -80,7 +86,7 @@ export async function createVibeChildProfile(input: StartRunInput, mode: RunMode
 
   const env = buildChildEnvironment(process.env);
   const originalHome = process.env.HOME;
-  if (originalHome && path.isAbsolute(originalHome)) env[ORIGINAL_HOME_ENV] = originalHome;
+  if (options.forwardOriginalHome === true && originalHome && path.isAbsolute(originalHome)) env[ORIGINAL_HOME_ENV] = originalHome;
   env.HOME = home;
   env.VIBE_HOME = vibeHome;
   env.VIBE_ACP_LOGGING_ENABLED = '0';

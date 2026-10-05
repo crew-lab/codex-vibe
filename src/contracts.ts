@@ -65,12 +65,21 @@ export interface ResultArtifact {
   mediaType: string;
 }
 
+export interface ReviewIntegrity {
+  status: "verified" | "changed" | "unverified";
+  writeToolObserved: boolean;
+  changedPaths?: string[];
+  changedPathsTotal?: number;
+  reason?: string;
+}
+
 export interface ResultSummary {
   stopReason?: string;
   summary?: string;
   artifacts?: ResultArtifact[];
   changedFiles?: string[];
   warnings?: string[];
+  integrity?: ReviewIntegrity;
 }
 
 export interface SupervisorError {

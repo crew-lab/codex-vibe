@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { open, readFile } from 'node:fs/promises';
+import { lstat, open, readFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPrivateFile } from '../security/paths.js';
@@ -69,6 +69,23 @@ export async function buildVibeLaunch(
     env[PROMPT_FILE_ENV] = promptFile;
   }
   return { command: python, args: [shim, ...args], env };
+}
+
+export type PromptFileOutcome = 'removed' | 'absent' | 'refused';
+
+/** Delete the supervisor-written prompt file only when it is still a regular file directly inside a real run directory. */
+export async function removePromptFile(runDirectory: string): Promise<PromptFileOutcome> {
+  const file = path.join(runDirectory, PROMPT_FILE_NAME);
+  try {
+    const directory = await lstat(runDirectory);
+    if (directory.isSymbolicLink() || !directory.isDirectory()) return 'refused';
+    const info = await lstat(file);
+    if (info.isSymbolicLink() || !info.isFile()) return 'refused';
+    await unlink(file);
+    return 'removed';
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'absent' : 'refused';
+  }
 }
 
 export const shimSourcePath = fileURLToPath(SHIM_ASSET);

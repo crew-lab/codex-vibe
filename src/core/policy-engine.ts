@@ -43,7 +43,7 @@ export class PolicyEngine {
   }
 }
 
-function normalizeKind(kind: string | undefined): "read" | "edit" | "delete" | "move" | "execute" | "fetch" | undefined {
+export function normalizeKind(kind: string | undefined): "read" | "edit" | "delete" | "move" | "execute" | "fetch" | undefined {
   if (!kind) return undefined;
   const value = kind.toLowerCase().replace(/[^a-z]/g, "");
   if (["read", "search", "list", "view"].includes(value)) return "read";

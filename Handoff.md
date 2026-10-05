@@ -72,7 +72,7 @@ These are local evidence, not portable defaults. `scripts/package-rc.mjs` and `s
 
 Historical: the last full implementation release verification passed **49 tests across 7 files**, lint, typecheck, build, deterministic acceptance, secret-pattern scan, and SPDX inventory. Counts: tool schemas 4; config 7; MCP integration 2; CLI 3; core 8; security 14; ACP integration 11. This is a historical result, not a substitute for checking later changes.
 
-Current suite as of the lifecycle fixes after Phase 4: 10 files / 75 tests (`npx vitest run`), plus 40 Vibe-free Python tests in `src/backends/runtime/test_prompt_file.py` and `src/backends/runtime/test_keychain_credential.py` (`npm run test:python`, also part of `verify:release`).
+Current suite as of the cold-review fixes (2026-10-05): 16 files / 179 tests (`npx vitest run`), plus 51 Vibe-free Python tests in `src/backends/runtime/test_prompt_file.py` and `src/backends/runtime/test_keychain_credential.py` (`npm run test:python`, also part of `verify:release`).
 
 ACP fake-subprocess coverage includes 100 independently initialized prompt runs, unknown notifications and thought filtering, correlated permissions and expired IDs, form responses, live continuation, loading without original-task replay, malformed JSON, early exit, wrong protocol/mode, and cancellation. It verifies local protocol/lifecycle behavior rather than hosted inference.
 
@@ -185,6 +185,24 @@ Target-machine checks added by the research (run alongside the field test plan):
 - **R2:** confirm a waiting `vibe_status` call completes within the registered `tool_timeout_sec` in both the CLI and the desktop app.
 - **R3:** validate the permission profile under Vibe's unified harness (without `--legacy-harness`) before Vibe removes the legacy harness: repeat T4, T9 and T12 in both harnesses and record any differences.
 - **R4:** record which model a fresh isolated home actually uses (from the run's private session records) before deciding whether to pin `active_model`.
+
+## Cold review before delivery (2026-10-05)
+
+A context-free review of `ee0b7cb..3b10f88` raised nine findings. All are fixed and covered by tests against fake backends:
+
+- **F1:** a review whose source changes still completes (by decision), but the result now carries an `integrity` object (`verified` / `changed` / `unverified`, up to 50 changed paths from per-file manifests, `write_tool_observed`). A write-capable tool call by the review worker is reported as a possible read-only boundary violation with an error-severity `review_integrity` event; an unchecked snapshot says a violation would go undetected.
+- **F2:** results shrink in a fixed order (inline patch, transcript, diff stat, lists, summary head and tail) and never drop `run_id`, `state`, `error`, `warnings`, `integrity`, `pending_request`, `patch_path` or `next_action`; `truncated_fields` lists what was reduced.
+- **F3:** the streaming redactor emits over-long lines instead of replacing them with `[REDACTED]`, holding back a tail so a secret across the cut is still caught.
+- **F4:** cancel, close and crashes flush the agent's partial last line before the process stops.
+- **F5:** a task prompt file the shim never consumed is removed after the child exits or fails to spawn; a symlink in its place is refused, never followed.
+- **F6:** only real runs receive the original HOME; probes, `compat:probe` and `doctor` make no Keychain lookup.
+- **F7:** Keychain failures are classified (not found 44, locked 36, denied 51/128, otherwise `error-<code>`) with per-service detail. The code meanings are derived from OSStatus values and unverified against a real Keychain.
+- **F8:** a trailing slash in HOME is accepted, and every skipped lookup reports a specific reason.
+- **F9:** `detail: "summary"` returns the full shape again, with a deprecation note.
+
+Also added from the review's open questions: redaction patterns for `API key: <value>`, `x-api-key` and `*_API_KEY=<value>` (requiring a value-looking token), because a Keychain-resolved key is unknown to the Node redactor.
+
+Open questions left as is: a probe cached as available after an in-place Vibe upgrade still fails safe at start because the shim re-checks the version; queued time does not count toward the timeout by decision; there is no cap on concurrent `wait_seconds` calls; after a completed run's session dies, a later `vibe_continue` reloads lazily without reporting why the earlier session ended.
 
 ## Known blockers from the hosted attempts
 

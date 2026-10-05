@@ -14,7 +14,7 @@ const shimPath = path.join(root, 'src', 'backends', 'runtime', 'vibe_supervisor_
 const HELP = `Usage: node scripts/compat-probe.mjs [options]
 
 Revalidate an installed Mistral Vibe against the versions this supervisor is pinned to.
-Requires a built tree (npm run build) and a real Vibe install. No prompt is sent and no key is used.
+Requires a built tree (npm run build) and a real Vibe install. No prompt is sent, no key is used, and no Keychain lookup is made.
 
 Options:
   --vibe <path>       vibe executable (default: resolved from PATH)

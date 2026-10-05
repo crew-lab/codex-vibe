@@ -41,7 +41,7 @@ describe('original HOME handoff to the launcher shim', () => {
     const vibe = path.join(scratch, 'vibe');
     await writeFile(vibe, '#!/usr/bin/env python3\n');
     await chmod(vibe, 0o755);
-    const profile = await createVibeChildProfile(input(runDirectory, workspace), 'review');
+    const profile = await createVibeChildProfile(input(runDirectory, workspace), 'review', { forwardOriginalHome: true });
     const launch = await buildVibeLaunch(vibe, 'acp', [], profile, runDirectory);
     expect(launch.env[ORIGINAL_HOME_ENV]).toBe(realHome);
     expect(launch.env.HOME).toBe(path.join(runDirectory, 'child-home'));
@@ -49,6 +49,15 @@ describe('original HOME handoff to the launcher shim', () => {
     expect(Object.entries(launch.env).filter(([, value]) => value === realHome).map(([key]) => key)).toEqual([ORIGINAL_HOME_ENV]);
     expect(launch.env.UNRELATED_USER_STATE).toBeUndefined();
     expect(JSON.stringify([launch.command, ...launch.args])).not.toContain(realHome);
+  });
+
+  it('omits the original-HOME variable unless the caller is a real run', async () => {
+    const runDirectory = path.join(scratch, 'run');
+    const workspace = path.join(scratch, 'workspace');
+    await mkdir(runDirectory); await mkdir(workspace);
+    const profile = await createVibeChildProfile(input(runDirectory, workspace), 'review');
+    expect(profile.env[ORIGINAL_HOME_ENV]).toBeUndefined();
+    expect(Object.values(profile.env)).not.toContain(realHome);
   });
 
   it('does not forward the original-HOME variable or other user state from the ambient environment', () => {

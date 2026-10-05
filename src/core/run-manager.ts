@@ -5,7 +5,7 @@ import type {
   BackendCallbacks, BackendKind, BackendRespondInput, BackendRunHandle,
   PendingRequest, ReviewStartToolInput, EditStartToolInput, StatusToolInput, ContinueToolInput,
   RespondToolInput, ResultToolInput, WaitOptions, CancelToolInput, CloseToolInput, RunLimits, RunMode, RunRecord, RunState, SupervisorBackend,
-  SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent
+  ReviewIntegrity, SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent
 } from "../contracts.js";
 import { SCHEMA_VERSION, supervisorError } from "../contracts.js";
 import { cancelSchema, closeSchema, continueSchema, editStartSchema, resultSchema, reviewStartSchema, respondSchema, statusSchema } from "../mcp/schemas.js";
@@ -15,9 +15,9 @@ import { createPrivateDir, resolveCanonicalRoot, isPathWithinRoot, assertPathWit
 import { redactSecrets } from "../security/redaction.js";
 import { assertNotSupervisorChild } from "../security/environment.js";
 import { createDetachedWorktree, exportDirtySnapshot, removeVerifiedWorktree, resolveBaseCommit } from "../git/worktree.js";
-import { eventFromWire, eventToWire, runFromWire, runToWire } from "./serialization.js";
+import { eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
-import { PolicyEngine } from "./policy-engine.js";
+import { PolicyEngine, normalizeKind } from "./policy-engine.js";
 
 interface Runtime {
   record: RunRecord;
@@ -37,7 +37,8 @@ interface Runtime {
   cancelRequested: boolean;
   started: boolean;
   sourceSnapshot?: string;
-  snapshotWarning?: string;
+  sourceManifest?: Map<string, string>;
+  snapshotFailed?: boolean;
   verifiedPatch?: { patchPath: string; sha256: string };
   deferredResponses: BackendRespondInput[];
   idleTimer?: NodeJS.Timeout;
@@ -63,6 +64,8 @@ type StartResult = {
   result?: Record<string, unknown>;
 };
 
+const SUMMARY_DEPRECATION = "detail=summary is deprecated; use detail=compact (default) or detail=full.";
+const START_ENVELOPE_RESERVE_CHARS = 1500;
 const MAX_META_BYTES = 1_048_576;
 const MAX_INLINE_TRANSCRIPT = 32_768;
 const COMPACT_TRANSCRIPT_CHARS = 4000;
@@ -198,7 +201,7 @@ export class RunManager {
       next_action: settled ? "Read the compact result above; call vibe_close when done." : "Call vibe_status with wait_seconds until the run needs action.",
       ...(record.pendingRequest ? { pending_request: pendingToWire(record.pendingRequest) } : {}),
       ...(record.error ? { error: record.error } : {}),
-      ...(settled ? { result: await this.compactResult(runtime, false) } : {})
+      ...(settled ? { result: await this.compactResult(runtime, false, START_ENVELOPE_RESERVE_CHARS) } : {})
     };
   }
 
@@ -365,15 +368,17 @@ export class RunManager {
   async result(value: ResultToolInput): Promise<Record<string, unknown>> {
     const input = parseInput(resultSchema, value); const runtime = this.requireRun(input.run_id); const record = runtime.record;
     const result = record.result;
-    if (input.detail !== "full") return this.compactResult(runtime, input.include_transcript);
-    if (!result) return { run_id: record.runId, state: record.state, backend: record.backend, summary: "Run has not produced a result yet.", artifacts: [], changed_files: [], warnings: [], ...(record.error ? { error: record.error } : {}) };
+    if (input.detail === "compact") return this.compactResult(runtime, input.include_transcript);
+    const deprecation = input.detail === "summary" ? { deprecation: SUMMARY_DEPRECATION } : {};
+    if (!result) return { run_id: record.runId, state: record.state, backend: record.backend, summary: "Run has not produced a result yet.", artifacts: [], changed_files: [], warnings: [], ...(record.error ? { error: record.error } : {}), ...deprecation };
     const output: Record<string, unknown> = {
       schema_version: 1, run_id: record.runId, state: record.state, backend: record.backend,
       ...(result.stopReason ? { stop_reason: result.stopReason } : {}),
       summary: result.summary ?? "",
       workspace: { source: record.sourceWorkspace, worker: record.workerWorkspace },
       artifacts: (result.artifacts ?? []).map(artifactToWire),
-      changed_files: result.changedFiles ?? [], ...(record.usage ? { usage: usageToWire(record.usage) } : {}), warnings: result.warnings ?? [], ...(record.error ? { error: record.error } : {})
+      changed_files: result.changedFiles ?? [], ...(record.usage ? { usage: usageToWire(record.usage) } : {}), warnings: result.warnings ?? [], ...(result.integrity ? { integrity: integrityToWire(result.integrity) } : {}), ...(record.error ? { error: record.error } : {}),
+      ...deprecation
     };
     if (input.include_transcript) {
       const transcriptPath = path.join(runtime.directory, "transcript.md");
@@ -385,7 +390,7 @@ export class RunManager {
     return output;
   }
 
-  private async compactResult(runtime: Runtime, includeTranscript: boolean): Promise<Record<string, unknown>> {
+  private async compactResult(runtime: Runtime, includeTranscript: boolean, reserveChars = 0): Promise<Record<string, unknown>> {
     const record = runtime.record; const result = record.result;
     const output: Record<string, unknown> = { run_id: record.runId, state: record.state, backend: record.backend };
     if (!result) {
@@ -398,6 +403,7 @@ export class RunManager {
     if (result.stopReason) output.stop_reason = result.stopReason;
     output.summary = result.summary ?? "";
     output.warnings = result.warnings ?? [];
+    if (result.integrity) output.integrity = integrityToWire(result.integrity);
     if (record.error) output.error = record.error;
     if (record.mode === "edit") output.worker = record.workerWorkspace;
     output.changed_files = files.slice(0, COMPACT_CHANGED_FILES);
@@ -405,12 +411,6 @@ export class RunManager {
     const stat = artifacts.find((artifact) => artifact.name === "diff.stat");
     const statText = stat ? await this.readArtifactText(runtime, stat.path, MAX_META_BYTES) : undefined;
     if (statText) output.diff_stat = statText.slice(0, COMPACT_DIFF_STAT_CHARS);
-    const patch = artifacts.find((artifact) => artifact.name === "diff.patch");
-    if (patch && patch.bytes > 0) {
-      const patchText = patch.bytes <= COMPACT_PATCH_BYTES ? await this.readArtifactText(runtime, patch.path, COMPACT_PATCH_BYTES) : undefined;
-      if (patchText !== undefined) output.patch = patchText;
-      else { output.patch_path = patch.path; output.patch_bytes = patch.bytes; }
-    }
     output.artifacts = artifacts.map((artifact) => ({ name: artifact.name, path: artifact.path }));
     if (includeTranscript) {
       const transcriptPath = path.join(runtime.directory, "transcript.md");
@@ -420,6 +420,13 @@ export class RunManager {
         if (text.length > COMPACT_TRANSCRIPT_CHARS) output.transcript_truncated = true;
         output.transcript_path = transcriptPath;
       }
+    }
+    const patch = artifacts.find((artifact) => artifact.name === "diff.patch");
+    if (patch && patch.bytes > 0) {
+      const patchText = patch.bytes <= COMPACT_PATCH_BYTES ? await this.readArtifactText(runtime, patch.path, COMPACT_PATCH_BYTES) : undefined;
+      const patchCost = patchText === undefined ? Infinity : JSON.stringify(patchText).length + '"patch":,'.length;
+      if (patchText !== undefined && JSON.stringify(output).length + patchCost + reserveChars <= this.config.limits.maxMcpResultChars) output.patch = patchText;
+      else { output.patch_path = patch.path; output.patch_bytes = patch.bytes; }
     }
     return output;
   }
@@ -599,11 +606,12 @@ export class RunManager {
         runtime.record.worktree = worktree; runtime.record.workerWorkspace = worktree.path; workerWorkspace = worktree.path;
       } else {
         try {
-          runtime.sourceSnapshot = await hashWorkspace(runtime.record.sourceWorkspace);
-          runtime.record.workspaceSnapshotSha256 = runtime.sourceSnapshot;
+          const snapshot = await snapshotWorkspace(runtime.record.sourceWorkspace);
+          runtime.sourceSnapshot = snapshot.sha256; runtime.sourceManifest = snapshot.manifest;
+          runtime.record.workspaceSnapshotSha256 = snapshot.sha256;
         } catch {
-          delete runtime.sourceSnapshot; delete runtime.record.workspaceSnapshotSha256;
-          runtime.snapshotWarning = SNAPSHOT_UNAVAILABLE_WARNING;
+          delete runtime.sourceSnapshot; delete runtime.sourceManifest; delete runtime.record.workspaceSnapshotSha256;
+          runtime.snapshotFailed = true;
         }
         await this.persist(runtime);
       }
@@ -778,7 +786,7 @@ export class RunManager {
     if (state === "completed") {
       this.endTranscriptTurn(runtime);
       try {
-        await this.addReviewIntegrityWarning(runtime);
+        await this.assessReviewIntegrity(runtime);
         await this.finalizeArtifacts(runtime, "completed");
         await this.setState(runtime, "completed", { finishedAt: new Date().toISOString() });
         runtime.completionOrder = ++this.completionCounter;
@@ -792,14 +800,14 @@ export class RunManager {
       return;
     }
     if (state === "failed") {
-      await this.addReviewIntegrityWarning(runtime);
+      await this.assessReviewIntegrity(runtime);
       await this.finalizeArtifacts(runtime, "failed").catch(() => undefined);
       await this.setState(runtime, "failed", { finishedAt: new Date().toISOString(), ...(update?.error ? { error: update.error } : {}) });
       await this.releaseSession(runtime);
       this.releaseSlot(runtime); return;
     }
     if (state === "cancelled") {
-      await this.addReviewIntegrityWarning(runtime);
+      await this.assessReviewIntegrity(runtime);
       await this.finalizeArtifacts(runtime, "cancelled").catch(() => undefined);
       if (runtime.pendingFailure) {
         await this.setState(runtime, "failed", { error: runtime.pendingFailure, finishedAt: new Date().toISOString() });
@@ -840,7 +848,8 @@ export class RunManager {
       summary,
       artifacts,
       changedFiles: patchInfo?.changedFiles ?? [],
-      warnings: [...(runtime.record.result?.warnings ?? []), ...(runtime.snapshotWarning && !(runtime.record.result?.warnings ?? []).includes(runtime.snapshotWarning) ? [runtime.snapshotWarning] : [])]
+      warnings: runtime.record.result?.warnings ?? [],
+      ...(runtime.record.result?.integrity ? { integrity: runtime.record.result.integrity } : {})
     };
     const resultWire = {
       schema_version: 1, run_id: runtime.record.runId, state: resultState, backend: runtime.record.backend,
@@ -848,7 +857,8 @@ export class RunManager {
       summary,
       workspace: { source: runtime.record.sourceWorkspace, worker: runtime.record.workerWorkspace },
       artifacts: artifacts.map(artifactToWire), changed_files: patchInfo?.changedFiles ?? [],
-      ...(runtime.record.usage ? { usage: usageToWire(runtime.record.usage) } : {}), warnings: runtime.record.result.warnings ?? []
+      ...(runtime.record.usage ? { usage: usageToWire(runtime.record.usage) } : {}), warnings: runtime.record.result.warnings ?? [],
+      ...(runtime.record.result.integrity ? { integrity: integrityToWire(runtime.record.result.integrity) } : {})
     };
     await atomicWriteJson(path.join(runtime.directory, "result.json"), resultWire);
     await this.persist(runtime);
@@ -969,21 +979,33 @@ export class RunManager {
     runtime.timer.unref?.();
   }
 
-  private async addReviewIntegrityWarning(runtime: Runtime): Promise<void> {
-    const warning = await this.reviewIntegrityWarning(runtime);
-    if (!warning) return;
+  private async assessReviewIntegrity(runtime: Runtime): Promise<void> {
+    if (runtime.record.mode !== "review" || runtime.record.result?.integrity) return;
+    const writeToolObserved = runtime.events.some(isWriteEvidence);
+    let integrity: ReviewIntegrity;
+    if (!runtime.sourceSnapshot) {
+      integrity = { status: "unverified", writeToolObserved, reason: runtime.snapshotFailed ? "The launch snapshot failed: the workspace is too large or unreadable." : "No launch snapshot is available for this run." };
+    } else {
+      try {
+        const end = await snapshotWorkspace(runtime.record.sourceWorkspace);
+        if (end.sha256 === runtime.sourceSnapshot) integrity = { status: "verified", writeToolObserved };
+        else {
+          const paths = runtime.sourceManifest ? diffManifests(runtime.sourceManifest, end.manifest) : [];
+          integrity = {
+            status: "changed", writeToolObserved,
+            changedPaths: paths.slice(0, MAX_INTEGRITY_PATHS), changedPathsTotal: paths.length,
+            reason: runtime.sourceManifest ? `The source workspace content changed between the launch snapshot and the end of the run (${paths.length} paths).` : "The source workspace content changed, but the launch manifest is unavailable so the paths are unknown."
+          };
+        }
+      } catch {
+        integrity = { status: "unverified", writeToolObserved, reason: "The end-of-run snapshot failed: the workspace is too large or unreadable." };
+      }
+    }
+    const warning = integrity.status === "changed" ? (writeToolObserved ? CHANGED_WITH_WRITE_WARNING : CHANGED_WARNING) : integrity.status === "unverified" ? UNVERIFIED_WARNING : undefined;
     const warnings = runtime.record.result?.warnings ?? [];
-    if (!warnings.includes(warning)) runtime.record.result = { ...runtime.record.result, warnings: [...warnings, warning] };
-  }
-
-  private async reviewIntegrityWarning(runtime: Runtime): Promise<string | undefined> {
-    if (runtime.record.mode !== "review" || !runtime.record.workspaceSnapshotSha256) return undefined;
-    try {
-      return await hashWorkspace(runtime.record.sourceWorkspace) === runtime.record.workspaceSnapshotSha256
-        ? undefined
-        : "The source workspace changed during the review; findings may not match the current files.";
-    } catch {
-      return "The source workspace could not be verified after the review; findings may not match the current files.";
+    runtime.record.result = { ...runtime.record.result, warnings: warning && !warnings.includes(warning) ? [...warnings, warning] : warnings, integrity };
+    if (integrity.status !== "verified" || writeToolObserved) {
+      await this.appendEvent(runtime, { source: "supervisor", type: "review_integrity", severity: integrity.status === "changed" && writeToolObserved ? "error" : "warning", data: integrityToWire(integrity) });
     }
   }
 
@@ -1068,13 +1090,37 @@ async function describeArtifact(name: string, file: string, mediaType: string): 
   return { name, path: file, sha256: createHash("sha256").update(bytes).digest("hex"), bytes: bytes.byteLength, mediaType } as NonNullable<RunRecord["result"]>["artifacts"] extends (infer A)[] | undefined ? A : never;
 }
 
-const SNAPSHOT_UNAVAILABLE_WARNING = "The source workspace could not be snapshotted (too large or unreadable); review integrity was not checked.";
+const CHANGED_WITH_WRITE_WARNING = "Possible read-only boundary violation: the review worker issued a write-capable tool call and the source workspace changed. Inspect the changed paths before trusting the review.";
+const CHANGED_WARNING = "The source workspace changed during this read-only review. The changes may be your own edits or a read-only boundary violation; inspect the changed paths before trusting the review.";
+const UNVERIFIED_WARNING = "The source workspace could not be snapshotted (too large or unreadable); review integrity was NOT checked, so a read-only boundary violation would go undetected.";
+const MAX_INTEGRITY_PATHS = 50;
+
+function isWriteEvidence(event: SupervisorEvent): boolean {
+  if (event.type !== "tool_call" && event.type !== "tool_call_update") return false;
+  const kind = normalizeKind(typeof event.data.kind === "string" ? event.data.kind : undefined);
+  if (kind === "edit" || kind === "delete" || kind === "move") return true;
+  return [event.data.title, event.data.name].some((value) => typeof value === "string" && /^\s*(?:write_file|edit)(?![a-z0-9])/i.test(value));
+}
+
+function diffManifests(before: ReadonlyMap<string, string>, after: ReadonlyMap<string, string>): string[] {
+  const changed: string[] = [];
+  for (const [file, digest] of before) if (after.get(file) !== digest) changed.push(file);
+  for (const file of after.keys()) if (!before.has(file)) changed.push(file);
+  return changed.sort();
+}
 
 export interface WorkspaceHashLimits { maxFiles: number; maxBytes: number }
 const DEFAULT_HASH_LIMITS: WorkspaceHashLimits = { maxFiles: 200_000, maxBytes: 2 * 1024 * 1024 * 1024 };
 
+export interface WorkspaceSnapshot { sha256: string; manifest: Map<string, string> }
+
 export async function hashWorkspace(root: string, limits: WorkspaceHashLimits = DEFAULT_HASH_LIMITS): Promise<string> {
+  return (await snapshotWorkspace(root, limits)).sha256;
+}
+
+export async function snapshotWorkspace(root: string, limits: WorkspaceHashLimits = DEFAULT_HASH_LIMITS): Promise<WorkspaceSnapshot> {
   const hash = createHash("sha256");
+  const manifest = new Map<string, string>();
   let totalBytes = 0; let count = 0;
   const visit = async (directory: string): Promise<void> => {
     const entries = await readdir(directory, { withFileTypes: true });
@@ -1083,19 +1129,22 @@ export async function hashWorkspace(root: string, limits: WorkspaceHashLimits = 
       if (directory === root && entry.name === ".git") continue;
       const absolute = path.join(directory, entry.name); const relative = path.relative(root, absolute);
       const info = await lstat(absolute);
-      if (info.isSymbolicLink()) { hash.update(`L${relative}\0${await readFileLink(absolute)}\0`); continue; }
-      if (info.isDirectory()) { hash.update(`D${relative}\0`); await visit(absolute); continue; }
+      if (info.isSymbolicLink()) { const target = await readFileLink(absolute); manifest.set(relative, `L:${target}`); hash.update(`L${relative}\0${target}\0`); continue; }
+      if (info.isDirectory()) { manifest.set(relative, "D"); hash.update(`D${relative}\0`); await visit(absolute); continue; }
       if (!info.isFile()) continue;
       count += 1; totalBytes += info.size;
       if (count > limits.maxFiles || totalBytes > limits.maxBytes) throw codedError("VSUP_OUTPUT_LIMIT", "Workspace snapshot exceeded its safety limits.");
-      hash.update(`F${relative}\0`);
+      const fileHash = createHash("sha256");
       const handle = await open(absolute, "r");
-      try { const buffer = Buffer.allocUnsafe(64 * 1024); while (true) { const { bytesRead } = await handle.read(buffer, 0, buffer.length, null); if (!bytesRead) break; hash.update(buffer.subarray(0, bytesRead)); } }
+      try { const buffer = Buffer.allocUnsafe(64 * 1024); while (true) { const { bytesRead } = await handle.read(buffer, 0, buffer.length, null); if (!bytesRead) break; fileHash.update(buffer.subarray(0, bytesRead)); } }
       finally { await handle.close(); }
-      hash.update("\0");
+      const digest = fileHash.digest("hex");
+      manifest.set(relative, `F:${digest}`);
+      hash.update(`F${relative}\0${digest}\0`);
     }
   };
-  await visit(root); return hash.digest("hex");
+  await visit(root);
+  return { sha256: hash.digest("hex"), manifest };
 }
 
 async function readFileLink(file: string): Promise<string> { const { readlink } = await import("node:fs/promises"); return readlink(file); }
