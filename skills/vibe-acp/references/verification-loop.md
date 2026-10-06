@@ -12,6 +12,10 @@ You share the codebase. Preserve other contributors' changes.
 Constraints: <versions, path boundaries, lifecycle and security requirements>.
 Acceptance: <regressions and exact checks the coordinator will execute>.
 Shell/network tools are disabled. Do not claim to have run shell checks.
+Local cleanup rules: <relevant coordinator-read requirements>.
+Track exact scratch/plan files you create; preserve deliverables and others’ work.
+Clean only your disposable in-worktree files when permitted tools support it;
+report unsupported removals. Do not manage worktrees, processes or runtime locks.
 Produce a scoped patch and concise explanation of changes and limitations.
 Do not commit, merge, push, or apply changes to the source checkout.
 ```
@@ -33,6 +37,38 @@ Explain what changed and anything still unresolved.
 
 For the observed draft, actionable feedback would identify the TypeScript environment-object index error, unsupported `VIBE_AGENTS__...` overrides, the missing Keychain account selector and output bounds, and noncanonical test fixture paths. Do not send raw credentials or private reasoning as evidence.
 
+## Final read-only review template
+
+```text
+Deliver the final read-only review now, not an implementation plan or mode switch.
+Scope: <exact approved files and context limitations>.
+Report only correctness defects supported by inspected files and observed checks.
+Each finding needs file/location, concrete trigger and incorrect behavior.
+Label conditions and assumptions. Exclude naming, placement, barrel exports and
+other style preferences unless they cause a demonstrated behavioral defect.
+If none is supported, say “No correctness defects found in the inspected scope”
+and state limitations. Never invent findings to meet a count. Do not edit.
+```
+
+## Cleanup request
+
+Send only through the same owning, usable ACP edit session after preserving the candidate:
+
+```text
+Finish cleanup for this assignment only; do not change feature behavior.
+Local cleanup constraints: <applicable rules read by the coordinator>.
+Owned disposable paths: <exact paths supported by recorded ownership evidence>.
+Preserve: <deliverables, final patch, reports, user/other contributors’ files>.
+Inventory scratch files and temporary plans you created. Remove only proven
+in-worktree disposables when an enabled permitted tool supports the operation;
+otherwise report the limitation and leave them intact.
+Do not use shell/network, remove the worktree, terminate processes, delete
+runtime homes/locks, or alter exports/digests. Return exact removed/retained/
+unsupported dispositions. The coordinator will verify, export and close the run.
+```
+
+Read-only workers receive an inventory/report request, never a deletion request. Closed/programmatic runs have no cleanup continuation; use supervisor/coordinator interfaces with ownership evidence instead of replaying work.
+
 ## State and decision table
 
 | Observation | Next action |
@@ -45,13 +81,20 @@ For the observed draft, actionable feedback would identify the TypeScript enviro
 | Claimed completion with empty patch | Compare against the task; text generation alone does not establish coding success. |
 | Repeated failures | Narrow the task and identify the shared cause; reassess budget and harness before more model calls. |
 | New worker changes after verification | Prior patch hashes and check results are stale; export/review again. |
+| Independent client returns NOT_FOUND for a known run | Check the owning connection/private home before declaring the run missing. |
+| Worker cleanup claim | Inspect exact paths and fresh exports; do not assume removal succeeded. |
+| Review returns a plan/mode-switch request | Reject as incomplete; request the final read-only answer when safe continuation exists. |
 | Missing real MCP tools | Report visibility separately from standalone-client discovery; do not invent tool availability. |
 
 ## Known integration failures
 
-These are observed defects from the 2026-10-03 attempts, not instructions to bypass policy. Consult current acceptance evidence before assuming they remain open or have been fixed.
+The original items are historical 2026-10-03 findings, not instructions to bypass policy. Later rc.2 acceptance recorded hosted browser-login reviews/edits and recursive/profile fixes; current ACP recovery, model identity and soak need separate evidence.
 
-- **Browser-login credential and private HOME:** the login credential was present in normal macOS Keychain lookup but absent with a fresh HOME. Repeating setup did not repair supervisor lookup. A private in-memory diagnostic bridge reached hosted generation, but the normal integration remains unverified. Keep authentication in the provider runtime; never put credentials into tasks, files, or logs. Do not advise an API-plan upgrade solely because the internal credential name is `MISTRAL_API_KEY`.
+- **Concurrent ownership (2026-10-06):** direct servers competed for one owner lock. rc.4’s opt-in `--isolated` gives independent clients persistent private snapshots; all calls for one run stay on its connection. Template edits need new connections.
+- **Project extensions (2026-10-06):** root `.agents`/`.vibe` fail the launch guard, including Codex-only skills. An authorized narrow safe-file copy can establish bounded hosted review, not full-project support or edits.
+- **Hosted review quality (2026-10-06):** a two-file programmatic run passed inference/integrity/close, but style findings and a mode-switch plan failed acceptance. Focused instructions produced a conditional correctness finding. Model identity was not supplied.
+
+- **Browser-login credential and private HOME:** the login credential was present in normal macOS Keychain lookup but absent with a fresh HOME. Repeating setup did not repair supervisor lookup. A private in-memory diagnostic bridge reached hosted generation, but later hosted acceptance supersedes that original normal-integration uncertainty within its tested scope. Keep authentication in the provider runtime; never put credentials into tasks, files, or logs. Do not advise an API-plan upgrade solely because the internal credential name is `MISTRAL_API_KEY`.
 - **Nested path grants:** Vibe 2.25.8 matches absolute glob allowlists with `PurePath.match`; `<root>/**` did not authorize nested descendants. The installed matcher recognized `vibe-path:directory_recursive:<canonical-root>`. Any implementation must test nested, sibling, outside, sensitive, and symlink paths against the real pinned resolver. Retain `never` fallback and deny patterns.
 - **Built-in agent overrides:** Plan replaces the read-file allowlist, and Accept Edits overrides write/edit permission. Effective mode, tool inventory, and permissions must be checked after all configuration layers. Unrecognized environment keys do not establish enforcement.
 - **Drafts are proposals:** one generated draft changed fallback to `always`; another failed typecheck, lint, and eight tests. The coordinator rejected them. Passing a model turn is distinct from delivering a verified fix.
@@ -59,7 +102,7 @@ These are observed defects from the 2026-10-03 attempts, not instructions to byp
 
 ## Research and scope
 
-Reviewed 2026-10-03. Official ACP v1 documentation establishes repeated prompt turns, streamed tool updates, correlated permission choices, cancellation, and capability-gated session loading. The repository's schemas and RunManager further restrict which states accept continuation; those local contracts govern actual MCP calls.
+Reviewed 2026-10-06. Official ACP v1 documentation establishes repeated prompt turns, streamed tool updates, correlated permission choices, cancellation, and capability-gated session loading. The repository's schemas and RunManager further restrict which states accept continuation; those local contracts govern actual MCP calls.
 
 Comparable [acpx session skill](https://github.com/Dwsy/agent/blob/main/skills/acpx/SKILL.md) covers persistent session commands, while [use-acpx](https://github.com/FradSer/dotclaude/blob/main/acpx/skills/use-acpx/SKILL.md) emphasizes assessment of worker proposals. This skill uses the repository's MCP API and coordinator verification, without importing their CLI flags, blanket permission settings, or mandatory subagent workflows. Its gap is the concrete correction loop with isolated artifacts, verification failures, and fail-closed recovery in this supervisor.
 
