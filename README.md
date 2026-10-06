@@ -2,7 +2,7 @@
 
 Codex Vibe is a local MCP supervisor for delegated Mistral Vibe code reviews and isolated edit runs. It preserves the `codex-vibe` project identity and packages a supervised ACP client behind a strict workspace and process boundary.
 
-The repository includes a private npm release candidate (`vibe-supervisor@0.9.0-rc.3`). It is **not published**; its source and package are MIT licensed under the retained `LICENSE` file. Do not infer Codex plugin installation or desktop visibility from the scaffold manifests.
+The repository includes a private npm release candidate (`vibe-supervisor@0.9.0-rc.4`). It is **not published**; its source and package are MIT licensed under the retained `LICENSE` file. Do not infer Codex plugin installation or desktop visibility from the scaffold manifests.
 
 ## Documentation
 

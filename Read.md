@@ -77,6 +77,8 @@ node dist/cli.js configure-codex --project --path /absolute/path/to/your/reposit
 node dist/cli.js configure-codex --project --path /absolute/path/to/your/repository
 ```
 
+For simultaneous independent desktop/CLI/subagent connections, use `configure-codex --user --isolated` after previewing with `--dry-run`; see [independent MCP clients](docs/configuration.md#independent-mcp-clients) for persistent storage and recovery implications.
+
 Reload your client configuration using its normal workflow and verify that all eight tools appear. Actual Codex desktop registration has not yet been validated in this project. The plugin manifests are scaffolds and are not required evidence of a working MCP connection.
 
 Other stdio MCP clients can launch the server directly:
@@ -149,7 +151,7 @@ shasum -a 256 -c SHA256SUMS
 For a separate local installation prefix:
 
 ```sh
-npm install --prefix /absolute/path/to/local-prefix /absolute/path/to/vibe-supervisor-0.9.0-rc.3.tgz
+npm install --prefix /absolute/path/to/local-prefix /absolute/path/to/vibe-supervisor-0.9.0-rc.4.tgz
 /absolute/path/to/local-prefix/node_modules/.bin/vibe-supervisor --version
 ```
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.0-rc.4
+
+- Adds opt-in per-connection storage with `serve --stdio --isolated` and `configure-codex --isolated`, preventing independent MCP clients from competing for one owner lock. Each server snapshots the validated configuration and retains its own runs. Default shared storage and existing recovery behavior remain unchanged.
+- Documents configuration refresh, private run ownership, and concurrent desktop/CLI use.
+
 ## 0.9.0-rc.3
 
 Replaces the rc.2 package, since two different tarballs carried the rc.2 version.

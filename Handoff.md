@@ -1,6 +1,10 @@
 # Implementation handoff
 
-Status as of **2026-10-06**: implemented release candidate 0.9.0-rc.3, with hosted review, edit and continuation evidence from the 2026-10-05 target-machine session (history below starts from rc.1 on 2026-10-03), not a production 1.0 certification; the plan for 1.0 is recorded below. Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.3`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
+Status as of **2026-10-06**: implemented release candidate 0.9.0-rc.4, with hosted review, edit and continuation evidence from the 2026-10-05 target-machine session (history below starts from rc.1 on 2026-10-03), not a production 1.0 certification; the plan for 1.0 is recorded below. Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.4`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
+
+## Multi-client setup correction (2026-10-06)
+
+Independent MCP clients previously competed for the same exclusive data-directory owner lock. rc.4 adds opt-in `serve --stdio --isolated` and `configure-codex --isolated` so each process snapshots the validated template into its own persistent private directory. Default shared storage is unchanged. Configuration snapshots require a new connection after allowlist edits; run IDs remain owned by their original connection. See [configuration](docs/configuration.md#independent-mcp-clients). This replaces the need for the machine-specific isolation adapter. Current hosted inference remains a separate validation gate.
 
 ## Target-machine results (2026-10-05)
 

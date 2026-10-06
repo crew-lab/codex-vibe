@@ -1,6 +1,6 @@
 # Using Vibe in another chat
 
-Use a local desktop chat on the same computer where the supervisor is registered. Start a new chat and check that the Vibe supervisor tools are available. Installation is per host, so it does not need to be repeated for every chat. Restart the app after registration changes.
+Use a local desktop chat on the same computer where the supervisor is registered. Start a new chat and check that the Vibe supervisor tools are available. Installation is per host, so it does not need to be repeated for every chat. Independent connections need separate storage; use `configure-codex --user --isolated` and see [configuration](configuration.md#independent-mcp-clients). Restart the app after registration changes.
 
 Example requests:
 
@@ -13,11 +13,11 @@ The supervisor creates the isolated edit worktree. Worker shell and network tool
 
 ## Prerequisites
 
-On this machine the installation, registration, pinned Vibe runtime, browser-login authentication, and hosted review/edit checks are already satisfied. A new chat needs access to the same local MCP connection. A different repository must first be explicitly added to the canonical workspace allowlist; the starter allowlist is empty.
+Historical rc.2 checks verified browser-login authentication and hosted review/edit behavior. Current transport/tool visibility and current hosted execution are separate checks; a successful status request does not verify inference. A new chat needs access to the same local MCP connection. A different repository must first be explicitly added to the canonical workspace allowlist; the starter allowlist is empty.
 
 A fresh machine needs Node.js 20.19 or newer, npm, Git, built supervisor installation, Vibe 2.25.8 with its matching Python interpreter, and `vibe-acp` for ACP runs. Configure explicit executable paths and workspace allowlists, authenticate with Mistral through the private provider runtime, and register the supervisor's stdio command in the desktop MCP settings. Use a tool timeout long enough for bounded hosted runs (this installation uses 600 seconds). Run the documented compatibility and doctor checks before inference. Do not place credentials in chat or repository files. Hosted prompts and permitted file contents are sent to Mistral; authorize that transfer for the intended workspace.
 
-The validated installation is the locally patched rc.2 at `~/.local/share/vibe-supervisor/rc2-permission-fix/node_modules/vibe-supervisor`. Plugin installation, Intel, clean-account setup, hosted lifecycle recovery, and the 100-run soak are still unverified. See [Handoff](../Handoff.md) and [field evidence](reviews/rc2-target-test-2026-10-05/Read.md).
+The historical hosted installation was the locally patched rc.2. Release rc.4 adds portable opt-in isolation; current hosted execution must be checked separately after updating. Plugin installation, Intel, clean-account setup, hosted lifecycle recovery, and the 100-run soak are still unverified. See [Handoff](../Handoff.md) and [field evidence](reviews/rc2-target-test-2026-10-05/Read.md).
 
 ## ChatGPT desktop and web
 
