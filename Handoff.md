@@ -1,6 +1,6 @@
 # Implementation handoff
 
-Status as of **2026-10-06**: implemented release candidate 0.9.0-rc.3, with hosted review, edit and continuation evidence from the 2026-10-05 target-machine session (history below starts from rc.1 on 2026-10-03), not a production 1.0 certification. Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.3`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
+Status as of **2026-10-06**: implemented release candidate 0.9.0-rc.3, with hosted review, edit and continuation evidence from the 2026-10-05 target-machine session (history below starts from rc.1 on 2026-10-03), not a production 1.0 certification; the plan for 1.0 is recorded below. Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.3`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
 
 ## Target-machine results (2026-10-05)
 
@@ -174,6 +174,51 @@ Recorded gaps after Phase 4:
 4. The programmatic backend passed the task via `--prompt` argv, visible in `ps`: fixed (the task goes through an owner-only prompt file that the shim reads and deletes; ACP is unchanged). The hosted programmatic review and edit on 2026-10-05 ran through this path successfully; the `ps` argv check (T7) was not recorded.
 5. `verify:release` ran tests before build: fixed (order is now lint, typecheck, build, test, acceptance, secret-scan, sbom; the compat-probe self-build fallback is kept for standalone `npx vitest run`).
 6. `.mcp.json` needed `npm run build` in a fresh checkout: fixed (`prepare` runs the build on `npm ci` / `npm install`). `package:rc` with its offline smoke install has since passed on both machines, and a fresh `npm ci` on the target machine ran the `prepare` build. The smoke install itself uses `--ignore-scripts`, so `prepare` does not run there.
+
+## Plan for 1.0 (2026-10-06)
+
+Three read-only audits (latency, user-facing surface, stability) were run against `f9d34da` after the stop-reason fix. The verdict: the happy path is correct and defended, but 1.0 needs the unhappy paths (restart, storage failure, a second Codex session, a Vibe upgrade) to work, the cold-start and review-snapshot latency reduced, and the configuration, tool and documentation surface cut down. Phases A–C are testable here with fake backends; D needs the target machine.
+
+Findings verified directly on this machine, not previously recorded:
+
+- `src/` installs no `unhandledRejection` handler, and `void this.fail(...)` / `void this.deadline(...)` at `run-manager.ts:692`, `:713`, `:945`, `:981` are unguarded, so a persist failure (disk full, EACCES) in those paths terminates the server on Node 20. `setState` mutates before persisting, so a failed persist in the completion branch also leaks a concurrency slot.
+- Recovery promotes only `recoverable` to `ready` (`run-manager.ts:154`); a run persisted as `running` or `waiting_*` stays there after restart, holds a slot and rejects `vibe_continue`. ACP `recover()` awaits `session/load` with no timeout (`acp.ts:445`) and runs before stdio opens; `configure-codex` writes no `startup_timeout_sec`.
+- Nine config keys written by `init` are never read by the runtime: `limits.review_timeout_seconds`, `limits.edit_timeout_seconds`, `limits.max_turns_review`, `limits.max_turns_edit` (the effective defaults are the schema constants in `src/mcp/schemas.ts`), `phase1.allow_temporary_trust`, `security.allow_shell_in_review`, `security.log_raw_acp`, `security.persist_reasoning`; `security.allow_shell_in_edit` can never take effect because `allow_shell: true` is rejected first.
+- The repository `.mcp.json` fails in any checkout that has not run `npm ci` (no `dist/`); it also declares `tool_timeout_sec = 3600` while `configure-codex` writes 600.
+
+Audit findings relied on with file:line evidence (not independently re-verified): reviews hash the whole workspace twice (launch and completion), serially, excluding only `.git`; cold start spends 3–6 `which` spawns, a full extra Vibe launch as the probe on cache miss, and up to two 5-second Keychain lookups; every ACP event fsyncs; `describeArtifact` re-reads and hashes all artifacts at completion; `vibe_result` never waits. Dead-process lock recovery trusts `kill(pid, 0)` alone; a crash inside the recovery lock blocks every later start; a second Codex session on the same data directory loses the tools with one stderr line. `close(cleanup_worktree)` is a silent no-op after restart (`verifiedPatch` is memory-only), a refused cleanup leaves the run in `closing` with no exit, and `record.worktree` is set before `git worktree add` succeeds. A Vibe exit 0 without a result can be reported `completed`; programmatic hard-codes `end_turn`. After a Vibe upgrade every run fails with `VSUP_BACKEND_UNAVAILABLE` and the version remedy says "upgrade" for an exact pin; launch failures write no diagnostic and `vibe_status` strips diagnostic text.
+
+### Phase A, survive failures (blockers)
+
+1. Crash safety: `unhandledRejection` handler in `serve`; `.catch` on every `void` call site; `releaseSlot`/`notify` in `finally`; filesystem errors mapped to `VSUP_STORAGE_ERROR`; a test with a forced EACCES on the run directory.
+2. One `settle(runtime, state, error)` replacing the seven divergent end-of-run sequences (launch failure, backend states, cancel, deadline, output limit, policy failure, shutdown), so artifacts, integrity, session release and slot release always happen in the same order. Timed-out and policy-failed reviews then also get `result.json` and an integrity record.
+3. Recovery: recovered non-completed runs become `ready` (handle recovered) or `recoverable` (no handle), stale `waiting_*` states are cleared, idle recovered sessions hold no slot; `recover()` runs under a bounded timeout or lazily on first `vibe_continue`; stdio opens before recovery.
+4. Owner lock: compare the PID start time with the lock's `started_at`, age out a stale recovery lock, retry briefly on an empty freshly created lock, and make the error name the lock path, owner PID and remedy; document one Codex session per data directory.
+5. Worktree and close: rebuild `verifiedPatch` from the saved artifact path and hash; a refused cleanup still transitions to `closed` and reports `worktree_retained` with the reason; `record.worktree` is set only after the worktree exists.
+6. Honest failure reporting: exit 0 without a stop reason fails with `VSUP_BACKEND_CRASHED`; an empty summary adds a warning; every launch failure appends a redacted diagnostic event; `vibe_status` returns capped diagnostic text; `VSUP_VIBE_VERSION_UNSUPPORTED` carries the detected version with a downgrade remedy; the probe cache is invalidated when a start fails before session initialization; `test-acp` and `doctor` include the shim stderr tail.
+
+### Phase B, latency
+
+1. Review snapshot: hash with bounded parallelism overlapped with probe, profile and launch preparation; at completion re-hash only files whose stat changed (decision pending: this misses same-size, same-mtime writes); consider excluding gitignored heavy directories (decision pending: this misses writes to ignored paths such as `.env`).
+2. Remove the separate availability probe and validate `agentInfo.version` and the protocol on the real run's `initialize`; the shim already enforces the pin. Resolve executables in-process once per launch instead of spawning `which` 3–6 times.
+3. Keychain: try the last service that succeeded first, or cache the resolved key in supervisor memory (decision pending).
+4. Git: pass the resolved root and base into `createDetachedWorktree`; replace the two spawns per untracked file with a temporary index, `add -N` and one `diff --binary`.
+5. Coalesce event appends and fsync at state and turn boundaries; hash artifacts incrementally; embed the compact result in `vibe_status` once a run is settled.
+6. Write `startup_timeout_sec` in `configure-codex`; prune retained runs automatically.
+
+### Phase C, lean surface
+
+1. Delete the nine dead config keys and `security.allow_network_tools` (all hard-off); either read the four `limits.*` defaults from config or delete them; `init` writes only `version`, `allowed_workspace_roots` and `[paths]`.
+2. Tools: drop `allow_shell` (the strict schema keeps rejecting it), `detail: "summary"` and the tool-side `auto` (an omitted `backend` means the configured one); return `next_action` from every tool and `next_after_seq` from `vibe_status`; expand tool descriptions with the wait, `stop_reason` and close guidance so Codex does not need the skills installed; fold `vibe_cancel` into `vibe_close`; register `vibe_continue` and `vibe_respond` only when ACP is configured.
+3. CLI: `setup --workspace <dir> [--codex user|project]` (init, canonical allowlist, `[paths]` autodetect from the shell PATH, validate, doctor, confirmed Codex write) and `allow <dir>`; fold `test-acp` and `config validate` into `doctor`; read the version from `package.json`.
+4. Documentation: README with prerequisites first (exact Vibe install command, browser login), `docs/reference.md` (tools, lifecycle, live config keys, CLI), `docs/security.md`, `docs/compatibility.md`, `docs/errors.md` generated from `REMEDIATION`, `CHANGELOG.md`; move this handoff, `docs/acceptance.md` and `docs/reviews/` to `docs/history/` outside the package; exclude history from `files`; reconcile or drop the `.mcp.json` scaffold until plugin installation is verified.
+5. Release: a workflow that attaches the tarball, `SHA256SUMS` and SBOM to a GitHub Release, and a documented `npm i -g <url>.tgz` install (works today because `dist/` ships and `prepare` does not run for tarballs).
+
+### Phase D, target machine and release
+
+T7, T8, T11, T12, R1–R3, restart, stale-lock and upgrade-path checks added to the field plan, the hosted soak as redefined in gate 3, then T14–T16; cut rc.4 after Phases A–C and 1.0 after D.
+
+Open decisions: integrity versus speed for the review snapshot (B1); whether 1.0 ships programmatic-only with ACP marked experimental (removes `continue`, `respond`, the `auto` fallback and most recovery surface, but also continuation); whether the Keychain key may live in supervisor memory; whether R3 (unified harness) gates 1.0 or "legacy only" is documented with the flag made conditional; whether `private: true` with GitHub Releases stays the install story.
 
 ## Platform research (2026-10-05)
 
