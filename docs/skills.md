@@ -6,6 +6,7 @@ The canonical skill sources live in this repository:
 |---|---|---|
 | `vibe-supervisor` | Setup and bounded review/edit delegation | [SKILL.md](../skills/vibe-supervisor/SKILL.md) |
 | `vibe-acp` | Delegate, independently verify, send correction requests, and repeat using ACP | [SKILL.md](../skills/vibe-acp/SKILL.md) |
+| `ent` | Finish a thread using local cleanup guidance and owned Vibe run cleanup | [SKILL.md](../skills/ent/SKILL.md) |
 
 Keep changes in these originals. Installations should point to them or be refreshed from them; do not maintain a separate edited copy as the source of truth. `vibe-acp` includes a `references/` directory that must accompany its `SKILL.md`.
 
@@ -30,3 +31,9 @@ ln -s "$repo_root/skills/vibe-acp" "$codex_skill_dir/vibe-acp"
 These commands do not overwrite existing entries; inspect an existing installation before replacing it. Keep the checkout at the linked path. Follow the client's normal skill reload workflow and verify discovery; installation and automatic discovery have not been demonstrated by authoring these files. When reading linked skills, resolve the link to the repository original so sibling skills and repository documentation references retain their context.
 
 The plugin manifest already points to the whole `skills/` directory, and the npm package's existing `files` allowlist includes it. Future packages therefore include both skills without a manifest change. The previously generated release tarball has not been rebuilt with these additions. Plugin installation remains a scaffold/unverified gate; skill installation alone does not establish plugin or desktop MCP visibility.
+
+## Current delegation and cleanup guidance
+
+The supervisor and ACP skills cover rc.4 per-connection isolated storage, configuration refresh, root `.agents`/`.vibe` launch restrictions, bounded safe-file smoke copies and separate evidence for transport, inference, model identity and task acceptance. Their review prompts require concrete behavioral findings or an explicit no-defect result; stylistic suggestions and mode-switch plans do not satisfy a correctness review.
+
+`ent` first reads an applicable project-local cleanup skill/procedure, then accounts for this thread's disposable plans, fixtures, worktrees and temporary files. It asks usable owned ACP edit workers to report/clean their own scratch work within existing tool permissions and verifies fresh artifacts before supervisor cleanup. Reviews remain read-only; programmatic or closed runs are not replayed for cleanup. The coordinator handles unsupported deletions and process/worktree/private-storage operations. Updating the skill does not execute it or archive this chat.

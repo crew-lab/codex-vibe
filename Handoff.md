@@ -348,3 +348,9 @@ A next maintainer should inspect Git status, read this handoff and the usage gui
 - [Detailed compatibility findings](docs/compatibility.md).
 - [Security contract](docs/security.md) and [release acceptance](docs/acceptance.md).
 - [Plugin scaffold status](docs/plugin-scaffold.md).
+
+## Coordinator skill and UARoute startup update (2026-10-06)
+
+The repository originals for vibe-supervisor, vibe-acp and ent now document rc.4 per-connection storage, configuration refresh, the root .agents/.vibe guard, evidence-based final reviews and Vibe-owned scratch cleanup within permitted tools. ent reads applicable local cleanup guidance first and accounts for thread-created plans/worktrees/temporary files; editing it does not invoke cleanup or archive. User skill links point to these originals. Existing local handoff/roadmap/skill changes were preserved.
+
+UARoute's local startup now uses pinned serve 14.2.6 instead of an undeclared npx download. Its full npm run check and local offline-mode startup smoke passed. Source/package-lock/README edits remain uncommitted alongside preexisting work. No commit, push, deployment, release rebuild or thread archival was performed for this update. See [scope and validation](docs/reviews/skill-workflow-update-2026-10-06.md). The previous managed release worktree is archived; there is no active worktree created by this update. The owned startup test server, empty cache and disposable clean-install directories were stopped/removed.
