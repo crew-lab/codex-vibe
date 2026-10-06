@@ -10,7 +10,7 @@ export interface McpServerOptions {
 
 export function createSupervisorMcpServer(manager: RunManagerTools, options: McpServerOptions): McpServer {
   const server = new McpServer(
-    { name: 'vibe-supervisor', version: '0.9.0-rc.2' },
+    { name: 'vibe-supervisor', version: '0.9.0-rc.3' },
     { capabilities: { tools: {} } },
   );
   registerSupervisorTools(server, manager, {
