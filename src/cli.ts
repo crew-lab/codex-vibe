@@ -15,7 +15,7 @@ import { readNdjsonRecovering } from './persistence/ndjson.js';
 import { startMcpStdio } from './mcp/server.js';
 import type { RunManagerTools } from './mcp/tools.js';
 import { supervisorError, type SupervisorErrorCode } from './contracts.js';
-import { redactSecrets } from './security/redaction.js';
+import { environmentSecrets, redactSecrets } from './security/redaction.js';
 
 const APP_VERSION = '0.9.0-rc.3';
 
@@ -228,7 +228,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
       if (!report.available) {
         process.exitCode = 1;
         const tail = report.details?.stderr_tail;
-        if (typeof tail === 'string' && tail) process.stderr.write(`vibe-acp stderr:\n${redactSecrets(tail)}\n`);
+        if (typeof tail === 'string' && tail) process.stderr.write(`vibe-acp stderr:\n${redactSecrets(tail, environmentSecrets())}\n`);
       }
       return;
     }
@@ -238,7 +238,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
     const code = typeof errorValue.code === 'string' && errorValue.code.startsWith('VSUP_') ? errorValue.code as SupervisorErrorCode : 'VSUP_INTERNAL';
     const detail = typeof errorValue.message === 'string' ? errorValue.message : 'Command failed.';
     const safe = errorValue.supervisor && typeof errorValue.supervisor === 'object' ? errorValue.supervisor as { code?: string; message?: string; remediation?: string } : supervisorError(code, detail);
-    process.stderr.write(`${redactSecrets(`${safe.code ?? code}: ${safe.message ?? detail}${safe.remediation ? ` ${safe.remediation}` : ''}`)}\n`);
+    process.stderr.write(`${redactSecrets(`${safe.code ?? code}: ${safe.message ?? detail}${safe.remediation ? ` ${safe.remediation}` : ''}`, environmentSecrets())}\n`);
     process.exitCode = process.exitCode || 1;
   }
 }

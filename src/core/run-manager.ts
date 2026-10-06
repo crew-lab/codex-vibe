@@ -51,8 +51,10 @@ interface Runtime {
   transcriptOverflow: boolean;
   requestedOutcome?: RequestedOutcome;
   storageDegraded?: { code: string; directory: string };
+  storageHealed?: { meta: boolean; event: boolean };
   completionOrder: number;
   persistChain: Promise<void>;
+  closeChain: Promise<void>;
   waiters: Set<() => void>;
 }
 
@@ -85,11 +87,13 @@ const COMPACT_CHANGED_FILES = 50;
 const COORDINATOR_ACTION_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "failed", "cancelled", "closed", "waiting_permission", "waiting_input", "recoverable"]);
 const CONTINUABLE_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "ready", "recoverable"]);
 const SETTLED_RESULT_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "failed", "cancelled"]);
+const CLEANABLE_STATES: ReadonlySet<RunState> = new Set<RunState>(["failed", "cancelled", "closed"]);
 const STATUS_TEXT_EVENT_TYPES: ReadonlySet<string> = new Set(["diagnostic", "review_integrity", "timeout", "permission_denied_by_policy"]);
 const STATUS_TEXT_CHARS = 400;
 const MAX_RETAINED_REASON_CHARS = 400;
 const MAX_PROBE_REASON_CHARS = 300;
 const DEFAULT_REMEDIATION = "Inspect the run status and supervisor diagnostics, then retry if safe.";
+const NO_SESSION_MESSAGE = "No live backend session is available for continuation.";
 
 export class RunManager {
   private readonly runRoot: string;
@@ -300,7 +304,7 @@ export class RunManager {
       if (backend) runtime.backend = backend;
     }
     const backend = runtime.backend;
-    if (!backend) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available for continuation.");
+    if (!backend) throw codedError("VSUP_SESSION_NOT_RESUMABLE", NO_SESSION_MESSAGE);
     const capability = await backend.probe();
     if (!capability.supportsContinue) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "The active backend does not support continuing this session.");
     if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
@@ -311,37 +315,67 @@ export class RunManager {
       if (this.activeSlots >= this.config.maxConcurrentRuns) throw codedError("VSUP_LIMIT_EXCEEDED", "No active run slot is available for continuation.");
       runtime.slot = true; this.activeSlots += 1;
       if (!runtime.handle) {
-        let recovered: BackendRunHandle | undefined;
-        try { recovered = await backend.recover(record, this.callbacks(runtime)); }
-        catch { recovered = undefined; }
-        if (!recovered) { await this.rejectContinuation(runtime); throw codedError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available for continuation."); }
+        const recovered = await this.recoverHandle(runtime, backend);
+        if (!recovered.handle) { await this.rejectContinuation(runtime, recovered.reason); throw codedError("VSUP_SESSION_NOT_RESUMABLE", recovered.reason ?? NO_SESSION_MESSAGE); }
         if (this.stopping || !CONTINUABLE_STATES.has(record.state)) {
-          await backend.close(recovered).catch(() => undefined);
+          await backend.close(recovered.handle).catch(() => undefined);
           this.releaseSlot(runtime);
           throw codedError("VSUP_INVALID_STATE", "This run changed state while its session was being recovered.");
         }
-        runtime.handle = recovered;
+        runtime.handle = recovered.handle;
       }
       if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
       delete record.finishedAt; delete record.error;
+      if (record.result) record.result = withoutIntegrity(record.result);
       record.launchedAt = new Date().toISOString();
       await this.setState(runtime, "running", { startedAt: record.launchedAt });
       this.armDeadline(runtime, record.limits.timeoutSeconds * 1000);
     }
-    if (!runtime.handle) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available for continuation.");
-    try { await backend.continue(runtime.handle, input.message); }
+    const live = runtime.handle;
+    if (!live) throw codedError("VSUP_SESSION_NOT_RESUMABLE", NO_SESSION_MESSAGE);
+    try { await backend.continue(live, input.message); }
     catch (error) {
+      let failure = error;
+      if (resumed && isSessionGone(error)) {
+        const reattached = await this.reattach(runtime, backend, live);
+        if (reattached.handle) {
+          try { await backend.continue(reattached.handle, input.message); return { run_id: record.runId, state: record.state }; }
+          catch (second) { failure = second; }
+        } else if (reattached.reason) failure = codedError("VSUP_SESSION_NOT_RESUMABLE", reattached.reason);
+      }
       if (resumed) await this.serial(runtime, () => this.settle(runtime, { state: "recoverable", error: supervisorError("VSUP_SESSION_NOT_RESUMABLE", "The backend session did not accept the continuation; a later continue can reattach.") }));
-      throw error;
+      throw failure;
     }
     return { run_id: record.runId, state: record.state };
   }
 
-  private async rejectContinuation(runtime: Runtime): Promise<void> {
+  private async recoverHandle(runtime: Runtime, backend: SupervisorBackend): Promise<{ handle?: BackendRunHandle; reason?: string }> {
+    try {
+      const handle = await backend.recover(runtime.record, this.callbacks(runtime));
+      return handle ? { handle } : {};
+    } catch (error) {
+      return isSessionGone(error) ? { reason: (error as Error).message } : {};
+    }
+  }
+
+  private async reattach(runtime: Runtime, backend: SupervisorBackend, dead: BackendRunHandle): Promise<{ handle?: BackendRunHandle; reason?: string }> {
+    if (runtime.handle === dead) delete runtime.handle;
+    await backend.close(dead).catch(() => undefined);
+    const recovered = await this.recoverHandle(runtime, backend);
+    if (!recovered.handle) return recovered;
+    if (this.stopping || runtime.record.state !== "running") {
+      await backend.close(recovered.handle).catch(() => undefined);
+      return {};
+    }
+    runtime.handle = recovered.handle;
+    return recovered;
+  }
+
+  private async rejectContinuation(runtime: Runtime, reason = NO_SESSION_MESSAGE): Promise<void> {
     this.releaseSlot(runtime);
     const record = runtime.record;
     if (record.state === "completed") return;
-    record.error = supervisorError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available for continuation.");
+    record.error = supervisorError("VSUP_SESSION_NOT_RESUMABLE", reason);
     record.updatedAt = new Date().toISOString();
     try { await this.persist(runtime); }
     catch (error) { if (!this.degrade(runtime, error)) this.reportBackground(runtime, "continue-rejection", error); }
@@ -469,17 +503,36 @@ export class RunManager {
 
   async close(value: CloseToolInput): Promise<Record<string, unknown>> {
     const input = parseInput(closeSchema, value); const runtime = this.requireRun(input.run_id);
-    if (runtime.record.state === "closing") return { run_id: input.run_id, state: "closing", worktree_removed: false };
-    if (runtime.record.state === "closed") return this.closeOutcome(runtime, input.cleanup_worktree ? await this.cleanupWorktree(runtime) : { removed: false });
-    if (!isTerminal(runtime.record.state)) await this.cancel({ run_id: input.run_id });
+    const next = runtime.closeChain.then(() => this.closeRun(runtime, input.cleanup_worktree === true));
+    runtime.closeChain = next.then(() => undefined, () => undefined);
+    return next;
+  }
+
+  private async closeRun(runtime: Runtime, cleanupWanted: boolean): Promise<Record<string, unknown>> {
+    const record = runtime.record;
+    if (record.state === "closed") return this.closeOutcome(runtime, cleanupWanted ? await this.cleanupWorktree(runtime) : { removed: false });
+    if (!isTerminal(record.state)) await this.cancel({ run_id: record.runId });
     if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
     await this.setState(runtime, "closing");
-    if (runtime.handle && runtime.backend) await runtime.backend.close(runtime.handle).catch(() => undefined);
-    delete runtime.handle;
-    const cleanup = input.cleanup_worktree ? await this.cleanupWorktree(runtime) : { removed: false };
+    let failure: unknown;
+    let cleanup: WorktreeCleanup = { removed: false };
+    try {
+      const handle = runtime.handle; delete runtime.handle;
+      if (handle && runtime.backend) await runtime.backend.close(handle);
+    } catch (error) { failure = error; }
+    try { if (cleanupWanted) cleanup = await this.cleanupWorktree(runtime); }
+    catch (error) { failure ??= error; }
     if (cleanup.reason) await this.serial(runtime, () => this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "warning", data: { reason: "worktree_retained", message: cleanup.reason } }, true)).catch(() => undefined);
-    await this.setState(runtime, "closed", { finishedAt: runtime.record.finishedAt ?? new Date().toISOString() });
-    return this.closeOutcome(runtime, cleanup);
+    if (failure !== undefined) await this.serial(runtime, () => this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "warning", data: { reason: "close_failed", message: describeFailure(failure) } }, true)).catch(() => undefined);
+    try { await this.setState(runtime, "closed", { finishedAt: record.finishedAt ?? new Date().toISOString() }); }
+    catch (error) {
+      failure ??= error;
+      const now = new Date().toISOString();
+      record.state = "closed"; record.updatedAt = now; record.finishedAt ??= now;
+      this.persisted.set(record.runId, record);
+      this.notify(runtime);
+    }
+    return { ...this.closeOutcome(runtime, cleanup), ...(failure === undefined ? {} : { error: normalizeError(failure) }) };
   }
 
   private closeOutcome(runtime: Runtime, cleanup: WorktreeCleanup): Record<string, unknown> {
@@ -500,6 +553,7 @@ export class RunManager {
     await this.ready();
     if (runId) {
       const runtime = this.requireRun(runId);
+      if (!CLEANABLE_STATES.has(runtime.record.state)) return { run_id: runId, worktree_removed: false, worktree_retained_reason: `The run is ${runtime.record.state}; only the worktree of a failed, cancelled or closed run can be removed. Close the run first.` };
       const cleanup = await this.cleanupWorktree(runtime);
       return { run_id: runId, worktree_removed: cleanup.removed, ...(cleanup.reason ? { worktree_retained_reason: cleanup.reason } : {}) };
     }
@@ -547,7 +601,7 @@ export class RunManager {
   }
 
   private makeRuntime(record: RunRecord, directory: string, task: string, contextFiles: string[], allowShell: boolean, backendPreference: "auto" | BackendKind, events: SupervisorEvent[] = []): Runtime {
-    return { record, directory, task, contextFiles, allowShell, backendPreference, events, eventSeq: events.at(-1)?.seq ?? 0, transcript: "", serial: Promise.resolve(), slot: false, cancelRequested: false, started: false, deferredResponses: [], transcriptOverflow: false, completionOrder: 0, persistChain: Promise.resolve(), waiters: new Set() };
+    return { record, directory, task, contextFiles, allowShell, backendPreference, events, eventSeq: events.at(-1)?.seq ?? 0, transcript: "", serial: Promise.resolve(), slot: false, cancelRequested: false, started: false, deferredResponses: [], transcriptOverflow: false, completionOrder: 0, persistChain: Promise.resolve(), closeChain: Promise.resolve(), waiters: new Set() };
   }
 
   private async loadDefaultBackends(): Promise<void> {
@@ -683,6 +737,7 @@ export class RunManager {
       throw asStorageError(error, runtime.directory);
     }
     runtime.events.push(full); runtime.eventSeq = full.seq;
+    this.noteStorageSuccess(runtime, "event");
     this.notify(runtime);
   }
 
@@ -752,9 +807,10 @@ export class RunManager {
   }
 
   private reportedOutcome(runtime: Runtime, state: RunState, error: SupervisorError | undefined): SettleOutcome | undefined {
+    if (state !== "completed" && state !== "failed" && state !== "cancelled") return undefined;
+    if (runtime.requestedOutcome) return runtime.requestedOutcome;
     if (state === "completed") return { state };
-    if (state !== "failed" && state !== "cancelled") return undefined;
-    return runtime.requestedOutcome ?? (state === "failed" && error ? { state, error } : { state });
+    return state === "failed" && error ? { state, error } : { state };
   }
 
   private requestOutcome(runtime: Runtime, outcome: RequestedOutcome): RequestedOutcome {
@@ -842,7 +898,15 @@ export class RunManager {
     const fault = storageErrorDetails(error);
     if (!fault) return false;
     if (!runtime.storageDegraded) { runtime.storageDegraded = fault; reportBackgroundFailure("storage", error); }
+    runtime.storageHealed = { meta: false, event: false };
     return true;
+  }
+
+  private noteStorageSuccess(runtime: Runtime, kind: "meta" | "event"): void {
+    const healed = runtime.storageHealed;
+    if (!runtime.storageDegraded || !healed) return;
+    healed[kind] = true;
+    if (healed.meta && healed.event) { delete runtime.storageDegraded; delete runtime.storageHealed; }
   }
 
   private async finalizeArtifacts(runtime: Runtime, resultState: RunState = runtime.record.state): Promise<void> {
@@ -939,7 +1003,12 @@ export class RunManager {
     const worktree = runtime.record.worktree;
     if (!worktree) return { removed: false };
     if (!worktree.createdBySupervisor) return { removed: false, reason: "The worktree was not created by the supervisor." };
-    const verified = this.savedPatchExport(runtime);
+    let verified = this.savedPatchExport(runtime);
+    if (!verified) {
+      try { await this.finalizeArtifacts(runtime, await this.settledResultState(runtime)); }
+      catch (error) { return { removed: false, reason: redactSecrets(error instanceof Error ? error.message : "The worktree could not be exported before removal.").slice(0, MAX_RETAINED_REASON_CHARS) }; }
+      verified = this.savedPatchExport(runtime);
+    }
     if (!verified) return { removed: false, reason: "No verified patch export is available for this worktree." };
     try { await removeVerifiedWorktree(runtime.record.sourceWorkspace, worktree, verified); }
     catch (error) { return { removed: false, reason: redactSecrets(error instanceof Error ? error.message : "Worktree cleanup was refused.").slice(0, MAX_RETAINED_REASON_CHARS) }; }
@@ -949,14 +1018,26 @@ export class RunManager {
     return { removed: true };
   }
 
+  private async settledResultState(runtime: Runtime): Promise<RunState> {
+    const text = await this.readArtifactText(runtime, path.join(runtime.directory, "result.json"), MAX_META_BYTES);
+    try {
+      const state = (JSON.parse(text ?? "") as { state?: unknown }).state;
+      if (typeof state === "string" && SETTLED_RESULT_STATES.has(state as RunState)) return state as RunState;
+    } catch {}
+    return "cancelled";
+  }
+
   private async deadline(runtime: Runtime): Promise<void> {
     if (isTerminal(runtime.record.state) || runtime.record.state === "completed") return;
     const outcome = this.requestOutcome(runtime, { state: "failed", error: supervisorError("VSUP_TIMEOUT", "The run exceeded its configured timeout.") });
     this.removeFromPending(runtime);
+    if (outcome.error?.code === "VSUP_TIMEOUT") await this.serial(runtime, async () => {
+      if (isTerminal(runtime.record.state) || runtime.record.state === "completed") return;
+      await this.appendEvent(runtime, { source: "supervisor", type: "timeout", severity: "warning", data: { timeout_seconds: runtime.record.limits.timeoutSeconds } }).catch(() => undefined);
+    });
     await this.cancelBackendSession(runtime);
     await this.serial(runtime, async () => {
       if (isTerminal(runtime.record.state) || runtime.record.state === "completed") return;
-      if (outcome.error?.code === "VSUP_TIMEOUT") await this.appendEvent(runtime, { source: "supervisor", type: "timeout", severity: "warning", data: { timeout_seconds: runtime.record.limits.timeoutSeconds } }).catch(() => undefined);
       await this.settle(runtime, outcome);
     });
   }
@@ -985,7 +1066,7 @@ export class RunManager {
     runtime.persistChain = write.then(() => undefined, () => undefined);
     try { await write; }
     catch (error) { throw asStorageError(error, runtime.directory); }
-    delete runtime.storageDegraded;
+    this.noteStorageSuccess(runtime, "meta");
   }
 
   private serial<T>(runtime: Runtime, fn: () => Promise<T>): Promise<T> {
@@ -1139,6 +1220,11 @@ function backendUnavailableError(failures: ProbeFailure[]): Error {
       ? codedError("VSUP_VIBE_ACP_NOT_FOUND", "The vibe-acp executable was not found.", { candidates })
       : codedError("VSUP_VIBE_NOT_FOUND", "The vibe executable was not found.", { candidates });
   }
+  const interpreter = failures.find(({ capability }) => capability.details?.interpreter_missing === true);
+  if (interpreter) {
+    const name = interpreter.capability.details?.interpreter;
+    return codedError("VSUP_BACKEND_UNAVAILABLE", `The interpreter for the ${interpreter.backend} Vibe launcher${typeof name === "string" ? ` (${name})` : ""} was not found; install it or correct the launcher's shebang.`, { candidates });
+  }
   return codedError("VSUP_BACKEND_UNAVAILABLE", "No configured backend passed its availability probe.", { candidates });
 }
 
@@ -1156,6 +1242,10 @@ function parseInput<T>(schema: { parse(value: unknown): T }, value: unknown): T 
 function codedError(code: SupervisorErrorCode, message: string, details?: Record<string, unknown>): Error & { code: SupervisorErrorCode; remediation: string; retryable: boolean } {
   const normalized = supervisorError(code, message, details);
   return Object.assign(new Error(message), normalized);
+}
+
+function isSessionGone(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "VSUP_SESSION_NOT_RESUMABLE";
 }
 
 function isCodedFailure(error: unknown): boolean {
@@ -1226,6 +1316,12 @@ function stopReasonWarning(stopReason: string | undefined): string | undefined {
 
 function withoutStopReasonWarnings(warnings: string[]): string[] {
   return warnings.filter((warning) => !warning.startsWith(STOP_WARNING_PREFIX));
+}
+
+function withoutIntegrity(result: NonNullable<RunRecord["result"]>): NonNullable<RunRecord["result"]> {
+  const rest = { ...result };
+  delete rest.integrity;
+  return { ...rest, warnings: (rest.warnings ?? []).filter((warning) => warning !== CHANGED_WITH_WRITE_WARNING && warning !== CHANGED_WARNING && warning !== UNVERIFIED_WARNING) };
 }
 
 function mergeTurnResult(previous: RunRecord["result"], turn: NonNullable<RunRecord["result"]>): NonNullable<RunRecord["result"]> {
