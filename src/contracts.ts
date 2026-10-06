@@ -1,4 +1,6 @@
 /** Shared, versioned contracts for the supervisor, MCP surface, and backends. */
+import { SUPPORTED_VIBE } from "./backends/pinned.js";
+
 export const SCHEMA_VERSION = 1 as const;
 
 export type BackendKind = "acp" | "programmatic";
@@ -261,7 +263,7 @@ const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_CONFIG_INVALID: "Correct the reported config.toml field and try again.",
   VSUP_VIBE_NOT_FOUND: "Install Vibe or set paths.vibe to its executable.",
   VSUP_VIBE_ACP_NOT_FOUND: "Install Vibe ACP or set paths.vibeAcp to its executable.",
-  VSUP_VIBE_VERSION_UNSUPPORTED: "Upgrade Vibe to the supported minimum version.",
+  VSUP_VIBE_VERSION_UNSUPPORTED: `Install exactly the supported Vibe version (for example \`uv tool install mistral-vibe==${SUPPORTED_VIBE}\`) or point paths.vibe and paths.vibe_acp at a pinned install.`,
   VSUP_ACP_INIT_FAILED: "Check the Vibe ACP executable and its stderr log, then retry.",
   VSUP_ACP_VERSION_UNSUPPORTED: "Upgrade Vibe ACP to a supported ACP version.",
   VSUP_ACP_PROTOCOL_ERROR: "Check ACP diagnostics and retry with a compatible Vibe release.",

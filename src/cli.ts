@@ -212,7 +212,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
     if (command === 'doctor') {
       if (args.some((arg) => arg !== '--json')) fail('Unknown doctor option.', 2);
       const config = await loadConfig(); const report = await runDoctor(config);
-      print(args.includes('--json') ? report : report.checks.map((check) => `${check.status === 'unverified' ? 'UNVERIFIED' : check.ok ? 'PASS' : 'CHECK'} ${check.name}: ${check.message}${check.version ? ` (${check.version})` : ''}`).join('\n'));
+      print(args.includes('--json') ? report : report.checks.map((check) => `${check.status === 'unverified' ? 'UNVERIFIED' : check.ok ? 'PASS' : 'CHECK'} ${check.name}: ${check.message}${check.version ? ` (${check.version})` : ''}${check.stderr_tail ? `\n  Vibe ACP stderr: ${check.stderr_tail}` : ''}`).join('\n'));
       if (!report.ok) process.exitCode = 1;
       return;
     }
@@ -225,7 +225,11 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
       const { AcpBackend } = await import(backendModulePath);
       const report = await new AcpBackend(config).probe();
       print(report);
-      if (!report.available) process.exitCode = 1;
+      if (!report.available) {
+        process.exitCode = 1;
+        const tail = report.details?.stderr_tail;
+        if (typeof tail === 'string' && tail) process.stderr.write(`vibe-acp stderr:\n${redactSecrets(tail)}\n`);
+      }
       return;
     }
     fail(`Unknown command: ${command}`, 2);

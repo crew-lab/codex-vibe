@@ -49,6 +49,10 @@ function safeCut(text: string, sentinels: readonly string[], wanted: number): nu
 }
 
 /** Streaming redactor retains a bounded suffix so tokens split across chunks are joined before emission. */
+export function redactedTail(bytes: Uint8Array, maxBytes = 1024): string {
+  return redactSecrets(Buffer.from(bytes).subarray(-maxBytes).toString('utf8')).trim().slice(-maxBytes);
+}
+
 export class StreamingRedactor {
   private pending = '';
   private discardingPem = false;
