@@ -9,6 +9,13 @@ const SENSITIVE_NAMES = ['.env', '.env.*', '.envrc', '.envrc.*', '*.pem', '*.key
 const RESERVED_DIRS = ['.git', '.vibe', '.agents'];
 const RESERVED_FILES = ['.vibeignore'];
 
+const STOCK_GREP_EXCLUDE_PATTERNS = [
+  '.venv/', 'venv/', '.env/', 'env/', 'node_modules/', '.git/', '.vibe/', '.agents/',
+  '__pycache__/', '.pytest_cache/', '.mypy_cache/', '.tox/', '.nox/', '.coverage/',
+  'htmlcov/', 'dist/', 'build/', '.idea/', '.vscode/', '*.egg-info', '*.pyc', '*.pyo', '*.pyd',
+  '.DS_Store', 'Thumbs.db', '*.env', '*.env.*', '*.envrc', '*.envrc.*', '*.pem', '*.key', '*.p12', '*.pfx',
+];
+
 function assertSimpleGlobRoot(root: string): void {
   if (/[\*?\[\]]/.test(root)) throw new Error('Workspace path contains glob characters and cannot be safely encoded for Vibe');
 }
@@ -25,23 +32,13 @@ function setToolPathPolicy(env: NodeJS.ProcessEnv, name: string, root: string, p
   ]);
   const reservedFiles = RESERVED_FILES.flatMap((name) => [`${absolute}/${name}`, `${absolute}/**/${name}`]);
   env[`${prefix}__PERMISSION`] = permission;
-  // The pinned resolver checks denylist first. Encoded recursive grants include
-  // the root and all descendants without the depth limit of legacy path globs.
   env[`${prefix}__DENYLIST`] = JSON.stringify([...reserved, ...reservedFiles, ...rootSecrets, ...nestedSecrets]);
   env[`${prefix}__ALLOWLIST`] = JSON.stringify([`vibe-path:directory_recursive:${absolute}`]);
   env[`${prefix}__SENSITIVE_PATTERNS`] = JSON.stringify([
     `${absolute}/.env`, `${absolute}/.env.*`, `${absolute}/.envrc`, `${absolute}/.envrc.*`,
     `${absolute}/**/.env`, `${absolute}/**/.env.*`, `${absolute}/**/.envrc`, `${absolute}/**/.envrc.*`,
   ]);
-  if (name === 'grep') {
-    // Reproduce the stock exclusions because VIBE list overrides replace, not append.
-    env[`${prefix}__EXCLUDE_PATTERNS`] = JSON.stringify([
-      '.venv/', 'venv/', '.env/', 'env/', 'node_modules/', '.git/', '.vibe/', '.agents/',
-      '__pycache__/', '.pytest_cache/', '.mypy_cache/', '.tox/', '.nox/', '.coverage/',
-      'htmlcov/', 'dist/', 'build/', '.idea/', '.vscode/', '*.egg-info', '*.pyc', '*.pyo', '*.pyd',
-      '.DS_Store', 'Thumbs.db', '*.env', '*.env.*', '*.envrc', '*.envrc.*', '*.pem', '*.key', '*.p12', '*.pfx',
-    ]);
-  }
+  if (name === 'grep') env[`${prefix}__EXCLUDE_PATTERNS`] = JSON.stringify(STOCK_GREP_EXCLUDE_PATTERNS);
 }
 
 export interface VibeChildProfile {
@@ -50,7 +47,6 @@ export interface VibeChildProfile {
   env: NodeJS.ProcessEnv;
 }
 
-/** Refuse project-local Vibe extension points instead of letting a future trust/config change activate them. */
 export async function assertNoProjectVibeExtensions(root: string): Promise<void> {
   const canonical = path.resolve(root);
   for (const rel of ['.vibe', '.agents']) {
@@ -72,12 +68,27 @@ export async function assertNoProjectVibeExtensions(root: string): Promise<void>
   }
 }
 
+async function writeSupervisorAgentProfile(vibeHome: string, agentId: string, mode: RunMode, tools: string[]): Promise<void> {
+  const agentDirectory = path.join(vibeHome, 'agents');
+  await createPrivateDir(agentDirectory);
+  const toolPermissions: Record<string, { permission: string }> = Object.fromEntries(
+    tools.map((tool) => [tool, { permission: tool === 'bash' ? 'ask' : 'never' }]),
+  );
+  await createPrivateFile(path.join(agentDirectory, `${agentId}.toml`), stringify({
+    display_name: mode === 'review' ? 'Plan' : 'Accept Edits',
+    description: 'Supervisor-owned workspace policy',
+    safety: mode === 'review' ? 'safe' : 'destructive',
+    enabled_tools: tools,
+    disabled_tools: ['exit_plan_mode'],
+    tools: toolPermissions,
+  }), 'w');
+}
+
 export interface VibeChildProfileOptions {
   allowShell?: boolean;
   forwardOriginalHome?: boolean;
 }
 
-/** Build Vibe's complete child environment from the supervisor's small allowlist. */
 export async function createVibeChildProfile(input: StartRunInput, mode: RunMode, options: VibeChildProfileOptions = {}): Promise<VibeChildProfile> {
   const allowShell = options.allowShell === true;
   const home = path.join(input.runDirectory, 'child-home');
@@ -107,22 +118,6 @@ export async function createVibeChildProfile(input: StartRunInput, mode: RunMode
     for (const tool of ['write_file', 'edit']) setToolPathPolicy(env, tool, input.workerWorkspace, 'never');
     if (allowShell) env.VIBE_TOOLS__BASH__PERMISSION = 'ask';
   }
-  // Vibe 2.25.8 applies agent overrides after environment configuration. Its
-  // built-in Plan replaces read grants and Accept Edits makes writes global.
-  // Supervisor-owned profiles shadow those built-ins in the private VIBE_HOME;
-  // they never inherit user/project agents and retain the same mode IDs for ACP.
-  const agentDirectory = path.join(vibeHome, 'agents');
-  await createPrivateDir(agentDirectory);
-  const agentTools: Record<string, { permission: string }> = Object.fromEntries(
-    tools.map((tool) => [tool, { permission: tool === 'bash' ? 'ask' : 'never' }]),
-  );
-  await createPrivateFile(path.join(agentDirectory, `${env.VIBE_DEFAULT_AGENT}.toml`), stringify({
-    display_name: mode === 'review' ? 'Plan' : 'Accept Edits',
-    description: 'Supervisor-owned workspace policy',
-    safety: mode === 'review' ? 'safe' : 'destructive',
-    enabled_tools: tools,
-    disabled_tools: ['exit_plan_mode'],
-    tools: agentTools,
-  }), 'w');
+  await writeSupervisorAgentProfile(vibeHome, env.VIBE_DEFAULT_AGENT, mode, tools);
   return { home, vibeHome, env };
 }

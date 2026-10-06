@@ -16,7 +16,7 @@ import type { RunManagerTools } from './mcp/tools.js';
 import { supervisorError, type SupervisorErrorCode } from './contracts.js';
 import { redactSecrets } from './security/redaction.js';
 
-const APP_VERSION = '0.9.0-rc.2';
+const APP_VERSION = '0.9.0-rc.3';
 
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
 function fail(message: string, code = 1): never { process.exitCode = code; throw Object.assign(new Error(message), { code: 'VSUP_INVALID_ARGUMENT' }); }

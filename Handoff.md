@@ -54,7 +54,7 @@ Reviews read/search an allowed source workspace and check integrity. Edits creat
 
 ## Lifecycle and persistence details
 
-Start returns a run ID asynchronously. Default capacity is two active workers and eight queued runs. Default idle lifetime is 600 seconds. Review defaults are 1,800 seconds and 12 turns; edit defaults are 2,400 seconds and 20 turns. Default byte caps are 52,428,800 for events, 10,485,760 for transcripts, and 104,857,600 for artifacts; MCP results are capped at 50,000 characters.
+Start returns a run ID asynchronously. Default capacity is two active workers and eight queued runs. Default idle lifetime is 600 seconds. Review defaults are 1,800 seconds and 12 turns; edit defaults are 2,400 seconds and 20 turns. Default byte caps are 52,428,800 for events, 10,485,760 for transcripts, and 104,857,600 for artifacts; MCP results are capped at 8,000 characters by default (`limits.max_mcp_result_chars`) and shrink in a fixed order when over the cap.
 
 State includes queued/startup/negotiation/ready/running, permission/input waits, completed/failed/cancelled, closing/closed, and recovery states. Owner-only directories/files use 0700/0600. Persistent records are versioned, writes are atomic, initialization is single-flight, and a data-directory owner lock excludes concurrent supervisors. Defaults retain seven days and preserve failed runs.
 
@@ -66,13 +66,13 @@ Canonical workspace roots, context paths, recursion guards, explicit child envir
 
 Each worker has fresh private HOME and VIBE_HOME; it does not inherit the user's Vibe configuration, project trust, tools, hooks, agents, skills, plugins, MCP servers, or additional directories. Project `.vibe`/`.agents` extensions and symlinked `.vibeignore` are refused. Review enables read/search; edit adds write/edit. Sensitive and reserved path exclusions cover the file/search profile. Grep's returned-result cap does not guarantee a peak-buffering cap inside Vibe's search implementation.
 
-The pinned Python shim checks Vibe version and logger persistence signatures, forces legacy harness behavior, removes reasoning/credential-bearing fields before native history writes, applies private permissions, and watches parent death/run lifetime. Raw ACP wire logging is disabled. Private histories remain for recovery/retention. Secrets are not placed in tool arguments or task text; only an explicitly present `MISTRAL_API_KEY` may be forwarded to the private child, otherwise Vibe may resolve OS Keychain credentials.
+The pinned Python shim checks Vibe version and logger persistence signatures, forces legacy harness behavior, removes reasoning/credential-bearing fields before native history writes, applies private permissions, and watches parent death/run lifetime. Raw ACP wire logging is disabled. Private histories remain for recovery/retention. Secrets are not placed in tool arguments or task text. An explicitly present `MISTRAL_API_KEY` is forwarded to the private child; otherwise, for real runs only, the shim resolves the browser-login Keychain credential itself and keeps it inside the Vibe process (verified in hosted runs on 2026-10-05).
 
 Git operations use direct argument arrays with no shell and disable/refuse hooks, filters, and external diff paths. Snapshot exports cover supported staged, unstaged, untracked, binary, and unusual-name changes without mutating the source index. Artifacts include patch/stat/changed files, public transcript, events, and hashes. Cleanup compares a fresh verified export to the saved patch and refuses stale or secret-bearing exports and unaccounted ignored files. Process-group cleanup is bounded; sandbox EPERM can degrade to known-child termination and is reported as unverified group cleanup, never as proof all descendants died.
 
 ## Compatibility and dependencies
 
-Vibe is pinned to **2.25.8**; ACP protocol is v1. The launcher obtains the installed entrypoint's Python interpreter from its shebang. Both adapters use the checked runtime shim; version/signature drift aborts. ACP advertises `loadSession: true`; do not infer an unsupported `session/resume` method. Effective authenticated runtime tool inventory remains a gate despite source-based profile enforcement.
+Vibe is pinned to **2.25.8**; ACP protocol is v1. The launcher obtains the installed entrypoint's Python interpreter from its shebang. Both adapters use the checked runtime shim; version/signature drift aborts. ACP advertises `loadSession: true`; do not infer an unsupported `session/resume` method. The effective tool inventory was confirmed from private session records in the 2026-10-05 hosted runs (review: `grep`, `read_file`; edit: adds `edit`, `write_file`). Supervisor-owned Plan and Accept Edits agent files keep Vibe's built-in agents from overriding these permissions; see [docs/compatibility.md](docs/compatibility.md). Hosted runs used `mistral-medium-3.5`; the supervisor does not pin a model.
 
 Runtime dependencies: ACP SDK 1.7.0, MCP server/client 2.3.0, MCP Node adapter 2.1.1, Zod 4.6.5, smol-toml 1.9.0. TypeScript 5.9.3 was retained for compatibility; TS7 adoption is not part of this RC. The lockfile pins versions. Node engine requirement is >=20.19; the observed verification machine ran Node 24.21.0, macOS 27.0.1 arm64, Git 2.54 Apple, Codex 0.160.0, and Vibe under uv/Python 3.12.
 
@@ -88,7 +88,7 @@ These are local evidence, not portable defaults. `scripts/package-rc.mjs` and `s
 
 Historical: the last full implementation release verification passed **49 tests across 7 files**, lint, typecheck, build, deterministic acceptance, secret-pattern scan, and SPDX inventory. Counts: tool schemas 4; config 7; MCP integration 2; CLI 3; core 8; security 14; ACP integration 11. This is a historical result, not a substitute for checking later changes.
 
-Current suite as of the cold-review fixes (2026-10-05): 16 files / 179 tests (`npx vitest run`), plus 51 Vibe-free Python tests in `src/backends/runtime/test_prompt_file.py` and `src/backends/runtime/test_keychain_credential.py` (`npm run test:python`, also part of `verify:release`).
+Current suite as of the B1/B3 fix (2026-10-06): 184 tests (`npx vitest run`), of which 2 installed-resolver profile tests skip when Vibe is not installed, plus 51 Vibe-free Python tests in `src/backends/runtime/test_prompt_file.py` and `src/backends/runtime/test_keychain_credential.py` (`npm run test:python`, also part of `verify:release`).
 
 ACP fake-subprocess coverage includes 100 independently initialized prompt runs, unknown notifications and thought filtering, correlated permissions and expired IDs, form responses, live continuation, loading without original-task replay, malformed JSON, early exit, wrong protocol/mode, and cancellation. It verifies local protocol/lifecycle behavior rather than hosted inference.
 
@@ -161,19 +161,19 @@ Implementation sequence:
 1. Phase 0, hygiene: done (no machine-specific cache fallback, portable docs; the `files` allowlist change was later reverted).
 2. Phase 1: done (realistic fake-ACP fixture and regression tests in `tests/integration/run-manager-regressions.test.ts`; they were red until Phase 2).
 3. Phase 2: done (per-turn streaming redaction with newlines only at turn boundaries and no per-event meta persists; completed runs reloaded lazily with idle sessions capped at `maxConcurrentRuns`; review source changes reported as a warning; timeout counted from launch via `launchedAt`; closing or evicting a completed ACP run no longer reports `failed`). Original scope: streamed message chunks (per-turn streaming redaction, newlines only at turn boundaries, fewer meta persists); a single owner for live session handles with idle expiry and a cap that includes recovered completed runs; review integrity as a warning with artifacts finalized first; timeout counted from launch; and closing a completed ACP run must not report `failed` afterwards.
-4. Phase 3: one hosted review and one hosted edit on a throwaway repository (gates 1-2), recording chunk shapes, the effective tool inventory, and the permission-request count. Then decide whether ACP reject options should be sent as `selected` reject option IDs instead of `cancelled`.
+4. Phase 3: done on 2026-10-05 (hosted review, programmatic edit, and ACP edit with continuation in Codex desktop; effective tool inventory recorded). The reject decision was made from the ACP spec instead: rejections are sent as the selected reject option.
 5. Phase 4: done (`npm run compat:probe`, see "Revalidating a Vibe release" in `docs/compatibility.md`; the pin now lives in `src/backends/pinned.ts`). The script was NOT run against a real Vibe on this machine (none installed), so it is untested against real Vibe until someone runs it; the tool-path resolver check, tool inventory and hosted inference stay MANUAL.
-6. Phase 5: hosted soak (gate 3 as redefined above), then RC2.
-7. Gates 4-5 (desktop registration, plugin install) can happen at any time; gate 6 (Intel and clean account) comes last.
+6. Phase 5: hosted soak (gate 3 as redefined above), then the next release candidate.
+7. Gate 4 (desktop registration) passed on 2026-10-05; gate 5 (plugin install) can happen at any time; gate 6 (Intel and clean account) comes last.
 
 Recorded gaps after Phase 4:
 
 1. Large or unreadable repos failing review at launch: fixed (a failed launch snapshot becomes a result warning and the integrity comparison is skipped).
 2. Failed runs keeping a live session: fixed (every path to `failed` releases the backend session once).
 3. Message events are emitted at newline or turn end, so `vibe_status` does not stream text live: accepted, end-of-turn delivery is fine.
-4. The programmatic backend passed the task via `--prompt` argv, visible in `ps`: fixed (the task goes through an owner-only prompt file that the shim reads and deletes; ACP is unchanged). Unverified: the real Vibe end-to-end run of this path, because Vibe is not installed on the fixing machine; only the shim logic, a fake `vibe` package, and the TypeScript launch args were exercised.
+4. The programmatic backend passed the task via `--prompt` argv, visible in `ps`: fixed (the task goes through an owner-only prompt file that the shim reads and deletes; ACP is unchanged). The hosted programmatic review and edit on 2026-10-05 ran through this path successfully; the `ps` argv check (T7) was not recorded.
 5. `verify:release` ran tests before build: fixed (order is now lint, typecheck, build, test, acceptance, secret-scan, sbom; the compat-probe self-build fallback is kept for standalone `npx vitest run`).
-6. `.mcp.json` needed `npm run build` in a fresh checkout: fixed (`prepare` runs the build on `npm ci` / `npm install`). Unverified: the offline tarball smoke test (`smoke:install`), which needs a populated npm cache; by npm semantics and `--ignore-scripts` on its pack and install steps `prepare` does not run there.
+6. `.mcp.json` needed `npm run build` in a fresh checkout: fixed (`prepare` runs the build on `npm ci` / `npm install`). `package:rc` with its offline smoke install has since passed on both machines, and a fresh `npm ci` on the target machine ran the `prepare` build. The smoke install itself uses `--ignore-scripts`, so `prepare` does not run there.
 
 ## Platform research (2026-10-05)
 
@@ -189,7 +189,7 @@ Token and speed work decided after the research, all implemented and tested agai
 1. Done: `vibe_status`, `vibe_review_start` and `vibe_edit_start` take `wait_seconds` (0–300) and return on a new event, a state change, a pending request, or a state where the coordinator must act. The wait is event-driven and honors MCP request cancellation and shutdown. `configure-codex` writes `tool_timeout_sec = 600`.
 2. Done: `limits.mcp_result_format` (`text` default, `structured`, `both`) sends the JSON once; `max_mcp_result_chars` defaults to 8000; `vibe_result` defaults to `detail: "compact"` with patches up to 4000 bytes inline (`summary` is kept as a deprecated alias); `vibe_status` defaults to 10 events. Measured on a typical edit run: status 4912 → 1403 bytes, result 4102 → 2115, start 1064 → 559. The `text` default assumes Codex reads the text block (check R1).
 3. Done: probes are cached per backend instance (10 minutes on success, 30 s on failure, keyed on the executable and launcher interpreter path and stat, single-flight, with a `fresh` bypass). In the fixture setup, a run's availability checks drop from two spawns to none once the cache is warm.
-4. Done: rejections are sent as the selected reject option; `cancel()` and `close()` answer a pending permission request `cancelled` (an elicitation `cancel`), send `session/cancel`, and allow up to 500 ms for the turn to end before terminating. Uncorrelated or duplicate permission requests still get `cancelled` as a fail-closed refusal. Unverified against real Vibe: that it continues after a selected reject, and that 500 ms is enough.
+4. Done: rejections are sent as the selected reject option; `cancel()` and `close()` answer a pending permission request `cancelled` (an elicitation `cancel`), send `session/cancel`, and allow up to 500 ms for the turn to end before terminating. Uncorrelated or duplicate permission requests also get the selected reject option, with `cancelled` only when no reject option is offered. Unverified against real Vibe: that it continues after a selected reject, and that 500 ms is enough.
 
 Also found while fixing item 4: the fake ACP fixture read `answer.result.outcome`, so allow and reject both ended the turn `cancelled`. Both the permission and elicitation modes are now fixed. The old elicitation backend test had passed under the bug because it only waited for `completed`; it now asserts `end_turn` after accept and `cancelled` after decline or cancel.
 
@@ -227,18 +227,20 @@ Open questions left as is: a probe cached as available after an in-place Vibe up
 The 2026-10-03 hosted attempts in [docs/acceptance.md](docs/acceptance.md) and the correction request in [docs/reviews/vibe-draft-corrections.md](docs/reviews/vibe-draft-corrections.md) found three P1 defects in the unmodified supervisor. The target-machine work on 2026-10-05 fixed B1/B3 and verified hosted authentication for B2; the descriptions below preserve the original diagnosis:
 
 - **B1, nested path grants.** Vibe 2.25.8 matches absolute glob allowlists with `PurePath.match`, so the `<root>/**` patterns written by `src/backends/profile.ts` authorize immediate children but not nested files. Hosted reviews saw `read_file` report "permanently disabled". The intended fix is Vibe's encoded `vibe-path:directory_recursive:<canonical-root>` grant, keeping the `never` fallback, denylist, and sensitive patterns. It must be verified against the installed resolver, not by environment-string assertions.
-- **B2, browser-login credential under private HOME.** Fixed with a mocked `security` only; real Keychain lookup unverified until the target machine confirms it (see "Work on the target machine before hosted tests"). Original problem: The `ai.mistral.vibe` / `MISTRAL_API_KEY` Keychain item is found with the real HOME but not with the worker's fresh HOME, so hosted runs fail authentication unless `MISTRAL_API_KEY` is exported. The correction request specifies the fix: a bounded, exact-argv Keychain lookup in the shim using the original HOME context only for that subprocess, run after version/entrypoint validation, with explicit nonempty environment credentials taking precedence, and the context removed before Vibe starts.
+- **B2, browser-login credential under private HOME.** Fixed, and confirmed by browser-login authentication in the 2026-10-05 hosted runs. Original problem: The `ai.mistral.vibe` / `MISTRAL_API_KEY` Keychain item is found with the real HOME but not with the worker's fresh HOME, so hosted runs fail authentication unless `MISTRAL_API_KEY` is exported. The correction request specifies the fix: a bounded, exact-argv Keychain lookup in the shim using the original HOME context only for that subprocess, run after version/entrypoint validation, with explicit nonempty environment credentials taking precedence, and the context removed before Vibe starts.
 - **B3, agent-layer permission overrides.** The Plan (review) and Accept Edits (edit) agents can override tool permissions. The previous draft's `VIBE_AGENTS__...` environment overrides are not a supported mechanism. The effective permissions after all configuration and agent layers must be inspected for both modes; this needs the installed Vibe source.
 
 ## Pre-delivery work possible without hosted access
 
 - ~~Fix B2 with a mocked `security` binary~~ Done: `src/backends/runtime/test_keychain_credential.py` and `tests/unit/original-home.test.ts`.
 - Vibe cannot be installed on the preparing machine, so B1 and B3 move to the target machine (see "Work on the target machine before hosted tests" below). Anything that needs the installed Vibe package belongs in the field test plan, not here.
-- Build a fresh RC (`0.9.0-rc.2`) with an explicitly populated offline npm cache, run `package:rc` and `smoke:install` (this also verifies gap 6), and deliver the tarball with `SHA256SUMS` alongside the checkout.
+- ~~Build a fresh RC with an explicitly populated offline npm cache~~ Done: rc.2 on 2026-10-05, superseded by rc.3 (see "Release artifacts and reproduction").
 - ~~Run the Vibe-free Python tests from `verify:release` so CI covers them~~ Done: `npm run test:python` runs `test_prompt_file.py` and `test_keychain_credential.py`, and `verify:release` calls it right after `npm test`. `test_vibe_supervisor_launcher.py` is excluded because it needs an installed Vibe.
-- Run a cold review of `ee0b7cb..HEAD` before delivery.
+- ~~Run a cold review of `ee0b7cb..HEAD` before delivery~~ Done; see "Cold review before delivery".
 
 ## Work on the target machine before hosted tests
+
+Status 2026-10-05: all three items below are done (B1 and B3 fixed in `291fc8c` and verified against the installed resolver; B2 confirmed by hosted authentication). Kept for the record.
 
 These need the installed Vibe 2.25.8 package but no credential or inference, so do them after T3 and before T6:
 
@@ -251,6 +253,8 @@ These need the installed Vibe 2.25.8 package but no credential or inference, so 
 Run on a macOS machine with Vibe 2.25.8 installed and browser login completed. Hosted steps (T6 onward) send source and tasks to Mistral and incur usage; run them only with the owner's authorization and only against a throwaway repository containing no secrets. Stop at the first failing step, record it, and do not work around a blocker by weakening policy (no `always` fallback, shell, network, or project trust).
 
 Record every step in a new dated section of [docs/acceptance.md](docs/acceptance.md) (and `docs/acceptance.json` for machine-readable status): exact commands, versions, run IDs, PASS/FAIL, and remaining uncertainty. Never record credentials, and redact task text only if it contains anything sensitive.
+
+Status after the 2026-10-05 target-machine session ([evidence](docs/reviews/rc2-target-test-2026-10-05/Read.md)): T1 (fresh `npm ci` with the `prepare` build, on the existing account), T2, T3, T5, T6, T9, T10 and T13 passed; T4 failed on nested files and passed after the B1 fix; T11 is covered only for live continuation; T12 is covered only for a refused review write (`Unknown tool 'write_file'`); T7, T8, T14, T15 and T16 are not yet run. R4 is answered: hosted runs used `mistral-medium-3.5`. R1, R2 and R3 remain open; the Codex registration shows the 600-second `tool_timeout_sec`, but no long `wait_seconds` call has been recorded.
 
 | ID | Step | Expected result | Covers |
 |---|---|---|---|
@@ -272,7 +276,9 @@ Record every step in a new dated section of [docs/acceptance.md](docs/acceptance
 | T15 | 100-run hosted soak per the redefined gate 3, mixing reviews, edits, continuation, cancellation, and restart/load. | Zero unexpected failures, zero permission requests in normal runs, no leaked processes (`pgrep -fl vibe`), bounded artifacts. | Gate 3, Phase 5 |
 | T16 | Repeat T1–T6 on an Intel Mac and on a clean OS account. | Same results. | Gate 6 |
 
-After T6 to T12 pass, decide whether ACP reject options should be sent as `selected` reject option IDs instead of `cancelled` (this only matters if T12 shows Vibe issuing permission requests). After T15 passes, cut RC2 per [docs/acceptance.md](docs/acceptance.md).
+After T6 to T12 pass, decide whether ACP reject options should be sent as `selected` reject option IDs instead of `cancelled` (this only matters if T12 shows Vibe issuing permission requests). After T15 passes, cut the next release candidate per [docs/acceptance.md](docs/acceptance.md).
+
+Open issue from the hosted ACP continuation: a turn that stops with `max_turn_requests` is reported as `completed` with the generic summary "Vibe completed the delegated task." Only the stop reason shows the turn cap was hit. Consider surfacing a non-`end_turn` stop reason as a warning in the result.
 
 A next maintainer should inspect Git status, read this handoff and the usage guide, reproduce local checks when making code changes, and finish those gates before claiming production readiness. Hosted validation sends source/tasks to a provider and may incur usage charges; keep it within user-authorized scope. Record exact versions, commands, outcomes, and remaining uncertainty in acceptance/compatibility docs. Any new version support requires renewed shim, profile, protocol, and effective-tool validation.
 
