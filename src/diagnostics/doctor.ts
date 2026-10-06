@@ -6,6 +6,7 @@ import path from 'node:path';
 import { createPrivateDir, isPathWithinRoot } from '../security/paths.js';
 import { executableSearchPath, getDataDir } from '../config/config.js';
 import { SUPPORTED_VIBE } from '../backends/pinned.js';
+import { inspectOwnerLock } from '../core/owner-lock.js';
 import type { SupervisorConfig } from '../contracts.js';
 
 export interface DoctorCheck { name: string; ok: boolean; status?: 'ok' | 'missing' | 'unverified'; version?: string; message: string }
@@ -115,6 +116,13 @@ export async function runDoctor(config: SupervisorConfig): Promise<DoctorReport>
     try { await access(path.dirname(dataDir), fsConstants.W_OK | fsConstants.X_OK); checks.push({ name: 'data-directory', ok: true, message: 'Supervisor data directory does not exist yet; its parent is writable.' }); }
     catch { checks.push({ name: 'data-directory', ok: false, message: 'Supervisor data directory and its parent are not writable.' }); }
   }
+  try {
+    const lock = await inspectOwnerLock(dataDir);
+    if (!lock.held) checks.push({ name: 'lock', ok: true, message: 'No supervisor currently holds the data directory.' });
+    else if (lock.owner === 'malformed') checks.push({ name: 'lock', ok: false, message: `The supervisor owner lock ${lock.path} is malformed; inspect it manually.` });
+    else if (lock.owner === 'alive') checks.push({ name: 'lock', ok: true, message: `The data directory is held by supervisor pid ${lock.pid} (alive); another session needs its own VIBE_SUPERVISOR_HOME.` });
+    else checks.push({ name: 'lock', ok: true, message: `The data directory lock belongs to pid ${lock.pid}, which is gone or was reused (stale); the next supervisor start takes it over.` });
+  } catch { checks.push({ name: 'lock', ok: false, message: 'The supervisor owner lock could not be inspected.' }); }
   checks.push({ name: 'authentication', ok: true, status: 'unverified', message: 'Vibe authentication was not inspected; Vibe may use its existing local sign-in or operating-system credential store.' });
   checks.push({ name: 'codex-registration', ok: true, status: 'unverified', message: 'Codex desktop visibility is not verified by doctor; run configure-codex and restart Codex after reviewing its changes.' });
   try { await import('@modelcontextprotocol/server'); checks.push({ name: 'mcp-server', ok: true, message: 'The MCP SDK dependency is installed.' }); }

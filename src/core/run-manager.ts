@@ -19,6 +19,8 @@ import { assertNotSupervisorChild } from "../security/environment.js";
 import { createDetachedWorktree, exportDirtySnapshot, removeVerifiedWorktree, resolveBaseCommit } from "../git/worktree.js";
 import { eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
+import { acquireOwnerLock } from "./owner-lock.js";
+import type { OwnerLock } from "./owner-lock.js";
 import { PolicyEngine, normalizeKind } from "./policy-engine.js";
 
 interface Runtime {
@@ -79,6 +81,7 @@ const COMPACT_PATCH_BYTES = 4000;
 const COMPACT_DIFF_STAT_CHARS = 2000;
 const COMPACT_CHANGED_FILES = 50;
 const COORDINATOR_ACTION_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "failed", "cancelled", "closed", "waiting_permission", "waiting_input", "recoverable"]);
+const CONTINUABLE_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "ready", "recoverable"]);
 const SETTLED_RESULT_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "failed", "cancelled"]);
 const DEFAULT_REMEDIATION = "Inspect the run status and supervisor diagnostics, then retry if safe.";
 
@@ -90,8 +93,7 @@ export class RunManager {
   private readonly persisted = new Map<string, RunRecord>();
   private readonly policy: PolicyEngine;
   private initializePromise: Promise<void> | undefined;
-  private ownerToken: string | undefined;
-  private ownerLockPath: string | undefined;
+  private ownerLock: OwnerLock | undefined;
   private initialized = false;
   private stopping = false;
   private activeSlots = 0;
@@ -115,7 +117,7 @@ export class RunManager {
     assertNotSupervisorChild();
     await createPrivateDir(this.dataDir);
     await createPrivateDir(this.runRoot);
-    await this.acquireOwnerLock();
+    this.ownerLock = await acquireOwnerLock(this.dataDir);
     if (this.backends.size === 0) await this.loadDefaultBackends();
     const entries = await readdir(this.runRoot, { withFileTypes: true });
     for (const entry of entries) {
@@ -145,31 +147,11 @@ export class RunManager {
           if (completedBackend) runtime.backend = completedBackend;
           this.runs.set(record.runId, runtime); continue;
         }
-        // Requests cannot survive a process restart because the ACP request handle is process-local.
-        if (record.pendingRequest) {
-          delete record.pendingRequest;
-          record.error = supervisorError("VSUP_REQUEST_EXPIRED", "The pending request expired when the supervisor restarted.");
-        }
         const backend = this.backends.get(record.backend);
-        if (backend) {
-          runtime.backend = backend;
-          try {
-            const handle = await backend.recover(record, this.callbacks(runtime));
-            if (handle && this.activeSlots < this.config.maxConcurrentRuns) {
-              runtime.handle = handle; runtime.slot = true; this.activeSlots += 1;
-              if (runtime.record.state === "recoverable") await this.setState(runtime, "ready");
-              this.resumeDeadline(runtime);
-              this.runs.set(record.runId, runtime); continue;
-            }
-            if (handle) await backend.close(handle).catch(() => undefined);
-          } catch { /* Persist a recoverable record below; never resubmit its task. */ }
-        }
-        record.state = "recoverable";
-        record.updatedAt = new Date().toISOString();
-        delete record.pendingRequest;
-        if (!record.error) record.error = supervisorError("VSUP_SESSION_NOT_RESUMABLE", "No resumable backend session was recovered.");
-        runtime.record = record; runtime.events = events; this.runs.set(record.runId, runtime); this.persisted.set(record.runId, record);
-        await this.persist(runtime);
+        if (backend) runtime.backend = backend;
+        this.runs.set(record.runId, runtime);
+        await this.settleRecovered(runtime);
+        if (isTerminal(runtime.record.state)) this.persisted.set(record.runId, runtime.record);
       } catch {
         // One corrupt record must not prevent recovery of other runs.
       }
@@ -305,38 +287,53 @@ export class RunManager {
 
   async continue(value: ContinueToolInput): Promise<Record<string, unknown>> {
     const input = parseInput(continueSchema, value); const runtime = this.requireRun(input.run_id);
+    const record = runtime.record;
     if (!runtime.backend) {
-      const backend = this.backends.get(runtime.record.backend);
+      const backend = this.backends.get(record.backend);
       if (backend) runtime.backend = backend;
     }
-    const lazyRecovery = runtime.record.state === "completed";
-    if (runtime.backend && !runtime.handle && !lazyRecovery) {
-      const handle = await runtime.backend.recover(runtime.record, this.callbacks(runtime));
-      if (handle) runtime.handle = handle;
-    }
-    if (!runtime.backend || (!runtime.handle && !lazyRecovery)) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available for continuation.");
-    const capability = await runtime.backend.probe();
+    const backend = runtime.backend;
+    if (!backend) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available for continuation.");
+    const capability = await backend.probe();
     if (!capability.supportsContinue) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "The active backend does not support continuing this session.");
-    if (runtime.record.pendingRequest || (runtime.record.state !== "completed" && runtime.record.state !== "ready" && runtime.record.state !== "recoverable")) throw codedError("VSUP_INVALID_STATE", "This run cannot accept a continuation in its current state.");
-    if (runtime.record.state === "completed") {
+    if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
+    if (record.pendingRequest || !CONTINUABLE_STATES.has(record.state)) throw codedError("VSUP_INVALID_STATE", "This run cannot accept a continuation in its current state.");
+    if (record.state !== "ready") {
       if (runtime.slot) throw codedError("VSUP_INVALID_STATE", "A continuation for this run is already starting.");
       if (this.activeSlots >= this.config.maxConcurrentRuns) throw codedError("VSUP_LIMIT_EXCEEDED", "No active run slot is available for continuation.");
       runtime.slot = true; this.activeSlots += 1;
       if (!runtime.handle) {
         let recovered: BackendRunHandle | undefined;
-        try { recovered = await runtime.backend.recover(runtime.record, this.callbacks(runtime)); }
+        try { recovered = await backend.recover(record, this.callbacks(runtime)); }
         catch { recovered = undefined; }
-        if (!recovered) { this.releaseSlot(runtime); throw codedError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available for continuation."); }
+        if (!recovered) { await this.rejectContinuation(runtime); throw codedError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available for continuation."); }
+        if (this.stopping || !CONTINUABLE_STATES.has(record.state)) {
+          await backend.close(recovered).catch(() => undefined);
+          this.releaseSlot(runtime);
+          throw codedError("VSUP_INVALID_STATE", "This run changed state while its session was being recovered.");
+        }
         runtime.handle = recovered;
       }
       if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
-      delete runtime.record.finishedAt;
-      runtime.record.launchedAt = new Date().toISOString();
-      await this.setState(runtime, "running", { startedAt: runtime.record.launchedAt });
-      this.armDeadline(runtime, runtime.record.limits.timeoutSeconds * 1000);
+      delete record.finishedAt; delete record.error;
+      record.launchedAt = new Date().toISOString();
+      await this.setState(runtime, "running", { startedAt: record.launchedAt });
+      this.armDeadline(runtime, record.limits.timeoutSeconds * 1000);
     }
-    await runtime.backend.continue(runtime.handle!, input.message);
-    return { run_id: runtime.record.runId, state: runtime.record.state };
+    if (!runtime.handle) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available for continuation.");
+    await backend.continue(runtime.handle, input.message);
+    return { run_id: record.runId, state: record.state };
+  }
+
+  private async rejectContinuation(runtime: Runtime): Promise<void> {
+    this.releaseSlot(runtime);
+    const record = runtime.record;
+    if (record.state === "completed") return;
+    record.error = supervisorError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available for continuation.");
+    record.updatedAt = new Date().toISOString();
+    try { await this.persist(runtime); }
+    catch (error) { if (!this.degrade(runtime, error)) this.reportBackground(runtime, "continue-rejection", error); }
+    this.notify(runtime);
   }
 
   async respond(value: RespondToolInput): Promise<Record<string, unknown>> {
@@ -519,61 +516,10 @@ export class RunManager {
 
   private async ready(): Promise<void> { if (!this.initialized) await this.initialize(); }
 
-  private async acquireOwnerLock(): Promise<void> {
-    const lockPath = path.join(this.dataDir, "supervisor.lock");
-    const recoveryLock = path.join(this.dataDir, "supervisor.lock.recovery");
-    const token = randomUUID();
-    const payload = JSON.stringify({ pid: process.pid, token, started_at: new Date().toISOString() });
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const handle = await open(lockPath, "wx", 0o600);
-        try { await handle.writeFile(payload, "utf8"); await handle.sync(); } finally { await handle.close(); }
-        this.ownerToken = token; this.ownerLockPath = lockPath; return;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-        const recoveryToken = randomUUID();
-        let recoveryHandle;
-        try { recoveryHandle = await open(recoveryLock, "wx", 0o600); }
-        catch (recoveryError) { if ((recoveryError as NodeJS.ErrnoException).code === "EEXIST") throw codedError("VSUP_INVALID_STATE", "Another process is recovering the supervisor owner lock; retry shortly."); throw recoveryError; }
-        try {
-          await recoveryHandle.writeFile(JSON.stringify({ pid: process.pid, token: recoveryToken }), "utf8"); await recoveryHandle.sync();
-        } finally { await recoveryHandle.close(); }
-        try {
-          const info = await lstat(lockPath);
-          if (info.isSymbolicLink() || !info.isFile() || info.size > 4096) throw codedError("VSUP_INVALID_STATE", "The supervisor owner lock is unsafe; inspect it manually.");
-          const currentText = await readFile(lockPath, "utf8");
-          let current: unknown;
-          try { current = JSON.parse(currentText) as unknown; } catch { throw codedError("VSUP_INVALID_STATE", "The supervisor owner lock is malformed; inspect it manually."); }
-          if (!current || typeof current !== "object" || !("pid" in current) || typeof current.pid !== "number" || !Number.isSafeInteger(current.pid) || current.pid <= 0 || !("token" in current) || typeof current.token !== "string") throw codedError("VSUP_INVALID_STATE", "The supervisor owner lock is invalid; inspect it manually.");
-          try {
-            process.kill(current.pid, 0);
-            throw codedError("VSUP_INVALID_STATE", "Another Vibe Supervisor process owns this data directory.");
-          } catch (probeError) {
-            if ((probeError as NodeJS.ErrnoException).code !== "ESRCH") throw probeError;
-          }
-          if (await readFile(lockPath, "utf8") !== currentText) throw codedError("VSUP_INVALID_STATE", "Supervisor lock changed during stale-owner recovery; retry.");
-          await rm(lockPath, { force: false });
-        } finally {
-          try {
-            const guard = JSON.parse(await readFile(recoveryLock, "utf8")) as { token?: unknown };
-            if (guard.token === recoveryToken) await rm(recoveryLock, { force: false });
-          } catch { /* Do not remove another process's recovery lock. */ }
-        }
-      }
-    }
-    throw codedError("VSUP_INVALID_STATE", "Could not acquire the supervisor data-directory lock.");
-  }
-
   private async releaseOwnerLock(): Promise<void> {
-    if (!this.ownerLockPath || !this.ownerToken) return;
-    try {
-      const info = await lstat(this.ownerLockPath);
-      if (info.isFile() && !info.isSymbolicLink() && info.size <= 4096) {
-        const lock = JSON.parse(await readFile(this.ownerLockPath, "utf8")) as { token?: unknown };
-        if (lock.token === this.ownerToken) await rm(this.ownerLockPath, { force: false });
-      }
-    } catch { /* Preserve a replaced, malformed, or already removed lock. */ }
-    this.ownerToken = undefined; this.ownerLockPath = undefined;
+    const lock = this.ownerLock;
+    this.ownerLock = undefined;
+    await lock?.release();
   }
 
   private makeRuntime(record: RunRecord, directory: string, task: string, contextFiles: string[], allowShell: boolean, backendPreference: "auto" | BackendKind, events: SupervisorEvent[] = []): Runtime {
@@ -823,6 +769,30 @@ export class RunManager {
     }
   }
 
+  private async settleRecovered(runtime: Runtime): Promise<void> {
+    const record = runtime.record;
+    const previous = record.state;
+    const neverSubmitted = previous === "queued" || previous === "starting";
+    const next: RunState = neverSubmitted ? "cancelled" : "recoverable";
+    let changed = previous !== next;
+    if (record.pendingRequest) {
+      delete record.pendingRequest;
+      record.error = supervisorError("VSUP_REQUEST_EXPIRED", "The pending request expired when the supervisor restarted.");
+      changed = true;
+    }
+    if (neverSubmitted) record.error = supervisorError("VSUP_CANCELLED", "The run was not submitted before the supervisor restarted.");
+    else if (!record.error && !hasReusableSession(record)) { record.error = supervisorError("VSUP_SESSION_NOT_RESUMABLE", "No resumable backend session was recovered."); changed = true; }
+    if (!changed) return;
+    if (previous !== next) {
+      const now = new Date().toISOString();
+      record.state = next; record.updatedAt = now;
+      if (neverSubmitted) record.finishedAt = now;
+      await this.writeFallbackResult(runtime, next, RESTARTED_WARNING);
+    }
+    try { await this.persist(runtime); }
+    catch (error) { if (!this.degrade(runtime, error)) throw error; }
+  }
+
   private reportBackground(runtime: Runtime | undefined, context: string, error: unknown): void {
     reportBackgroundFailure(context, error);
     if (!runtime || this.stopping) return;
@@ -845,7 +815,7 @@ export class RunManager {
     catch (error) { throw asStorageError(error, runtime.directory); }
   }
 
-  private async writeFallbackResult(runtime: Runtime, resultState: RunState): Promise<void> {
+  private async writeFallbackResult(runtime: Runtime, resultState: RunState, warning = ARTIFACTS_INCOMPLETE_WARNING): Promise<void> {
     const previous = runtime.record.result;
     const warnings = withoutStopReasonWarnings(previous?.warnings ?? []);
     runtime.record.result = {
@@ -853,7 +823,7 @@ export class RunManager {
       summary: previous?.summary ?? "Vibe run ended before normal completion.",
       artifacts: previous?.artifacts ?? [],
       changedFiles: previous?.changedFiles ?? [],
-      warnings: warnings.includes(ARTIFACTS_INCOMPLETE_WARNING) ? warnings : [...warnings, ARTIFACTS_INCOMPLETE_WARNING],
+      warnings: warnings.includes(warning) ? warnings : [...warnings, warning],
       ...(previous?.integrity ? { integrity: previous.integrity } : {})
     };
     await atomicWriteJson(path.join(runtime.directory, "result.json"), this.resultWire(runtime, resultState)).catch((error: unknown) => this.degrade(runtime, asStorageError(error, runtime.directory)));
@@ -982,14 +952,6 @@ export class RunManager {
     this.pumpQueue();
   }
 
-  private resumeDeadline(runtime: Runtime): void {
-    if (runtime.record.state === "completed") return;
-    const deadline = Date.parse(runtime.record.launchedAt ?? runtime.record.startedAt ?? runtime.record.createdAt) + runtime.record.limits.timeoutSeconds * 1000;
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) { this.deadline(runtime).catch((error: unknown) => this.reportBackground(runtime, "deadline", error)); return; }
-    this.armDeadline(runtime, remaining);
-  }
-
   private scheduleIdleExpiration(runtime: Runtime): void {
     if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
     if (!runtime.handle || !runtime.backend) return;
@@ -1086,6 +1048,10 @@ export class RunManager {
   }
 }
 
+function hasReusableSession(record: RunRecord): boolean {
+  return record.acp?.sessionId !== undefined && record.acp.capabilities?.loadSession === true;
+}
+
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function parseInput<T>(schema: { parse(value: unknown): T }, value: unknown): T {
@@ -1137,6 +1103,7 @@ async function describeArtifact(name: string, file: string, mediaType: string): 
 }
 
 const ARTIFACTS_INCOMPLETE_WARNING = "Run artifacts could not be finalized; the listed artifacts may be missing or incomplete.";
+const RESTARTED_WARNING = "The supervisor restarted before this run finished; artifacts were not re-exported and may be incomplete.";
 const CHANGED_WITH_WRITE_WARNING = "Possible read-only boundary violation: the review worker issued a write-capable tool call and the source workspace changed. Inspect the changed paths before trusting the review.";
 const STOP_WARNING_PREFIX = "Vibe stopped with stop reason ";
 const MAX_STOP_REASON_CHARS = 64;
