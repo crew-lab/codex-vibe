@@ -142,3 +142,7 @@ For details, read [security.md](security.md), [compatibility.md](compatibility.m
 ## Workspace permission profiles
 
 File tools use a literal recursive workspace grant with a `never` fallback and secret/reserved-path denials. Supervisor-generated agent definitions in each private VIBE_HOME preserve these rules after Vibe selects Plan or Accept Edits. They do not inherit user or project agents. Reviews enable only read/search; edits add write/edit in the detached worktree, with no global write permission.
+
+## Opt-in per-connection storage
+
+`serve --stdio --isolated` starts each MCP server with a fresh private configuration snapshot and persistent run directory. Register it using `configure-codex --user --isolated`. This allows independent clients to connect without competing for the default storage owner lock. The default remains shared storage. Configuration refresh, run ownership, retention, and explicit recovery requirements are described in [configuration](configuration.md#independent-mcp-clients).

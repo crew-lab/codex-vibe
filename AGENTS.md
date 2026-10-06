@@ -4,7 +4,7 @@ These instructions apply to this repository and its descendants unless a more sp
 
 ## Project and orientation
 
-This is codex-vibe, a local MCP supervisor for Mistral Vibe review and isolated edit runs. The npm package is `vibe-supervisor`, version `0.9.0-rc.3`, ESM, private and unpublished. Preserve the existing MIT license and copyright notice.
+This is codex-vibe, a local MCP supervisor for Mistral Vibe review and isolated edit runs. The npm package is `vibe-supervisor`, version `0.9.0-rc.4`, ESM, private and unpublished. Preserve the existing MIT license and copyright notice.
 
 Read [Read.md](Read.md) for installation and usage, [Handoff.md](Handoff.md) for implementation status and remaining work, and [docs/functionality.md](docs/functionality.md) for behavior. Consult the focused security, compatibility, configuration, protocol, acceptance, and ADR documents before changing those boundaries.
 

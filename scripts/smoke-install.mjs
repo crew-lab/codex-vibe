@@ -39,12 +39,27 @@ try {
   const client = new Client({ name: 'vibe-supervisor-release-smoke', version: manifest.version });
   try {
     await client.connect(transport);
+    if (client.getServerVersion()?.version !== manifest.version) throw new Error("MCP server version mismatch.");
     const listed = await client.listTools();
     if (listed.tools.length !== 8) throw new Error(`Expected eight MCP tools; received ${listed.tools.length}.`);
     const status = await client.callTool({ name: 'vibe_status', arguments: { run_id: '00000000-0000-4000-8000-000000000001' } });
     if (!status.isError) throw new Error('Expected status on an unknown run to return a normalized error.');
+    // Keep the default owner live while two independent clients use isolated storage.
+    const isolated = [0, 1].map(index => {
+      const transport = new StdioClientTransport({ command: process.execPath, args: [cli, 'serve', '--stdio', '--isolated'], env, stderr: 'pipe' });
+      return { transport, client: new Client({ name: `isolated-smoke-${index}`, version: manifest.version }) };
+    });
+    try {
+      await Promise.all(isolated.map(async ({ client, transport }) => {
+        await client.connect(transport);
+        if ((await client.listTools()).tools.length !== 8) throw new Error('Isolated tool inventory mismatch.');
+        const response = await client.callTool({ name: 'vibe_status', arguments: { run_id: '00000000-0000-4000-8000-000000000001' } });
+        if (!response.isError || !JSON.stringify(response).includes('VSUP_NOT_FOUND')) throw new Error('Isolated backend did not respond.');
+      }));
+    } finally { await Promise.all(isolated.map(({ client }) => client.close())); }
+
   } finally {
     await client.close();
   }
-  process.stdout.write(JSON.stringify({ status: 'PASS', package: manifest.name, version: manifest.version, isolatedHome: true, runtimeShim: 'present', installedMcpInitializeAndListTools: 'PASS', eofShutdown: 'PASS' }) + '\n');
+  process.stdout.write(JSON.stringify({ status: 'PASS', package: manifest.name, version: manifest.version, isolatedHome: true, runtimeShim: 'present', installedMcpInitializeAndListTools: 'PASS', eofShutdown: 'PASS', concurrentIsolatedMcp: 'PASS' }) + '\n');
 } finally { await rm(tmpRoot, { recursive: true, force: true }); }

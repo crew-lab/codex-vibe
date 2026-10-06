@@ -7,6 +7,7 @@ import { homedir } from 'node:os';
 import { parse } from 'smol-toml';
 import { getConfigPath, getDataDir, loadConfig } from './config/config.js';
 import { validateConfig } from './config/validation.js';
+import { prepareIsolatedHome } from './config/isolated-home.js';
 import { DEFAULT_CONFIG } from './config/defaults.js';
 import { createPrivateDir, createPrivateFile } from './security/paths.js';
 import { runDoctor } from './diagnostics/doctor.js';
@@ -17,7 +18,7 @@ import type { RunManagerTools } from './mcp/tools.js';
 import { supervisorError, type SupervisorErrorCode } from './contracts.js';
 import { environmentSecrets, redactSecrets } from './security/redaction.js';
 
-const APP_VERSION = '0.9.0-rc.3';
+const APP_VERSION = '0.9.0-rc.4';
 
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
 function fail(message: string, code = 1): never { process.exitCode = code; throw Object.assign(new Error(message), { code: 'VSUP_INVALID_ARGUMENT' }); }
@@ -44,7 +45,7 @@ async function validateConfigFile(file: string): Promise<void> {
   print({ valid: true, config });
 }
 
-async function configureCodex(scope: 'user' | 'project', dryRun: boolean, projectPath = process.cwd()): Promise<void> {
+async function configureCodex(scope: 'user' | 'project', dryRun: boolean, projectPath = process.cwd(), isolated = false): Promise<void> {
   if (scope === 'project') {
     const info = await lstat(path.resolve(projectPath));
     if (info.isSymbolicLink() || !info.isDirectory()) fail('Project path must be an existing real directory.', 2);
@@ -55,7 +56,8 @@ async function configureCodex(scope: 'user' | 'project', dryRun: boolean, projec
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   const executable = process.execPath;
   const cliPath = path.resolve(process.argv[1] ?? 'dist/cli.js');
-  const block = `[mcp_servers.vibe-supervisor]\ncommand = ${quoteToml(executable)}\nargs = [${quoteToml(cliPath)}, "serve", "--stdio"]\ntool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SECONDS}\n`;
+  const launchArgs = [cliPath, 'serve', '--stdio', ...(isolated ? ['--isolated'] : [])];
+  const block = `[mcp_servers.vibe-supervisor]\ncommand = ${quoteToml(executable)}\nargs = [${launchArgs.map(quoteToml).join(", ")}]\ntool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SECONDS}\n`;
   let original = '';
   try { original = await readFile(file, 'utf8'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   let updated: string;
@@ -64,7 +66,7 @@ async function configureCodex(scope: 'user' | 'project', dryRun: boolean, projec
   const servers = parsedExisting.mcp_servers;
   if (servers !== undefined && (!servers || typeof servers !== 'object' || Array.isArray(servers))) fail('Codex config mcp_servers must be a table; no changes were made.', 2);
   const existingEntry = servers && typeof servers === 'object' ? (servers as Record<string, unknown>)['vibe-supervisor'] : undefined;
-  const target = { command: executable, args: [cliPath, 'serve', '--stdio'], tool_timeout_sec: CODEX_TOOL_TIMEOUT_SECONDS };
+  const target = { command: executable, args: launchArgs, tool_timeout_sec: CODEX_TOOL_TIMEOUT_SECONDS };
   if (existingEntry && typeof existingEntry === 'object' && !Array.isArray(existingEntry)) {
     const entry = existingEntry as Record<string, unknown>;
     if (entry.command === target.command && JSON.stringify(entry.args) === JSON.stringify(target.args) && entry.tool_timeout_sec === target.tool_timeout_sec && Object.keys(entry).length === 3) {
@@ -186,7 +188,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   try {
     if (command === '--version' || command === '-v') { print(APP_VERSION); return; }
     if (command === 'help' || command === '--help' || command === '-h' || !command) {
-      print('Usage: vibe-supervisor <serve --stdio|doctor [--json]|init|configure-codex --user|--project [--dry-run]|test-acp|config validate [path]|runs list|show|tail|cleanup [run-id]|--version>'); return;
+      print('Usage: vibe-supervisor <serve --stdio [--isolated]|doctor [--json]|init|configure-codex --user|--project [--dry-run] [--isolated]|test-acp|config validate [path]|runs list|show|tail|cleanup [run-id]|--version>'); return;
     }
     if (command === 'init') { if (args.length) fail('init accepts no options.', 2); return await initConfig(); }
     if (command === 'config' && args[0] === 'validate') { if (args.length > 2) fail('Usage: vibe-supervisor config validate [path]', 2); return await validateConfigFile(args[1] ?? getConfigPath()); }
@@ -197,17 +199,17 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
       if (args.includes('--user') && args.includes('--project')) fail('Choose only one scope.', 2);
       if (args.includes('--user') && scope !== 'user' || args.includes('--project') && scope !== 'project') fail('Conflicting Codex configuration scopes.', 2);
       if (scope !== 'user' && scope !== 'project') fail('Scope must be user or project.', 2);
-      const known = new Set(['--user', '--project', '--dry-run', '--scope', '--path']);
+      const known = new Set(['--user', '--project', '--dry-run', '--scope', '--path', '--isolated']);
       if (args.some((arg) => arg.startsWith('--') && !known.has(arg) && !arg.startsWith('--scope=') && !arg.startsWith('--path='))) fail('Unknown configure-codex option.', 2);
       for (let i = 0; i < args.length; i++) {
         const arg = args[i] ?? '';
         if (arg === '--scope' || arg === '--path') { const next = args[i + 1]; if (!next || next.startsWith('--')) fail(`${arg} requires a value.`, 2); i++; continue; }
-        if (arg.startsWith('--scope=') || arg.startsWith('--path=') || arg === '--user' || arg === '--project' || arg === '--dry-run') continue;
+        if (arg.startsWith('--scope=') || arg.startsWith('--path=') || arg === '--user' || arg === '--project' || arg === '--dry-run' || arg === '--isolated') continue;
         fail(`Unexpected configure-codex argument: ${arg}`, 2);
       }
       const pathIndex = args.indexOf('--path');
       const projectPath = args.find((arg) => arg.startsWith('--path='))?.slice('--path='.length) ?? (pathIndex >= 0 ? args[pathIndex + 1] : undefined) ?? process.cwd();
-      return await configureCodex(scope, args.includes('--dry-run'), projectPath);
+      return await configureCodex(scope, args.includes('--dry-run'), projectPath, args.includes('--isolated'));
     }
     if (command === 'doctor') {
       if (args.some((arg) => arg !== '--json')) fail('Unknown doctor option.', 2);
@@ -216,7 +218,15 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
       if (!report.ok) process.exitCode = 1;
       return;
     }
-    if (command === 'serve') { if (args.length !== 1 || args[0] !== '--stdio') fail('Usage: vibe-supervisor serve --stdio', 2); return await serve(); }
+    if (command === 'serve') {
+      if (args[0] !== '--stdio' || args.length > 2 || (args.length === 2 && args[1] !== '--isolated')) fail('Usage: vibe-supervisor serve --stdio [--isolated]', 2);
+      if (args.includes('--isolated')) {
+        const home = await prepareIsolatedHome();
+        process.env.VIBE_SUPERVISOR_HOME = home;
+        process.stderr.write(`Vibe private session directory: ${home}\n`);
+      }
+      return await serve();
+    }
     if (command === 'runs') return await runsCommand(args);
     if (command === 'test-acp') {
       if (args.length) fail('test-acp accepts no options.', 2);

@@ -46,6 +46,19 @@ describe('CLI local setup', () => {
     expect((await readdir(codex)).filter((name) => name.startsWith('config.toml.bak-'))).toHaveLength(1);
   });
 
+  it('registers isolated startup idempotently without changing other settings', async () => {
+    const home = await tempDir(); const codex = path.join(home, '.codex'); await mkdir(codex);
+    const file = path.join(codex, 'config.toml');
+    await writeFile(file, 'title = "keep"\n');
+    vi.stubEnv('HOME', home); captureOutput();
+    await runCli(['configure-codex', '--user', '--isolated']);
+    const source = await readFile(file, 'utf8');
+    expect(parse(source)).toMatchObject({ title: 'keep', mcp_servers: { 'vibe-supervisor': { args: [expect.any(String), 'serve', '--stdio', '--isolated'], tool_timeout_sec: 600 } } });
+    await runCli(['configure-codex', '--user', '--isolated']);
+    expect(await readFile(file, 'utf8')).toBe(source);
+    expect((await readdir(codex)).filter(name => name.startsWith('config.toml.bak-'))).toHaveLength(1);
+  });
+
   it('dry-run reveals only the new registration block, not unrelated config values', async () => {
     const home = await tempDir(); const codex = path.join(home, '.codex'); await mkdir(codex);
     await writeFile(path.join(codex, 'config.toml'), 'api_key = "UNRELATED_SECRET_SENTINEL"\n');
