@@ -34,7 +34,7 @@ export function isExecutableMissing(error: unknown): boolean {
   return (error as { code?: unknown } | null)?.code === 'ENOENT';
 }
 
-export async function pythonFor(executable: string, env: NodeJS.ProcessEnv): Promise<string> {
+async function shebangWords(executable: string): Promise<string[]> {
   const handle = await open(executable, 'r');
   let firstLine: string;
   try {
@@ -45,10 +45,26 @@ export async function pythonFor(executable: string, env: NodeJS.ProcessEnv): Pro
     firstLine = bytes.subarray(0, bytesRead).toString('utf8').split(/\r?\n/, 1)[0] ?? '';
   } finally { await handle.close(); }
   if (!firstLine.startsWith('#!')) throw new Error('Vibe entrypoint has no Python shebang; refusing unverified runtime');
-  const words = firstLine.slice(2).trim().split(/\s+/);
+  return firstLine.slice(2).trim().split(/\s+/);
+}
+
+export async function pythonFor(executable: string, env: NodeJS.ProcessEnv): Promise<string> {
+  const words = await shebangWords(executable);
   if (words[0] === '/usr/bin/env' && words[1]) return resolveCommand(words[1], env);
   if (words[0]?.startsWith('/')) return words[0];
   throw new Error('Unsupported Vibe Python shebang');
+}
+
+export async function describeMissing(executable: string, error: unknown, env: NodeJS.ProcessEnv = process.env): Promise<Record<string, unknown>> {
+  if (!isExecutableMissing(error)) return {};
+  let resolved: string;
+  try { resolved = await resolveCommand(executable, env); }
+  catch { return { executable_missing: true }; }
+  try { await lstat(resolved); }
+  catch (failure) { if ((failure as NodeJS.ErrnoException).code === 'ENOENT') return { executable_missing: true }; }
+  const words = await shebangWords(resolved).catch(() => []);
+  const interpreter = words[0] === '/usr/bin/env' ? words[1] : words[0];
+  return { interpreter_missing: true, ...(interpreter ? { interpreter } : {}) };
 }
 
 /** Run the installed Vibe module through the pinned, redacting persistence shim. */

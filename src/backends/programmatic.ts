@@ -11,12 +11,12 @@ import { supervisorError } from '../contracts.js';
 import type { SupervisorConfig } from '../contracts.js';
 import { spawnManaged } from '../process/managed.js';
 import { assertNoProjectVibeExtensions, createVibeChildProfile } from './profile.js';
-import { buildVibeLaunch, isExecutableMissing, removePromptFile } from './launcher.js';
+import { buildVibeLaunch, describeMissing, removePromptFile } from './launcher.js';
 import type { VibeLaunch } from './launcher.js';
 import { SUPPORTED_VIBE } from './pinned.js';
 import { executableProbeKey, ProbeCache } from './probe-cache.js';
 import type { ProbeOptions } from './probe-cache.js';
-import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
+import { environmentSecrets, redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { reportBackgroundFailure } from '../diagnostics/background.js';
 
 const execFileAsync = promisify(execFile);
@@ -47,11 +47,13 @@ export class ProgrammaticBackend implements SupervisorBackend {
 
   protected async runProbe(): Promise<BackendCapabilities> {
     const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'vibe-supervisor-probe-')));
+    let secrets: string[] = [];
     try {
       const profile = await createVibeChildProfile({
         runId: 'probe', mode: 'review', task: '', cwd: root, workerWorkspace: root,
         runDirectory: root, limits: { timeoutSeconds: 15, maxTurns: 1, maxEventBytes: 4096, maxTranscriptBytes: 4096, maxArtifactBytes: 4096 }
       }, 'review');
+      secrets = environmentSecrets(profile.env);
       const result = await execFileAsync(executable(this.config), ['--version'], {
         cwd: root, env: profile.env, timeout: 15_000, maxBuffer: 64 * 1024, windowsHide: true
       });
@@ -66,7 +68,8 @@ export class ProgrammaticBackend implements SupervisorBackend {
         details: { ...(version ? { detected_version: version } : {}), reason: version === SUPPORTED_VIBE ? 'Exact tested Vibe build detected' : `Requires exactly Vibe ${SUPPORTED_VIBE}` }
       };
     } catch (error) {
-      return { available: false, backend: this.kind, executable: executable(this.config), supportsContinue: false, supportsPermissionResponse: false, details: { ...(isExecutableMissing(error) ? { executable_missing: true } : {}), reason: 'The Vibe version probe failed.', error: redactSecrets(String(error)) } };
+      const missing = await describeMissing(executable(this.config), error);
+      return { available: false, backend: this.kind, executable: executable(this.config), supportsContinue: false, supportsPermissionResponse: false, details: { ...missing, reason: missing.interpreter_missing ? `The interpreter for the vibe launcher${typeof missing.interpreter === 'string' ? ` (${missing.interpreter})` : ''} was not found.` : 'The Vibe version probe failed.', error: redactSecrets(String(error), secrets) } };
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -89,11 +92,11 @@ export class ProgrammaticBackend implements SupervisorBackend {
     let outputChain = Promise.resolve();
     let stderrChain = Promise.resolve();
     const chunks = createStreamingOutputParser(async (text) => {
-      const redacted = redactSecrets(text, profile.env.MISTRAL_API_KEY ? [profile.env.MISTRAL_API_KEY] : []);
+      const redacted = redactSecrets(text, environmentSecrets(profile.env));
       latestSummary = redacted.slice(-input.limits.maxTranscriptBytes);
       await callbacks.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: `${redacted}\n` } });
     }, input.limits.maxEventBytes);
-    const stderrRedactor = new StreamingRedactor(profile.env.MISTRAL_API_KEY ? [profile.env.MISTRAL_API_KEY] : []);
+    const stderrRedactor = new StreamingRedactor(environmentSecrets(profile.env));
     let outputLimited = false;
     let parserFailed = false;
     const discardPromptFile = async (): Promise<void> => {
@@ -115,7 +118,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
           if (stream === 'stdout') Promise.resolve(callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', 'Vibe programmatic output exceeded the configured transcript limit.') })).catch((error: unknown) => reportBackgroundFailure('programmatic-output-limit', error));
         },
         onStdout: (chunk) => { outputChain = outputChain.then(() => chunks.push(chunk)).catch(async (error: unknown) => {
-          if (!parserFailed) { parserFailed = true; await callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', redactSecrets(String(error), profile.env.MISTRAL_API_KEY ? [profile.env.MISTRAL_API_KEY] : [])) }); }
+          if (!parserFailed) { parserFailed = true; await callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', redactSecrets(String(error), environmentSecrets(profile.env))) }); }
           await child.terminate();
         }); },
         onStderr: (chunk) => {

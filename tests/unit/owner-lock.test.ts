@@ -2,7 +2,7 @@ import { mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { acquireOwnerLock, inspectOwnerLock } from "../../src/core/owner-lock.js";
+import { acquireOwnerLock, inspectOwnerLock, parseElapsedMs, readProcessStartTime } from "../../src/core/owner-lock.js";
 import type { OwnerLockDeps, OwnerLockFs } from "../../src/core/owner-lock.js";
 
 const DATA = "/data";
@@ -30,7 +30,12 @@ function memoryFs(files: Record<string, Entry> = {}) {
       if (!entry) throw Object.assign(new Error("missing"), { code: "ENOENT" });
       return entry.content;
     },
-    async remove(file) { store.delete(file); }
+    async remove(file) { store.delete(file); },
+    async rename(from, to) {
+      const entry = store.get(from);
+      if (!entry) throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      store.delete(from); store.set(to, entry);
+    }
   };
   return { store, fs, writes };
 }
@@ -189,5 +194,100 @@ describe("owner lock on the real filesystem", () => {
     const second = await acquireOwnerLock(root);
     expect(JSON.parse(await readFile(join(root, "supervisor.lock"), "utf8"))).toMatchObject({ pid: process.pid, token: second.token });
     await second.release();
+  });
+});
+
+describe("process start time", () => {
+  it.each([
+    ["05:03", 303_000],
+    ["   00:07  ", 7_000],
+    ["59:59", 3_599_000],
+    ["01:05:03", 3_903_000],
+    ["23:59:59", 86_399_000],
+    ["2-01:05:03", 2 * 86_400_000 + 3_903_000],
+    ["12-00:00:09", 12 * 86_400_000 + 9_000],
+    ["106751-23:47:16", 106_751 * 86_400_000 + 85_636_000]
+  ])("parses ps etime %j", (text, expected) => {
+    expect(parseElapsedMs(text)).toBe(expected);
+  });
+
+  it.each(["", "   ", "abc", "12", "1:2:3:4", "-5:00", "05:3", "1-2", "1-05:03", "00:60", "01:60:00", "24:00:00 junk", "1.5:00"])("rejects the unparsable etime %j", (text) => {
+    expect(parseElapsedMs(text)).toBeUndefined();
+  });
+
+  const zones = ["Pacific/Kiritimati", "Pacific/Pago_Pago", "UTC"];
+  const savedZone = process.env.TZ;
+  afterEach(() => { if (savedZone === undefined) delete process.env.TZ; else process.env.TZ = savedZone; });
+
+  it.each(zones)("reports this process start independent of the Node time zone (%s)", async (zone) => {
+    process.env.TZ = zone;
+    const started = await readProcessStartTime(process.pid);
+    expect(started).toBeDefined();
+    expect(Math.abs((started ?? 0) - (Date.now() - process.uptime() * 1000))).toBeLessThan(3_000);
+  });
+
+  it("returns undefined for a pid that does not exist", async () => {
+    expect(await readProcessStartTime(2 ** 22 + 12345)).toBeUndefined();
+  });
+});
+
+describe("owner lock recovery race", () => {
+  const DEAD = 9001;
+  const stale = () => ({ [LOCK]: old(lockText(DEAD)), [RECOVERY]: { content: JSON.stringify({ pid: 1, token: "x" }), mtimeMs: NOW - 31_000 } });
+  const kill = (target: number) => { if (target === DEAD) throw Object.assign(new Error("gone"), { code: "ESRCH" }); };
+
+  interface Hooks { before?(op: "remove" | "rename", file: string, who: string): Promise<void>; created?(file: string, who: string): void }
+
+  function racers(files: Record<string, Entry>, hooks: Hooks = {}) {
+    const memory = memoryFs(files);
+    const make = (who: string, pid: number): Partial<OwnerLockDeps> => ({
+      fs: {
+        ...memory.fs,
+        createExclusive: async (file, content) => { await memory.fs.createExclusive(file, content); hooks.created?.(file, who); },
+        remove: async (file) => { await hooks.before?.("remove", file, who); await memory.fs.remove(file); },
+        rename: async (from, to) => { await hooks.before?.("rename", from, who); await memory.fs.rename(from, to); }
+      },
+      pid, kill, now: () => NOW, sleep: async () => undefined, processStartTime: async () => undefined
+    });
+    return { ...memory, a: make("a", 4001), b: make("b", 4002) };
+  }
+
+  const winnerOf = (results: PromiseSettledResult<{ token: string }>[]) => (results.find((result) => result.status === "fulfilled") as PromiseFulfilledResult<{ token: string }> | undefined)?.value;
+
+  it("lets exactly one of two acquirers through when both find the recovery lock stale together", async () => {
+    const h = racers(stale());
+    const results = await Promise.allSettled([acquireOwnerLock(DATA, h.a), acquireOwnerLock(DATA, h.b)]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(JSON.parse(h.store.get(LOCK)!.content).token).toBe(winnerOf(results)?.token);
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({ reason: { code: "VSUP_INVALID_STATE" } });
+  });
+
+  it("never takes over a recovery lock that another acquirer created after the stale one was judged", async () => {
+    const gates = new Map<string, () => void>();
+    const gate = (name: string) => new Promise<void>((resolve) => { gates.set(name, resolve); });
+    const open = (name: string) => gates.get(name)?.();
+    const aHoldsRecovery = gate("a-holds-recovery"); const bAtRemoval = gate("b-at-removal"); const aHoldsLock = gate("a-holds-lock");
+    let bSettled: Promise<unknown> = Promise.resolve();
+    const h = racers(stale(), {
+      created: (file, who) => { if (who === "a" && file === RECOVERY) open("a-holds-recovery"); if (who === "a" && file === LOCK) open("a-holds-lock"); },
+      before: async (op, file, who) => {
+        if (who === "b" && file === RECOVERY) await aHoldsRecovery;
+        if (who === "b" && op === "remove" && file === LOCK) { open("b-at-removal"); await aHoldsLock; }
+        if (who === "a" && op === "remove" && file === LOCK) await Promise.race([bAtRemoval, bSettled]);
+      }
+    });
+    const first = acquireOwnerLock(DATA, h.a);
+    const second = acquireOwnerLock(DATA, h.b);
+    bSettled = second.then(() => undefined, () => undefined);
+    const results = await Promise.allSettled([first, second]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(JSON.parse(h.store.get(LOCK)!.content).token).toBe(winnerOf(results)?.token);
+  });
+
+  it("leaves the recovery lock it claimed gone and the data directory free after a successful takeover", async () => {
+    const h = racers(stale());
+    const lock = await acquireOwnerLock(DATA, h.a);
+    expect(JSON.parse(h.store.get(LOCK)!.content).token).toBe(lock.token);
+    expect([...h.store.keys()].filter((file) => file !== LOCK)).toEqual([]);
   });
 });

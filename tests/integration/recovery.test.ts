@@ -162,10 +162,11 @@ describe('restart recovery', () => {
     meta.state = 'running'; meta.launched_at = '2020-01-01T00:00:00.000Z'; delete meta.finished_at; delete meta.result;
     await writeFile(metaPath, JSON.stringify(meta));
     expect(await readdir(pidDir)).toHaveLength(1);
-    const secondBackend = new FakeAcpBackend('load', data, [source]); secondBackend.pidDir = pidDir;
+    const secondBackend = new FakeAcpBackend('marker', data, [source]); secondBackend.pidDir = pidDir;
     const second = new RunManager(config, data, [secondBackend]);
     try {
       await second.initialize();
+      expect(await readFile(path.join(data, 'runs', started.run_id, 'transcript.md'), 'utf8')).not.toContain('continued-turn-marker');
       expect(await second.status({ run_id: started.run_id })).toMatchObject({ state: 'recoverable' });
       expect((await second.status({ run_id: started.run_id })).error).toBeUndefined();
       expect(activeSlots(second)).toBe(0);
@@ -178,7 +179,7 @@ describe('restart recovery', () => {
       expect(status.state).toBe('completed');
       expect(await waitFor(async () => activeSlots(second), (value) => value === 0)).toBe(0);
       expect(await readdir(pidDir)).toHaveLength(2);
-      expect(await readFile(path.join(data, 'runs', started.run_id, 'transcript.md'), 'utf8')).toContain('reply-1');
+      expect(await readFile(path.join(data, 'runs', started.run_id, 'transcript.md'), 'utf8')).toContain('continued-turn-marker');
       expect((await second.result({ run_id: started.run_id })).state).toBe('completed');
     } finally { await first.shutdown(); await second.shutdown(); }
   }, 30_000);
@@ -248,12 +249,12 @@ describe('restart recovery', () => {
     try {
       await second.initialize();
       const begun = Date.now();
-      await expect(second.continue({ run_id: started.run_id, message: 'again' })).rejects.toMatchObject({ code: 'VSUP_SESSION_NOT_RESUMABLE' });
+      await expect(second.continue({ run_id: started.run_id, message: 'again' })).rejects.toMatchObject({ code: 'VSUP_SESSION_NOT_RESUMABLE', message: 'Vibe did not finish loading the session within 30 seconds.' });
       const elapsed = Date.now() - begun;
-      expect(elapsed).toBeGreaterThan(8000);
-      expect(elapsed).toBeLessThan(15_000);
+      expect(elapsed).toBeGreaterThan(28_000);
+      expect(elapsed).toBeLessThan(40_000);
       expect(activeSlots(second)).toBe(0);
-      expect(await second.status({ run_id: started.run_id })).toMatchObject({ state: 'recoverable', error: { code: 'VSUP_SESSION_NOT_RESUMABLE' } });
+      expect(await second.status({ run_id: started.run_id })).toMatchObject({ state: 'recoverable', error: { code: 'VSUP_SESSION_NOT_RESUMABLE', message: 'Vibe did not finish loading the session within 30 seconds.' } });
       await new Promise((resolve) => setTimeout(resolve, 500));
       const pids = (await readdir(pidDir)).map(Number);
       expect(pids).toHaveLength(2);
@@ -261,5 +262,5 @@ describe('restart recovery', () => {
       expect(livePids).toEqual([]);
       expect(await second.status({ run_id: started.run_id })).toMatchObject({ state: 'recoverable' });
     } finally { await first.shutdown(); await second.shutdown(); }
-  }, 40_000);
+  }, 70_000);
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { StreamingRedactor, redactSecrets } from '../../src/security/redaction.js';
+import { StreamingRedactor, redactSecrets, redactedTail } from '../../src/security/redaction.js';
 
 const BEGIN = ['-----BEGIN', 'PRIVATE KEY-----'].join(' ');
 const END = ['-----END', 'PRIVATE KEY-----'].join(' ');
@@ -112,5 +112,56 @@ describe('redactSecrets credential phrases', () => {
     ['MISTRAL_API_KEY is not set'],
   ])('leaves prose alone: %s', (text) => {
     expect(redactSecrets(text)).toBe(text);
+  });
+});
+
+describe('redactedTail', () => {
+  const bare = 'q7Zk2mXp9WvLc4Nb8RtYs1DfGh3JaE6u';
+  const bytes = (text: string) => Buffer.from(text, 'utf8');
+
+  it('redacts a key whose Bearer prefix falls outside the 1 KiB cut', () => {
+    const text = `${'p'.repeat(500)} Bearer ${bare}\n${'q'.repeat(1001)}`;
+    expect(text.length - 1024).toBeGreaterThan(501 + 'Bearer '.length);
+    expect(text.length - 1024).toBeLessThan(501 + 'Bearer '.length + bare.length);
+    const output = redactedTail(bytes(text));
+    expect(output).not.toContain(bare.slice(10));
+    expect(output.length).toBeLessThanOrEqual(1024);
+  });
+
+  it('redacts a prefixed key cut in the middle by the window', () => {
+    const key = `sk-${'A1b2C3d4'.repeat(4)}`;
+    const text = `${'p'.repeat(2000)} ${key} ${'s'.repeat(1000)}`;
+    const output = redactedTail(bytes(text));
+    expect(output).not.toContain('C3d4');
+    expect(output).toContain('[REDACTED]');
+  });
+
+  it('redacts a known secret that has no recognizable shape, wherever the cut falls', () => {
+    for (const offset of [-20, -5, 0, 5, 20]) {
+      const prefix = 1100 + offset;
+      const text = `${'p'.repeat(prefix)} fatal ${bare} ${'s'.repeat(1024 - 8 - (offset + 20))}`;
+      const output = redactedTail(bytes(text), 1024, [bare]);
+      expect(output).not.toContain(bare.slice(8));
+      expect(output).not.toContain(bare.slice(0, 20));
+    }
+  });
+
+  it('keeps a short buffer whole and trims surrounding whitespace', () => {
+    expect(redactedTail(bytes('  fatal: not a git repository\n'))).toBe('fatal: not a git repository');
+  });
+
+  it('never returns more than the window', () => {
+    expect(redactedTail(bytes('x'.repeat(5000)), 200).length).toBe(200);
+  });
+
+  it('drops a trailing fragment when the collected buffer was cut at its end', () => {
+    const output = redactedTail(bytes(`error: bad token ${bare.slice(0, 20)}`), 1024, [], 'tail');
+    expect(output).toBe('error: bad token');
+  });
+
+  it('drops a leading fragment when the collected buffer was cut at its start', () => {
+    const output = redactedTail(bytes(`${bare.slice(12)}\nfatal: next line`), 1024, [], 'head');
+    expect(output).toBe('fatal: next line');
+    expect(redactedTail(bytes(bare.slice(12)), 1024, [], 'head')).toBe('');
   });
 });

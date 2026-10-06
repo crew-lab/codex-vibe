@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { open, lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { createPrivateDir } from '../security/paths.js';
-import { redactSecrets, redactedTail } from '../security/redaction.js';
+import { environmentSecrets, redactSecrets, redactedTail } from '../security/redaction.js';
 
 const MAX_GIT_OUTPUT = 100 * 1024 * 1024;
 const MAX_GIT_RUNTIME_MS = 30_000;
@@ -27,6 +27,7 @@ async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = process
     const child = spawn('git', [...fixed, '-C', cwd, ...args], { cwd, env: safeEnv, shell: false, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
     const chunks: Buffer[] = []; let size = 0; let overflow = false;
     let stderr = Buffer.alloc(0);
+    let stderrHeadDropped = false;
     let timedOut = false;
     const signalTree = (signal: NodeJS.Signals): void => {
       if (!child.pid) return;
@@ -43,12 +44,17 @@ async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = process
       if (size > MAX_GIT_OUTPUT) { overflow = true; signalTree('SIGTERM'); setTimeout(() => signalTree('SIGKILL'), 1000).unref?.(); return; }
       chunks.push(Buffer.from(chunk));
     });
-    child.stderr.on('data', (chunk: Buffer) => { stderr = Buffer.concat([stderr, chunk]).subarray(-MAX_GIT_STDERR_BYTES); });
+    child.stderr.on('data', (chunk: Buffer) => {
+      const joined = Buffer.concat([stderr, chunk]);
+      if (joined.length > MAX_GIT_STDERR_BYTES) stderrHeadDropped = true;
+      stderr = joined.subarray(-MAX_GIT_STDERR_BYTES);
+    });
+    const stderrTail = (): string => redactedTail(stderr, 1024, environmentSecrets(), stderrHeadDropped ? 'head' : undefined);
     child.once('error', (error) => reject(new GitOperationError(args[0] ?? 'git', undefined, (error as NodeJS.ErrnoException).code === 'ENOENT')));
     child.once('close', (code) => {
       clearTimeout(timer);
-      if (timedOut) reject(new GitOperationError(args[0] ?? 'git', `Git operation timed out: ${args[0] ?? 'git'}`, false, redactedTail(stderr)));
-      else if (overflow || code === null || !allowedCodes.includes(code)) reject(new GitOperationError(args[0] ?? 'git', undefined, false, redactedTail(stderr)));
+      if (timedOut) reject(new GitOperationError(args[0] ?? 'git', `Git operation timed out: ${args[0] ?? 'git'}`, false, stderrTail()));
+      else if (overflow || code === null || !allowedCodes.includes(code)) reject(new GitOperationError(args[0] ?? 'git', undefined, false, stderrTail()));
       else resolve(Buffer.concat(chunks, size));
     });
   });

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { lstat, open, readFile, rm } from "node:fs/promises";
+import { lstat, open, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { supervisorError } from "../contracts.js";
 
@@ -22,6 +22,7 @@ export interface OwnerLockFs {
   stat(file: string): Promise<LockFileInfo>;
   read(file: string): Promise<string>;
   remove(file: string): Promise<void>;
+  rename(from: string, to: string): Promise<void>;
 }
 
 export interface OwnerLockDeps {
@@ -55,15 +56,26 @@ const nodeFs: OwnerLockFs = {
     return { isFile: info.isFile(), isSymbolicLink: info.isSymbolicLink(), size: info.size, mtimeMs: info.mtimeMs };
   },
   read: (file) => readFile(file, "utf8"),
-  remove: (file) => rm(file, { force: false })
+  remove: (file) => rm(file, { force: false }),
+  rename: (from, to) => rename(from, to)
 };
 
-function readProcessStartTime(pid: number): Promise<number | undefined> {
+const ELAPSED = /^(?:(?:(\d+)-)?(\d{1,2}):)?(\d{1,2}):(\d{2})$/;
+
+export function parseElapsedMs(text: string): number | undefined {
+  const match = ELAPSED.exec(text.trim());
+  if (!match) return undefined;
+  const days = Number(match[1] ?? 0); const hours = Number(match[2] ?? 0); const minutes = Number(match[3]); const seconds = Number(match[4]);
+  if (hours > 23 || minutes > 59 || seconds > 59) return undefined;
+  return (((days * 24 + hours) * 60 + minutes) * 60 + seconds) * 1000;
+}
+
+export function readProcessStartTime(pid: number, now: () => number = Date.now): Promise<number | undefined> {
   return new Promise((resolve) => {
-    execFile("ps", ["-o", "lstart=", "-p", String(pid)], { env: { LC_ALL: "C", PATH: "/usr/bin:/bin" }, timeout: PS_TIMEOUT_MS, maxBuffer: 4096, windowsHide: true }, (error, stdout) => {
+    execFile("ps", ["-o", "etime=", "-p", String(pid)], { env: { LC_ALL: "C", PATH: "/usr/bin:/bin" }, timeout: PS_TIMEOUT_MS, maxBuffer: 4096, windowsHide: true }, (error, stdout) => {
       if (error) { resolve(undefined); return; }
-      const parsed = Date.parse(stdout.trim());
-      resolve(Number.isNaN(parsed) ? undefined : parsed);
+      const elapsed = parseElapsedMs(stdout);
+      resolve(elapsed === undefined ? undefined : now() - elapsed);
     });
   });
 }
@@ -147,9 +159,24 @@ async function removeIfPresent(deps: OwnerLockDeps, file: string): Promise<void>
   catch (error) { if (errorCode(error) !== "ENOENT") throw error; }
 }
 
-async function recoveryLockIsStale(deps: OwnerLockDeps, recoveryPath: string): Promise<boolean> {
-  try { return deps.now() - (await deps.fs.stat(recoveryPath)).mtimeMs > STALE_RECOVERY_MS; }
+async function claimStaleRecovery(deps: OwnerLockDeps, recoveryPath: string): Promise<boolean> {
+  let observed: string;
+  try {
+    const info = await deps.fs.stat(recoveryPath);
+    if (deps.now() - info.mtimeMs <= STALE_RECOVERY_MS) return false;
+    observed = await deps.fs.read(recoveryPath);
+  } catch (error) { if (errorCode(error) === "ENOENT") return true; throw error; }
+  const claimedPath = `${recoveryPath}.${randomUUID()}.claimed`;
+  try { await deps.fs.rename(recoveryPath, claimedPath); }
   catch (error) { if (errorCode(error) === "ENOENT") return true; throw error; }
+  let claimed: string | undefined;
+  try { claimed = await deps.fs.read(claimedPath); } catch {}
+  if (claimed === observed) { await removeIfPresent(deps, claimedPath); return true; }
+  let vacant = false;
+  try { await deps.fs.stat(recoveryPath); } catch (error) { vacant = errorCode(error) === "ENOENT"; }
+  if (vacant) { try { await deps.fs.rename(claimedPath, recoveryPath); } catch { await removeIfPresent(deps, claimedPath).catch(() => undefined); } }
+  else await removeIfPresent(deps, claimedPath).catch(() => undefined);
+  return false;
 }
 
 export async function acquireOwnerLock(dataDir: string, overrides: Partial<OwnerLockDeps> = {}): Promise<OwnerLock> {
@@ -170,7 +197,7 @@ export async function acquireOwnerLock(dataDir: string, overrides: Partial<Owner
     try { await deps.fs.createExclusive(recoveryPath, JSON.stringify({ pid: deps.pid, token: recoveryToken })); }
     catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
-      if (!clearedStaleRecovery && await recoveryLockIsStale(deps, recoveryPath)) { clearedStaleRecovery = true; await removeIfPresent(deps, recoveryPath); continue; }
+      if (!clearedStaleRecovery && await claimStaleRecovery(deps, recoveryPath)) { clearedStaleRecovery = true; continue; }
       throw lockError(`Another process is recovering the supervisor owner lock ${lockPath}; retry shortly.`, lockPath);
     }
     try { await reclaimStaleOwner(dataDir, lockPath, deps); }

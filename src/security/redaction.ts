@@ -48,9 +48,16 @@ function safeCut(text: string, sentinels: readonly string[], wanted: number): nu
   return cut;
 }
 
-/** Streaming redactor retains a bounded suffix so tokens split across chunks are joined before emission. */
-export function redactedTail(bytes: Uint8Array, maxBytes = 1024): string {
-  return redactSecrets(Buffer.from(bytes).subarray(-maxBytes).toString('utf8')).trim().slice(-maxBytes);
+export function environmentSecrets(env: NodeJS.ProcessEnv = process.env): string[] {
+  return env.MISTRAL_API_KEY ? [env.MISTRAL_API_KEY] : [];
+}
+
+export function redactedTail(bytes: Uint8Array, maxBytes = 1024, sentinels: readonly string[] = [], truncated?: 'head' | 'tail'): string {
+  let text = Buffer.from(bytes).toString('utf8');
+  if (truncated === 'head') { const newline = text.indexOf('\n'); text = newline < 0 ? '' : text.slice(newline + 1); }
+  if (truncated === 'tail') text = text.replace(/\S+$/, '');
+  const whole = redactSecrets(text, sentinels).trim();
+  return redactSecrets(Buffer.from(whole, 'utf8').subarray(-maxBytes).toString('utf8'), sentinels).trim();
 }
 
 export class StreamingRedactor {

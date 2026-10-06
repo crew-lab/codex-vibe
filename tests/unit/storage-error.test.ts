@@ -9,8 +9,29 @@ describe('storage error mapping', () => {
     expect(mapped.code).toBe('VSUP_STORAGE_ERROR');
     expect(mapped.details).toEqual({ code, directory: '/data/runs/abc' });
     expect(mapped.message).not.toContain('secret-body');
-    expect(mapped.remediation).toMatch(/permissions and disk space/);
+    if (code !== 'EMFILE') expect(mapped.remediation).toMatch(/permissions and disk space/);
     expect(storageErrorDetails(mapped)).toEqual({ code, directory: '/data/runs/abc' });
+  });
+
+  it.each([
+    ['ENOSPC', /disk is full/],
+    ['EDQUOT', /quota/],
+    ['EACCES', /not permitted/],
+    ['EPERM', /not permitted/],
+    ['EROFS', /read-only/],
+    ['EIO', /I\/O error/],
+    ['EMFILE', /file descriptors/],
+  ])('gives %s its own accurate message', (code, pattern) => {
+    const mapped = asStorageError(Object.assign(new Error('x'), { code, path: '/data/runs/abc/meta.json' }), '/fallback') as Error;
+    expect(mapped.message).toMatch(pattern);
+    expect(mapped.message).toContain(code);
+  });
+
+  it('tells the operator to raise the file descriptor limit instead of blaming permissions or disk space for EMFILE', () => {
+    const mapped = asStorageError(Object.assign(new Error('x'), { code: 'EMFILE' }), '/fallback') as Error & { remediation: string };
+    expect(mapped.message).not.toMatch(/permissions|disk space/);
+    expect(mapped.remediation).toMatch(/limit/);
+    expect(mapped.remediation).not.toMatch(/permissions and disk space/);
   });
 
   it('falls back to the given directory when the error names no path', () => {
