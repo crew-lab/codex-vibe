@@ -19,10 +19,13 @@ import type { ProbeOptions } from './probe-cache.js';
 import type { VibeLaunch } from './launcher.js';
 import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { resolveCanonicalRoot } from '../security/paths.js';
+import { reportBackgroundFailure } from '../diagnostics/background.js';
 
 const PROTOCOL_VERSION = ACP_PROTOCOL_VERSION;
 const MAX_WIRE_BYTES = 1024 * 1024;
 const CANCEL_TURN_GRACE_MS = 500;
+
+const reportFailure = (context: string) => (error: unknown): void => reportBackgroundFailure(context, error);
 
 type Deferred<T> = { promise: Promise<T>; resolve(value: T): void; reject(reason: unknown): void };
 function deferred<T>(): Deferred<T> {
@@ -165,7 +168,7 @@ export class AcpBackend implements SupervisorBackend {
         loadSession = init.agentCapabilities?.loadSession === true;
         initialized = init.protocolVersion === PROTOCOL_VERSION && version === SUPPORTED_VIBE;
       });
-      const timer = setTimeout(() => { void child.terminate(1000); }, 15_000);
+      const timer = setTimeout(() => { child.terminate(1000).catch(reportFailure('acp-probe-terminate')); }, 15_000);
       try { await Promise.race([connected, child.done.then(() => { throw new Error('ACP exited during initialize probe'); })]); }
       finally { clearTimeout(timer); await child.terminate(250); }
       const available = initialized;
@@ -188,7 +191,7 @@ export class AcpBackend implements SupervisorBackend {
     let outputLimitReported = false;
     const child = spawnManaged(launch.command, launch.args, {
       cwd: input.workerWorkspace, env: launch.env, forwardEnv: Object.keys(launch.env), stdio: ['pipe', 'pipe', 'pipe'], maxStdoutBytes: input.limits.maxTranscriptBytes, maxStderrBytes: input.limits.maxEventBytes,
-      onLimit: () => { outputLimited = true; outputLimitReported = true; void callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', 'Vibe ACP output exceeded the configured limit.') }); },
+      onLimit: () => { outputLimited = true; outputLimitReported = true; Promise.resolve(callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', 'Vibe ACP output exceeded the configured limit.') })).catch(reportFailure('acp-output-limit')); },
       onStderr: (text) => { const safe = stderrRedactor.push(text); if (safe) stderrChain = stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: safe } })).then(() => undefined).catch(() => undefined); }
     });
     const state: AcpState = { process: child, home: profile.home, vibeHome: profile.vibeHome, ready: deferred<BackendStartResult>(), commands: makeQueue(), connected: Promise.resolve(), closed: false, readySettled: false, failureReported: false, released: false, toolCalls: new Map(), callbacks, input, recovering: false, suppressReplay: false };
@@ -199,16 +202,16 @@ export class AcpBackend implements SupervisorBackend {
       await child.terminate();
       const message = redactSecrets(String(error), launch.env.MISTRAL_API_KEY ? [launch.env.MISTRAL_API_KEY] : []);
       if (!state.failureReported && !state.released) { state.failureReported = true; await callbacks.onState('failed', { error: supervisorError(/missing api key|unauthorized|\b401\b/i.test(message) ? 'VSUP_AUTH_REQUIRED' : 'VSUP_ACP_INIT_FAILED', message) }); }
-    });
+    }).catch(reportFailure('acp-start-failure'));
     child.done.then(({ code, signal }) => {
       closeQueue(state.commands);
       if (!state.readySettled) { state.closed = true; state.readySettled = true; state.ready.reject(supervisorError('VSUP_ACP_INIT_FAILED', 'Vibe ACP exited before session initialization')); }
       const tail = stderrRedactor.flush();
       if (tail) stderrChain = stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: tail } })).then(() => undefined);
-      void stderrChain.then(() => {
-        if (!state.closed && !state.failureReported) { state.failureReported = code !== 0 || outputLimited; if (outputLimited) { if (!outputLimitReported) void callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', 'Vibe ACP output exceeded the configured limit.') }); } else void callbacks.onState(code === 0 ? 'completed' : 'failed', code === 0 ? {} : { error: supervisorError('VSUP_BACKEND_CRASHED', `Vibe ACP exited ${code ?? signal ?? 'without status'}`) }); }
-      });
-    }).catch((error: unknown) => { void callbacks.onState('failed', { error: supervisorError('VSUP_BACKEND_CRASHED', String(error)) }); });
+      stderrChain.then(() => {
+        if (!state.closed && !state.failureReported) { state.failureReported = code !== 0 || outputLimited; if (outputLimited) { if (!outputLimitReported) return callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', 'Vibe ACP output exceeded the configured limit.') }); } else return callbacks.onState(code === 0 ? 'completed' : 'failed', code === 0 ? {} : { error: supervisorError('VSUP_BACKEND_CRASHED', `Vibe ACP exited ${code ?? signal ?? 'without status'}`) }); }
+      }).catch(reportFailure('acp-exit'));
+    }).catch((error: unknown) => Promise.resolve(callbacks.onState('failed', { error: supervisorError('VSUP_BACKEND_CRASHED', String(error)) })).catch(reportFailure('acp-exit')));
     return state.ready.promise;
   }
 
@@ -435,7 +438,7 @@ export class AcpBackend implements SupervisorBackend {
       await process.terminate();
       const message = redactSecrets(String(error), launch.env.MISTRAL_API_KEY ? [launch.env.MISTRAL_API_KEY] : []);
       if (!state.failureReported && !state.released) { state.failureReported = true; await callbacks.onState('failed', { error: supervisorError('VSUP_RECOVERY_ERROR', message) }); }
-    });
+    }).catch(reportFailure('acp-recover-failure'));
     process.done.then(async ({ code, signal }) => {
       closeQueue(state.commands);
       const tail = redactor.flush();

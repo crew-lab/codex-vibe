@@ -11,6 +11,8 @@ import { SCHEMA_VERSION, supervisorError } from "../contracts.js";
 import { cancelSchema, closeSchema, continueSchema, editStartSchema, resultSchema, reviewStartSchema, respondSchema, statusSchema } from "../mcp/schemas.js";
 import { atomicWriteJson, sanitizeForPersistence } from "../persistence/atomic.js";
 import { appendNdjson, readNdjsonRecovering } from "../persistence/ndjson.js";
+import { asStorageError, storageErrorDetails } from "../persistence/storage-error.js";
+import { describeFailure, reportBackgroundFailure } from "../diagnostics/background.js";
 import { createPrivateDir, resolveCanonicalRoot, isPathWithinRoot, assertPathWithinRoot } from "../security/paths.js";
 import { redactSecrets } from "../security/redaction.js";
 import { assertNotSupervisorChild } from "../security/environment.js";
@@ -43,11 +45,15 @@ interface Runtime {
   deferredResponses: BackendRespondInput[];
   idleTimer?: NodeJS.Timeout;
   transcriptOverflow: boolean;
-  pendingFailure?: SupervisorError;
+  requestedOutcome?: RequestedOutcome;
+  storageDegraded?: { code: string; directory: string };
   completionOrder: number;
   persistChain: Promise<void>;
   waiters: Set<() => void>;
 }
+
+type SettleOutcome = { state: "completed" | "failed" | "cancelled" | "recoverable"; error?: SupervisorError };
+type RequestedOutcome = { state: "failed" | "cancelled"; error?: SupervisorError };
 
 type StartResult = {
   run_id: string;
@@ -267,9 +273,9 @@ export class RunManager {
     } catch (error) {
       this.runs.delete(id); this.removeFromPending(runtime); this.releaseSlot(runtime);
       await rm(runtime.directory, { recursive: true, force: true }).catch(() => undefined);
-      throw error;
+      throw asStorageError(error, runtime.directory);
     }
-    if (slot) void this.launch(runtime);
+    if (slot) this.launch(runtime).catch((error: unknown) => this.reportBackground(runtime, "launch", error));
     return {
       run_id: id, state: runtime.record.state, backend: runtime.record.backend, mode,
       source_workspace: source, worker_workspace: workerWorkspace, created_at: now,
@@ -292,7 +298,8 @@ export class RunManager {
       run_id: runtime.record.runId, state: runtime.record.state, backend: runtime.record.backend,
       last_seq: runtime.eventSeq, events,
       ...(runtime.record.pendingRequest ? { pending_request: pendingToWire(runtime.record.pendingRequest) } : {}),
-      ...(runtime.record.error ? { error: runtime.record.error } : {})
+      ...(runtime.record.error ? { error: runtime.record.error } : {}),
+      ...(runtime.storageDegraded ? { warnings: [`Run state could not be saved (${runtime.storageDegraded.code} in ${runtime.storageDegraded.directory}); progress recorded since may be lost if the supervisor restarts.`] } : {})
     };
   }
 
@@ -444,18 +451,10 @@ export class RunManager {
   async cancel(value: CancelToolInput): Promise<Record<string, unknown>> {
     const input = parseInput(cancelSchema, value); const runtime = this.requireRun(input.run_id);
     if (isTerminal(runtime.record.state) || runtime.record.state === "completed") return { run_id: input.run_id, state: runtime.record.state };
-    runtime.cancelRequested = true;
+    const outcome = this.requestOutcome(runtime, { state: "cancelled" });
     this.removeFromPending(runtime);
-    const sessionBackend = runtime.backend; const sessionHandle = runtime.handle;
-    if (sessionHandle && sessionBackend) {
-      delete runtime.handle;
-      try { await sessionBackend.cancel(sessionHandle); } catch { /* State remains cancelled; diagnostics are redacted and generic. */ }
-    }
-    if (!isTerminal(runtime.record.state)) {
-      await this.finalizeArtifacts(runtime, "cancelled").catch(() => undefined);
-      await this.setState(runtime, "cancelled", { finishedAt: new Date().toISOString() });
-    }
-    this.releaseSlot(runtime);
+    await this.cancelBackendSession(runtime);
+    await this.serial(runtime, () => this.settle(runtime, outcome));
     return { run_id: input.run_id, state: runtime.record.state };
   }
 
@@ -508,12 +507,9 @@ export class RunManager {
       await runtime.serial;
       runtime.cancelRequested = true;
       this.removeFromPending(runtime);
-      if (runtime.handle && runtime.backend) await runtime.backend.close(runtime.handle).catch(() => undefined);
-      if (runtime.record.state === "queued") await this.setState(runtime, "cancelled", { finishedAt: new Date().toISOString(), error: supervisorError("VSUP_CANCELLED", "Queued task was not submitted before shutdown.") }).catch(() => undefined);
-      else if (!isTerminal(runtime.record.state) && runtime.record.state !== "completed") {
-        await this.finalizeArtifacts(runtime, "recoverable").catch(() => undefined);
-        await this.setState(runtime, "recoverable", { finishedAt: new Date().toISOString() }).catch(() => undefined);
-      }
+      await this.releaseSession(runtime);
+      if (runtime.record.state === "queued") await this.serial(runtime, () => this.settle(runtime, { state: "cancelled", error: supervisorError("VSUP_CANCELLED", "Queued task was not submitted before shutdown.") })).catch(() => undefined);
+      else if (!isTerminal(runtime.record.state) && runtime.record.state !== "completed") await this.serial(runtime, () => this.settle(runtime, { state: "recoverable" })).catch(() => undefined);
       if (runtime.timer) clearTimeout(runtime.timer);
       if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
       this.releaseSlot(runtime);
@@ -641,11 +637,8 @@ export class RunManager {
       if (!isTerminal(runtime.record.state) && runtime.record.state === "negotiating") await this.setState(runtime, result.initialState === "starting" ? "running" : result.initialState, { startedAt: runtime.record.startedAt ?? new Date().toISOString() });
     } catch (error) {
       if (runtime.cancelRequested || runtime.record.state === "cancelled") return;
-      const normalized = normalizeError(error);
-      await this.setState(runtime, "failed", { error: normalized, finishedAt: new Date().toISOString() }).catch(() => undefined);
-      await this.finalizeArtifacts(runtime, "failed").catch(() => undefined);
-      await this.releaseSession(runtime);
-      this.releaseSlot(runtime);
+      const outcome: SettleOutcome = { state: "failed", error: normalizeError(error) };
+      await this.serial(runtime, () => this.settle(runtime, outcome));
     }
   }
 
@@ -664,7 +657,7 @@ export class RunManager {
 
   private callbacks(runtime: Runtime): BackendCallbacks {
     return {
-      onEvent: (event) => this.stopping ? undefined : this.serial(runtime, async () => this.appendEvent(runtime, event)),
+      onEvent: (event) => this.stopping ? undefined : this.serial(runtime, async () => this.appendEvent(runtime, event)).catch((error: unknown) => this.noteEventFailure(runtime, error)),
       onPendingRequest: (pending) => this.stopping ? undefined : this.receivePending(runtime, pending),
       onState: (state, update) => this.stopping ? undefined : this.serial(runtime, async () => this.applyBackendState(runtime, state, update)).catch((error: unknown) => this.recordIgnoredTransition(runtime, state, error))
     };
@@ -689,7 +682,7 @@ export class RunManager {
         const text = typeof data.text === "string" ? data.text : "";
         if (text && !this.appendTranscript(runtime, text)) {
           runtime.transcriptOverflow = true;
-          queueMicrotask(() => { void this.fail(runtime, supervisorError("VSUP_OUTPUT_LIMIT", "The transcript reached its configured byte limit.")); });
+          queueMicrotask(() => { this.fail(runtime, supervisorError("VSUP_OUTPUT_LIMIT", "The transcript reached its configured byte limit.")).catch((failure: unknown) => this.reportBackground(runtime, "output-limit", failure)); });
         }
       }
     }
@@ -710,10 +703,10 @@ export class RunManager {
     catch (error) {
       if (error instanceof RangeError) {
         runtime.cancelRequested = true;
-        queueMicrotask(() => { void this.fail(runtime, supervisorError("VSUP_OUTPUT_LIMIT", "The event log reached its configured byte limit.")); });
+        queueMicrotask(() => { this.fail(runtime, supervisorError("VSUP_OUTPUT_LIMIT", "The event log reached its configured byte limit.")).catch((failure: unknown) => this.reportBackground(runtime, "output-limit", failure)); });
         return;
       }
-      throw error;
+      throw asStorageError(error, runtime.directory);
     }
     runtime.events.push(full); runtime.eventSeq = full.seq;
     this.notify(runtime);
@@ -758,68 +751,128 @@ export class RunManager {
         runtime.deferredResponses.push(response);
         if (runtime.handle && runtime.backend) {
           runtime.deferredResponses.splice(runtime.deferredResponses.indexOf(response), 1);
-          setImmediate(() => { void runtime.backend?.respond(runtime.handle!, response).catch(() => undefined); });
+          setImmediate(() => { Promise.resolve().then(() => runtime.backend?.respond(runtime.handle!, response)).catch(() => undefined); });
         }
       } else {
-        runtime.cancelRequested = true;
-        await this.setState(runtime, "failed", { error: supervisorError("VSUP_PERMISSION_REQUIRED", "The requested tool action is outside the configured safety policy."), finishedAt: new Date().toISOString() });
-        this.releaseSlot(runtime);
+        const outcome = this.requestOutcome(runtime, { state: "failed", error: supervisorError("VSUP_PERMISSION_REQUIRED", "The requested tool action is outside the configured safety policy.") });
         const sessionBackend = runtime.backend; const sessionHandle = runtime.handle;
         if (sessionHandle && sessionBackend) {
           delete runtime.handle;
-          setImmediate(() => { void sessionBackend.cancel(sessionHandle).catch(() => undefined); });
+          setImmediate(() => { Promise.resolve().then(() => sessionBackend.cancel(sessionHandle)).catch((error: unknown) => this.reportBackground(runtime, "policy-cancel", error)); });
         }
+        await this.settle(runtime, outcome);
       }
     });
   }
 
   private async applyBackendState(runtime: Runtime, state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "acp">>): Promise<void> {
     if (isTerminal(runtime.record.state) || runtime.record.state === "closing") return;
-    if (runtime.record.state === "completed" && (state === "failed" || state === "cancelled" || state === "completed")) {
-      if (state === "failed") await this.releaseSession(runtime);
-      return;
-    }
+    const outcome = this.reportedOutcome(runtime, state, update?.error);
+    if (outcome && runtime.record.state === "completed") { await this.settle(runtime, outcome); return; }
     if (update?.usage) runtime.record.usage = update.usage;
     if (update?.result) runtime.record.result = mergeTurnResult(runtime.record.result, update.result);
     if (update?.process) runtime.record.process = update.process;
     if (update?.acp) runtime.record.acp = update.acp;
-    if (state === "completed") {
-      this.endTranscriptTurn(runtime);
-      try {
-        await this.assessReviewIntegrity(runtime);
-        await this.finalizeArtifacts(runtime, "completed");
-        await this.setState(runtime, "completed", { finishedAt: new Date().toISOString() });
-        runtime.completionOrder = ++this.completionCounter;
-        this.scheduleIdleExpiration(runtime);
-      } catch (error) {
-        await this.setState(runtime, "failed", { error: error instanceof Error && "code" in error ? normalizeError(error) : supervisorError("VSUP_ARTIFACT_ERROR", "Could not finish and verify the run artifacts."), finishedAt: new Date().toISOString() });
-        await this.releaseSession(runtime);
-      }
-      this.releaseSlot(runtime);
-      this.enforceIdleSessionCap();
-      return;
-    }
-    if (state === "failed") {
-      await this.assessReviewIntegrity(runtime);
-      await this.finalizeArtifacts(runtime, "failed").catch(() => undefined);
-      await this.setState(runtime, "failed", { finishedAt: new Date().toISOString(), ...(update?.error ? { error: update.error } : {}) });
-      await this.releaseSession(runtime);
-      this.releaseSlot(runtime); return;
-    }
-    if (state === "cancelled") {
-      await this.assessReviewIntegrity(runtime);
-      await this.finalizeArtifacts(runtime, "cancelled").catch(() => undefined);
-      if (runtime.pendingFailure) {
-        await this.setState(runtime, "failed", { error: runtime.pendingFailure, finishedAt: new Date().toISOString() });
-        delete runtime.pendingFailure;
-      } else await this.setState(runtime, "cancelled", { finishedAt: new Date().toISOString() });
-      await this.releaseSession(runtime);
-      this.releaseSlot(runtime); return;
-    }
+    if (outcome) { await this.settle(runtime, outcome); return; }
     await this.setState(runtime, state, update);
   }
 
+  private reportedOutcome(runtime: Runtime, state: RunState, error: SupervisorError | undefined): SettleOutcome | undefined {
+    if (state === "completed") return { state };
+    if (state !== "failed" && state !== "cancelled") return undefined;
+    return runtime.requestedOutcome ?? (state === "failed" && error ? { state, error } : { state });
+  }
+
+  private requestOutcome(runtime: Runtime, outcome: RequestedOutcome): RequestedOutcome {
+    runtime.cancelRequested = true;
+    runtime.requestedOutcome ??= outcome;
+    return runtime.requestedOutcome;
+  }
+
+  private async cancelBackendSession(runtime: Runtime): Promise<void> {
+    const backend = runtime.backend; const handle = runtime.handle;
+    if (!backend || !handle) return;
+    delete runtime.handle;
+    await backend.cancel(handle).catch((error: unknown) => this.reportBackground(runtime, "backend-cancel", error));
+  }
+
+  private async settle(runtime: Runtime, requested: SettleOutcome): Promise<void> {
+    const current = runtime.record.state;
+    if (isTerminal(current) || current === "closing") return;
+    if (current === "completed" && requested.state !== "recoverable") {
+      if (requested.state === "failed") await this.releaseSession(runtime);
+      return;
+    }
+    let outcome = requested;
+    try {
+      this.endTranscriptTurn(runtime);
+      if (outcome.state !== "recoverable") await this.assessReviewIntegrity(runtime, outcome.state);
+      try { await this.finalizeArtifacts(runtime, outcome.state); }
+      catch (error) {
+        if (outcome.state === "completed") outcome = { state: "failed", error: isCodedFailure(error) ? normalizeError(error) : supervisorError("VSUP_ARTIFACT_ERROR", "Could not finish and verify the run artifacts.") };
+        else await this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "warning", data: { reason: "artifact_finalization_failed", message: describeFailure(error) } }, true).catch(() => undefined);
+        await this.writeFallbackResult(runtime, outcome.state);
+      }
+      await this.setState(runtime, outcome.state, { ...(outcome.error ? { error: outcome.error } : {}), finishedAt: new Date().toISOString() });
+      if (outcome.state === "completed") { delete runtime.requestedOutcome; runtime.completionOrder = ++this.completionCounter; this.scheduleIdleExpiration(runtime); }
+      else await this.releaseSession(runtime);
+    } finally {
+      this.releaseSlot(runtime);
+      if (runtime.record.state === "completed") this.enforceIdleSessionCap();
+      this.notify(runtime);
+    }
+  }
+
+  private reportBackground(runtime: Runtime | undefined, context: string, error: unknown): void {
+    reportBackgroundFailure(context, error);
+    if (!runtime || this.stopping) return;
+    this.serial(runtime, () => this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "warning", data: { reason: "background_failure", context, message: describeFailure(error) } }, true)).catch(() => undefined);
+  }
+
+  private noteEventFailure(runtime: Runtime, error: unknown): void {
+    if (!this.degrade(runtime, asStorageError(error, runtime.directory))) this.reportBackground(runtime, "event", error);
+  }
+
+  private degrade(runtime: Runtime, error: unknown): boolean {
+    const fault = storageErrorDetails(error);
+    if (!fault) return false;
+    if (!runtime.storageDegraded) { runtime.storageDegraded = fault; reportBackgroundFailure("storage", error); }
+    return true;
+  }
+
   private async finalizeArtifacts(runtime: Runtime, resultState: RunState = runtime.record.state): Promise<void> {
+    try { await this.writeArtifacts(runtime, resultState); }
+    catch (error) { throw asStorageError(error, runtime.directory); }
+  }
+
+  private async writeFallbackResult(runtime: Runtime, resultState: RunState): Promise<void> {
+    const previous = runtime.record.result;
+    const warnings = withoutStopReasonWarnings(previous?.warnings ?? []);
+    runtime.record.result = {
+      ...(previous?.stopReason ? { stopReason: previous.stopReason } : {}),
+      summary: previous?.summary ?? "Vibe run ended before normal completion.",
+      artifacts: previous?.artifacts ?? [],
+      changedFiles: previous?.changedFiles ?? [],
+      warnings: warnings.includes(ARTIFACTS_INCOMPLETE_WARNING) ? warnings : [...warnings, ARTIFACTS_INCOMPLETE_WARNING],
+      ...(previous?.integrity ? { integrity: previous.integrity } : {})
+    };
+    await atomicWriteJson(path.join(runtime.directory, "result.json"), this.resultWire(runtime, resultState)).catch((error: unknown) => this.degrade(runtime, asStorageError(error, runtime.directory)));
+  }
+
+  private resultWire(runtime: Runtime, resultState: RunState): Record<string, unknown> {
+    const record = runtime.record; const result = record.result;
+    return {
+      schema_version: 1, run_id: record.runId, state: resultState, backend: record.backend,
+      ...(result?.stopReason ? { stop_reason: result.stopReason } : {}),
+      summary: result?.summary ?? "",
+      workspace: { source: record.sourceWorkspace, worker: record.workerWorkspace },
+      artifacts: (result?.artifacts ?? []).map(artifactToWire), changed_files: result?.changedFiles ?? [],
+      ...(record.usage ? { usage: usageToWire(record.usage) } : {}), warnings: result?.warnings ?? [],
+      ...(result?.integrity ? { integrity: integrityToWire(result.integrity) } : {})
+    };
+  }
+
+  private async writeArtifacts(runtime: Runtime, resultState: RunState): Promise<void> {
     const artifactDir = path.join(runtime.directory, "artifacts");
     await createPrivateDir(artifactDir);
     let patchInfo: { patchPath: string; statPath: string; sha256: string; bytes: number; changedFiles: string[] } | undefined;
@@ -854,16 +907,7 @@ export class RunManager {
       warnings: stopWarning ? [...carriedWarnings, stopWarning] : carriedWarnings,
       ...(runtime.record.result?.integrity ? { integrity: runtime.record.result.integrity } : {})
     };
-    const resultWire = {
-      schema_version: 1, run_id: runtime.record.runId, state: resultState, backend: runtime.record.backend,
-      ...(runtime.record.result.stopReason ? { stop_reason: runtime.record.result.stopReason } : {}),
-      summary,
-      workspace: { source: runtime.record.sourceWorkspace, worker: runtime.record.workerWorkspace },
-      artifacts: artifacts.map(artifactToWire), changed_files: patchInfo?.changedFiles ?? [],
-      ...(runtime.record.usage ? { usage: usageToWire(runtime.record.usage) } : {}), warnings: runtime.record.result.warnings ?? [],
-      ...(runtime.record.result.integrity ? { integrity: integrityToWire(runtime.record.result.integrity) } : {})
-    };
-    await atomicWriteJson(path.join(runtime.directory, "result.json"), resultWire);
+    await atomicWriteJson(path.join(runtime.directory, "result.json"), this.resultWire(runtime, resultState));
     await this.persist(runtime);
   }
 
@@ -889,16 +933,13 @@ export class RunManager {
 
   private async deadline(runtime: Runtime): Promise<void> {
     if (isTerminal(runtime.record.state) || runtime.record.state === "completed") return;
-    runtime.cancelRequested = true; runtime.pendingFailure = supervisorError("VSUP_TIMEOUT", "The run exceeded its configured timeout."); this.removeFromPending(runtime);
-    const backend = runtime.backend; const handle = runtime.handle;
-    if (backend && handle) { delete runtime.handle; await backend.cancel(handle).catch(() => undefined); }
+    const outcome = this.requestOutcome(runtime, { state: "failed", error: supervisorError("VSUP_TIMEOUT", "The run exceeded its configured timeout.") });
+    this.removeFromPending(runtime);
+    await this.cancelBackendSession(runtime);
     await this.serial(runtime, async () => {
       if (isTerminal(runtime.record.state) || runtime.record.state === "completed") return;
-      await this.appendEvent(runtime, { source: "supervisor", type: "timeout", severity: "warning", data: { timeout_seconds: runtime.record.limits.timeoutSeconds } });
-      await this.finalizeArtifacts(runtime, "failed").catch(() => undefined);
-      await this.setState(runtime, "failed", { error: runtime.pendingFailure ?? supervisorError("VSUP_TIMEOUT", "The run exceeded its configured timeout."), finishedAt: new Date().toISOString() });
-      delete runtime.pendingFailure;
-      this.releaseSlot(runtime);
+      if (outcome.error?.code === "VSUP_TIMEOUT") await this.appendEvent(runtime, { source: "supervisor", type: "timeout", severity: "warning", data: { timeout_seconds: runtime.record.limits.timeoutSeconds } }).catch(() => undefined);
+      await this.settle(runtime, outcome);
     });
   }
 
@@ -915,7 +956,8 @@ export class RunManager {
     if (update?.startedAt) runtime.record.startedAt = update.startedAt;
     if (update?.finishedAt) runtime.record.finishedAt = update.finishedAt;
     if ((isTerminal(state) || state === "completed") && runtime.timer) clearTimeout(runtime.timer);
-    await this.persist(runtime);
+    try { await this.persist(runtime); }
+    catch (error) { if (!this.degrade(runtime, error)) throw error; }
     if (isTerminal(state)) this.persisted.set(runtime.record.runId, runtime.record);
     this.notify(runtime);
   }
@@ -923,7 +965,9 @@ export class RunManager {
   private async persist(runtime: Runtime): Promise<void> {
     const write = runtime.persistChain.then(() => atomicWriteJson(path.join(runtime.directory, "meta.json"), runToWire(runtime.record)));
     runtime.persistChain = write.then(() => undefined, () => undefined);
-    await write;
+    try { await write; }
+    catch (error) { throw asStorageError(error, runtime.directory); }
+    delete runtime.storageDegraded;
   }
 
   private serial<T>(runtime: Runtime, fn: () => Promise<T>): Promise<T> {
@@ -942,14 +986,14 @@ export class RunManager {
     if (runtime.record.state === "completed") return;
     const deadline = Date.parse(runtime.record.launchedAt ?? runtime.record.startedAt ?? runtime.record.createdAt) + runtime.record.limits.timeoutSeconds * 1000;
     const remaining = deadline - Date.now();
-    if (remaining <= 0) { void this.deadline(runtime); return; }
+    if (remaining <= 0) { this.deadline(runtime).catch((error: unknown) => this.reportBackground(runtime, "deadline", error)); return; }
     this.armDeadline(runtime, remaining);
   }
 
   private scheduleIdleExpiration(runtime: Runtime): void {
     if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
     if (!runtime.handle || !runtime.backend) return;
-    runtime.idleTimer = setTimeout(() => { void this.releaseIdleHandle(runtime, "idle_expired"); }, this.config.workerIdleTtlSeconds * 1000);
+    runtime.idleTimer = setTimeout(() => { this.releaseIdleHandle(runtime, "idle_expired").catch((error: unknown) => this.reportBackground(runtime, "idle-expiry", error)); }, this.config.workerIdleTtlSeconds * 1000);
     runtime.idleTimer.unref?.();
   }
 
@@ -973,17 +1017,18 @@ export class RunManager {
 
   private enforceIdleSessionCap(): void {
     const idle = [...this.runs.values()].filter((candidate) => candidate.record.state === "completed" && !candidate.slot && candidate.handle).sort((a, b) => a.completionOrder - b.completionOrder);
-    for (const evicted of idle.slice(0, Math.max(0, idle.length - this.config.maxConcurrentRuns))) void this.releaseIdleHandle(evicted, "idle_evicted");
+    for (const evicted of idle.slice(0, Math.max(0, idle.length - this.config.maxConcurrentRuns))) this.releaseIdleHandle(evicted, "idle_evicted").catch((error: unknown) => this.reportBackground(evicted, "idle-eviction", error));
   }
 
   private armDeadline(runtime: Runtime, milliseconds: number): void {
     if (runtime.timer) clearTimeout(runtime.timer);
-    runtime.timer = setTimeout(() => { void this.deadline(runtime); }, milliseconds);
+    runtime.timer = setTimeout(() => { this.deadline(runtime).catch((error: unknown) => this.reportBackground(runtime, "deadline", error)); }, milliseconds);
     runtime.timer.unref?.();
   }
 
-  private async assessReviewIntegrity(runtime: Runtime): Promise<void> {
-    if (runtime.record.mode !== "review" || runtime.record.result?.integrity) return;
+  private async assessReviewIntegrity(runtime: Runtime, outcome: SettleOutcome["state"]): Promise<void> {
+    if (runtime.record.mode !== "review" || !runtime.record.launchedAt || runtime.record.result?.integrity) return;
+    if (outcome !== "completed" && !runtime.sourceSnapshot && !runtime.snapshotFailed) return;
     const writeToolObserved = runtime.events.some(isWriteEvidence);
     let integrity: ReviewIntegrity;
     if (!runtime.sourceSnapshot) {
@@ -1008,7 +1053,7 @@ export class RunManager {
     const warnings = runtime.record.result?.warnings ?? [];
     runtime.record.result = { ...runtime.record.result, warnings: warning && !warnings.includes(warning) ? [...warnings, warning] : warnings, integrity };
     if (integrity.status !== "verified" || writeToolObserved) {
-      await this.appendEvent(runtime, { source: "supervisor", type: "review_integrity", severity: integrity.status === "changed" && writeToolObserved ? "error" : "warning", data: integrityToWire(integrity) });
+      await this.appendEvent(runtime, { source: "supervisor", type: "review_integrity", severity: integrity.status === "changed" && writeToolObserved ? "error" : "warning", data: integrityToWire(integrity) }).catch((error: unknown) => this.reportBackground(runtime, "review-integrity-event", error));
     }
   }
 
@@ -1017,21 +1062,15 @@ export class RunManager {
       const next = this.pending.shift();
       if (!next || next.cancelRequested || isTerminal(next.record.state)) continue;
       next.slot = true; this.activeSlots += 1;
-      void this.setState(next, "starting").then(() => this.launch(next)).catch((error) => this.fail(next, normalizeError(error)));
+      this.setState(next, "starting").then(() => this.launch(next)).catch((error: unknown) => this.fail(next, normalizeError(error))).catch((error: unknown) => this.reportBackground(next, "queue-launch", error));
     }
   }
 
   private async fail(runtime: Runtime, error: SupervisorError): Promise<void> {
-    runtime.cancelRequested = true;
-    runtime.pendingFailure = error;
-    const backend = runtime.backend; const handle = runtime.handle;
-    if (backend && handle && !isTerminal(runtime.record.state)) { delete runtime.handle; await backend.cancel(handle).catch(() => undefined); }
-    await this.serial(runtime, async () => {
-      if (isTerminal(runtime.record.state)) return;
-      await this.setState(runtime, "failed", { error, finishedAt: new Date().toISOString() });
-      await this.finalizeArtifacts(runtime, "failed").catch(() => undefined);
-      this.releaseSlot(runtime);
-    });
+    if (isTerminal(runtime.record.state) || runtime.record.state === "completed" || runtime.record.state === "closing") return;
+    const outcome = this.requestOutcome(runtime, { state: "failed", error });
+    await this.cancelBackendSession(runtime);
+    await this.serial(runtime, () => this.settle(runtime, outcome));
   }
 
   private removeFromPending(runtime: Runtime): void {
@@ -1059,12 +1098,16 @@ function codedError(code: SupervisorErrorCode, message: string): Error & { code:
   return Object.assign(new Error(message), normalized);
 }
 
+function isCodedFailure(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" && error.code.startsWith("VSUP_");
+}
+
 function normalizeError(error: unknown): SupervisorError {
   if (typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" && error.code.startsWith("VSUP_")) {
     const code = error.code as SupervisorErrorCode;
     const message = "message" in error && typeof error.message === "string" ? error.message : code;
-    const known = supervisorError(code, message);
-    return { ...known, retryable: "retryable" in error && error.retryable === true };
+    const details = "details" in error && typeof error.details === "object" && error.details !== null && !Array.isArray(error.details) ? error.details as Record<string, unknown> : undefined;
+    return supervisorError(code, message, details, "retryable" in error && error.retryable === true);
   }
   return { code: "VSUP_BACKEND_ERROR", message: "The backend failed. Check the run diagnostics for details.", remediation: DEFAULT_REMEDIATION, retryable: false };
 }
@@ -1093,6 +1136,7 @@ async function describeArtifact(name: string, file: string, mediaType: string): 
   return { name, path: file, sha256: createHash("sha256").update(bytes).digest("hex"), bytes: bytes.byteLength, mediaType } as NonNullable<RunRecord["result"]>["artifacts"] extends (infer A)[] | undefined ? A : never;
 }
 
+const ARTIFACTS_INCOMPLETE_WARNING = "Run artifacts could not be finalized; the listed artifacts may be missing or incomplete.";
 const CHANGED_WITH_WRITE_WARNING = "Possible read-only boundary violation: the review worker issued a write-capable tool call and the source workspace changed. Inspect the changed paths before trusting the review.";
 const STOP_WARNING_PREFIX = "Vibe stopped with stop reason ";
 const MAX_STOP_REASON_CHARS = 64;
