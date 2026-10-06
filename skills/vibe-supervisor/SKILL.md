@@ -40,7 +40,7 @@ Do not poll turn by turn. While the run is not finished, call `vibe_status` with
 
 ### Step 4 — Inspect outputs
 
-For a review, report its bounded findings and cite relevant paths. For an edit, call `vibe_result` (compact by default) for the summary, changed-file list, diff stat, and the patch, inline when small or at `patch_path` otherwise. Use `detail: "full"` only when digests or workspace paths are needed. Read the patch before suggesting or performing application to the source checkout. Report test results and any limitations separately.
+For a review, report its bounded findings and cite relevant paths. For an edit, call `vibe_result` (compact by default) for the summary, changed-file list, diff stat, and the patch, inline when small or at `patch_path` otherwise. Use `detail: "full"` only when digests or workspace paths are needed. Read the patch before suggesting or performing application to the source checkout. Before accepting a result, check `stop_reason` and `warnings`, not the summary: a state of `completed` with any `stop_reason` other than `end_turn` (for example `max_turn_requests`) means Vibe stopped early and the result may be partial. Report test results and any limitations separately.
 
 ### Step 5 — Close the run
 

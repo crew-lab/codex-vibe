@@ -780,7 +780,7 @@ export class RunManager {
       return;
     }
     if (update?.usage) runtime.record.usage = update.usage;
-    if (update?.result) runtime.record.result = update.result;
+    if (update?.result) runtime.record.result = mergeTurnResult(runtime.record.result, update.result);
     if (update?.process) runtime.record.process = update.process;
     if (update?.acp) runtime.record.acp = update.acp;
     if (state === "completed") {
@@ -842,13 +842,16 @@ export class RunManager {
     artifacts.push(await describeArtifact("events.ndjson", path.join(runtime.directory, "events.ndjson"), "application/x-ndjson"));
     const artifactBytes = artifacts.reduce((sum, artifact) => sum + artifact.bytes, 0);
     if (artifactBytes > runtime.record.limits.maxArtifactBytes) throw codedError("VSUP_OUTPUT_LIMIT", "Run artifacts exceeded the configured byte limit.");
-    const summary = runtime.record.result?.summary ?? (resultState === "completed" ? "Vibe completed the delegated task." : "Vibe run ended before normal completion.");
+    const stopReason = runtime.record.result?.stopReason;
+    const summary = runtime.record.result?.summary ?? (resultState === "completed" ? completedSummary(stopReason) : "Vibe run ended before normal completion.");
+    const stopWarning = resultState === "completed" ? stopReasonWarning(stopReason) : undefined;
+    const carriedWarnings = withoutStopReasonWarnings(runtime.record.result?.warnings ?? []);
     runtime.record.result = {
-      ...(runtime.record.result?.stopReason ? { stopReason: runtime.record.result.stopReason } : {}),
+      ...(stopReason ? { stopReason } : {}),
       summary,
       artifacts,
       changedFiles: patchInfo?.changedFiles ?? [],
-      warnings: runtime.record.result?.warnings ?? [],
+      warnings: stopWarning ? [...carriedWarnings, stopWarning] : carriedWarnings,
       ...(runtime.record.result?.integrity ? { integrity: runtime.record.result.integrity } : {})
     };
     const resultWire = {
@@ -1091,6 +1094,41 @@ async function describeArtifact(name: string, file: string, mediaType: string): 
 }
 
 const CHANGED_WITH_WRITE_WARNING = "Possible read-only boundary violation: the review worker issued a write-capable tool call and the source workspace changed. Inspect the changed paths before trusting the review.";
+const STOP_WARNING_PREFIX = "Vibe stopped with stop reason ";
+const MAX_STOP_REASON_CHARS = 64;
+
+function printableStopReason(reason: string): string {
+  const cleaned = reason.replace(/[^\x20-\x7e]/g, "?");
+  return cleaned.length > MAX_STOP_REASON_CHARS ? `${cleaned.slice(0, MAX_STOP_REASON_CHARS)}...` : cleaned;
+}
+
+function completedSummary(stopReason: string | undefined): string {
+  switch (stopReason) {
+    case undefined:
+    case "end_turn": return "Vibe completed the delegated task.";
+    case "max_turn_requests": return "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; continue the run or raise max_turns if more work is needed.";
+    case "max_tokens": return "Vibe stopped at the token limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; continue the run if more work is needed.";
+    case "refusal": return "Vibe declined the request. Inspect the artifacts and stop_reason before trusting the result.";
+    case "cancelled": return "The Vibe turn was cancelled before it finished. Inspect the artifacts and stop_reason before trusting the result.";
+    default: return `Vibe stopped with reason ${printableStopReason(stopReason)} instead of a normal final answer. Inspect the artifacts and stop_reason before trusting the result.`;
+  }
+}
+
+function stopReasonWarning(stopReason: string | undefined): string | undefined {
+  if (!stopReason || stopReason === "end_turn") return undefined;
+  return `${STOP_WARNING_PREFIX}${printableStopReason(stopReason)} instead of end_turn; the result may be incomplete.`;
+}
+
+function withoutStopReasonWarnings(warnings: string[]): string[] {
+  return warnings.filter((warning) => !warning.startsWith(STOP_WARNING_PREFIX));
+}
+
+function mergeTurnResult(previous: RunRecord["result"], turn: NonNullable<RunRecord["result"]>): NonNullable<RunRecord["result"]> {
+  const carried = withoutStopReasonWarnings(previous?.warnings ?? []);
+  const warnings = [...carried, ...withoutStopReasonWarnings(turn.warnings ?? []).filter((warning) => !carried.includes(warning))];
+  return { ...turn, warnings };
+}
+
 const CHANGED_WARNING = "The source workspace changed during this read-only review. The changes may be your own edits or a read-only boundary violation; inspect the changed paths before trusting the review.";
 const UNVERIFIED_WARNING = "The source workspace could not be snapshotted (too large or unreadable); review integrity was NOT checked, so a read-only boundary violation would go undetected.";
 const MAX_INTEGRITY_PATHS = 50;

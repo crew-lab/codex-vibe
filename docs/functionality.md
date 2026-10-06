@@ -44,7 +44,7 @@ See [protocol.md](protocol.md) and `src/mcp/schemas.ts` for the protocol and exa
 
 3. Save the returned run ID. Without `wait_seconds` a start returns at once; with it (for example 120 to 300) the start call waits until the run needs action and then includes the compact result if the run has finished. Otherwise call `vibe_status` with `wait_seconds` repeatedly instead of polling turn by turn.
 4. For an ACP run waiting for permission or input, inspect the current request before calling `vibe_respond`. Unknown, expired, or unsafe responses fail closed.
-5. Fetch `vibe_result` (compact by default) when work completes, fails, or is cancelled. Inspect the summary, warnings, and any available edit patch.
+5. Fetch `vibe_result` (compact by default) when work completes, fails, or is cancelled. Inspect `stop_reason`, warnings, the summary, and any available edit patch. A `completed` run whose `stop_reason` is not `end_turn` stopped early; the supervisor derives the summary from the stop reason when the backend gave none (turn limit, token limit, refusal, cancelled turn, or an unknown reason) and adds a warning naming the stop reason. A backend-supplied summary is kept. On a continuation, the summary, `stop_reason` and stop-reason warning always reflect the latest turn, while other warnings such as review integrity carry over.
 6. Close the run. Worktree removal is optional and is refused if the saved patch no longer matches the worktree or residual files cannot be safely accounted for.
 
 ## Run lifecycle and recovery

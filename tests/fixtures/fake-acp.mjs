@@ -77,7 +77,7 @@ async function handle(message) {
       const answer = await answerPromise;
       if (answer?.action !== 'accept' || answer.content?.confirm !== true) { reply(message.id, { stopReason: 'cancelled' }); return; }
     }
-    if (mode === 'normal' || mode === 'soak' || mode === 'permission' || mode === 'load' || mode === 'elicitation') {
+    if (mode === 'normal' || mode === 'soak' || mode === 'permission' || mode === 'load' || mode === 'elicitation' || mode === 'cap-on-second') {
       notification('session/update', { sessionId, update: { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'PRIVATE_THOUGHT_MUST_NOT_ESCAPE' } } });
       notification('vibe/unknown_test_notification', { arbitrary: 'unknown notification is ignored' });
       notification('session/update', { sessionId, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `reply-${promptCount}` } } });
@@ -95,7 +95,7 @@ async function handle(message) {
     }
     if (mode === 'chunked') { chunk('Hel'); chunk('lo '); chunk('world'); }
     if (mode === 'split-secret') { chunk('token sk-abcdef'); chunk('1234567890xyz done'); }
-    reply(message.id, { stopReason: 'end_turn' });
+    reply(message.id, { stopReason: mode === 'cap-on-second' && promptCount === 2 ? 'max_turn_requests' : 'end_turn' });
     return;
   }
   if (message.id !== undefined) send({ jsonrpc: '2.0', id: message.id, error: { code: -32601, message: `Unknown method ${message.method}` } });
