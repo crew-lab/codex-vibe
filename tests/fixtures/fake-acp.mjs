@@ -34,6 +34,7 @@ async function handle(message) {
     return;
   }
   if (message.method === 'session/load') {
+    if (mode === 'load-hang') return;
     reply(message.id, { modes: { currentModeId: 'plan' }, _meta: { workspace_trust: { status: 'untrusted' } } });
     return;
   }

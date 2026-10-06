@@ -24,6 +24,7 @@ import { reportBackgroundFailure } from '../diagnostics/background.js';
 const PROTOCOL_VERSION = ACP_PROTOCOL_VERSION;
 const MAX_WIRE_BYTES = 1024 * 1024;
 const CANCEL_TURN_GRACE_MS = 500;
+const RECOVER_TIMEOUT_MS = 10_000;
 
 const reportFailure = (context: string) => (error: unknown): void => reportBackgroundFailure(context, error);
 
@@ -434,8 +435,10 @@ export class AcpBackend implements SupervisorBackend {
     state.connected = this.connect(state, launch.env.MISTRAL_API_KEY);
     state.connected.catch(async (error: unknown) => {
       state.closed = true;
-      if (!state.readySettled) { state.readySettled = true; state.ready.reject(error); }
+      const beforeReady = !state.readySettled;
+      if (beforeReady) { state.readySettled = true; state.ready.reject(error); }
       await process.terminate();
+      if (beforeReady) return;
       const message = redactSecrets(String(error), launch.env.MISTRAL_API_KEY ? [launch.env.MISTRAL_API_KEY] : []);
       if (!state.failureReported && !state.released) { state.failureReported = true; await callbacks.onState('failed', { error: supervisorError('VSUP_RECOVERY_ERROR', message) }); }
     }).catch(reportFailure('acp-recover-failure'));
@@ -443,9 +446,21 @@ export class AcpBackend implements SupervisorBackend {
       closeQueue(state.commands);
       const tail = redactor.flush();
       if (tail) await eventChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: tail } }));
+      if (!state.readySettled) { state.closed = true; state.readySettled = true; state.ready.reject(supervisorError('VSUP_SESSION_NOT_RESUMABLE', 'Vibe ACP exited before the session was loaded')); return; }
       if (!state.closed && !state.failureReported) { state.failureReported = code !== 0; await callbacks.onState(code === 0 ? 'completed' : 'failed', code === 0 ? {} : { error: supervisorError('VSUP_BACKEND_CRASHED', `Recovered Vibe ACP exited ${code ?? signal ?? 'without status'}`) }); }
     }).catch(() => undefined);
-    try { return (await state.ready.promise).handle; }
+    let timer: NodeJS.Timeout | undefined;
+    const timedOut = Symbol('recover-timeout');
+    const expiry = new Promise<typeof timedOut>((resolve) => { timer = setTimeout(() => resolve(timedOut), RECOVER_TIMEOUT_MS); });
+    try {
+      const outcome = await Promise.race([state.ready.promise, expiry]);
+      if (outcome !== timedOut) return outcome.handle;
+      state.released = true; state.closed = true; state.failureReported = true; state.readySettled = true;
+      closeQueue(state.commands);
+      await process.terminate();
+      return undefined;
+    }
     catch { return undefined; }
+    finally { if (timer) clearTimeout(timer); }
   }
 }
