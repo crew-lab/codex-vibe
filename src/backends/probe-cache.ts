@@ -15,6 +15,8 @@ export class ProbeCache {
   private entry: Entry | undefined;
   private flight: Flight | undefined;
 
+  invalidate(): void { this.entry = undefined; }
+
   async get(key: string, fresh: boolean, run: () => Promise<BackendCapabilities>): Promise<BackendCapabilities> {
     if (!fresh) {
       if (this.entry && this.entry.key === key && this.entry.expiresAt > Date.now()) return structuredClone(this.entry.value);

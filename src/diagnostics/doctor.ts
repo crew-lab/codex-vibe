@@ -8,8 +8,9 @@ import { executableSearchPath, getDataDir } from '../config/config.js';
 import { SUPPORTED_VIBE } from '../backends/pinned.js';
 import { inspectOwnerLock } from '../core/owner-lock.js';
 import type { SupervisorConfig } from '../contracts.js';
+import { redactSecrets } from '../security/redaction.js';
 
-export interface DoctorCheck { name: string; ok: boolean; status?: 'ok' | 'missing' | 'unverified'; version?: string; message: string }
+export interface DoctorCheck { name: string; ok: boolean; status?: 'ok' | 'missing' | 'unverified'; version?: string; message: string; stderr_tail?: string }
 export interface DoctorReport { ok: boolean; generatedAt: string; checks: DoctorCheck[] }
 
 function findExecutable(name: string, configPath?: string): string | undefined {
@@ -89,7 +90,8 @@ export async function runDoctor(config: SupervisorConfig): Promise<DoctorReport>
         let capabilities;
         try { capabilities = await new AcpBackend(config).probe(); }
         finally { homeKeys.forEach((key, index) => { const value = previous[index]; if (value === undefined) delete process.env[key]; else process.env[key] = value; }); }
-        checks.push({ name: 'acp-initialize', ok: capabilities.available, message: capabilities.available ? 'ACP initialization probe succeeded in the isolated temporary home.' : 'ACP initialization probe did not succeed.' });
+        const tail = !capabilities.available && typeof capabilities.details?.stderr_tail === 'string' ? redactSecrets(capabilities.details.stderr_tail) : '';
+        checks.push({ name: 'acp-initialize', ok: capabilities.available, message: capabilities.available ? 'ACP initialization probe succeeded in the isolated temporary home.' : 'ACP initialization probe did not succeed.', ...(tail ? { stderr_tail: tail } : {}) });
       } catch {
         checks.push({ name: 'acp-initialize', ok: false, message: 'ACP initialization probe failed; inspect local diagnostics and the Vibe ACP version.' });
       }

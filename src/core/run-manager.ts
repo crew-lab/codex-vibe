@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { open, readFile, readdir, rename, rm, lstat } from "node:fs/promises";
 import path from "node:path";
 import type {
-  BackendCallbacks, BackendKind, BackendRespondInput, BackendRunHandle,
+  BackendCallbacks, BackendCapabilities, BackendKind, BackendRespondInput, BackendRunHandle,
   PendingRequest, ReviewStartToolInput, EditStartToolInput, StatusToolInput, ContinueToolInput,
   RespondToolInput, ResultToolInput, WaitOptions, CancelToolInput, CloseToolInput, RunLimits, RunMode, RunRecord, RunState, SupervisorBackend,
   ReviewIntegrity, SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent
@@ -16,7 +16,8 @@ import { describeFailure, reportBackgroundFailure } from "../diagnostics/backgro
 import { createPrivateDir, resolveCanonicalRoot, isPathWithinRoot, assertPathWithinRoot } from "../security/paths.js";
 import { redactSecrets } from "../security/redaction.js";
 import { assertNotSupervisorChild } from "../security/environment.js";
-import { createDetachedWorktree, exportDirtySnapshot, removeVerifiedWorktree, resolveBaseCommit } from "../git/worktree.js";
+import { createDetachedWorktree, exportDirtySnapshot, removeVerifiedWorktree } from "../git/worktree.js";
+import { SUPPORTED_VIBE } from "../backends/pinned.js";
 import { eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
 import { acquireOwnerLock } from "./owner-lock.js";
@@ -44,6 +45,7 @@ interface Runtime {
   sourceManifest?: Map<string, string>;
   snapshotFailed?: boolean;
   verifiedPatch?: { patchPath: string; sha256: string };
+  baseRef?: string;
   deferredResponses: BackendRespondInput[];
   idleTimer?: NodeJS.Timeout;
   transcriptOverflow: boolean;
@@ -83,6 +85,10 @@ const COMPACT_CHANGED_FILES = 50;
 const COORDINATOR_ACTION_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "failed", "cancelled", "closed", "waiting_permission", "waiting_input", "recoverable"]);
 const CONTINUABLE_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "ready", "recoverable"]);
 const SETTLED_RESULT_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "failed", "cancelled"]);
+const STATUS_TEXT_EVENT_TYPES: ReadonlySet<string> = new Set(["diagnostic", "review_integrity", "timeout", "permission_denied_by_policy"]);
+const STATUS_TEXT_CHARS = 400;
+const MAX_RETAINED_REASON_CHARS = 400;
+const MAX_PROBE_REASON_CHARS = 300;
 const DEFAULT_REMEDIATION = "Inspect the run status and supervisor diagnostics, then retry if safe.";
 
 export class RunManager {
@@ -242,11 +248,11 @@ export class RunManager {
       taskSha256: createHash("sha256").update(task).digest("hex"),
       limits
     };
-    if (mode === "edit") record.worktree = { path: workerWorkspace, baseRef: options.baseRef ?? "HEAD", createdBySupervisor: true };
     const slot = this.activeSlots < this.config.maxConcurrentRuns;
     if (!slot && this.pending.length >= this.config.maxQueuedRuns) throw codedError("VSUP_LIMIT_EXCEEDED", "The active and queued run limits are full.");
     const runtime = this.makeRuntime(record, path.join(this.runRoot, id), task, options.contextFiles ?? [], options.allowShell, requested);
     runtime.slot = slot;
+    if (mode === "edit") runtime.baseRef = options.baseRef ?? "HEAD";
     this.runs.set(id, runtime);
     if (slot) this.activeSlots += 1; else this.pending.push(runtime);
     try {
@@ -272,6 +278,7 @@ export class RunManager {
     await this.waitUntil(runtime, () => runtime.eventSeq > input.after_seq || runtime.record.state !== initialState || runtime.record.pendingRequest !== undefined || COORDINATOR_ACTION_STATES.has(runtime.record.state), input.wait_seconds, wait?.signal);
     const events = runtime.events.filter((event) => event.seq > input.after_seq).slice(0, input.max_events).map((event) => ({
       seq: event.seq, type: event.type,
+      ...statusText(event),
       ...(typeof event.data.title === "string" ? { title: event.data.title } : {}),
       ...(typeof event.data.kind === "string" ? { kind: event.data.kind } : {}),
       ...(typeof event.data.status === "string" ? { status: event.data.status } : {})
@@ -298,7 +305,8 @@ export class RunManager {
     if (!capability.supportsContinue) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "The active backend does not support continuing this session.");
     if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
     if (record.pendingRequest || !CONTINUABLE_STATES.has(record.state)) throw codedError("VSUP_INVALID_STATE", "This run cannot accept a continuation in its current state.");
-    if (record.state !== "ready") {
+    const resumed = record.state !== "ready";
+    if (resumed) {
       if (runtime.slot) throw codedError("VSUP_INVALID_STATE", "A continuation for this run is already starting.");
       if (this.activeSlots >= this.config.maxConcurrentRuns) throw codedError("VSUP_LIMIT_EXCEEDED", "No active run slot is available for continuation.");
       runtime.slot = true; this.activeSlots += 1;
@@ -321,7 +329,11 @@ export class RunManager {
       this.armDeadline(runtime, record.limits.timeoutSeconds * 1000);
     }
     if (!runtime.handle) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available for continuation.");
-    await backend.continue(runtime.handle, input.message);
+    try { await backend.continue(runtime.handle, input.message); }
+    catch (error) {
+      if (resumed) await this.serial(runtime, () => this.settle(runtime, { state: "recoverable", error: supervisorError("VSUP_SESSION_NOT_RESUMABLE", "The backend session did not accept the continuation; a later continue can reattach.") }));
+      throw error;
+    }
     return { run_id: record.runId, state: record.state };
   }
 
@@ -447,7 +459,7 @@ export class RunManager {
 
   async cancel(value: CancelToolInput): Promise<Record<string, unknown>> {
     const input = parseInput(cancelSchema, value); const runtime = this.requireRun(input.run_id);
-    if (isTerminal(runtime.record.state) || runtime.record.state === "completed") return { run_id: input.run_id, state: runtime.record.state };
+    if (isTerminal(runtime.record.state) || runtime.record.state === "completed" || runtime.record.state === "closing") return { run_id: input.run_id, state: runtime.record.state };
     const outcome = this.requestOutcome(runtime, { state: "cancelled" });
     this.removeFromPending(runtime);
     await this.cancelBackendSession(runtime);
@@ -457,14 +469,21 @@ export class RunManager {
 
   async close(value: CloseToolInput): Promise<Record<string, unknown>> {
     const input = parseInput(closeSchema, value); const runtime = this.requireRun(input.run_id);
+    if (runtime.record.state === "closing") return { run_id: input.run_id, state: "closing", worktree_removed: false };
+    if (runtime.record.state === "closed") return this.closeOutcome(runtime, input.cleanup_worktree ? await this.cleanupWorktree(runtime) : { removed: false });
     if (!isTerminal(runtime.record.state)) await this.cancel({ run_id: input.run_id });
     if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
     await this.setState(runtime, "closing");
     if (runtime.handle && runtime.backend) await runtime.backend.close(runtime.handle).catch(() => undefined);
     delete runtime.handle;
-    if (input.cleanup_worktree && runtime.record.worktree) await this.cleanupWorktree(runtime);
+    const cleanup = input.cleanup_worktree ? await this.cleanupWorktree(runtime) : { removed: false };
+    if (cleanup.reason) await this.serial(runtime, () => this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "warning", data: { reason: "worktree_retained", message: cleanup.reason } }, true)).catch(() => undefined);
     await this.setState(runtime, "closed", { finishedAt: runtime.record.finishedAt ?? new Date().toISOString() });
-    return { run_id: runtime.record.runId, state: runtime.record.state };
+    return this.closeOutcome(runtime, cleanup);
+  }
+
+  private closeOutcome(runtime: Runtime, cleanup: WorktreeCleanup): Record<string, unknown> {
+    return { run_id: runtime.record.runId, state: runtime.record.state, worktree_removed: cleanup.removed, ...(cleanup.reason ? { worktree_retained_reason: cleanup.reason } : {}) };
   }
 
   async runsList(): Promise<Record<string, unknown>[]> {
@@ -481,14 +500,19 @@ export class RunManager {
     await this.ready();
     if (runId) {
       const runtime = this.requireRun(runId);
-      const removed = await this.cleanupWorktree(runtime);
-      return { run_id: runId, worktree_removed: removed };
+      const cleanup = await this.cleanupWorktree(runtime);
+      return { run_id: runId, worktree_removed: cleanup.removed, ...(cleanup.reason ? { worktree_retained_reason: cleanup.reason } : {}) };
     }
     const cutoff = Date.now() - this.config.retention.days * 86_400_000;
     const removed: string[] = [];
     for (const [id, runtime] of this.runs) {
       const record = runtime.record;
-      if (!isTerminal(record.state) || Date.parse(record.updatedAt) > cutoff || record.worktree) continue;
+      if (!isTerminal(record.state)) continue;
+      if (record.worktree && !await pathExists(record.worktree.path)) {
+        delete record.worktree;
+        await this.persist(runtime).catch((error: unknown) => this.degrade(runtime, error));
+      }
+      if (Date.parse(record.updatedAt) > cutoff || record.worktree) continue;
       if (record.state === "failed" && this.config.retention.preserveFailedRuns) continue;
       await rm(runtime.directory, { recursive: true, force: false });
       this.runs.delete(id); removed.push(id);
@@ -542,10 +566,9 @@ export class RunManager {
       let workerWorkspace = runtime.record.sourceWorkspace;
       let baseRef: string | undefined;
       if (runtime.record.mode === "edit") {
-        const requestedBase = runtime.record.worktree?.baseRef ?? "HEAD";
-        baseRef = await resolveBaseCommit(runtime.record.sourceWorkspace, requestedBase);
-        const worktree = await createDetachedWorktree(runtime.record.sourceWorkspace, runtime.record.workerWorkspace, baseRef);
-        runtime.record.worktree = worktree; runtime.record.workerWorkspace = worktree.path; workerWorkspace = worktree.path;
+        const worktree = await createDetachedWorktree(runtime.record.sourceWorkspace, runtime.record.workerWorkspace, runtime.baseRef ?? "HEAD");
+        runtime.record.worktree = worktree; runtime.record.workerWorkspace = worktree.path; workerWorkspace = worktree.path; baseRef = worktree.baseRef;
+        await this.persist(runtime);
       } else {
         try {
           const snapshot = await snapshotWorkspace(runtime.record.sourceWorkspace);
@@ -584,7 +607,10 @@ export class RunManager {
     } catch (error) {
       if (runtime.cancelRequested || runtime.record.state === "cancelled") return;
       const outcome: SettleOutcome = { state: "failed", error: normalizeError(error) };
-      await this.serial(runtime, () => this.settle(runtime, outcome));
+      await this.serial(runtime, async () => {
+        await this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "error", data: { reason: "launch_failed", message: describeFailure(error) } }).catch(() => undefined);
+        await this.settle(runtime, outcome);
+      });
     }
   }
 
@@ -592,13 +618,15 @@ export class RunManager {
     const configured = this.config.backend;
     const kind = preference !== "auto" ? preference : configured !== "auto" ? configured : "auto";
     const candidates = kind === "auto" ? ["acp", "programmatic"] as const : [kind];
+    const failures: ProbeFailure[] = [];
     for (const candidate of candidates) {
       const backend = this.backends.get(candidate);
       if (!backend) continue;
       const capability = await backend.probe();
       if (capability.available) return backend;
+      failures.push({ backend: candidate, capability });
     }
-    throw codedError("VSUP_BACKEND_UNAVAILABLE", "No configured backend passed its availability probe.");
+    throw backendUnavailableError(failures);
   }
 
   private callbacks(runtime: Runtime): BackendCallbacks {
@@ -772,6 +800,13 @@ export class RunManager {
   private async settleRecovered(runtime: Runtime): Promise<void> {
     const record = runtime.record;
     const previous = record.state;
+    if (previous === "closing") {
+      const now = new Date().toISOString();
+      record.state = "closed"; record.updatedAt = now; record.finishedAt ??= now;
+      try { await this.persist(runtime); }
+      catch (error) { if (!this.degrade(runtime, error)) throw error; }
+      return;
+    }
     const neverSubmitted = previous === "queued" || previous === "starting";
     const next: RunState = neverSubmitted ? "cancelled" : "recoverable";
     let changed = previous !== next;
@@ -820,7 +855,7 @@ export class RunManager {
     const warnings = withoutStopReasonWarnings(previous?.warnings ?? []);
     runtime.record.result = {
       ...(previous?.stopReason ? { stopReason: previous.stopReason } : {}),
-      summary: previous?.summary ?? "Vibe run ended before normal completion.",
+      summary: hasText(previous?.summary) ? previous.summary : "Vibe run ended before normal completion.",
       artifacts: previous?.artifacts ?? [],
       changedFiles: previous?.changedFiles ?? [],
       warnings: warnings.includes(warning) ? warnings : [...warnings, warning],
@@ -866,7 +901,8 @@ export class RunManager {
     const artifactBytes = artifacts.reduce((sum, artifact) => sum + artifact.bytes, 0);
     if (artifactBytes > runtime.record.limits.maxArtifactBytes) throw codedError("VSUP_OUTPUT_LIMIT", "Run artifacts exceeded the configured byte limit.");
     const stopReason = runtime.record.result?.stopReason;
-    const summary = runtime.record.result?.summary ?? (resultState === "completed" ? completedSummary(stopReason) : "Vibe run ended before normal completion.");
+    const recordedSummary = runtime.record.result?.summary;
+    const summary = hasText(recordedSummary) ? recordedSummary : resultState === "completed" ? completedSummary(stopReason) : "Vibe run ended before normal completion.";
     const stopWarning = resultState === "completed" ? stopReasonWarning(stopReason) : undefined;
     const carriedWarnings = withoutStopReasonWarnings(runtime.record.result?.warnings ?? []);
     runtime.record.result = {
@@ -892,13 +928,25 @@ export class RunManager {
     } catch (error) { await handle.close().catch(() => undefined); await rm(temp, { force: true }).catch(() => undefined); throw error; }
   }
 
-  private async cleanupWorktree(runtime: Runtime): Promise<boolean> {
+  private savedPatchExport(runtime: Runtime): { patchPath: string; sha256: string } | undefined {
+    if (runtime.verifiedPatch) return runtime.verifiedPatch;
+    const artifact = runtime.record.result?.artifacts?.find((candidate) => candidate.name === "diff.patch");
+    if (!artifact?.sha256 || !artifact.path || path.resolve(artifact.path) !== path.join(runtime.directory, "artifacts", "diff.patch")) return undefined;
+    return { patchPath: path.resolve(artifact.path), sha256: artifact.sha256 };
+  }
+
+  private async cleanupWorktree(runtime: Runtime): Promise<WorktreeCleanup> {
     const worktree = runtime.record.worktree;
-    if (!worktree || !runtime.verifiedPatch || !worktree.createdBySupervisor) return false;
-    await removeVerifiedWorktree(runtime.record.sourceWorkspace, worktree, runtime.verifiedPatch);
+    if (!worktree) return { removed: false };
+    if (!worktree.createdBySupervisor) return { removed: false, reason: "The worktree was not created by the supervisor." };
+    const verified = this.savedPatchExport(runtime);
+    if (!verified) return { removed: false, reason: "No verified patch export is available for this worktree." };
+    try { await removeVerifiedWorktree(runtime.record.sourceWorkspace, worktree, verified); }
+    catch (error) { return { removed: false, reason: redactSecrets(error instanceof Error ? error.message : "Worktree cleanup was refused.").slice(0, MAX_RETAINED_REASON_CHARS) }; }
     delete runtime.record.worktree;
-    await this.persist(runtime);
-    return true;
+    try { await this.persist(runtime); }
+    catch (error) { if (!this.degrade(runtime, error)) throw error; }
+    return { removed: true };
   }
 
   private async deadline(runtime: Runtime): Promise<void> {
@@ -1048,6 +1096,52 @@ export class RunManager {
   }
 }
 
+function hasText(value: string | undefined): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+async function pathExists(file: string): Promise<boolean> {
+  try { await lstat(file); return true; }
+  catch (error) { return (error as NodeJS.ErrnoException).code !== "ENOENT"; }
+}
+
+function statusText(event: SupervisorEvent): { text?: string } {
+  if (event.source !== "supervisor" || !STATUS_TEXT_EVENT_TYPES.has(event.type)) return {};
+  for (const key of ["text", "message", "reason"]) {
+    const value = event.data[key];
+    if (typeof value === "string" && value.trim()) return { text: redactSecrets(value).slice(0, STATUS_TEXT_CHARS) };
+  }
+  return {};
+}
+
+interface ProbeFailure { backend: BackendKind; capability: BackendCapabilities }
+interface WorktreeCleanup { removed: boolean; reason?: string }
+
+function probeReason(capability: BackendCapabilities): string {
+  const details = capability.details ?? {};
+  const reason = typeof details.reason === "string" ? details.reason : typeof details.error === "string" ? details.error : "The availability probe did not pass.";
+  return redactSecrets(reason).slice(0, MAX_PROBE_REASON_CHARS);
+}
+
+function backendUnavailableError(failures: ProbeFailure[]): Error {
+  const candidates = failures.map(({ backend, capability }) => {
+    const details = capability.details ?? {};
+    return {
+      backend, reason: probeReason(capability),
+      ...(typeof details.detected_version === "string" ? { detected_version: details.detected_version } : {}),
+      ...(typeof details.stderr_tail === "string" ? { stderr_tail: details.stderr_tail } : {})
+    };
+  });
+  const mismatch = failures.find(({ capability }) => typeof capability.details?.detected_version === "string" && capability.details.detected_version !== SUPPORTED_VIBE);
+  if (mismatch) return codedError("VSUP_VIBE_VERSION_UNSUPPORTED", `Found Vibe ${String(mismatch.capability.details?.detected_version)} (${mismatch.backend} backend); this release supports exactly Vibe ${SUPPORTED_VIBE}.`, { candidates });
+  if (failures.length > 0 && failures.every(({ capability }) => capability.details?.executable_missing === true)) {
+    return failures[0]?.backend === "acp"
+      ? codedError("VSUP_VIBE_ACP_NOT_FOUND", "The vibe-acp executable was not found.", { candidates })
+      : codedError("VSUP_VIBE_NOT_FOUND", "The vibe executable was not found.", { candidates });
+  }
+  return codedError("VSUP_BACKEND_UNAVAILABLE", "No configured backend passed its availability probe.", { candidates });
+}
+
 function hasReusableSession(record: RunRecord): boolean {
   return record.acp?.sessionId !== undefined && record.acp.capabilities?.loadSession === true;
 }
@@ -1059,8 +1153,8 @@ function parseInput<T>(schema: { parse(value: unknown): T }, value: unknown): T 
   catch (error) { throw codedError("VSUP_INVALID_ARGUMENT", error instanceof Error ? error.message : "Invalid tool input."); }
 }
 
-function codedError(code: SupervisorErrorCode, message: string): Error & { code: SupervisorErrorCode; remediation: string; retryable: boolean } {
-  const normalized = supervisorError(code, message);
+function codedError(code: SupervisorErrorCode, message: string, details?: Record<string, unknown>): Error & { code: SupervisorErrorCode; remediation: string; retryable: boolean } {
+  const normalized = supervisorError(code, message, details);
   return Object.assign(new Error(message), normalized);
 }
 

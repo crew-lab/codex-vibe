@@ -3,14 +3,20 @@ import { createHash } from 'node:crypto';
 import { open, lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { createPrivateDir } from '../security/paths.js';
-import { redactSecrets } from '../security/redaction.js';
+import { redactSecrets, redactedTail } from '../security/redaction.js';
 
 const MAX_GIT_OUTPUT = 100 * 1024 * 1024;
 const MAX_GIT_RUNTIME_MS = 30_000;
+const MAX_GIT_STDERR_BYTES = 4096;
 
 export class GitOperationError extends Error {
   readonly code = 'VSUP_GIT_REQUIRED';
-  constructor(operation: string, detail?: string) { super(detail ?? `Git operation failed: ${operation}`); this.name = 'GitOperationError'; }
+  constructor(readonly operation: string, detail?: string, readonly missing = false, readonly stderrTail = '') { super(detail ?? `Git operation failed: ${operation}`); this.name = 'GitOperationError'; }
+}
+
+export class WorktreeCreateError extends Error {
+  readonly code = 'VSUP_WORKTREE_CREATE_FAILED';
+  constructor(message: string, readonly details: Record<string, unknown>) { super(message); this.name = 'WorktreeCreateError'; }
 }
 
 async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = process.env, allowedCodes: readonly number[] = [0]): Promise<Buffer> {
@@ -18,8 +24,9 @@ async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = process
     const safeEnv: NodeJS.ProcessEnv = { PATH: env.PATH, HOME: env.HOME, LANG: env.LANG, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
     if (env.GIT_INDEX_FILE) safeEnv.GIT_INDEX_FILE = env.GIT_INDEX_FILE;
     const fixed = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.attributesFile=/dev/null'];
-    const child = spawn('git', [...fixed, '-C', cwd, ...args], { cwd, env: safeEnv, shell: false, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'ignore'] });
+    const child = spawn('git', [...fixed, '-C', cwd, ...args], { cwd, env: safeEnv, shell: false, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
     const chunks: Buffer[] = []; let size = 0; let overflow = false;
+    let stderr = Buffer.alloc(0);
     let timedOut = false;
     const signalTree = (signal: NodeJS.Signals): void => {
       if (!child.pid) return;
@@ -36,11 +43,12 @@ async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = process
       if (size > MAX_GIT_OUTPUT) { overflow = true; signalTree('SIGTERM'); setTimeout(() => signalTree('SIGKILL'), 1000).unref?.(); return; }
       chunks.push(Buffer.from(chunk));
     });
-    child.once('error', () => reject(new GitOperationError(args[0] ?? 'git')));
+    child.stderr.on('data', (chunk: Buffer) => { stderr = Buffer.concat([stderr, chunk]).subarray(-MAX_GIT_STDERR_BYTES); });
+    child.once('error', (error) => reject(new GitOperationError(args[0] ?? 'git', undefined, (error as NodeJS.ErrnoException).code === 'ENOENT')));
     child.once('close', (code) => {
       clearTimeout(timer);
-      if (timedOut) reject(new GitOperationError(args[0] ?? 'git', `Git operation timed out: ${args[0] ?? 'git'}`));
-      else if (overflow || code === null || !allowedCodes.includes(code)) reject(new GitOperationError(args[0] ?? 'git'));
+      if (timedOut) reject(new GitOperationError(args[0] ?? 'git', `Git operation timed out: ${args[0] ?? 'git'}`, false, redactedTail(stderr)));
+      else if (overflow || code === null || !allowedCodes.includes(code)) reject(new GitOperationError(args[0] ?? 'git', undefined, false, redactedTail(stderr)));
       else resolve(Buffer.concat(chunks, size));
     });
   });
@@ -107,6 +115,18 @@ export async function captureDirtySnapshot(source: string, baseRef = 'HEAD'): Pr
 }
 
 export async function createDetachedWorktree(source: string, worktreePath: string, baseRef = 'HEAD'): Promise<{ path: string; baseRef: string; createdBySupervisor: true }> {
+  try { return await addDetachedWorktree(source, worktreePath, baseRef); }
+  catch (error) {
+    if (error instanceof GitOperationError) {
+      if (error.missing) throw error;
+      throw new WorktreeCreateError(`Git could not create the isolated worktree (${error.operation}).`, { operation: error.operation, ...(error.stderrTail ? { stderr_tail: error.stderrTail } : {}) });
+    }
+    const code = (error as NodeJS.ErrnoException).code;
+    throw new WorktreeCreateError('The isolated worktree could not be created.', { ...(typeof code === 'string' ? { error_code: code } : {}) });
+  }
+}
+
+async function addDetachedWorktree(source: string, worktreePath: string, baseRef: string): Promise<{ path: string; baseRef: string; createdBySupervisor: true }> {
   const root = await resolveGitRoot(source);
   const base = await resolveBaseCommit(root, baseRef);
   const target = path.resolve(worktreePath);

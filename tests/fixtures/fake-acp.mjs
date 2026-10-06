@@ -24,8 +24,9 @@ function notification(method, params) { send({ jsonrpc: '2.0', method, params })
 async function handle(message) {
   if (message.method === 'initialize') {
     if (mode === 'early-exit') { process.exit(17); return; }
+    if (mode === 'init-stderr') { process.stderr.write('fatal: cannot start sk-abcdef1234567890xyz during init\n', () => process.exit(17)); return; }
     if (mode === 'broken-json') { process.stdout.write('{broken-json\n', () => process.exit(23)); return; }
-    reply(message.id, { protocolVersion: mode === 'wrong-protocol' ? 999 : 1, agentInfo: { name: 'fake-vibe', version: '2.25.8' }, agentCapabilities: { loadSession: true } });
+    reply(message.id, { protocolVersion: mode === 'wrong-protocol' ? 999 : 1, agentInfo: { name: 'fake-vibe', version: mode === 'wrong-version' ? '2.26.0' : '2.25.8' }, agentCapabilities: { loadSession: true } });
     return;
   }
   if (message.method === 'session/new') {
@@ -43,6 +44,11 @@ async function handle(message) {
   if (message.method === 'session/cancel') { return; }
   if (message.method === 'session/prompt') {
     promptCount += 1;
+    if (mode === 'exit-zero-mid-turn') {
+      chunk('partial answer');
+      process.stdout.write('', () => process.exit(0));
+      await new Promise(() => {});
+    }
     if (mode === 'permission' && promptCount === 1) {
       const filePath = process.env.FAKE_FILE_PATH ?? '/tmp/source.txt';
       notification('session/update', { sessionId, update: { sessionUpdate: 'tool_call', toolCallId: 'tool-17', title: 'Read source', kind: 'read', rawInput: { path: filePath }, locations: [{ path: filePath }] } });

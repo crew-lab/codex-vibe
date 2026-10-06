@@ -11,7 +11,7 @@ import { supervisorError } from '../contracts.js';
 import type { SupervisorConfig } from '../contracts.js';
 import { spawnManaged } from '../process/managed.js';
 import { assertNoProjectVibeExtensions, createVibeChildProfile } from './profile.js';
-import { buildVibeLaunch, removePromptFile } from './launcher.js';
+import { buildVibeLaunch, isExecutableMissing, removePromptFile } from './launcher.js';
 import type { VibeLaunch } from './launcher.js';
 import { SUPPORTED_VIBE } from './pinned.js';
 import { executableProbeKey, ProbeCache } from './probe-cache.js';
@@ -20,6 +20,7 @@ import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { reportBackgroundFailure } from '../diagnostics/background.js';
 
 const execFileAsync = promisify(execFile);
+const NO_FINAL_MESSAGE_WARNING = 'Vibe produced no final message.';
 
 interface ProgrammaticHandle extends BackendRunHandle {
   opaque: { process: ReturnType<typeof spawnManaged>; done: boolean; home: string; vibeHome: string; summary: string };
@@ -62,10 +63,10 @@ export class ProgrammaticBackend implements SupervisorBackend {
         ...(version ? { version } : {}),
         supportsContinue: false,
         supportsPermissionResponse: false,
-        details: { reason: version === SUPPORTED_VIBE ? 'Exact tested Vibe build detected' : `Requires exactly Vibe ${SUPPORTED_VIBE}` }
+        details: { ...(version ? { detected_version: version } : {}), reason: version === SUPPORTED_VIBE ? 'Exact tested Vibe build detected' : `Requires exactly Vibe ${SUPPORTED_VIBE}` }
       };
     } catch (error) {
-      return { available: false, backend: this.kind, executable: executable(this.config), supportsContinue: false, supportsPermissionResponse: false, details: { error: String(error) } };
+      return { available: false, backend: this.kind, executable: executable(this.config), supportsContinue: false, supportsPermissionResponse: false, details: { ...(isExecutableMissing(error) ? { executable_missing: true } : {}), reason: 'The Vibe version probe failed.', error: redactSecrets(String(error)) } };
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -123,6 +124,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
         }
       });
     } catch (error) {
+      this.probeCache.invalidate();
       await discardPromptFile().catch(() => undefined);
       throw error;
     }
@@ -140,7 +142,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
         await chunks.flush();
         const diagnosticTail = stderrRedactor.flush();
         if (diagnosticTail) await stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: diagnosticTail } }));
-        await callbacks.onState('completed', { result: { stopReason: 'end_turn', summary: opaque.summary } });
+        await callbacks.onState('completed', { result: { stopReason: 'end_turn', summary: opaque.summary, ...(opaque.summary.trim() ? {} : { warnings: [NO_FINAL_MESSAGE_WARNING] }) } });
       } else {
         await callbacks.onState('failed', { error: supervisorError('VSUP_BACKEND_CRASHED', `Vibe exited with code ${code ?? 'null'}${signal ? ` (${signal})` : ''}`) });
       }

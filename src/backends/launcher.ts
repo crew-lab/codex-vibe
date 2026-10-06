@@ -19,10 +19,19 @@ export interface VibeLaunch {
 
 export async function resolveCommand(command: string, env: NodeJS.ProcessEnv): Promise<string> {
   if (path.isAbsolute(command)) return command;
-  const result = await execFileAsync('/usr/bin/which', [command], { env, timeout: 5000, maxBuffer: 8192 });
+  let result;
+  try { result = await execFileAsync('/usr/bin/which', [command], { env, timeout: 5000, maxBuffer: 8192 }); }
+  catch (error) {
+    if ((error as { code?: unknown }).code === 1) throw Object.assign(new Error(`Cannot resolve executable ${command}`), { code: 'ENOENT' });
+    throw error;
+  }
   const resolved = result.stdout.trim().split('\n')[0];
   if (!resolved) throw new Error(`Cannot resolve executable ${command}`);
   return resolved;
+}
+
+export function isExecutableMissing(error: unknown): boolean {
+  return (error as { code?: unknown } | null)?.code === 'ENOENT';
 }
 
 export async function pythonFor(executable: string, env: NodeJS.ProcessEnv): Promise<string> {
