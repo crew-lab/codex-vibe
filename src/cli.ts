@@ -10,6 +10,7 @@ import { validateConfig } from './config/validation.js';
 import { DEFAULT_CONFIG } from './config/defaults.js';
 import { createPrivateDir, createPrivateFile } from './security/paths.js';
 import { runDoctor } from './diagnostics/doctor.js';
+import { installProcessGuards } from './diagnostics/background.js';
 import { readNdjsonRecovering } from './persistence/ndjson.js';
 import { startMcpStdio } from './mcp/server.js';
 import type { RunManagerTools } from './mcp/tools.js';
@@ -119,6 +120,7 @@ async function serve(): Promise<void> {
     await handle.close().catch(() => {});
     await manager.shutdown().catch((error) => process.stderr.write(`Shutdown failed: ${String((error as Error).message)}\n`));
   };
+  installProcessGuards({ shutdown: close });
   process.stdin.once('end', () => { void close(); });
   process.once('SIGINT', () => { void close(); });
   process.once('SIGTERM', () => { void close(); });

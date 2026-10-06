@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { supervisorError, type SupervisorError, type SupervisorErrorCode, type ReviewStartToolInput, type EditStartToolInput, type StatusToolInput, type ContinueToolInput, type RespondToolInput, type ResultToolInput, type CancelToolInput, type CloseToolInput, type McpResultFormat, type WaitOptions } from '../contracts.js';
 import { toolSchemas, type ToolName } from './schemas.js';
 import { sanitizeForPersistence } from '../persistence/atomic.js';
+import { describeFailure } from '../diagnostics/background.js';
 
 /** Narrow adapter expected from the run manager; MCP owns validation and wire shaping. */
 export interface RunManagerTools {
@@ -34,11 +35,11 @@ const DEFINITIONS: Record<ToolName, { title: string; description: string; readOn
 
 function normalizeError(error: unknown): SupervisorError {
   if (error && typeof error === 'object') {
-    const value = error as { supervisor?: unknown; code?: unknown; message?: unknown; retryable?: unknown };
+    const value = error as { supervisor?: unknown; code?: unknown; message?: unknown; retryable?: unknown; details?: unknown };
     if (value.supervisor && typeof value.supervisor === 'object' && 'code' in value.supervisor) return value.supervisor as SupervisorError;
     if (typeof value.code === 'string' && value.code.startsWith('VSUP_')) {
       const message = typeof value.message === 'string' ? value.message : 'The request could not be completed.';
-      return supervisorError(value.code as SupervisorErrorCode, message, undefined, value.retryable === true);
+      return supervisorError(value.code as SupervisorErrorCode, message, isRecord(value.details) ? value.details : undefined, value.retryable === true);
     }
   }
   return supervisorError('VSUP_INTERNAL', 'The request could not be completed.');
@@ -200,7 +201,7 @@ export function registerSupervisorTools(server: McpServer, manager: RunManagerTo
           delete safeError.details;
         }
         if (JSON.stringify({ error: safeError }).length > options.maxResultChars) safeError.message = 'The request failed; inspect the stable code and remediation.';
-        options.onError?.(safeError);
+        options.onError?.(safeError.code === 'VSUP_INTERNAL' ? { ...safeError, message: `${safeError.message} Cause: ${describeFailure(cause)}` } : safeError);
         const text = `${safeError.code}: ${safeError.message} ${safeError.remediation}`.slice(0, options.maxResultChars);
         return { isError: true, ...shapeResult({ error: safeError }, text, options.resultFormat) };
       }

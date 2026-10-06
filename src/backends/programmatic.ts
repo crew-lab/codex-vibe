@@ -17,6 +17,7 @@ import { SUPPORTED_VIBE } from './pinned.js';
 import { executableProbeKey, ProbeCache } from './probe-cache.js';
 import type { ProbeOptions } from './probe-cache.js';
 import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
+import { reportBackgroundFailure } from '../diagnostics/background.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -110,7 +111,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
         maxStderrBytes: input.limits.maxEventBytes,
         onLimit: (stream) => {
           outputLimited = true;
-          if (stream === 'stdout') void callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', 'Vibe programmatic output exceeded the configured transcript limit.') });
+          if (stream === 'stdout') Promise.resolve(callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', 'Vibe programmatic output exceeded the configured transcript limit.') })).catch((error: unknown) => reportBackgroundFailure('programmatic-output-limit', error));
         },
         onStdout: (chunk) => { outputChain = outputChain.then(() => chunks.push(chunk)).catch(async (error: unknown) => {
           if (!parserFailed) { parserFailed = true; await callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', redactSecrets(String(error), profile.env.MISTRAL_API_KEY ? [profile.env.MISTRAL_API_KEY] : [])) }); }
@@ -129,7 +130,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
     const handle: ProgrammaticHandle = { runId: input.runId, backend: this.kind, opaque };
     const processRecord = { ...(child.child.pid === undefined ? {} : { pid: child.child.pid }), executable: launch.command, version: SUPPORTED_VIBE };
     await callbacks.onState('running', { process: processRecord });
-    void child.done.then(async ({ code, signal }) => {
+    child.done.then(async ({ code, signal }) => {
       opaque.done = true;
       await discardPromptFile();
       if (outputLimited || parserFailed) return;
@@ -147,7 +148,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
       opaque.done = true;
       await discardPromptFile().catch(() => undefined);
       await callbacks.onState('failed', { error: supervisorError('VSUP_BACKEND_CRASHED', redactSecrets(String(error))) });
-    });
+    }).catch((error: unknown) => reportBackgroundFailure('programmatic-exit', error));
     return { handle, initialState: 'running' as const, process: processRecord };
   }
 

@@ -85,4 +85,41 @@ describe('MCP stdio tool surface', () => {
     expect(malformed.isError).toBe(true);
     expect(JSON.stringify(malformed)).toContain('Unrecognized key');
   });
+
+  it('returns VSUP_INTERNAL for an unexpected error and writes its redacted cause to the error log', async () => {
+    const input = new PassThrough(); const output = new PassThrough();
+    const manager = {
+      reviewStart: vi.fn(async () => ({})), editStart: vi.fn(async () => ({})),
+      status: vi.fn(async () => { throw Object.assign(new Error('disk exploded while writing api_key=sk-abcdef1234567890xyz'), { code: 'EBADF' }); }),
+      continue: vi.fn(async () => ({})), respond: vi.fn(async () => ({})), result: vi.fn(async () => ({})), cancel: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
+    } satisfies RunManagerTools;
+    const logged: string[] = [];
+    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits, mcpResultFormat: 'both' } }, onError: (message) => logged.push(message) });
+    await server.connect(new StdioServerTransport(input, output));
+    const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
+    await client.connect(new StdioClientHarness(input, output));
+    const failed = await client.callTool({ name: 'vibe_status', arguments: { run_id: '123e4567-e89b-42d3-a456-426614174000' } });
+    expect(failed.isError).toBe(true);
+    expect(failed.structuredContent).toMatchObject({ error: { code: 'VSUP_INTERNAL', message: 'The request could not be completed.' } });
+    expect(JSON.stringify(failed)).not.toContain('disk exploded');
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain('VSUP_INTERNAL');
+    expect(logged[0]).toContain('EBADF: disk exploded while writing api_key=[REDACTED]');
+    expect(logged[0]).not.toContain('sk-abcdef');
+  });
+
+  it('keeps storage error details on the wire without file content', async () => {
+    const input = new PassThrough(); const output = new PassThrough();
+    const storage = Object.assign(new Error('The supervisor could not write to its data directory (ENOSPC).'), { code: 'VSUP_STORAGE_ERROR', details: { code: 'ENOSPC', directory: '/data/runs/abc' } });
+    const manager = {
+      reviewStart: vi.fn(async () => { throw storage; }), editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})), continue: vi.fn(async () => ({})),
+      respond: vi.fn(async () => ({})), result: vi.fn(async () => ({})), cancel: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
+    } satisfies RunManagerTools;
+    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits, mcpResultFormat: 'both' } } });
+    await server.connect(new StdioServerTransport(input, output));
+    const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
+    await client.connect(new StdioClientHarness(input, output));
+    const failed = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp' } });
+    expect(failed.structuredContent).toMatchObject({ error: { code: 'VSUP_STORAGE_ERROR', details: { code: 'ENOSPC', directory: '/data/runs/abc' } } });
+  });
 });
