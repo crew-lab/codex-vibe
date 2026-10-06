@@ -88,7 +88,7 @@ These are local evidence, not portable defaults. `scripts/package-rc.mjs` and `s
 
 Historical: the last full implementation release verification passed **49 tests across 7 files**, lint, typecheck, build, deterministic acceptance, secret-pattern scan, and SPDX inventory. Counts: tool schemas 4; config 7; MCP integration 2; CLI 3; core 8; security 14; ACP integration 11. This is a historical result, not a substitute for checking later changes.
 
-Current suite as of the B1/B3 fix (2026-10-06): 184 tests (`npx vitest run`), of which 2 installed-resolver profile tests skip when Vibe is not installed, plus 51 Vibe-free Python tests in `src/backends/runtime/test_prompt_file.py` and `src/backends/runtime/test_keychain_credential.py` (`npm run test:python`, also part of `verify:release`).
+Current suite as of the stop-reason fix (2026-10-06): 195 tests (`npx vitest run`), of which 2 installed-resolver profile tests skip when Vibe is not installed, plus 51 Vibe-free Python tests in `src/backends/runtime/test_prompt_file.py` and `src/backends/runtime/test_keychain_credential.py` (`npm run test:python`, also part of `verify:release`).
 
 ACP fake-subprocess coverage includes 100 independently initialized prompt runs, unknown notifications and thought filtering, correlated permissions and expired IDs, form responses, live continuation, loading without original-task replay, malformed JSON, early exit, wrong protocol/mode, and cancellation. It verifies local protocol/lifecycle behavior rather than hosted inference.
 
@@ -278,7 +278,9 @@ Status after the 2026-10-05 target-machine session ([evidence](docs/reviews/rc2-
 
 After T6 to T12 pass, decide whether ACP reject options should be sent as `selected` reject option IDs instead of `cancelled` (this only matters if T12 shows Vibe issuing permission requests). After T15 passes, cut the next release candidate per [docs/acceptance.md](docs/acceptance.md).
 
-Open issue from the hosted ACP continuation: a turn that stops with `max_turn_requests` is reported as `completed` with the generic summary "Vibe completed the delegated task." Only the stop reason shows the turn cap was hit. Consider surfacing a non-`end_turn` stop reason as a warning in the result.
+Fixed after the hosted ACP continuation (2026-10-06): a turn that stopped with `max_turn_requests` used to be reported with the generic summary "Vibe completed the delegated task." The default summary now follows the stop reason (`end_turn`, `max_tokens`, `max_turn_requests`, `refusal`, `cancelled`, or an unknown reason), any non-`end_turn` stop adds a warning naming it, and each continuation's result replaces the previous turn's summary and stop-reason warning while keeping unrelated warnings. The run state stays `completed`; the skills tell the coordinator to check `stop_reason` and warnings, not the summary.
+
+Test fragility: with 18 test files, four full-suite runs launched at the same time on one machine occasionally time out (5 s) in the Git worktree tests in `tests/unit/core-run-manager.test.ts` and `tests/security/security-primitives.test.ts`. Sequential runs and `verify:release` pass. This is CPU oversubscription, not a product defect; raise those test timeouts if parallel runs are needed.
 
 A next maintainer should inspect Git status, read this handoff and the usage guide, reproduce local checks when making code changes, and finish those gates before claiming production readiness. Hosted validation sends source/tasks to a provider and may incur usage charges; keep it within user-authorized scope. Record exact versions, commands, outcomes, and remaining uncertainty in acceptance/compatibility docs. Any new version support requires renewed shim, profile, protocol, and effective-tool validation.
 
