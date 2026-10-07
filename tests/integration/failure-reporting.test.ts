@@ -78,8 +78,9 @@ class ScriptedBackend implements SupervisorBackend {
   callbacks = new Map<string, BackendCallbacks>();
   probeResult: BackendCapabilities;
   startError: Error | undefined;
+  probeCalls = 0;
   constructor(readonly kind: 'acp' | 'programmatic', probeResult?: BackendCapabilities) { this.probeResult = probeResult ?? available(kind); }
-  async probe() { return this.probeResult; }
+  async probe() { this.probeCalls += 1; return this.probeResult; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     this.callbacks.set(input.runId, callbacks);
     if (this.startError) throw this.startError;
@@ -242,7 +243,7 @@ describe('an empty final message', () => {
 describe('backend selection errors', () => {
   it('names the detected and the supported version when a probe saw the wrong one', async () => {
     const { source, data } = await makeParent();
-    const manager = managerFor(source, data, [new ScriptedBackend('acp', unavailable('acp', { detected_version: '2.26.0', reason: 'Requires exactly Vibe 2.25.8' }))], { backend: 'acp' });
+    const manager = managerFor(source, data, [new ScriptedBackend('acp', unavailable('acp', { detected_version: '2.26.0', reason: 'Requires exactly Vibe 2.25.8' }))], { backend: 'auto' });
     try {
       const { status } = await failedRun(manager, source);
       expect(status.state).toBe('failed');
@@ -258,7 +259,7 @@ describe('backend selection errors', () => {
     const cases = [['acp', 'VSUP_VIBE_ACP_NOT_FOUND'], ['programmatic', 'VSUP_VIBE_NOT_FOUND']] as const;
     for (const [kind, code] of cases) {
       const { source, data } = await makeParent();
-      const manager = managerFor(source, data, [new ScriptedBackend(kind, unavailable(kind, { executable_missing: true, reason: 'not found' }))], { backend: kind });
+      const manager = managerFor(source, data, [new ScriptedBackend(kind, unavailable(kind, { executable_missing: true, reason: 'not found' }))], { backend: 'auto' });
       try { expect((await failedRun(manager, source)).status.error).toMatchObject({ code }); }
       finally { await manager.shutdown(); }
     }
@@ -291,7 +292,7 @@ describe('backend selection errors', () => {
     const { vibe } = await installFakeVibe(parent, 'process.exit(0);', '2.26.0');
     const backend = new ProgrammaticBackend({ ...DEFAULT_CONFIG, backend: 'programmatic', paths: { vibe } });
     expect((await backend.probe()).details).toMatchObject({ detected_version: '2.26.0' });
-    const manager = managerFor(source, data, [backend], { backend: 'programmatic' });
+    const manager = managerFor(source, data, [backend], { backend: 'auto' });
     try { expect((await failedRun(manager, source)).status.error).toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED', message: expect.stringMatching(/2\.26\.0.*2\.25\.8|2\.25\.8.*2\.26\.0/) }); }
     finally { await manager.shutdown(); }
   });
@@ -314,6 +315,98 @@ describe('backend selection errors', () => {
     expect((await missing.probe()).details).toMatchObject({ executable_missing: true });
     const manager = managerFor(source, data, [missing], { backend: 'acp' });
     try { expect((await failedRun(manager, source)).status.error).toMatchObject({ code: 'VSUP_VIBE_ACP_NOT_FOUND' }); }
+    finally { await manager.shutdown(); }
+  });
+});
+
+describe('explicit backends skip the availability probe', () => {
+  const running = async (manager: RunManager, source: string) => {
+    const started = await manager.reviewStart({ task: 'review', cwd: source });
+    return waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
+  };
+  const versionStderr = "process.stderr.write('Vibe privacy shim supports exactly 2.25.8; found 2.26.0\\n'); process.exit(1);";
+
+  it('starts an explicit ACP backend with a single spawn and continues without another', async () => {
+    const { parent, source, data, pidDir } = await makeParent();
+    const script = path.join(parent, 'vibe-acp'); await writeExecutable(script, '#!/bin/sh\nexit 0\n');
+    const backend = new FixtureAcp('normal', script, data); backend.pidDir = pidDir;
+    const manager = managerFor(source, data, [backend], { backend: 'acp' });
+    try {
+      const { id, status } = await failedRun(manager, source);
+      expect(status.state).toBe('completed');
+      expect((await readdir(pidDir)).length).toBe(1);
+      await waitFor(async () => activeSlots(manager), (value) => value === 0);
+      await manager.continue({ run_id: id, message: 'again' });
+      await waitFor(() => manager.status({ run_id: id }), (value) => value.state === 'completed' && JSON.stringify(value).includes('reply-2'));
+      expect((await readdir(pidDir)).length).toBe(1);
+    } finally { await manager.shutdown(); }
+  }, 30_000);
+
+  it('does not run vibe --version before an explicit programmatic start', async () => {
+    const { parent, source, data } = await makeParent();
+    const { vibe, probeCount } = await installFakeVibe(parent, 'process.exit(0);');
+    const manager = managerFor(source, data, [new ProgrammaticBackend({ ...DEFAULT_CONFIG, backend: 'programmatic', paths: { vibe } })], { backend: 'programmatic' });
+    try {
+      expect((await failedRun(manager, source)).status.state).toBe('completed');
+      expect(await probeCount()).toBe(0);
+    } finally { await manager.shutdown(); }
+  });
+
+  it('takes the backend from config when the tool says auto and the config names one', async () => {
+    const { source, data } = await makeParent();
+    const acp = new ScriptedBackend('acp'); const programmatic = new ScriptedBackend('programmatic');
+    const manager = managerFor(source, data, [acp, programmatic], { backend: 'programmatic' });
+    try {
+      await running(manager, source);
+      expect([acp.probeCalls, programmatic.probeCalls]).toEqual([0, 0]);
+    } finally { await manager.shutdown(); }
+  });
+
+  it('still probes candidates in order for auto and falls back', async () => {
+    const { source, data } = await makeParent();
+    const acp = new ScriptedBackend('acp', unavailable('acp', { reason: 'down' })); const programmatic = new ScriptedBackend('programmatic');
+    const manager = managerFor(source, data, [acp, programmatic], { backend: 'auto' });
+    try {
+      await running(manager, source);
+      expect([acp.probeCalls, programmatic.probeCalls]).toEqual([1, 1]);
+    } finally { await manager.shutdown(); }
+  });
+
+  it('reports a wrong ACP version from the real initialize with both versions and a single spawn', async () => {
+    const { parent, source, data, pidDir } = await makeParent();
+    const script = path.join(parent, 'vibe-acp'); await writeExecutable(script, '#!/bin/sh\nexit 0\n');
+    const backend = new FixtureAcp('wrong-version', script, data); backend.pidDir = pidDir;
+    const manager = managerFor(source, data, [backend], { backend: 'acp' });
+    try {
+      const { status } = await failedRun(manager, source);
+      expect(status.error).toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED', message: expect.stringMatching(/2\.26\.0.*2\.25\.8/) });
+      expect((await readdir(pidDir)).length).toBe(1);
+    } finally { await manager.shutdown(); }
+  });
+
+  it('maps the shim version message on stderr to the unsupported-version code for ACP', async () => {
+    const { parent, source, data } = await makeParent();
+    const child = path.join(parent, 'shim-child.mjs'); await writeFile(child, `${versionStderr}\n`);
+    childScript.path = child;
+    const script = path.join(parent, 'vibe-acp'); await writeExecutable(script, '#!/usr/bin/env python3\n');
+    const manager = managerFor(source, data, [new AcpBackend({ ...DEFAULT_CONFIG, backend: 'acp', paths: { vibeAcp: script, dataDir: data } }, data)], { backend: 'acp' });
+    try { expect((await failedRun(manager, source)).status.error).toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED', message: expect.stringMatching(/2\.26\.0.*2\.25\.8/) }); }
+    finally { await manager.shutdown(); }
+  });
+
+  it('maps the shim version message on stderr to the unsupported-version code for programmatic', async () => {
+    const { parent, source, data } = await makeParent();
+    const { vibe } = await installFakeVibe(parent, versionStderr);
+    const manager = managerFor(source, data, [new ProgrammaticBackend({ ...DEFAULT_CONFIG, backend: 'programmatic', paths: { vibe } })], { backend: 'programmatic' });
+    try { expect((await failedRun(manager, source)).status.error).toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED', message: expect.stringMatching(/2\.26\.0.*2\.25\.8/) }); }
+    finally { await manager.shutdown(); }
+  });
+
+  it('keeps other early programmatic failures as a crash', async () => {
+    const { parent, source, data } = await makeParent();
+    const { vibe } = await installFakeVibe(parent, "process.stderr.write('boom\\n'); process.exit(3);");
+    const manager = managerFor(source, data, [new ProgrammaticBackend({ ...DEFAULT_CONFIG, backend: 'programmatic', paths: { vibe } })], { backend: 'programmatic' });
+    try { expect((await failedRun(manager, source)).status.error).toMatchObject({ code: 'VSUP_BACKEND_CRASHED' }); }
     finally { await manager.shutdown(); }
   });
 });
@@ -401,16 +494,18 @@ describe('probe cache invalidation', () => {
     const { parent, pidDir } = await makeParent();
     const script = path.join(parent, 'vibe-acp'); await writeExecutable(script, '#!/bin/sh\nexit 0\n');
     const backend = new FixtureAcp('wrong-mode', script); backend.pidDir = pidDir;
-    for (let attempt = 1; attempt <= 2; attempt += 1) {
-      const input = startInput(parent);
-      await mkdir(input.cwd, { recursive: true }); await mkdir(input.runDirectory, { recursive: true });
-      await expect(backend.start(input, noCallbacks)).rejects.toMatchObject({ code: 'VSUP_ACP_PROTOCOL_ERROR' });
-      await waitFor(async () => (await readdir(pidDir)).length, (value) => value >= attempt * 2, 3_000);
-      expect((await readdir(pidDir)).length).toBe(attempt * 2);
-    }
+    await backend.probe();
+    await backend.probe();
+    expect((await readdir(pidDir)).length).toBe(1);
+    const input = startInput(parent);
+    await mkdir(input.cwd, { recursive: true }); await mkdir(input.runDirectory, { recursive: true });
+    await expect(backend.start(input, noCallbacks)).rejects.toMatchObject({ code: 'VSUP_ACP_PROTOCOL_ERROR' });
+    await waitFor(async () => (await readdir(pidDir)).length, (value) => value >= 2, 3_000);
+    await backend.probe();
+    expect((await readdir(pidDir)).length).toBe(3);
   });
 
-  it('keeps one probe for runs that start fine', async () => {
+  it('spawns nothing but the session for runs that start fine', async () => {
     const { parent, pidDir } = await makeParent();
     const script = path.join(parent, 'vibe-acp'); await writeExecutable(script, '#!/bin/sh\nexit 0\n');
     const backend = new FixtureAcp('soak', script); backend.pidDir = pidDir;
@@ -420,7 +515,7 @@ describe('probe cache invalidation', () => {
       const started = await backend.start(input, noCallbacks);
       await backend.close(started.handle);
     }
-    expect((await readdir(pidDir)).length).toBe(3);
+    expect((await readdir(pidDir)).length).toBe(2);
   });
 
   it('re-probes the programmatic backend after a start that failed before the session was ready', async () => {

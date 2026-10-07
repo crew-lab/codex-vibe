@@ -227,6 +227,7 @@ export interface BackendRespondInput {
 
 export interface SupervisorBackend {
   readonly kind: BackendKind;
+  readonly supportsContinue?: boolean;
   probe(): Promise<BackendCapabilities>;
   start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult>;
   continue(handle: BackendRunHandle, message: string): Promise<void>;

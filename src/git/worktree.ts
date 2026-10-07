@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { open, lstat, realpath } from 'node:fs/promises';
+import { copyFile, mkdtemp, open, lstat, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createPrivateDir } from '../security/paths.js';
 import { environmentSecrets, redactSecrets, redactedTail } from '../security/redaction.js';
@@ -86,38 +87,38 @@ async function assertNoExternalFilters(root: string): Promise<void> {
   if (filters.byteLength > 0) throw new GitOperationError('filter configuration', 'Repository defines external Git filters; refusing to read/export through them');
 }
 
+async function withPrivateIndex<T>(root: string, work: (env: NodeJS.ProcessEnv) => Promise<T>): Promise<T> {
+  const directory = await mkdtemp(path.join(await realpath(tmpdir()), 'vsup-index-'));
+  try {
+    const location = decodeTrimmed(await git(root, ['rev-parse', '--git-path', 'index']));
+    const source = path.resolve(root, location);
+    const copy = path.join(directory, 'index');
+    try { await copyFile(source, copy); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    return await work({ ...process.env, GIT_INDEX_FILE: copy });
+  } finally { await rm(directory, { recursive: true, force: true }); }
+}
+
 /** Captures staged, unstaged and untracked (including binary) changes without touching the source index. */
 export async function captureDirtySnapshot(source: string, baseRef = 'HEAD'): Promise<DirtySnapshot> {
   const root = await resolveGitRoot(source);
   const base = await resolveBaseCommit(root, baseRef);
   await assertNoExternalFilters(root);
-  const trackedPatch = await git(root, ['diff', '--binary', '--no-ext-diff', '--no-textconv', '--no-renames', base, '--']);
-  const trackedNames = await git(root, ['diff', '--name-only', '-z', '--no-textconv', '--no-renames', base, '--']);
-  const trackedStat = await git(root, ['diff', '--stat', '--no-textconv', '--no-renames', base, '--']);
-  const status = await git(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--no-renames']);
-  const statusBytes = status.toString('utf8');
-  const untracked: string[] = [];
-  let cursor = 0;
-  while (cursor < statusBytes.length) {
-    const end = statusBytes.indexOf('\0', cursor);
-    if (end < 0) break;
-    const record = statusBytes.slice(cursor, end);
-    cursor = end + 1;
-    if (record.slice(0, 2) === '??') untracked.push(record.slice(3));
-  }
-  const extraPatches: Buffer[] = [];
-  const extraStats: string[] = [];
-  for (const name of untracked) {
-    const relative = name.startsWith('-') ? `./${name}` : name;
-    const patch = await git(root, ['diff', '--no-index', '--binary', '--no-ext-diff', '--no-textconv', '--', '/dev/null', relative], process.env, [0, 1]);
-    extraPatches.push(patch);
-    const stat = await git(root, ['diff', '--no-index', '--stat', '--no-textconv', '--', '/dev/null', relative], process.env, [0, 1]);
-    extraStats.push(stat.toString('utf8'));
-  }
-  const patch = Buffer.concat([trackedPatch, ...extraPatches]);
-  const changedFiles = [...trackedNames.toString('utf8').split('\0').filter(Boolean), ...untracked];
-  const diffStat = [trackedStat.toString('utf8'), ...extraStats].filter(Boolean).join('');
-  return { patch, diffStat, changedFiles, sha256: createHash('sha256').update(patch).digest('hex'), bytes: patch.byteLength };
+  return await withPrivateIndex(root, async (env) => {
+    await git(root, ['add', '-N', '--all', '--', '.'], env);
+    const patch = await git(root, ['diff', '--binary', '--no-ext-diff', '--no-textconv', '--no-renames', base, '--'], env);
+    const names = await git(root, ['diff', '--name-only', '-z', '--no-textconv', '--no-renames', base, '--'], env);
+    const stat = await git(root, ['diff', '--stat', '--no-textconv', '--no-renames', base, '--'], env);
+    return { patch, diffStat: stat.toString('utf8'), changedFiles: names.toString('utf8').split('\0').filter(Boolean), sha256: createHash('sha256').update(patch).digest('hex'), bytes: patch.byteLength };
+  });
+}
+
+export async function listGitVisibleFiles(root: string): Promise<string[] | undefined> {
+  try {
+    const inside = decodeTrimmed(await git(root, ['rev-parse', '--is-inside-work-tree'], process.env, [0, 128]));
+    if (inside !== 'true') return undefined;
+  } catch (error) { if (error instanceof GitOperationError && error.missing) return undefined; throw error; }
+  const listed = await git(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']);
+  return [...new Set(listed.toString('utf8').split('\0').filter(Boolean))];
 }
 
 export async function createDetachedWorktree(source: string, worktreePath: string, baseRef = 'HEAD'): Promise<{ path: string; baseRef: string; createdBySupervisor: true }> {

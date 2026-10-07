@@ -10,7 +10,8 @@ import type {
 import { SCHEMA_VERSION, supervisorError } from "../contracts.js";
 import { cancelSchema, closeSchema, continueSchema, editStartSchema, resultSchema, reviewStartSchema, respondSchema, statusSchema } from "../mcp/schemas.js";
 import { atomicWriteJson, sanitizeForPersistence } from "../persistence/atomic.js";
-import { appendNdjson, readNdjsonRecovering } from "../persistence/ndjson.js";
+import { readNdjsonRecovering } from "../persistence/ndjson.js";
+import { EventLog } from "../persistence/event-log.js";
 import { asStorageError, storageErrorDetails } from "../persistence/storage-error.js";
 import { describeFailure, reportBackgroundFailure } from "../diagnostics/background.js";
 import { createPrivateDir, resolveCanonicalRoot, isPathWithinRoot, assertPathWithinRoot } from "../security/paths.js";
@@ -18,8 +19,11 @@ import { redactSecrets } from "../security/redaction.js";
 import { assertNotSupervisorChild } from "../security/environment.js";
 import { createDetachedWorktree, exportDirtySnapshot, removeVerifiedWorktree } from "../git/worktree.js";
 import { SUPPORTED_VIBE } from "../backends/pinned.js";
+import { interpreterMissingMessage } from "../backends/launcher.js";
 import { eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
+import { changedSinceSnapshot, snapshotWorkspace } from "./workspace-snapshot.js";
+import type { ManifestEntry } from "./workspace-snapshot.js";
 import { acquireOwnerLock } from "./owner-lock.js";
 import type { OwnerLock } from "./owner-lock.js";
 import { PolicyEngine, normalizeKind } from "./policy-engine.js";
@@ -35,6 +39,9 @@ interface Runtime {
   backend?: SupervisorBackend;
   events: SupervisorEvent[];
   eventSeq: number;
+  eventBytes: number;
+  eventLog?: EventLog;
+  loading?: Promise<void> | undefined;
   transcript: string;
   serial: Promise<void>;
   timer?: NodeJS.Timeout;
@@ -42,7 +49,7 @@ interface Runtime {
   cancelRequested: boolean;
   started: boolean;
   sourceSnapshot?: string;
-  sourceManifest?: Map<string, string>;
+  sourceManifest?: Map<string, ManifestEntry>;
   snapshotFailed?: boolean;
   verifiedPatch?: { patchPath: string; sha256: string };
   baseRef?: string;
@@ -78,6 +85,7 @@ type StartResult = {
 
 const SUMMARY_DEPRECATION = "detail=summary is deprecated; use detail=compact (default) or detail=full.";
 const START_ENVELOPE_RESERVE_CHARS = 1500;
+const STATUS_RESULT_RESERVE_CHARS = 100;
 const MAX_META_BYTES = 1_048_576;
 const MAX_INLINE_TRANSCRIPT = 32_768;
 const COMPACT_TRANSCRIPT_CHARS = 4000;
@@ -87,6 +95,9 @@ const COMPACT_CHANGED_FILES = 50;
 const COORDINATOR_ACTION_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "failed", "cancelled", "closed", "waiting_permission", "waiting_input", "recoverable"]);
 const CONTINUABLE_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "ready", "recoverable"]);
 const SETTLED_RESULT_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "failed", "cancelled"]);
+const DAY_MS = 86_400_000;
+const RETENTION_FIRST_DELAY_MS = 5000;
+const RETENTION_INTERVAL_MS = DAY_MS;
 const CLEANABLE_STATES: ReadonlySet<RunState> = new Set<RunState>(["failed", "cancelled", "closed"]);
 const STATUS_TEXT_EVENT_TYPES: ReadonlySet<string> = new Set(["diagnostic", "review_integrity", "timeout", "permission_denied_by_policy"]);
 const STATUS_TEXT_CHARS = 400;
@@ -108,8 +119,11 @@ export class RunManager {
   private stopping = false;
   private activeSlots = 0;
   private completionCounter = 0;
+  private retentionTimer: NodeJS.Timeout | undefined;
+  private retentionRun: Promise<void> = Promise.resolve();
 
-  constructor(private readonly config: SupervisorConfig, private readonly dataDir: string, backends: readonly SupervisorBackend[] = []) {
+  constructor(private readonly config: SupervisorConfig, private readonly dataDir: string, backends: readonly SupervisorBackend[] = [], preAcquiredLock?: OwnerLock) {
+    this.ownerLock = preAcquiredLock;
     this.runRoot = path.join(path.resolve(dataDir), "runs");
     this.policy = new PolicyEngine(config);
     for (const backend of backends) this.backends.set(backend.kind, backend);
@@ -127,7 +141,7 @@ export class RunManager {
     assertNotSupervisorChild();
     await createPrivateDir(this.dataDir);
     await createPrivateDir(this.runRoot);
-    this.ownerLock = await acquireOwnerLock(this.dataDir);
+    this.ownerLock ??= await acquireOwnerLock(this.dataDir);
     if (this.backends.size === 0) await this.loadDefaultBackends();
     const entries = await readdir(this.runRoot, { withFileTypes: true });
     for (const entry of entries) {
@@ -139,16 +153,8 @@ export class RunManager {
         if (info.isSymbolicLink() || !info.isFile() || info.size > MAX_META_BYTES) continue;
         const record = runFromWire(JSON.parse(await readFile(file, "utf8")) as unknown);
         if (record.runId !== entry.name || !isPathWithinRoot(this.runRoot, path.resolve(directory))) continue;
-        const wireEvents = await readNdjsonRecovering<unknown>(path.join(directory, "events.ndjson"), { maxBytes: record.limits.maxEventBytes, truncatePartial: true });
-        const events = wireEvents.map(eventFromWire).filter((event, index) => event.runId === record.runId && event.seq === index + 1);
-        const runtime = this.makeRuntime(record, directory, "", [], false, record.backend, events);
-        runtime.eventSeq = events.at(-1)?.seq ?? 0;
+        const runtime = this.makeRuntime(record, directory, "", [], false, record.backend, true);
         if (record.workspaceSnapshotSha256) runtime.sourceSnapshot = record.workspaceSnapshotSha256;
-        try {
-          const transcriptPath = path.join(directory, "transcript.md");
-          const transcriptInfo = await lstat(transcriptPath);
-          if (transcriptInfo.isFile() && !transcriptInfo.isSymbolicLink() && transcriptInfo.size <= record.limits.maxTranscriptBytes) runtime.transcript = await readFile(transcriptPath, "utf8");
-        } catch { /* Missing or unsafe transcript is never trusted during recovery. */ }
         if (isTerminal(record.state)) {
           this.runs.set(record.runId, runtime); this.persisted.set(record.runId, record); continue;
         }
@@ -162,9 +168,7 @@ export class RunManager {
         this.runs.set(record.runId, runtime);
         await this.settleRecovered(runtime);
         if (isTerminal(runtime.record.state)) this.persisted.set(record.runId, runtime.record);
-      } catch {
-        // One corrupt record must not prevent recovery of other runs.
-      }
+      } catch {}
     }
     this.initialized = true;
   }
@@ -278,6 +282,8 @@ export class RunManager {
 
   async status(value: StatusToolInput, wait?: WaitOptions): Promise<Record<string, unknown>> {
     const input = parseInput(statusSchema, value); const runtime = this.requireRun(input.run_id);
+    await this.ensureLoaded(runtime);
+    if (runtime.storageDegraded) await this.flushQuietly(runtime);
     const initialState = runtime.record.state;
     await this.waitUntil(runtime, () => runtime.eventSeq > input.after_seq || runtime.record.state !== initialState || runtime.record.pendingRequest !== undefined || COORDINATOR_ACTION_STATES.has(runtime.record.state), input.wait_seconds, wait?.signal);
     const events = runtime.events.filter((event) => event.seq > input.after_seq).slice(0, input.max_events).map((event) => ({
@@ -287,17 +293,20 @@ export class RunManager {
       ...(typeof event.data.kind === "string" ? { kind: event.data.kind } : {}),
       ...(typeof event.data.status === "string" ? { status: event.data.status } : {})
     }));
-    return {
+    const body = {
       run_id: runtime.record.runId, state: runtime.record.state, backend: runtime.record.backend,
       last_seq: runtime.eventSeq, events,
       ...(runtime.record.pendingRequest ? { pending_request: pendingToWire(runtime.record.pendingRequest) } : {}),
       ...(runtime.record.error ? { error: runtime.record.error } : {}),
       ...(runtime.storageDegraded ? { warnings: [`Run state could not be saved (${runtime.storageDegraded.code} in ${runtime.storageDegraded.directory}); progress recorded since may be lost if the supervisor restarts.`] } : {})
     };
+    if (!SETTLED_RESULT_STATES.has(runtime.record.state)) return body;
+    return { ...body, result: await this.compactResult(runtime, false, JSON.stringify(body).length + STATUS_RESULT_RESERVE_CHARS) };
   }
 
   async continue(value: ContinueToolInput): Promise<Record<string, unknown>> {
     const input = parseInput(continueSchema, value); const runtime = this.requireRun(input.run_id);
+    await this.ensureLoaded(runtime);
     const record = runtime.record;
     if (!runtime.backend) {
       const backend = this.backends.get(record.backend);
@@ -305,8 +314,8 @@ export class RunManager {
     }
     const backend = runtime.backend;
     if (!backend) throw codedError("VSUP_SESSION_NOT_RESUMABLE", NO_SESSION_MESSAGE);
-    const capability = await backend.probe();
-    if (!capability.supportsContinue) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "The active backend does not support continuing this session.");
+    const supportsContinue = backend.supportsContinue ?? (await backend.probe()).supportsContinue;
+    if (!supportsContinue) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "The active backend does not support continuing this session.");
     if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
     if (record.pendingRequest || !CONTINUABLE_STATES.has(record.state)) throw codedError("VSUP_INVALID_STATE", "This run cannot accept a continuation in its current state.");
     const resumed = record.state !== "ready";
@@ -417,6 +426,8 @@ export class RunManager {
 
   async result(value: ResultToolInput): Promise<Record<string, unknown>> {
     const input = parseInput(resultSchema, value); const runtime = this.requireRun(input.run_id); const record = runtime.record;
+    await this.ensureLoaded(runtime);
+    await this.flushQuietly(runtime);
     const result = record.result;
     if (input.detail === "compact") return this.compactResult(runtime, input.include_transcript);
     const deprecation = input.detail === "summary" ? { deprecation: SUMMARY_DEPRECATION } : {};
@@ -435,7 +446,7 @@ export class RunManager {
       try {
         const info = await lstat(transcriptPath);
         if (info.isFile() && !info.isSymbolicLink() && info.size <= MAX_INLINE_TRANSCRIPT) output.transcript = await readFile(transcriptPath, "utf8");
-      } catch { /* Transcript is optional and may be absent. */ }
+      } catch {}
     }
     return output;
   }
@@ -447,12 +458,14 @@ export class RunManager {
       output.summary = "Run has not produced a result yet.";
       output.warnings = [];
       if (record.error) output.error = record.error;
+      output.next_action = nextActionFor(record.state);
       return output;
     }
     const artifacts = result.artifacts ?? []; const files = result.changedFiles ?? [];
     if (result.stopReason) output.stop_reason = result.stopReason;
     output.summary = result.summary ?? "";
     output.warnings = result.warnings ?? [];
+    output.next_action = nextActionFor(record.state);
     if (result.integrity) output.integrity = integrityToWire(result.integrity);
     if (record.error) output.error = record.error;
     if (record.mode === "edit") output.worker = record.workerWorkspace;
@@ -548,7 +561,6 @@ export class RunManager {
     })).sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
   }
 
-  /** Removes only expired terminal run records without a retained worktree. */
   async cleanup(runId?: string): Promise<Record<string, unknown>> {
     await this.ready();
     if (runId) {
@@ -557,25 +569,63 @@ export class RunManager {
       const cleanup = await this.cleanupWorktree(runtime);
       return { run_id: runId, worktree_removed: cleanup.removed, ...(cleanup.reason ? { worktree_retained_reason: cleanup.reason } : {}) };
     }
-    const cutoff = Date.now() - this.config.retention.days * 86_400_000;
+    return { removed_run_ids: await this.pruneRuns(false) };
+  }
+
+  startAutomaticRetention(options: { firstDelayMs?: number; intervalMs?: number } = {}): void {
+    if (this.retentionTimer || this.stopping) return;
+    const firstDelay = options.firstDelayMs ?? RETENTION_FIRST_DELAY_MS;
+    const interval = options.intervalMs ?? RETENTION_INTERVAL_MS;
+    const schedule = (delay: number): void => {
+      if (this.stopping) return;
+      this.retentionTimer = setTimeout(() => {
+        this.retentionTimer = undefined;
+        this.retentionRun = this.pruneRuns(true, (error) => reportBackgroundFailure("retention", error))
+          .then(() => undefined, (error: unknown) => reportBackgroundFailure("retention", error))
+          .then(() => schedule(interval));
+      }, delay);
+      this.retentionTimer.unref?.();
+    };
+    this.ready().then(() => schedule(firstDelay), () => undefined);
+  }
+
+  private async pruneRuns(closeCompleted: boolean, onError?: (error: unknown) => void): Promise<string[]> {
+    const cutoff = Date.now() - this.config.retention.days * DAY_MS;
     const removed: string[] = [];
-    for (const [id, runtime] of this.runs) {
-      const record = runtime.record;
-      if (!isTerminal(record.state)) continue;
-      if (record.worktree && !await pathExists(record.worktree.path)) {
-        delete record.worktree;
-        await this.persist(runtime).catch((error: unknown) => this.degrade(runtime, error));
-      }
-      if (Date.parse(record.updatedAt) > cutoff || record.worktree) continue;
-      if (record.state === "failed" && this.config.retention.preserveFailedRuns) continue;
-      await rm(runtime.directory, { recursive: true, force: false });
-      this.runs.delete(id); removed.push(id);
+    for (const runtime of [...this.runs.values()]) {
+      if (this.stopping && closeCompleted) break;
+      try { if (await this.pruneRun(runtime, cutoff, closeCompleted)) removed.push(runtime.record.runId); }
+      catch (error) { if (!onError) throw error; onError(error); }
     }
-    return { removed_run_ids: removed };
+    return removed;
+  }
+
+  private async pruneRun(runtime: Runtime, cutoff: number, closeCompleted: boolean): Promise<boolean> {
+    const record = runtime.record;
+    const completed = record.state === "completed";
+    if (!isTerminal(record.state) && !(closeCompleted && completed)) return false;
+    if (runtime.slot || runtime.handle || record.pendingRequest || this.pending.includes(runtime)) return false;
+    if (record.worktree && !await pathExists(record.worktree.path)) {
+      delete record.worktree;
+      await this.persist(runtime).catch((error: unknown) => this.degrade(runtime, error));
+    }
+    if (Date.parse(record.updatedAt) > cutoff || record.worktree) return false;
+    if (record.state === "failed" && this.config.retention.preserveFailedRuns) return false;
+    if (completed) {
+      await this.close({ run_id: record.runId });
+      if (!isTerminal(record.state) || record.worktree) return false;
+    }
+    runtime.eventLog?.dispose();
+    await rm(runtime.directory, { recursive: true, force: false });
+    this.runs.delete(record.runId); this.persisted.delete(record.runId);
+    return true;
   }
 
   async shutdown(): Promise<void> {
     this.stopping = true;
+    if (this.retentionTimer) clearTimeout(this.retentionTimer);
+    this.retentionTimer = undefined;
+    await this.retentionRun;
     for (const runtime of this.runs.values()) this.notify(runtime);
     const active = [...this.runs.values()].filter((runtime) => runtime.slot || runtime.record.state === "queued" || Boolean(runtime.handle));
     await Promise.all(active.map(async (runtime) => {
@@ -589,7 +639,44 @@ export class RunManager {
       if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
       this.releaseSlot(runtime);
     }));
+    await Promise.all([...this.runs.values()].map(async (runtime) => {
+      try { await runtime.eventLog?.flush(); } catch (error) { this.noteEventFailure(runtime, error); }
+      runtime.eventLog?.dispose();
+    }));
     await this.releaseOwnerLock();
+  }
+
+  private ensureLoaded(runtime: Runtime): Promise<void> {
+    runtime.loading ??= this.loadRuntime(runtime).catch((error: unknown) => { runtime.loading = undefined; throw error; });
+    return runtime.loading;
+  }
+
+  private async loadRuntime(runtime: Runtime): Promise<void> {
+    const record = runtime.record;
+    const eventsPath = path.join(runtime.directory, "events.ndjson");
+    const wireEvents = await readNdjsonRecovering<unknown>(eventsPath, { maxBytes: record.limits.maxEventBytes, truncatePartial: true });
+    const events = wireEvents.map(eventFromWire).filter((event, index) => event.runId === record.runId && event.seq === index + 1);
+    let transcript = "";
+    try {
+      const transcriptPath = path.join(runtime.directory, "transcript.md");
+      const transcriptInfo = await lstat(transcriptPath);
+      if (transcriptInfo.isFile() && !transcriptInfo.isSymbolicLink() && transcriptInfo.size <= record.limits.maxTranscriptBytes) transcript = await readFile(transcriptPath, "utf8");
+    } catch {}
+    const eventBytes = await lstat(eventsPath).then((info) => info.size, () => 0);
+    runtime.events = events; runtime.eventSeq = events.at(-1)?.seq ?? 0; runtime.eventBytes = eventBytes; runtime.transcript = transcript;
+  }
+
+  private logFor(runtime: Runtime): EventLog {
+    runtime.eventLog ??= new EventLog(path.join(runtime.directory, "events.ndjson"), {
+      maxBytes: runtime.record.limits.maxEventBytes, initialBytes: runtime.eventBytes,
+      onFailure: (error) => this.noteEventFailure(runtime, error),
+      onFlushed: () => this.noteStorageSuccess(runtime, "event")
+    });
+    return runtime.eventLog;
+  }
+
+  private async flushQuietly(runtime: Runtime): Promise<void> {
+    try { await runtime.eventLog?.flush(); } catch (error) { this.noteEventFailure(runtime, error); }
   }
 
   private async ready(): Promise<void> { if (!this.initialized) await this.initialize(); }
@@ -600,8 +687,8 @@ export class RunManager {
     await lock?.release();
   }
 
-  private makeRuntime(record: RunRecord, directory: string, task: string, contextFiles: string[], allowShell: boolean, backendPreference: "auto" | BackendKind, events: SupervisorEvent[] = []): Runtime {
-    return { record, directory, task, contextFiles, allowShell, backendPreference, events, eventSeq: events.at(-1)?.seq ?? 0, transcript: "", serial: Promise.resolve(), slot: false, cancelRequested: false, started: false, deferredResponses: [], transcriptOverflow: false, completionOrder: 0, persistChain: Promise.resolve(), closeChain: Promise.resolve(), waiters: new Set() };
+  private makeRuntime(record: RunRecord, directory: string, task: string, contextFiles: string[], allowShell: boolean, backendPreference: "auto" | BackendKind, lazy = false): Runtime {
+    return { record, directory, task, contextFiles, allowShell, backendPreference, events: [], eventSeq: 0, eventBytes: 0, ...(lazy ? {} : { loading: Promise.resolve() }), transcript: "", serial: Promise.resolve(), slot: false, cancelRequested: false, started: false, deferredResponses: [], transcriptOverflow: false, completionOrder: 0, persistChain: Promise.resolve(), closeChain: Promise.resolve(), waiters: new Set() };
   }
 
   private async loadDefaultBackends(): Promise<void> {
@@ -616,27 +703,22 @@ export class RunManager {
     if (runtime.cancelRequested || isTerminal(runtime.record.state)) { this.releaseSlot(runtime); return; }
     runtime.record.launchedAt = new Date().toISOString();
     this.armDeadline(runtime, runtime.record.limits.timeoutSeconds * 1000);
+    let snapshotTask: Promise<void> | undefined;
     try {
       let workerWorkspace = runtime.record.sourceWorkspace;
       let baseRef: string | undefined;
+      if (runtime.record.mode !== "edit") snapshotTask = this.captureLaunchSnapshot(runtime);
       if (runtime.record.mode === "edit") {
         const worktree = await createDetachedWorktree(runtime.record.sourceWorkspace, runtime.record.workerWorkspace, runtime.baseRef ?? "HEAD");
         runtime.record.worktree = worktree; runtime.record.workerWorkspace = worktree.path; workerWorkspace = worktree.path; baseRef = worktree.baseRef;
-        await this.persist(runtime);
-      } else {
-        try {
-          const snapshot = await snapshotWorkspace(runtime.record.sourceWorkspace);
-          runtime.sourceSnapshot = snapshot.sha256; runtime.sourceManifest = snapshot.manifest;
-          runtime.record.workspaceSnapshotSha256 = snapshot.sha256;
-        } catch {
-          delete runtime.sourceSnapshot; delete runtime.sourceManifest; delete runtime.record.workspaceSnapshotSha256;
-          runtime.snapshotFailed = true;
-        }
         await this.persist(runtime);
       }
       if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
       const backend = await this.selectBackend(runtime.backendPreference);
       runtime.backend = backend; runtime.record.backend = backend.kind;
+      await snapshotTask;
+      if (snapshotTask) await this.persist(runtime);
+      if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
       const contextFiles = runtime.contextFiles.map((file) => path.resolve(runtime.record.sourceWorkspace, file));
       const limits = runtime.record.limits;
       const input = {
@@ -659,6 +741,7 @@ export class RunManager {
       for (const response of runtime.deferredResponses.splice(0)) await backend.respond(result.handle, response).catch(() => undefined);
       if (!isTerminal(runtime.record.state) && runtime.record.state === "negotiating") await this.setState(runtime, result.initialState === "starting" ? "running" : result.initialState, { startedAt: runtime.record.startedAt ?? new Date().toISOString() });
     } catch (error) {
+      await snapshotTask;
       if (runtime.cancelRequested || runtime.record.state === "cancelled") return;
       const outcome: SettleOutcome = { state: "failed", error: normalizeError(error) };
       await this.serial(runtime, async () => {
@@ -668,10 +751,26 @@ export class RunManager {
     }
   }
 
+  private async captureLaunchSnapshot(runtime: Runtime): Promise<void> {
+    try {
+      const snapshot = await snapshotWorkspace(runtime.record.sourceWorkspace);
+      runtime.sourceSnapshot = snapshot.sha256; runtime.sourceManifest = snapshot.manifest;
+      runtime.record.workspaceSnapshotSha256 = snapshot.sha256;
+    } catch {
+      delete runtime.sourceSnapshot; delete runtime.sourceManifest; delete runtime.record.workspaceSnapshotSha256;
+      runtime.snapshotFailed = true;
+    }
+  }
+
   private async selectBackend(preference: "auto" | BackendKind): Promise<SupervisorBackend> {
     const configured = this.config.backend;
     const kind = preference !== "auto" ? preference : configured !== "auto" ? configured : "auto";
     const candidates = kind === "auto" ? ["acp", "programmatic"] as const : [kind];
+    if (kind !== "auto") {
+      const backend = this.backends.get(kind);
+      if (!backend) throw backendUnavailableError([]);
+      return backend;
+    }
     const failures: ProbeFailure[] = [];
     for (const candidate of candidates) {
       const backend = this.backends.get(candidate);
@@ -699,7 +798,9 @@ export class RunManager {
 
   private async appendEvent(runtime: Runtime, event: Parameters<BackendCallbacks["onEvent"]>[0], allowTerminal = false): Promise<void> {
     if (isTerminal(runtime.record.state) && !allowTerminal) return;
-    const type = String(event.type).slice(0, 128);
+    await this.ensureLoaded(runtime);
+    if (isTerminal(runtime.record.state) && !allowTerminal) return;
+    const type = redactSecrets(String(event.type).slice(0, 128));
     let data = event.data ?? {};
     if (/reasoning|thought/i.test(type)) {
       const omitted = Buffer.byteLength(JSON.stringify(data));
@@ -725,9 +826,7 @@ export class RunManager {
       severity: event.severity,
       data
     };
-    const file = path.join(runtime.directory, "events.ndjson");
-    const maxBytes = runtime.record.limits.maxEventBytes;
-    try { await appendNdjson(file, eventToWire(full), { maxBytes }); }
+    try { this.logFor(runtime).append(eventToWire(full)); }
     catch (error) {
       if (error instanceof RangeError) {
         runtime.cancelRequested = true;
@@ -737,7 +836,6 @@ export class RunManager {
       throw asStorageError(error, runtime.directory);
     }
     runtime.events.push(full); runtime.eventSeq = full.seq;
-    this.noteStorageSuccess(runtime, "event");
     this.notify(runtime);
   }
 
@@ -764,6 +862,8 @@ export class RunManager {
     const decision = await this.policy.evaluate(runtime.record.mode, runtime.record.workerWorkspace, pending, runtime.allowShell);
     if (decision.kind === "prompt") {
       await this.serial(runtime, async () => {
+        if (isTerminal(runtime.record.state)) return;
+        await this.flushQuietly(runtime);
         if (isTerminal(runtime.record.state)) return;
         runtime.record.pendingRequest = pending;
         await this.setState(runtime, pending.kind === "permission" ? "waiting_permission" : "waiting_input");
@@ -835,6 +935,7 @@ export class RunManager {
     }
     let outcome = requested;
     try {
+      await this.ensureLoaded(runtime);
       this.endTranscriptTurn(runtime);
       if (outcome.state !== "recoverable") await this.assessReviewIntegrity(runtime, outcome.state);
       try { await this.finalizeArtifacts(runtime, outcome.state); }
@@ -942,6 +1043,7 @@ export class RunManager {
   }
 
   private async writeArtifacts(runtime: Runtime, resultState: RunState): Promise<void> {
+    await this.ensureLoaded(runtime);
     const artifactDir = path.join(runtime.directory, "artifacts");
     await createPrivateDir(artifactDir);
     let patchInfo: { patchPath: string; statPath: string; sha256: string; bytes: number; changedFiles: string[] } | undefined;
@@ -952,6 +1054,7 @@ export class RunManager {
     }
     await this.atomicWriteText(path.join(runtime.directory, "transcript.md"), runtime.transcript.slice(0, runtime.record.limits.maxTranscriptBytes));
     const eventsPath = path.join(runtime.directory, "events.ndjson");
+    await runtime.eventLog?.flush();
     try { await lstat(eventsPath); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") await this.atomicWriteText(eventsPath, ""); else throw error; }
     const artifacts: NonNullable<RunRecord["result"]>["artifacts"] = [];
     if (patchInfo) {
@@ -1062,6 +1165,8 @@ export class RunManager {
   }
 
   private async persist(runtime: Runtime): Promise<void> {
+    try { await runtime.eventLog?.flush(); }
+    catch (error) { if (!this.degrade(runtime, asStorageError(error, runtime.directory))) throw error; }
     const write = runtime.persistChain.then(() => atomicWriteJson(path.join(runtime.directory, "meta.json"), runToWire(runtime.record)));
     runtime.persistChain = write.then(() => undefined, () => undefined);
     try { await write; }
@@ -1126,14 +1231,14 @@ export class RunManager {
       integrity = { status: "unverified", writeToolObserved, reason: runtime.snapshotFailed ? "The launch snapshot failed: the workspace is too large or unreadable." : "No launch snapshot is available for this run." };
     } else {
       try {
-        const end = await snapshotWorkspace(runtime.record.sourceWorkspace);
-        if (end.sha256 === runtime.sourceSnapshot) integrity = { status: "verified", writeToolObserved };
+        const manifest = runtime.sourceManifest;
+        const paths = manifest ? await changedSinceSnapshot(runtime.record.sourceWorkspace, manifest) : (await snapshotWorkspace(runtime.record.sourceWorkspace)).sha256 === runtime.sourceSnapshot ? [] : undefined;
+        if (paths?.length === 0) integrity = { status: "verified", writeToolObserved };
         else {
-          const paths = runtime.sourceManifest ? diffManifests(runtime.sourceManifest, end.manifest) : [];
           integrity = {
             status: "changed", writeToolObserved,
-            changedPaths: paths.slice(0, MAX_INTEGRITY_PATHS), changedPathsTotal: paths.length,
-            reason: runtime.sourceManifest ? `The source workspace content changed between the launch snapshot and the end of the run (${paths.length} paths).` : "The source workspace content changed, but the launch manifest is unavailable so the paths are unknown."
+            changedPaths: (paths ?? []).slice(0, MAX_INTEGRITY_PATHS), changedPathsTotal: (paths ?? []).length,
+            reason: paths ? `The source workspace content changed between the launch snapshot and the end of the run (${paths.length} paths).` : "The source workspace content changed, but the launch manifest is unavailable so the paths are unknown."
           };
         }
       } catch {
@@ -1174,6 +1279,20 @@ export class RunManager {
     const runtime = this.runs.get(id);
     if (!runtime) throw codedError("VSUP_NOT_FOUND", "Run was not found.");
     return runtime;
+  }
+}
+
+function nextActionFor(state: RunState): string {
+  switch (state) {
+    case "completed": return "Read the result; call vibe_continue for a follow-up or vibe_close when done.";
+    case "failed":
+    case "cancelled": return "Read error and warnings; call vibe_close when done.";
+    case "waiting_permission":
+    case "waiting_input": return "Answer the pending request with vibe_respond.";
+    case "recoverable": return "Call vibe_continue to resume the session or vibe_close to discard it.";
+    case "closing":
+    case "closed": return "The run is closed.";
+    default: return "Call vibe_status with wait_seconds until the run needs action.";
   }
 }
 
@@ -1223,7 +1342,7 @@ function backendUnavailableError(failures: ProbeFailure[]): Error {
   const interpreter = failures.find(({ capability }) => capability.details?.interpreter_missing === true);
   if (interpreter) {
     const name = interpreter.capability.details?.interpreter;
-    return codedError("VSUP_BACKEND_UNAVAILABLE", `The interpreter for the ${interpreter.backend} Vibe launcher${typeof name === "string" ? ` (${name})` : ""} was not found; install it or correct the launcher's shebang.`, { candidates });
+    return codedError("VSUP_BACKEND_UNAVAILABLE", interpreterMissingMessage(interpreter.backend, name), { candidates });
   }
   return codedError("VSUP_BACKEND_UNAVAILABLE", "No configured backend passed its availability probe.", { candidates });
 }
@@ -1340,53 +1459,6 @@ function isWriteEvidence(event: SupervisorEvent): boolean {
   if (kind === "edit" || kind === "delete" || kind === "move") return true;
   return [event.data.title, event.data.name].some((value) => typeof value === "string" && /^\s*(?:write_file|edit)(?![a-z0-9])/i.test(value));
 }
-
-function diffManifests(before: ReadonlyMap<string, string>, after: ReadonlyMap<string, string>): string[] {
-  const changed: string[] = [];
-  for (const [file, digest] of before) if (after.get(file) !== digest) changed.push(file);
-  for (const file of after.keys()) if (!before.has(file)) changed.push(file);
-  return changed.sort();
-}
-
-export interface WorkspaceHashLimits { maxFiles: number; maxBytes: number }
-const DEFAULT_HASH_LIMITS: WorkspaceHashLimits = { maxFiles: 200_000, maxBytes: 2 * 1024 * 1024 * 1024 };
-
-export interface WorkspaceSnapshot { sha256: string; manifest: Map<string, string> }
-
-export async function hashWorkspace(root: string, limits: WorkspaceHashLimits = DEFAULT_HASH_LIMITS): Promise<string> {
-  return (await snapshotWorkspace(root, limits)).sha256;
-}
-
-export async function snapshotWorkspace(root: string, limits: WorkspaceHashLimits = DEFAULT_HASH_LIMITS): Promise<WorkspaceSnapshot> {
-  const hash = createHash("sha256");
-  const manifest = new Map<string, string>();
-  let totalBytes = 0; let count = 0;
-  const visit = async (directory: string): Promise<void> => {
-    const entries = await readdir(directory, { withFileTypes: true });
-    entries.sort((a, b) => a.name.localeCompare(b.name));
-    for (const entry of entries) {
-      if (directory === root && entry.name === ".git") continue;
-      const absolute = path.join(directory, entry.name); const relative = path.relative(root, absolute);
-      const info = await lstat(absolute);
-      if (info.isSymbolicLink()) { const target = await readFileLink(absolute); manifest.set(relative, `L:${target}`); hash.update(`L${relative}\0${target}\0`); continue; }
-      if (info.isDirectory()) { manifest.set(relative, "D"); hash.update(`D${relative}\0`); await visit(absolute); continue; }
-      if (!info.isFile()) continue;
-      count += 1; totalBytes += info.size;
-      if (count > limits.maxFiles || totalBytes > limits.maxBytes) throw codedError("VSUP_OUTPUT_LIMIT", "Workspace snapshot exceeded its safety limits.");
-      const fileHash = createHash("sha256");
-      const handle = await open(absolute, "r");
-      try { const buffer = Buffer.allocUnsafe(64 * 1024); while (true) { const { bytesRead } = await handle.read(buffer, 0, buffer.length, null); if (!bytesRead) break; fileHash.update(buffer.subarray(0, bytesRead)); } }
-      finally { await handle.close(); }
-      const digest = fileHash.digest("hex");
-      manifest.set(relative, `F:${digest}`);
-      hash.update(`F${relative}\0${digest}\0`);
-    }
-  };
-  await visit(root);
-  return { sha256: hash.digest("hex"), manifest };
-}
-
-async function readFileLink(file: string): Promise<string> { const { readlink } = await import("node:fs/promises"); return readlink(file); }
 
 function validateElicitation(schema: Record<string, unknown> | undefined, action: "accept" | "decline" | "cancel", content?: Record<string, unknown>): void {
   if (action !== "accept") {

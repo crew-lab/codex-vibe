@@ -8,6 +8,7 @@ import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { AcpBackend } from '../../src/backends/acp.js';
 import { ProgrammaticBackend } from '../../src/backends/programmatic.js';
+import { PROBE_FAILURE_TTL_MS } from '../../src/backends/probe-cache.js';
 import type { VibeChildProfile } from '../../src/backends/profile.js';
 import type { VibeLaunch } from '../../src/backends/launcher.js';
 
@@ -134,9 +135,24 @@ describe('backend probe cache', () => {
     await backend.probe();
     expect(backend.runs).toBe(1);
     backend.result = available;
-    vi.advanceTimersByTime(25_000);
+    vi.advanceTimersByTime(55_000);
     expect((await backend.probe()).available).toBe(true);
     expect(backend.runs).toBe(2);
+  });
+
+  it('keeps a failed probe for sixty seconds', async () => {
+    const { script } = await acpScript();
+    const backend = new ProbeCountingAcp(script);
+    backend.result = unavailable;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    await backend.probe();
+    vi.advanceTimersByTime(59_000);
+    await backend.probe();
+    expect(backend.runs).toBe(1);
+    vi.advanceTimersByTime(2_000);
+    await backend.probe();
+    expect(backend.runs).toBe(2);
+    expect(PROBE_FAILURE_TTL_MS).toBe(60_000);
   });
 
   it('shares one in-flight probe between concurrent callers', async () => {
@@ -215,7 +231,7 @@ function startInput(root: string): StartRunInput {
 }
 
 describe('probe sharing between probe and start', () => {
-  it('spawns Vibe for the availability probe once across two runs', async () => {
+  it('spawns Vibe once per run and never for an availability probe', async () => {
     const root = await makeRoot();
     const script = path.join(root, 'vibe-acp');
     await writeExecutable(script, '#!/bin/sh\nexit 0\n');
@@ -231,7 +247,7 @@ describe('probe sharing between probe and start', () => {
       await backend.close(started.handle);
     }
     const spawned = (await readdir(pidDir)).length;
-    expect(spawned).toBe(3);
+    expect(spawned).toBe(2);
   });
 });
 
