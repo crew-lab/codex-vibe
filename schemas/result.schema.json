@@ -9,6 +9,7 @@
     "workspace": { "type": "object", "additionalProperties": false, "required": ["source", "worker"], "properties": { "source": { "type": "string" }, "worker": { "type": "string" } } },
     "artifacts": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["name", "path", "sha256", "bytes", "media_type"], "properties": { "name": { "type": "string" }, "path": { "type": "string" }, "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "bytes": { "type": "integer", "minimum": 0 }, "media_type": { "type": "string" } } } },
     "changed_files": { "type": "array", "items": { "type": "string" } }, "usage": { "type": "object" }, "warnings": { "type": "array", "items": { "type": "string" } },
+    "error": {"type": "object", "additionalProperties": false, "required": ["code", "message", "remediation", "retryable"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}, "remediation": {"type": "string"}, "retryable": {"type": "boolean"}, "details": {"type": "object"}}},
     "next_action": { "type": "string" }
   }
 }

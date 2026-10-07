@@ -1,0 +1,11 @@
+{
+  "at": "2026-10-07T12:51:02.390579+00:00",
+  "live_test_launchers": 1,
+  "task_in_live_launcher_argv": false,
+  "runs": [
+    {
+      "run_id": "fbcd85d0-42a8-4099-bcd3-63ecf7f37dec",
+      "prompt_file_exists": false
+    }
+  ]
+}

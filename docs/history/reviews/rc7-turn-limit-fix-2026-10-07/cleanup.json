@@ -1,0 +1,9 @@
+{
+  "owned_process_pids": [],
+  "saved_runs": 18,
+  "nonclosed_runs": [],
+  "owner_locks": [],
+  "source_status": "",
+  "synthetic_worktree_registry": "worktree /private/tmp/rc7-phase-d-zotf2wpq/workspace\nHEAD 79c00925ea88aa0c1cdd96f4cb1ccd6a54f58d2c\nbranch refs/heads/main\n\n",
+  "retained_root": "/private/tmp/rc7-phase-d-zotf2wpq"
+}

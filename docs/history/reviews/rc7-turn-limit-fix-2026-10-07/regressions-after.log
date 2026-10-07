@@ -1,0 +1,72 @@
+
+> vibe-supervisor@0.9.0-rc.7 test
+> vitest run tests/integration/failure-reporting.test.ts tests/integration/settle.test.ts tests/integration/stop-reason.test.ts tests/integration/storage-faults.test.ts
+
+
+ RUN  v4.0.18 /Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe
+
+vibe-supervisor: background failure in storage: VSUP_STORAGE_ERROR: The supervisor could not write to its data directory because the disk is full (ENOSPC).
+ ✓ tests/integration/stop-reason.test.ts (11 tests) 1981ms
+vibe-supervisor: background failure in storage: VSUP_STORAGE_ERROR: The supervisor could not write to its data directory because the disk is full (ENOSPC).
+ ✓ tests/integration/storage-faults.test.ts (11 tests) 4028ms
+     ✓ fails the run with VSUP_STORAGE_ERROR when the completion persist hits ENOSPC, and keeps the pipeline moving  648ms
+     ✓ keeps the in-memory outcome and reports a warning while the state cannot be saved  618ms
+     ✓ lets the first persist of start() propagate VSUP_STORAGE_ERROR without creating a run  392ms
+     ✓ fails the run with EACCES when the run directory becomes unwritable mid-run  492ms
+     ✓ does not reject an ACP session when recording an event fails  566ms
+ ✓ tests/integration/settle.test.ts (18 tests) 8423ms
+     ✓ 'the launch fails'  566ms
+     ✓ 'the backend reports completed'  542ms
+     ✓ 'the backend reports failed'  584ms
+     ✓ 'the backend reports cancelled on its …'  488ms
+     ✓ 'the user cancels a running run'  462ms
+     ✓ 'the user cancels a running run (backe…'  513ms
+     ✓ 'the user cancels a queued run'  487ms
+     ✓ 'the deadline expires'  429ms
+     ✓ 'the deadline expires (backend cancel …'  453ms
+     ✓ 'the transcript limit is reached'  486ms
+     ✓ 'the transcript limit is reached (back…'  447ms
+     ✓ 'a permission request violates the pol…'  442ms
+     ✓ 'a permission request violates the pol…'  521ms
+     ✓ 'artifact finalization fails a complet…'  432ms
+     ✓ 'a failure is reported after the run a…'  475ms
+     ✓ 'the supervisor shuts down under a run…'  320ms
+     ✓ 'the supervisor shuts down under a que…'  378ms
+     ✓ a policy failure writes artifacts, records integrity and leaves no worker process  395ms
+ ✓ tests/integration/failure-reporting.test.ts (37 tests) 23520ms
+     ✓ fails a run whose ACP process exits 0 mid-turn with VSUP_BACKEND_CRASHED  490ms
+     ✓ applies the same rule to a recovered session  654ms
+     ✓ treats an empty or blank summary like a missing one when finalizing  502ms
+     ✓ adds the no-final-message warning when the programmatic Vibe produced nothing  366ms
+     ✓ adds no warning when the programmatic Vibe produced a message  382ms
+     ✓ 'matching pinned markers, including an…'  417ms
+     ✓ 'a marker mentioned only by the assist…'  395ms
+     ✓ 'a marker on stderr without a streamed…'  372ms
+     ✓ 'a marker for a different configured t…'  351ms
+     ✓ 'a genuine crash after a matching mark…'  373ms
+     ✓ 'an additional error after the marker'  398ms
+     ✓ 'a marker in ordinary successful assis…'  410ms
+     ✓ reports a missing executable with the code of the backend that was asked for  355ms
+     ✓ lists every candidate reason when nothing else explains the failure  318ms
+     ✓ prefers the version mismatch over a missing sibling executable  308ms
+     ✓ puts detected_version in the real programmatic probe and fails the run with both versions  589ms
+     ✓ flags a missing programmatic executable in the real probe  316ms
+     ✓ puts detected_version in the real ACP probe and flags a missing ACP executable  404ms
+     ✓ starts an explicit ACP backend with a single spawn and continues without another  10401ms
+     ✓ does not run vibe --version before an explicit programmatic start  368ms
+     ✓ takes the backend from config when the tool says auto and the config names one  302ms
+     ✓ still probes candidates in order for auto and falls back  301ms
+     ✓ reports a wrong ACP version from the real initialize with both versions and a single spawn  347ms
+     ✓ maps the shim version message on stderr to the unsupported-version code for ACP  349ms
+     ✓ maps the shim version message on stderr to the unsupported-version code for programmatic  365ms
+     ✓ keeps other early programmatic failures as a crash  343ms
+     ✓ shows the review integrity explanation  322ms
+     ✓ re-probes the ACP backend after a start that failed before the session was ready  368ms
+     ✓ spawns nothing but the session for runs that start fine  306ms
+     ✓ re-probes the programmatic backend after a start that failed before the session was ready  461ms
+
+ Test Files  4 passed (4)
+      Tests  77 passed (77)
+   Start at  15:49:36
+   Duration  24.67s (transform 560ms, setup 0ms, import 898ms, tests 37.95s, environment 0ms)
+
