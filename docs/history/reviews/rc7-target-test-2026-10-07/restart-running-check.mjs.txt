@@ -1,0 +1,67 @@
+import { readFile, writeFile, mkdir, utimes, stat } from 'node:fs/promises';
+import { Client } from '/Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/node_modules/@modelcontextprotocol/client/dist/index.mjs';
+import { StdioClientTransport } from '/Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/node_modules/@modelcontextprotocol/client/dist/stdio.mjs';
+const root='/private/tmp/rc7-phase-d-zotf2wpq';
+const workspace=`${root}/workspace`;
+const cli=`${root}/install/node_modules/vibe-supervisor/dist/cli.js`;
+const evidence=[];
+let client,transport,runId,r;
+const save=async()=>writeFile(`${root}/restart-running-check.json`,JSON.stringify(evidence,null,2)+'\n',{mode:0o600});
+async function connect(backend){
+ const home=`${root}/target-${backend}`;await mkdir(home,{mode:0o700,recursive:true});
+ const source=await readFile(`${root}/home/config.toml`,'utf8');
+ await writeFile(`${home}/config.toml`,source.replace('backend = "programmatic"',`backend = "${backend}"\nworker_idle_ttl_seconds = 60`),{mode:0o600});
+ client=new Client({name:'phase-d-target-checks',version:'1.0.0'});
+ transport=new StdioClientTransport({command:process.execPath,args:[cli,'serve','--stdio'],env:{...process.env,VIBE_SUPERVISOR_HOME:home},stderr:'pipe'});
+ let stderr='';transport.stderr?.on('data',c=>{stderr+=c.toString();});
+ await client.connect(transport);return home;
+}
+async function call(name,args){
+ const start=performance.now();
+ const reply=await client.callTool({name,arguments:args},{timeout:600000});
+ const data=reply.structuredContent??JSON.parse(reply.content.find(c=>c.type==='text').text);
+ if(reply.isError)throw Error(`${name}: ${JSON.stringify(data)}`);
+ return {data,ms:Math.round(performance.now()-start)};
+}
+async function start(task){const r=await call('vibe_review_start',{cwd:workspace,task,wait_seconds:0,max_turns:12,timeout_seconds:180});runId=r.data.run_id;return r;}
+async function running(){
+ for(let i=0;i<240;i++){
+  const {data}=await call('vibe_status',{run_id:runId,wait_seconds:0,max_events:0});
+  if(data.state==='running')return data;
+  if(['completed','failed','closed'].includes(data.state))throw Error(`Turn settled before running observation: ${data.state}`);
+  await new Promise(r=>setTimeout(r,50));
+ }throw Error('No running state observed');
+}
+async function settle(){
+ let after=0;
+ for(let i=0;i<100;i++){
+  const r=await call('vibe_status',{run_id:runId,after_seq:after,wait_seconds:300,max_events:100});
+  after=r.data.next_after_seq??after;
+  if(r.data.pending_request)throw Error('Unexpected permission/input request');
+  if(r.data.result){if(r.data.state!=='completed'||r.data.result.stop_reason!=='end_turn')throw Error(`Unexpected result: ${JSON.stringify(r.data.result)}`);return r;}
+ }throw Error('No settled result');
+}
+async function close(){const r=await call('vibe_close',{run_id:runId});runId=undefined;return r;}
+try{
+ const home=await connect('acp');
+ await start('Read src/nested/arithmetic.py. Give a detailed forty-paragraph explanation of its correctness, edge cases, and examples. Read only.');
+ await running();
+ let after=0, observed=false;
+ for(let i=0;i<160;i++){
+  const x=(await call('vibe_status',{run_id:runId,after_seq:after,wait_seconds:0,max_events:100})).data;
+  after=x.next_after_seq??after;
+  if(x.state!=='running')throw Error('Turn ended before tool use was observed');
+  if(x.events.some(e=>e.type==='tool_call_update')){observed=true;break;}
+  await new Promise(r=>setTimeout(r,50));
+ }
+ if(!observed)throw Error('No live tool use observed before restart');
+ const interrupted=runId;await client.close();
+ const before=performance.now();await connect('acp');const startupMs=Math.round(performance.now()-before);
+ const recovered=(await call('vibe_status',{run_id:interrupted,wait_seconds:0,max_events:100})).data;
+ if(recovered.state!=='recoverable'&&recovered.state!=='completed')throw Error('Unexpected restarted state '+recovered.state);
+ evidence.push({step:'D11-restart-running',run_id:interrupted,tool_use_before_restart:true,startup_ms:startupMs,state_after:recovered.state,last_seq:recovered.last_seq});await save();
+ try{await call('vibe_continue',{run_id:interrupted,message:'Ignore the requested lengthy explanation. In one sentence state the arithmetic bug.'});const outcome=await settle();evidence.push({step:'D11-running-session-reload',run_id:interrupted,result:outcome.data.result});}
+ catch(e){evidence.push({step:'D11-accurate-reload-error',run_id:interrupted,error:String(e)});if(!/VSUP_SESSION_NOT_RESUMABLE/.test(String(e)))throw e;}
+ await close();await save();console.log('Restart running check complete');
+}catch(e){evidence.push({step:'FAIL',message:String(e)});await save();process.exitCode=1;console.error(e);}
+finally{if(runId&&client){try{await close();}catch{}}if(client){try{await client.close();}catch{}}}

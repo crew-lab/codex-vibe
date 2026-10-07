@@ -1,0 +1,39 @@
+{
+  "base_commit": "f30f8d74be9d442b5c315b51dc4e5c3cf5722757",
+  "source_sha256": {
+    "src/backends/programmatic.ts": "576b67173f9313cf3c2f5d90e94947ad875ead07c643e834cfae9aa886d0f927",
+    "src/core/run-manager.ts": "e39e237ce69e3a65ca98accb239d2ce9e2437766cb75de192e9fe41605a2b94d",
+    "schemas/result.schema.json": "657e6ef642caefabb6dd222cc0e189349eee22d0303ef0a06939d450b7e8e500",
+    "tests/integration/failure-reporting.test.ts": "9a286908c4a3f7979b3f40962daa09535cdf11062dbde829c36bf11a96082092",
+    "tests/integration/settle.test.ts": "36fd446ce037fc4337a9dfdd9203786538e62c4490c36986b5b55aa7540c2bab",
+    "docs/functionality.md": "6db18bcbfa567fc520c15bc7dfe2e2aa3147a02e5b4148fdc06fe2cb418d38f9"
+  },
+  "patched_tarball_sha256": "6e444fc3769d4a39114fe3fd8e4c13e84c018c59e74197b2287f16bc94f4f1bd",
+  "version": "0.9.0-rc.7 (locally patched, uncommitted)",
+  "checks": {
+    "targeted_regressions": {
+      "files": 4,
+      "passed": 77
+    },
+    "release_tests": {
+      "files": 53,
+      "passed": 603
+    },
+    "python": "PASS",
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "offline_smoke": "PASS",
+    "checksums": "PASS"
+  },
+  "hosted_retry": {
+    "requested_runs": 100,
+    "attempted_runs": 1,
+    "status": "FAIL",
+    "run_id": "d9ce1a35-e7c4-43d4-b619-32383d3353af",
+    "stop_reason": "max_turn_requests",
+    "failure": "driver:stop_reason_max_turn_requests",
+    "limits_and_tasks_changed": false
+  },
+  "installed_saved_error": "PASS"
+}

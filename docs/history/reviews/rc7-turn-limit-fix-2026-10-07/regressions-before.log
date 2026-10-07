@@ -1,0 +1,285 @@
+
+> vibe-supervisor@0.9.0-rc.7 test
+> vitest run tests/integration/failure-reporting.test.ts tests/integration/settle.test.ts
+
+
+ RUN  v4.0.18 /Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe
+
+ ❯ tests/integration/settle.test.ts (18 tests | 10 failed) 7644ms
+     × 'the launch fails' 338ms
+     ✓ 'the backend reports completed'  454ms
+     × 'the backend reports failed' 402ms
+     ✓ 'the backend reports cancelled on its …'  526ms
+     ✓ 'the user cancels a running run'  477ms
+     ✓ 'the user cancels a running run (backe…'  413ms
+     ✓ 'the user cancels a queued run'  487ms
+     × 'the deadline expires' 369ms
+     × 'the deadline expires (backend cancel …' 357ms
+     × 'the transcript limit is reached' 669ms
+     × 'the transcript limit is reached (back…' 413ms
+     × 'a permission request violates the pol…' 528ms
+     × 'a permission request violates the pol…' 354ms
+     × 'artifact finalization fails a complet…' 355ms
+     ✓ 'a failure is reported after the run a…'  483ms
+     ✓ 'the supervisor shuts down under a run…'  310ms
+     × 'the supervisor shuts down under a que…' 333ms
+     ✓ a policy failure writes artifacts, records integrity and leaves no worker process  375ms
+ ❯ tests/integration/failure-reporting.test.ts (37 tests | 2 failed) 23744ms
+     ✓ fails a run whose ACP process exits 0 mid-turn with VSUP_BACKEND_CRASHED  382ms
+     ✓ never reports completed to the backend callbacks when the process exits 0 mid-turn 293ms
+     ✓ applies the same rule to a recovered session  535ms
+     ✓ treats an empty or blank summary like a missing one when finalizing  447ms
+     ✓ adds the no-final-message warning when the programmatic Vibe produced nothing  379ms
+     ✓ adds no warning when the programmatic Vibe produced a message  351ms
+     × 'matching pinned markers, including an…' 383ms
+     ✓ 'a marker mentioned only by the assist…'  372ms
+     ✓ 'a marker on stderr without a streamed…'  391ms
+     ✓ 'a marker for a different configured t…'  404ms
+     ✓ 'a genuine crash after a matching mark…'  881ms
+     × 'an additional error after the marker' 618ms
+     ✓ 'a marker in ordinary successful assis…'  396ms
+     ✓ names the detected and the supported version when a probe saw the wrong one  302ms
+     ✓ reports a missing executable with the code of the backend that was asked for  370ms
+     ✓ lists every candidate reason when nothing else explains the failure 279ms
+     ✓ prefers the version mismatch over a missing sibling executable 264ms
+     ✓ puts detected_version in the real programmatic probe and fails the run with both versions  468ms
+     ✓ flags a missing programmatic executable in the real probe 289ms
+     ✓ puts detected_version in the real ACP probe and flags a missing ACP executable  349ms
+     ✓ starts an explicit ACP backend with a single spawn and continues without another  10386ms
+     ✓ does not run vibe --version before an explicit programmatic start  345ms
+     ✓ takes the backend from config when the tool says auto and the config names one 292ms
+     ✓ still probes candidates in order for auto and falls back  303ms
+     ✓ reports a wrong ACP version from the real initialize with both versions and a single spawn  351ms
+     ✓ maps the shim version message on stderr to the unsupported-version code for ACP  373ms
+     ✓ maps the shim version message on stderr to the unsupported-version code for programmatic  370ms
+     ✓ keeps other early programmatic failures as a crash  375ms
+     ✓ appends a redacted diagnostic event before the run settles as failed  307ms
+     ✓ shows capped text for supervisor diagnostics and keeps other event data stripped  303ms
+     ✓ shows the review integrity explanation  310ms
+     ✓ forgets a cached probe so the next get runs again 202ms
+     ✓ re-probes the ACP backend after a start that failed before the session was ready  365ms
+     ✓ spawns nothing but the session for runs that start fine  313ms
+     ✓ re-probes the programmatic backend after a start that failed before the session was ready  478ms
+     ✓ captures a redacted stderr tail when the ACP probe fails 260ms
+     ✓ adds no stderr tail to a successful probe 256ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/failure-reporting.test.ts > programmatic turn-limit exits > 'matching pinned markers, including an…'
+AssertionError: expected 'failed' to be 'completed' // Object.is equality
+
+Expected: "completed"
+Received: "failed"
+
+ ❯ tests/integration/failure-reporting.test.ts:264:30
+    262|       const result = await manager.result({ run_id: id });
+    263|       if (test.capped) {
+    264|         expect(status.state).toBe('completed');
+       |                              ^
+    265|         expect(status.error).toBeUndefined();
+    266|         expect(result).toMatchObject({ stop_reason: 'max_turn_requests…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  tests/integration/failure-reporting.test.ts > programmatic turn-limit exits > 'an additional error after the marker'
+AssertionError: expected { …(11) } to match object { state: 'failed', …(1) }
+(14 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "error": {
+-     "code": "VSUP_AUTH_REQUIRED",
++     "code": "VSUP_BACKEND_CRASHED",
+    },
+    "state": "failed",
+  }
+
+ ❯ tests/integration/failure-reporting.test.ts:275:24
+    273|         expect(result).toMatchObject({ state: 'completed', stop_reason…
+    274|       } else {
+    275|         expect(result).toMatchObject({ state: 'failed', error: { code:…
+       |                        ^
+    276|         expect(result.stop_reason).toBeUndefined();
+    277|       }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  tests/integration/settle.test.ts > settle: every end-of-run path ends the run the same way > 'the launch fails'
+AssertionError: expected undefined to deeply equal { …(4) }
+
+- Expected: 
+{
+  "code": "VSUP_BACKEND_UNAVAILABLE",
+  "message": "start failed",
+  "remediation": "Install or configure an available backend and retry.",
+  "retryable": false,
+}
+
++ Received: 
+undefined
+
+ ❯ tests/integration/settle.test.ts:140:53
+    138|       expect(result, 'result.json must exist').toBeDefined();
+    139|       expect(result?.state).toBe(scenario.state);
+    140|       if (scenario.errorCode) expect(result?.error).toEqual(status.err…
+       |                                                     ^
+    141|       if (scenario.launched && scenario.state !== 'recoverable') expec…
+    142|       if (!scenario.launched) expect(result?.integrity).toBeUndefined(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  tests/integration/settle.test.ts > settle: every end-of-run path ends the run the same way > 'the backend reports failed'
+AssertionError: expected undefined to deeply equal { code: 'VSUP_BACKEND_CRASHED', …(3) }
+
+- Expected: 
+{
+  "code": "VSUP_BACKEND_CRASHED",
+  "message": "crashed",
+  "remediation": "Inspect the backend stderr log and start a new run.",
+  "retryable": false,
+}
+
++ Received: 
+undefined
+
+ ❯ tests/integration/settle.test.ts:140:53
+    138|       expect(result, 'result.json must exist').toBeDefined();
+    139|       expect(result?.state).toBe(scenario.state);
+    140|       if (scenario.errorCode) expect(result?.error).toEqual(status.err…
+       |                                                     ^
+    141|       if (scenario.launched && scenario.state !== 'recoverable') expec…
+    142|       if (!scenario.launched) expect(result?.integrity).toBeUndefined(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  tests/integration/settle.test.ts > settle: every end-of-run path ends the run the same way > 'the deadline expires'
+ FAIL  tests/integration/settle.test.ts > settle: every end-of-run path ends the run the same way > 'the deadline expires (backend cancel …'
+AssertionError: expected undefined to deeply equal { code: 'VSUP_TIMEOUT', …(3) }
+
+- Expected: 
+{
+  "code": "VSUP_TIMEOUT",
+  "message": "The run exceeded its configured timeout.",
+  "remediation": "Increase the timeout or simplify the task, then start a new run.",
+  "retryable": false,
+}
+
++ Received: 
+undefined
+
+ ❯ tests/integration/settle.test.ts:140:53
+    138|       expect(result, 'result.json must exist').toBeDefined();
+    139|       expect(result?.state).toBe(scenario.state);
+    140|       if (scenario.errorCode) expect(result?.error).toEqual(status.err…
+       |                                                     ^
+    141|       if (scenario.launched && scenario.state !== 'recoverable') expec…
+    142|       if (!scenario.launched) expect(result?.integrity).toBeUndefined(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  tests/integration/settle.test.ts > settle: every end-of-run path ends the run the same way > 'the transcript limit is reached'
+ FAIL  tests/integration/settle.test.ts > settle: every end-of-run path ends the run the same way > 'the transcript limit is reached (back…'
+AssertionError: expected undefined to deeply equal { code: 'VSUP_OUTPUT_LIMIT', …(3) }
+
+- Expected: 
+{
+  "code": "VSUP_OUTPUT_LIMIT",
+  "message": "The transcript reached its configured byte limit.",
+  "remediation": "Reduce the requested output or increase the configured limit.",
+  "retryable": false,
+}
+
++ Received: 
+undefined
+
+ ❯ tests/integration/settle.test.ts:140:53
+    138|       expect(result, 'result.json must exist').toBeDefined();
+    139|       expect(result?.state).toBe(scenario.state);
+    140|       if (scenario.errorCode) expect(result?.error).toEqual(status.err…
+       |                                                     ^
+    141|       if (scenario.launched && scenario.state !== 'recoverable') expec…
+    142|       if (!scenario.launched) expect(result?.integrity).toBeUndefined(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  tests/integration/settle.test.ts > settle: every end-of-run path ends the run the same way > 'a permission request violates the pol…'
+ FAIL  tests/integration/settle.test.ts > settle: every end-of-run path ends the run the same way > 'a permission request violates the pol…'
+AssertionError: expected undefined to deeply equal { …(4) }
+
+- Expected: 
+{
+  "code": "VSUP_PERMISSION_REQUIRED",
+  "message": "The requested tool action is outside the configured safety policy.",
+  "remediation": "Respond to the pending permission request before continuing.",
+  "retryable": false,
+}
+
++ Received: 
+undefined
+
+ ❯ tests/integration/settle.test.ts:140:53
+    138|       expect(result, 'result.json must exist').toBeDefined();
+    139|       expect(result?.state).toBe(scenario.state);
+    140|       if (scenario.errorCode) expect(result?.error).toEqual(status.err…
+       |                                                     ^
+    141|       if (scenario.launched && scenario.state !== 'recoverable') expec…
+    142|       if (!scenario.launched) expect(result?.integrity).toBeUndefined(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  tests/integration/settle.test.ts > settle: every end-of-run path ends the run the same way > 'artifact finalization fails a complet…'
+AssertionError: expected undefined to deeply equal { code: 'VSUP_OUTPUT_LIMIT', …(3) }
+
+- Expected: 
+{
+  "code": "VSUP_OUTPUT_LIMIT",
+  "message": "Run artifacts exceeded the configured byte limit.",
+  "remediation": "Reduce the requested output or increase the configured limit.",
+  "retryable": false,
+}
+
++ Received: 
+undefined
+
+ ❯ tests/integration/settle.test.ts:140:53
+    138|       expect(result, 'result.json must exist').toBeDefined();
+    139|       expect(result?.state).toBe(scenario.state);
+    140|       if (scenario.errorCode) expect(result?.error).toEqual(status.err…
+       |                                                     ^
+    141|       if (scenario.launched && scenario.state !== 'recoverable') expec…
+    142|       if (!scenario.launched) expect(result?.integrity).toBeUndefined(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+ FAIL  tests/integration/settle.test.ts > settle: every end-of-run path ends the run the same way > 'the supervisor shuts down under a que…'
+AssertionError: expected undefined to deeply equal { code: 'VSUP_CANCELLED', …(3) }
+
+- Expected: 
+{
+  "code": "VSUP_CANCELLED",
+  "message": "Queued task was not submitted before shutdown.",
+  "remediation": "Start another run if more work is needed.",
+  "retryable": false,
+}
+
++ Received: 
+undefined
+
+ ❯ tests/integration/settle.test.ts:140:53
+    138|       expect(result, 'result.json must exist').toBeDefined();
+    139|       expect(result?.state).toBe(scenario.state);
+    140|       if (scenario.errorCode) expect(result?.error).toEqual(status.err…
+       |                                                     ^
+    141|       if (scenario.launched && scenario.state !== 'recoverable') expec…
+    142|       if (!scenario.launched) expect(result?.integrity).toBeUndefined(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  12 failed | 43 passed (55)
+   Start at  15:47:02
+   Duration  25.11s (transform 288ms, setup 0ms, import 453ms, tests 31.39s, environment 0ms)
+

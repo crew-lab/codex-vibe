@@ -971,11 +971,13 @@ export class RunManager {
     try {
       await this.ensureLoaded(runtime);
       this.endTranscriptTurn(runtime);
+      if (outcome.error) runtime.record.error = outcome.error;
       if (outcome.state !== "recoverable") await this.assessReviewIntegrity(runtime, outcome.state);
       try { await this.finalizeArtifacts(runtime, outcome.state); }
       catch (error) {
         if (outcome.state === "completed") outcome = { state: "failed", error: isCodedFailure(error) ? normalizeError(error) : supervisorError("VSUP_ARTIFACT_ERROR", "Could not finish and verify the run artifacts.") };
         else await this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "warning", data: { reason: "artifact_finalization_failed", message: describeFailure(error) } }, true).catch(() => undefined);
+        if (outcome.error) runtime.record.error = outcome.error;
         await this.writeFallbackResult(runtime, outcome.state);
       }
       await this.setState(runtime, outcome.state, { ...(outcome.error ? { error: outcome.error } : {}), finishedAt: new Date().toISOString() });
@@ -1076,6 +1078,7 @@ export class RunManager {
       summary: result?.summary ?? "",
       workspace: { source: record.sourceWorkspace, worker: record.workerWorkspace },
       artifacts: (result?.artifacts ?? []).map(artifactToWire), changed_files: result?.changedFiles ?? [],
+      ...(record.error ? { error: record.error } : {}),
       ...(record.usage ? { usage: usageToWire(record.usage) } : {}), warnings: result?.warnings ?? [],
       ...(result?.integrity ? { integrity: integrityToWire(result.integrity) } : {})
     };

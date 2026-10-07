@@ -240,6 +240,45 @@ describe('an empty final message', () => {
   });
 });
 
+describe('programmatic turn-limit exits', () => {
+  const marker = '<vibe_stop_event>Turn limit of 12 reached</vibe_stop_event>';
+  const cases = [
+    { name: 'matching pinned markers, including an unterminated last streaming line', code: 1, stdout: marker, stderr: marker, capped: true },
+    { name: 'a marker mentioned only by the assistant', code: 1, stdout: marker, stderr: 'boom', capped: false },
+    { name: 'a marker on stderr without a streamed assistant marker', code: 1, stdout: 'Partial findings.', stderr: marker, capped: false },
+    { name: 'a marker for a different configured turn limit', code: 1, stdout: marker.replace('12', '13'), stderr: marker.replace('12', '13'), capped: false },
+    { name: 'a genuine crash after a matching marker', code: 2, stdout: marker, stderr: marker, capped: false },
+    { name: 'an additional error after the marker', code: 1, stdout: marker, stderr: `${marker}\nError: 401 Unauthorized`, capped: false },
+    { name: 'a marker in ordinary successful assistant output', code: 0, stdout: marker, stderr: marker, capped: false },
+  ];
+  it.each(cases)('$name', async (test) => {
+    const { parent, source, data } = await makeParent();
+    const entry = JSON.stringify({ type: 'message', role: 'assistant', content: [{ type: 'text', text: test.stdout }] });
+    const body = `process.stdout.write(${JSON.stringify(entry.slice(0, 17))}); setTimeout(() => { process.stdout.write(${JSON.stringify(entry.slice(17))}); process.stderr.write(${JSON.stringify(test.stderr + '\n')}); process.exitCode = ${test.code}; }, 20);`;
+    const { vibe } = await installFakeVibe(parent, body);
+    const manager = managerFor(source, data, [new ProgrammaticBackend({ ...DEFAULT_CONFIG, backend: 'programmatic', paths: { vibe } })], { backend: 'programmatic' });
+    try {
+      const { id, status } = await failedRun(manager, source);
+      const result = await manager.result({ run_id: id });
+      if (test.capped) {
+        expect(status.state).toBe('completed');
+        expect(status.error).toBeUndefined();
+        expect(result).toMatchObject({ stop_reason: 'max_turn_requests', warnings: [expect.stringContaining('max_turn_requests')] });
+        expect(result.summary).toContain('turn limit');
+        expect(result.summary).not.toContain('<vibe_stop_event>');
+        const saved = JSON.parse(await readFile(path.join(data, 'runs', id, 'result.json'), 'utf8'));
+        expect(saved).toMatchObject({ state: 'completed', stop_reason: 'max_turn_requests', warnings: [expect.stringContaining('max_turn_requests')] });
+        expect(saved.error).toBeUndefined();
+      } else if (test.code === 0) {
+        expect(result).toMatchObject({ state: 'completed', stop_reason: 'end_turn' });
+      } else {
+        expect(result).toMatchObject({ state: 'failed', error: { code: test.stderr.includes('401 Unauthorized') ? 'VSUP_AUTH_REQUIRED' : 'VSUP_BACKEND_CRASHED' } });
+        expect(result.stop_reason).toBeUndefined();
+      }
+    } finally { await manager.shutdown(); }
+  });
+});
+
 describe('backend selection errors', () => {
   it('names the detected and the supported version when a probe saw the wrong one', async () => {
     const { source, data } = await makeParent();

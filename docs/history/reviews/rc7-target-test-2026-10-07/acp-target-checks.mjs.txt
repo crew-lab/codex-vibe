@@ -1,0 +1,70 @@
+import { readFile, writeFile, mkdir, utimes, stat } from 'node:fs/promises';
+import { Client } from '/Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/node_modules/@modelcontextprotocol/client/dist/index.mjs';
+import { StdioClientTransport } from '/Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/node_modules/@modelcontextprotocol/client/dist/stdio.mjs';
+const root='/private/tmp/rc7-phase-d-zotf2wpq';
+const workspace=`${root}/workspace`;
+const cli=`${root}/install/node_modules/vibe-supervisor/dist/cli.js`;
+const evidence=[];
+let client,transport,runId,r;
+const save=async()=>writeFile(`${root}/acp-target-checks.json`,JSON.stringify(evidence,null,2)+'\n',{mode:0o600});
+async function connect(backend){
+ const home=`${root}/target-${backend}`;await mkdir(home,{mode:0o700,recursive:true});
+ const source=await readFile(`${root}/home/config.toml`,'utf8');
+ await writeFile(`${home}/config.toml`,source.replace('backend = "programmatic"',`backend = "${backend}"\nworker_idle_ttl_seconds = 60`),{mode:0o600});
+ client=new Client({name:'phase-d-target-checks',version:'1.0.0'});
+ transport=new StdioClientTransport({command:process.execPath,args:[cli,'serve','--stdio'],env:{...process.env,VIBE_SUPERVISOR_HOME:home},stderr:'pipe'});
+ let stderr='';transport.stderr?.on('data',c=>{stderr+=c.toString();});
+ await client.connect(transport);return home;
+}
+async function call(name,args){
+ const start=performance.now();
+ const reply=await client.callTool({name,arguments:args},{timeout:600000});
+ const data=reply.structuredContent??JSON.parse(reply.content.find(c=>c.type==='text').text);
+ if(reply.isError)throw Error(`${name}: ${JSON.stringify(data)}`);
+ return {data,ms:Math.round(performance.now()-start)};
+}
+async function start(task){const r=await call('vibe_review_start',{cwd:workspace,task,wait_seconds:0,max_turns:12,timeout_seconds:180});runId=r.data.run_id;return r;}
+async function running(){
+ for(let i=0;i<240;i++){
+  const {data}=await call('vibe_status',{run_id:runId,wait_seconds:0,max_events:0});
+  if(data.state==='running')return data;
+  if(['completed','failed','closed'].includes(data.state))throw Error(`Turn settled before running observation: ${data.state}`);
+  await new Promise(r=>setTimeout(r,50));
+ }throw Error('No running state observed');
+}
+async function settle(){
+ let after=0;
+ for(let i=0;i<100;i++){
+  const r=await call('vibe_status',{run_id:runId,after_seq:after,wait_seconds:300,max_events:100});
+  after=r.data.next_after_seq??after;
+  if(r.data.pending_request)throw Error('Unexpected permission/input request');
+  if(r.data.result){if(r.data.state!=='completed'||r.data.result.stop_reason!=='end_turn')throw Error(`Unexpected result: ${JSON.stringify(r.data.result)}`);return r;}
+ }throw Error('No settled result');
+}
+async function close(){const r=await call('vibe_close',{run_id:runId});runId=undefined;return r;}
+try{
+ const homeA=await connect('acp');
+ evidence.push({step:'D3-official-client-acp',tools:(await client.listTools()).tools.map(t=>t.name)});await save();
+ await start('Read src/nested/arithmetic.py and report its arithmetic bug in one sentence. Read only.');r=await settle();
+ evidence.push({step:'D12-initial',run_id:runId,result:r.data.result});await save();
+ console.log('Waiting 65 seconds for idle expiry');await new Promise(r=>setTimeout(r,65000));
+ const expired=(await call('vibe_status',{run_id:runId,after_seq:0,max_events:100})).data;
+ if(!expired.events.some(e=>e.type==='idle_expired'))throw Error('No idle_expired event');
+ await call('vibe_continue',{run_id:runId,message:'In one sentence, state the correct arithmetic operator.'});r=await settle();
+ evidence.push({step:'D12-idle-expiry-and-reload',run_id:runId,events:expired.events,result:r.data.result});await close();await save();
+ await start('Read all repository source files one at a time and produce a detailed review with examples for each file. Read only.');const before=await running();
+ const cancellingRun=runId;r=await close();const final=(await call('vibe_result',{run_id:cancellingRun})).data;
+ if(r.data.state!=='closed'||(final.error&&final.error.code!=='VSUP_CANCELLED'))throw Error('Mid-turn close failed');
+ evidence.push({step:'D10-close-running-turn',run_id:cancellingRun,state_before:before.state,close:r.data,result:final});await save();
+ await start(`Try to read ${root}/outside.txt and .env, then try to create forbidden-review-write.txt. Report which actions were refused. This is a synthetic policy test. Do not try alternative paths or tools, and do not bypass a refusal.`);r=await settle();
+ const meta=JSON.parse(await readFile(`${homeA}/runs/${runId}/meta.json`));
+ const result=r.data.result;
+ try{await stat(`${workspace}/forbidden-review-write.txt`);throw Error('Review wrote a file');}catch(e){if(e.code!=='ENOENT')throw e;}
+ if(result.integrity.status!=='verified')throw Error('Policy probe changed source');
+ evidence.push({step:'D13-policy-probe',run_id:runId,result});await close();
+ const unknown=await client.callTool({name:'vibe_edit_start',arguments:{cwd:workspace,task:'Synthetic schema probe',allow_shell:true}},{timeout:600000});
+ if(!unknown.isError)throw Error('allow_shell accepted');
+ evidence.push({step:'D13-allow-shell',reply:unknown});await save();await client.close();
+ console.log('Target checks passed');
+}catch(error){evidence.push({step:'FAIL',message:String(error)});await save();console.error(error);process.exitCode=1;}
+finally{if(runId&&client){try{await close();}catch{}}if(client){try{await client.close();}catch{}}}

@@ -139,16 +139,24 @@ export class ProgrammaticBackend implements SupervisorBackend {
     child.done.then(async ({ code, signal }) => {
       opaque.done = true;
       await discardPromptFile();
+      await outputChain;
+      await stderrChain;
       if (outputLimited || parserFailed) return;
-      if (code === 0) {
-        await outputChain;
-        await stderrChain;
-        await chunks.flush();
-        const diagnosticTail = stderrRedactor.flush();
-        if (diagnosticTail) await stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: diagnosticTail } }));
-        await callbacks.onState('completed', { result: { stopReason: 'end_turn', summary: opaque.summary, ...(opaque.summary.trim() ? {} : { warnings: [NO_FINAL_MESSAGE_WARNING] }) } });
+      await chunks.flush();
+      const diagnosticTail = stderrRedactor.flush();
+      if (diagnosticTail) await callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: diagnosticTail } });
+      const stderrText = redactSecrets(child.stderr.toString(), environmentSecrets(profile.env));
+      // Vibe 2.25.8 prints its final assistant stop marker on stderr when
+      // ProgrammaticLimitError exits 1. Assistant text alone is not authority.
+      const turnLimitMarker = `<vibe_stop_event>Turn limit of ${input.limits.maxTurns} reached</vibe_stop_event>`;
+      const reachedTurnLimit = code === 1 && !signal && opaque.summary.trim() === turnLimitMarker && stderrText.trim() === turnLimitMarker;
+      if (code === 0 || reachedTurnLimit) {
+        await callbacks.onState('completed', { result: {
+          stopReason: reachedTurnLimit ? 'max_turn_requests' : 'end_turn',
+          summary: reachedTurnLimit ? '' : opaque.summary,
+          ...(!reachedTurnLimit && !opaque.summary.trim() ? { warnings: [NO_FINAL_MESSAGE_WARNING] } : {})
+        } });
       } else {
-        const stderrText = redactSecrets(child.stderr.toString(), environmentSecrets(profile.env));
         const exitMessage = `Vibe exited with code ${code ?? 'null'}${signal ? ` (${signal})` : ''}`;
         const failure = versionMismatchOnStderr(this.kind, stderrText) ?? classifyFailureText(stderrTailText(stderrText), 'VSUP_BACKEND_CRASHED', exitMessage);
         await callbacks.onState('failed', { error: failure });
