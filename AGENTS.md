@@ -4,7 +4,7 @@ These instructions apply to this repository and its descendants unless a more sp
 
 ## Project and orientation
 
-This is codex-vibe, a local MCP supervisor for Mistral Vibe review and isolated edit runs. The npm package is `vibe-supervisor`, version `0.9.0-rc.6`, ESM, private and unpublished. Preserve the existing MIT license and copyright notice.
+This is codex-vibe, a local MCP supervisor for Mistral Vibe review and isolated edit runs. The npm package is `vibe-supervisor`, version `0.9.0-rc.7`, ESM, private and unpublished. Preserve the existing MIT license and copyright notice.
 
 Read [README.md](README.md) for installation and usage, [Handoff.md](Handoff.md) for implementation status and remaining work, [docs/reference.md](docs/reference.md) for tools, configuration and CLI, and [docs/functionality.md](docs/functionality.md) for behavior. Consult [docs/security.md](docs/security.md), [docs/compatibility.md](docs/compatibility.md) and the ADRs in `docs/adr/` before changing those boundaries. `docs/errors.md` is generated: run `npm run docs:errors` after changing a remedy. Dated evidence lives in `docs/history/` and is not shipped.
 

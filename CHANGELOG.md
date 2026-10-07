@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0-rc.7
+
+- An ACP session that is continued long after it started is no longer killed mid-turn by the launcher's fixed lifetime. The supervisor keeps a private worker-deadline file in the run directory and moves it forward on every turn and over the idle window; the launcher re-reads it, keeps its last valid value when the file is missing, unsafe or malformed, still stops on parent death, and never runs past a 48-hour hard cap. A worker stopped after the supervisor's own deadline is reported as `VSUP_TIMEOUT` instead of `VSUP_BACKEND_CRASHED`. A failed deadline write is a diagnostic, not a session failure, and nothing is written after a session closes.
+- 1.0 supports Vibe's legacy harness only; the unified harness is a documented limitation rather than an open release gate.
+- New `npm run soak` hosted soak driver for the Phase D test plan (maintainer tool, run from a source checkout).
+
 ## 0.9.0-rc.6
 
 Breaking changes for coordinators (Phase C):
