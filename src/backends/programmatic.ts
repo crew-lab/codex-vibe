@@ -11,7 +11,7 @@ import { supervisorError } from '../contracts.js';
 import type { SupervisorConfig } from '../contracts.js';
 import { spawnManaged } from '../process/managed.js';
 import { assertNoProjectVibeExtensions, createVibeChildProfile } from './profile.js';
-import { buildVibeLaunch, describeMissing, removePromptFile } from './launcher.js';
+import { buildVibeLaunch, classifyStartFailure, describeMissing, removePromptFile, spawned, versionMismatchOnStderr } from './launcher.js';
 import type { VibeLaunch } from './launcher.js';
 import { SUPPORTED_VIBE } from './pinned.js';
 import { executableProbeKey, ProbeCache } from './probe-cache.js';
@@ -37,6 +37,7 @@ function parsedVersion(stdout: string, stderr: string): string | undefined {
 
 export class ProgrammaticBackend implements SupervisorBackend {
   readonly kind = 'programmatic' as const;
+  readonly supportsContinue = false;
   private readonly probeCache = new ProbeCache();
   constructor(private readonly config: SupervisorConfig) {}
 
@@ -76,8 +77,6 @@ export class ProgrammaticBackend implements SupervisorBackend {
   }
 
   async start(input: StartRunInput, callbacks: BackendCallbacks) {
-    const capabilities = await this.probe();
-    if (!capabilities.available) throw supervisorError('VSUP_VIBE_VERSION_UNSUPPORTED', `Vibe CLI is unavailable or is not the tested version ${SUPPORTED_VIBE}`, capabilities.details);
     await assertNoProjectVibeExtensions(input.cwd);
     await assertNoProjectVibeExtensions(input.workerWorkspace);
     const profile = await createVibeChildProfile(input, input.mode, { forwardOriginalHome: true });
@@ -126,10 +125,12 @@ export class ProgrammaticBackend implements SupervisorBackend {
           if (text) stderrChain = stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text } })).then(() => undefined).catch(() => undefined);
         }
       });
+      try { await spawned(child); }
+      catch (error) { child.done.catch(() => undefined); throw error; }
     } catch (error) {
       this.probeCache.invalidate();
       await discardPromptFile().catch(() => undefined);
-      throw error;
+      throw await classifyStartFailure(this.kind, executable(this.config), error);
     }
     const opaque = { process: child, done: false, home: profile.home, vibeHome: profile.vibeHome, get summary() { return latestSummary; } };
     const handle: ProgrammaticHandle = { runId: input.runId, backend: this.kind, opaque };
@@ -147,7 +148,8 @@ export class ProgrammaticBackend implements SupervisorBackend {
         if (diagnosticTail) await stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: diagnosticTail } }));
         await callbacks.onState('completed', { result: { stopReason: 'end_turn', summary: opaque.summary, ...(opaque.summary.trim() ? {} : { warnings: [NO_FINAL_MESSAGE_WARNING] }) } });
       } else {
-        await callbacks.onState('failed', { error: supervisorError('VSUP_BACKEND_CRASHED', `Vibe exited with code ${code ?? 'null'}${signal ? ` (${signal})` : ''}`) });
+        const mismatch = versionMismatchOnStderr(this.kind, redactSecrets(child.stderr.toString(), environmentSecrets(profile.env)));
+        await callbacks.onState('failed', { error: mismatch ?? supervisorError('VSUP_BACKEND_CRASHED', `Vibe exited with code ${code ?? 'null'}${signal ? ` (${signal})` : ''}`) });
       }
     }).catch(async (error: unknown) => {
       opaque.done = true;

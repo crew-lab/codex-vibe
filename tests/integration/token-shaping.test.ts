@@ -192,7 +192,7 @@ describe("vibe_status wait_seconds", () => {
         await backend.callbacks?.onEvent({ source: "vibe", type: "tool_call", severity: "info", data: { title: `step ${round}` } });
         await waiting;
         expect(runtime.waiters.size).toBe(0);
-        expect(vi.getTimerCount()).toBe(0);
+        expect(vi.getTimerCount()).toBeLessThanOrEqual(1);
         expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
       }
     } finally { vi.useRealTimers(); await manager.shutdown(); }

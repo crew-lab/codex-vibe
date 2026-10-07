@@ -95,9 +95,15 @@ function errorCode(error: unknown): string | undefined {
   return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : undefined;
 }
 
-function lockError(message: string, lockPath: string, ownerPid?: number): Error {
-  const details = { lock_path: lockPath, ...(ownerPid === undefined ? {} : { owner_pid: ownerPid }) };
+function lockError(message: string, lockPath: string, ownerPid?: number, contended = false): Error {
+  const details = { lock_path: lockPath, ...(ownerPid === undefined ? {} : { owner_pid: ownerPid }), ...(contended ? { contended: true } : {}) };
   return Object.assign(new Error(message), supervisorError("VSUP_INVALID_STATE", message, details));
+}
+
+export function isOwnerLockContention(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("details" in error)) return false;
+  const details = error.details;
+  return typeof details === "object" && details !== null && "contended" in details && details.contended === true;
 }
 
 function parseLock(text: string): ParsedLock | undefined {
@@ -198,7 +204,7 @@ export async function acquireOwnerLock(dataDir: string, overrides: Partial<Owner
     catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
       if (!clearedStaleRecovery && await claimStaleRecovery(deps, recoveryPath)) { clearedStaleRecovery = true; continue; }
-      throw lockError(`Another process is recovering the supervisor owner lock ${lockPath}; retry shortly.`, lockPath);
+      throw lockError(`Another process is recovering the supervisor owner lock ${lockPath}; retry shortly.`, lockPath, undefined, true);
     }
     try { await reclaimStaleOwner(dataDir, lockPath, deps); }
     finally {
@@ -216,7 +222,7 @@ async function reclaimStaleOwner(dataDir: string, lockPath: string, deps: OwnerL
   if (!observed) return;
   if (!observed.parsed) throw lockError(`The supervisor owner lock ${lockPath} is malformed; inspect it manually.`, lockPath);
   const owner = await classifyOwner(observed.parsed, deps);
-  if (owner === "alive") throw lockError(`Another vibe-supervisor (pid ${observed.parsed.pid}) owns ${dataDir}. Lock file: ${lockPath}. Stop that process, or give each Codex session its own VIBE_SUPERVISOR_HOME.`, lockPath, observed.parsed.pid);
+  if (owner === "alive") throw lockError(`Another vibe-supervisor (pid ${observed.parsed.pid}) owns ${dataDir}. Lock file: ${lockPath}. Stop that process, or give each Codex session its own VIBE_SUPERVISOR_HOME.`, lockPath, observed.parsed.pid, true);
   let again: string;
   try { again = await deps.fs.read(lockPath); }
   catch (error) { if (errorCode(error) === "ENOENT") return; throw error; }

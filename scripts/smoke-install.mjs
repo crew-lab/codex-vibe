@@ -44,7 +44,6 @@ try {
     if (listed.tools.length !== 8) throw new Error(`Expected eight MCP tools; received ${listed.tools.length}.`);
     const status = await client.callTool({ name: 'vibe_status', arguments: { run_id: '00000000-0000-4000-8000-000000000001' } });
     if (!status.isError) throw new Error('Expected status on an unknown run to return a normalized error.');
-    // Keep the default owner live while two independent clients use isolated storage.
     const isolated = [0, 1].map(index => {
       const transport = new StdioClientTransport({ command: process.execPath, args: [cli, 'serve', '--stdio', '--isolated'], env, stderr: 'pipe' });
       return { transport, client: new Client({ name: `isolated-smoke-${index}`, version: manifest.version }) };

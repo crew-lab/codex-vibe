@@ -7,6 +7,7 @@ import { homedir } from 'node:os';
 import { parse } from 'smol-toml';
 import { getConfigPath, getDataDir, loadConfig } from './config/config.js';
 import { validateConfig } from './config/validation.js';
+import type { OwnerLock } from './core/owner-lock.js';
 import { prepareIsolatedHome } from './config/isolated-home.js';
 import { DEFAULT_CONFIG } from './config/defaults.js';
 import { createPrivateDir, createPrivateFile } from './security/paths.js';
@@ -23,6 +24,7 @@ const APP_VERSION = '0.9.0-rc.4';
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
 function fail(message: string, code = 1): never { process.exitCode = code; throw Object.assign(new Error(message), { code: 'VSUP_INVALID_ARGUMENT' }); }
 const CODEX_TOOL_TIMEOUT_SECONDS = 600;
+const CODEX_STARTUP_TIMEOUT_SECONDS = 30;
 function quoteToml(value: string): string { return JSON.stringify(value); }
 function defaultConfigToml(): string {
   const limits = DEFAULT_CONFIG.limits;
@@ -57,7 +59,7 @@ async function configureCodex(scope: 'user' | 'project', dryRun: boolean, projec
   const executable = process.execPath;
   const cliPath = path.resolve(process.argv[1] ?? 'dist/cli.js');
   const launchArgs = [cliPath, 'serve', '--stdio', ...(isolated ? ['--isolated'] : [])];
-  const block = `[mcp_servers.vibe-supervisor]\ncommand = ${quoteToml(executable)}\nargs = [${launchArgs.map(quoteToml).join(", ")}]\ntool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SECONDS}\n`;
+  const block = `[mcp_servers.vibe-supervisor]\ncommand = ${quoteToml(executable)}\nargs = [${launchArgs.map(quoteToml).join(", ")}]\nstartup_timeout_sec = ${CODEX_STARTUP_TIMEOUT_SECONDS}\ntool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SECONDS}\n`;
   let original = '';
   try { original = await readFile(file, 'utf8'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   let updated: string;
@@ -66,10 +68,10 @@ async function configureCodex(scope: 'user' | 'project', dryRun: boolean, projec
   const servers = parsedExisting.mcp_servers;
   if (servers !== undefined && (!servers || typeof servers !== 'object' || Array.isArray(servers))) fail('Codex config mcp_servers must be a table; no changes were made.', 2);
   const existingEntry = servers && typeof servers === 'object' ? (servers as Record<string, unknown>)['vibe-supervisor'] : undefined;
-  const target = { command: executable, args: launchArgs, tool_timeout_sec: CODEX_TOOL_TIMEOUT_SECONDS };
+  const target = { command: executable, args: launchArgs, startup_timeout_sec: CODEX_STARTUP_TIMEOUT_SECONDS, tool_timeout_sec: CODEX_TOOL_TIMEOUT_SECONDS };
   if (existingEntry && typeof existingEntry === 'object' && !Array.isArray(existingEntry)) {
     const entry = existingEntry as Record<string, unknown>;
-    if (entry.command === target.command && JSON.stringify(entry.args) === JSON.stringify(target.args) && entry.tool_timeout_sec === target.tool_timeout_sec && Object.keys(entry).length === 3) {
+    if (entry.command === target.command && JSON.stringify(entry.args) === JSON.stringify(target.args) && entry.startup_timeout_sec === target.startup_timeout_sec && entry.tool_timeout_sec === target.tool_timeout_sec && Object.keys(entry).length === 4) {
       print({ changed: false, file, config: block }); return;
     }
   }
@@ -104,18 +106,22 @@ async function configureCodex(scope: 'user' | 'project', dryRun: boolean, projec
   print({ changed: true, file, backup });
 }
 
-async function getManager(): Promise<{ manager: RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; shutdown(): Promise<void> }; config: Awaited<ReturnType<typeof loadConfig>>; dataDir: string }> {
+async function getManager(ownerLock?: OwnerLock): Promise<{ manager: RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<void> }; config: Awaited<ReturnType<typeof loadConfig>>; dataDir: string }> {
   const config = await loadConfig({ createDataDir: true });
   const dataDir = config.paths?.dataDir ?? getDataDir();
   const { RunManager } = await import('./core/run-manager.js');
-  const manager = new RunManager(config, dataDir) as RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; shutdown(): Promise<void> };
+  const manager = new RunManager(config, dataDir, [], ownerLock) as RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<void> };
   await manager.initialize();
   return { manager, config, dataDir };
 }
 
-async function serve(): Promise<void> {
-  const { manager, config } = await getManager();
+async function serve(ownerLock?: OwnerLock): Promise<void> {
+  let ready: Awaited<ReturnType<typeof getManager>>;
+  try { ready = await getManager(ownerLock); }
+  catch (error) { await ownerLock?.release(); throw error; }
+  const { manager, config } = ready;
   const handle = startMcpStdio(manager, { config, onError: (message) => process.stderr.write(`${message}\n`) });
+  manager.startAutomaticRetention?.();
   let closing = false;
   const close = async (): Promise<void> => {
     if (closing) return; closing = true;
@@ -221,9 +227,10 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
     if (command === 'serve') {
       if (args[0] !== '--stdio' || args.length > 2 || (args.length === 2 && args[1] !== '--isolated')) fail('Usage: vibe-supervisor serve --stdio [--isolated]', 2);
       if (args.includes('--isolated')) {
-        const home = await prepareIsolatedHome();
+        const { home, lock, adopted } = await prepareIsolatedHome();
         process.env.VIBE_SUPERVISOR_HOME = home;
-        process.stderr.write(`Vibe private session directory: ${home}\n`);
+        process.stderr.write(`Vibe private session directory (${adopted ? 'adopted' : 'created'}): ${home}\n`);
+        return await serve(lock);
       }
       return await serve();
     }

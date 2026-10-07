@@ -1,11 +1,13 @@
 import { chmod, mkdtemp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
-import { RunManager, hashWorkspace } from '../../src/core/run-manager.js';
+import { RunManager } from '../../src/core/run-manager.js';
+import { hashWorkspace } from '../../src/core/workspace-snapshot.js';
 import { AcpBackend } from '../../src/backends/acp.js';
 import type { VibeChildProfile } from '../../src/backends/profile.js';
 import type { VibeLaunch } from '../../src/backends/launcher.js';
@@ -38,7 +40,7 @@ const unreadable: string[] = [];
 
 afterEach(async () => {
   vi.useRealTimers();
-  for (const file of unreadable.splice(0)) await chmod(file, 0o600).catch(() => undefined);
+  for (const file of unreadable.splice(0)) await chmod(file, 0o700).catch(() => undefined);
   for (const pidDir of pidDirs.splice(0)) {
     for (const name of await readdir(pidDir).catch(() => [] as string[])) {
       const pid = Number(name);
@@ -240,8 +242,8 @@ describe('RunManager regressions', () => {
       expect((await manager.status({ run_id: started.run_id })).state).toBe('completed');
       await expect(Promise.resolve(callbacks?.onState('waiting_input'))).resolves.toBeUndefined();
       expect((await manager.status({ run_id: started.run_id })).state).toBe('completed');
-      const lines = (await readFile(path.join(data, 'runs', started.run_id, 'events.ndjson'), 'utf8')).split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
-      const diagnostics = lines.filter((event) => event.type === 'diagnostic' && (event.data as Record<string, unknown>).reason === 'ignored_backend_state_transition');
+      const readDiagnostics = async () => (await readFile(path.join(data, 'runs', started.run_id, 'events.ndjson'), 'utf8')).split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>).filter((event) => event.type === 'diagnostic' && (event.data as Record<string, unknown>).reason === 'ignored_backend_state_transition');
+      const diagnostics = await waitFor(readDiagnostics, (value) => value.length > 0);
       expect(diagnostics).toHaveLength(1);
       expect(diagnostics[0]).toMatchObject({ source: 'supervisor', severity: 'warning', data: { backend_state: 'waiting_input', run_state: 'completed' } });
       expect(String((diagnostics[0]?.data as Record<string, unknown>).message)).toContain('completed -> waiting_input');
@@ -343,8 +345,8 @@ describe('RunManager regressions', () => {
   it.skipIf(process.getuid?.() === 0)('proceeds with a warning when the source workspace cannot be snapshotted', async () => {
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
-    const locked = path.join(source, 'locked.txt');
-    await writeFile(locked, 'secret\n'); await chmod(locked, 0o000); unreadable.push(locked);
+    const locked = path.join(source, 'locked');
+    await mkdir(locked); await writeFile(path.join(locked, 'secret.txt'), 'secret\n'); await chmod(locked, 0o000); unreadable.push(locked);
     const manager = new RunManager({ ...DEFAULT_CONFIG, backend: 'programmatic', allowedWorkspaceRoots: [source], workerIdleTtlSeconds: 0 }, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
@@ -378,13 +380,15 @@ describe('RunManager regressions', () => {
     } finally { persistFault.armed = false; await manager.shutdown(); }
   }, 30_000);
 
-  it('hashWorkspace enforces file count and byte limits with an output-limit error', async () => {
+  it('hashWorkspace enforces the entry limit and bounds only the hashed bytes', async () => {
     const { source } = await makeParent();
     await writeFile(path.join(source, 'a.txt'), 'aaaa'); await writeFile(path.join(source, 'b.txt'), 'bbbb'); await writeFile(path.join(source, 'c.txt'), 'cccc');
     expect(await hashWorkspace(source)).toMatch(/^[0-9a-f]{64}$/);
     await expect(hashWorkspace(source, { maxFiles: 2, maxBytes: 1_000 })).rejects.toMatchObject({ code: 'VSUP_OUTPUT_LIMIT' });
+    await expect(hashWorkspace(source, { maxFiles: 3, maxBytes: 0 })).resolves.toMatch(/^[0-9a-f]{64}$/);
+    spawnSync('git', ['init', '-q'], { cwd: source });
     await expect(hashWorkspace(source, { maxFiles: 10, maxBytes: 8 })).rejects.toMatchObject({ code: 'VSUP_OUTPUT_LIMIT' });
-    await expect(hashWorkspace(source, { maxFiles: 3, maxBytes: 12 })).resolves.toMatch(/^[0-9a-f]{64}$/);
+    await expect(hashWorkspace(source, { maxFiles: 10, maxBytes: 12 })).resolves.toMatch(/^[0-9a-f]{64}$/);
   });
 
   it('releases the ACP worker process when artifact finalization fails a completed turn', async () => {

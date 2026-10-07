@@ -84,8 +84,8 @@ const CHANGED_PLAIN = "The source workspace changed during this read-only review
 const UNVERIFIED = "The source workspace could not be snapshotted (too large or unreadable); review integrity was NOT checked, so a read-only boundary violation would go undetected.";
 
 describe("review integrity", () => {
-  async function prepared() {
-    const context = await setup();
+  async function prepared(backend = new FakeBackend()) {
+    const context = await setup(backend);
     await writeFile(join(context.source, "a.txt"), "a\n");
     await writeFile(join(context.source, "b.txt"), "b\n");
     await mkdir(join(context.source, "dir"));
@@ -151,8 +151,8 @@ describe("review integrity", () => {
   it("reports unverified when the workspace cannot be snapshotted", async () => {
     if (process.getuid?.() === 0) return;
     const { source, manager, backend } = await prepared();
-    const locked = join(source, "locked.txt");
-    await writeFile(locked, "secret\n"); await chmod(locked, 0o000);
+    const locked = join(source, "locked");
+    await mkdir(locked); await writeFile(join(locked, "secret.txt"), "secret\n"); await chmod(locked, 0o000);
     try {
       const runId = await runningReview(manager, source);
       await backend.callbacks?.onState("completed", { result: { summary: "Review done" } });
@@ -165,7 +165,21 @@ describe("review integrity", () => {
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({ severity: "warning", data: { status: "unverified" } });
       expect((await manager.result({ run_id: runId })).integrity).toMatchObject({ status: "unverified" });
-    } finally { await chmod(locked, 0o600).catch(() => undefined); await manager.shutdown(); }
+    } finally { await chmod(locked, 0o700).catch(() => undefined); await manager.shutdown(); }
+  });
+
+  it("never starts the backend before the launch snapshot resolves", async () => {
+    const backend = new FakeBackend();
+    const { source, manager } = await prepared(backend);
+    let sawLaunchDigest = false;
+    backend.beforeReturn = async (input) => {
+      const runtime = (manager as unknown as { runs: Map<string, { sourceSnapshot?: string; sourceManifest?: Map<string, unknown> }> }).runs.get(input.runId)!;
+      sawLaunchDigest = Boolean(runtime.sourceSnapshot && runtime.sourceManifest?.has("a.txt"));
+    };
+    try {
+      await runningReview(manager, source);
+      expect(sawLaunchDigest).toBe(true);
+    } finally { await manager.shutdown(); }
   });
 
   it("reports verified for an untouched workspace", async () => {

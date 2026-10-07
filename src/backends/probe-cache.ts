@@ -5,7 +5,7 @@ import { pythonFor, resolveCommand } from './launcher.js';
 export interface ProbeOptions { fresh?: boolean }
 
 export const PROBE_SUCCESS_TTL_MS = 10 * 60_000;
-export const PROBE_FAILURE_TTL_MS = 30_000;
+export const PROBE_FAILURE_TTL_MS = 60_000;
 
 interface Entry { key: string; expiresAt: number; value: BackendCapabilities }
 interface Flight { key: string; promise: Promise<BackendCapabilities> }

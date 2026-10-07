@@ -30,8 +30,8 @@ afterEach(async () => {
 
 class FakeAcpBackend extends AcpBackend {
   pidDir: string | undefined;
-  constructor(private readonly testMode: string, dataDir: string, allowedWorkspaceRoots: string[]) {
-    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp', dataDir } }, dataDir);
+  constructor(private readonly testMode: string, dataDir: string, allowedWorkspaceRoots: string[], recoverTimeoutMs?: number) {
+    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp', dataDir } }, dataDir, recoverTimeoutMs === undefined ? {} : { recoverTimeoutMs });
   }
   protected override executable(): string { return 'fake-acp'; }
   protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {
@@ -244,17 +244,17 @@ describe('restart recovery', () => {
     const meta = JSON.parse(await readFile(metaPath, 'utf8')) as Record<string, unknown>;
     meta.state = 'running'; delete meta.finished_at; delete meta.result;
     await writeFile(metaPath, JSON.stringify(meta));
-    const secondBackend = new FakeAcpBackend('load-hang', data, [source]); secondBackend.pidDir = pidDir;
+    const secondBackend = new FakeAcpBackend('load-hang', data, [source], 1000); secondBackend.pidDir = pidDir;
     const second = new RunManager(config, data, [secondBackend]);
     try {
       await second.initialize();
       const begun = Date.now();
-      await expect(second.continue({ run_id: started.run_id, message: 'again' })).rejects.toMatchObject({ code: 'VSUP_SESSION_NOT_RESUMABLE', message: 'Vibe did not finish loading the session within 30 seconds.' });
+      await expect(second.continue({ run_id: started.run_id, message: 'again' })).rejects.toMatchObject({ code: 'VSUP_SESSION_NOT_RESUMABLE', message: 'Vibe did not finish loading the session within 1 second.' });
       const elapsed = Date.now() - begun;
-      expect(elapsed).toBeGreaterThan(28_000);
-      expect(elapsed).toBeLessThan(40_000);
+      expect(elapsed).toBeGreaterThan(900);
+      expect(elapsed).toBeLessThan(8_000);
       expect(activeSlots(second)).toBe(0);
-      expect(await second.status({ run_id: started.run_id })).toMatchObject({ state: 'recoverable', error: { code: 'VSUP_SESSION_NOT_RESUMABLE', message: 'Vibe did not finish loading the session within 30 seconds.' } });
+      expect(await second.status({ run_id: started.run_id })).toMatchObject({ state: 'recoverable', error: { code: 'VSUP_SESSION_NOT_RESUMABLE', message: 'Vibe did not finish loading the session within 1 second.' } });
       await new Promise((resolve) => setTimeout(resolve, 500));
       const pids = (await readdir(pidDir)).map(Number);
       expect(pids).toHaveLength(2);
@@ -262,5 +262,5 @@ describe('restart recovery', () => {
       expect(livePids).toEqual([]);
       expect(await second.status({ run_id: started.run_id })).toMatchObject({ state: 'recoverable' });
     } finally { await first.shutdown(); await second.shutdown(); }
-  }, 70_000);
+  }, 30_000);
 });

@@ -25,10 +25,10 @@ export interface ToolRegistrationOptions {
 const DEFINITIONS: Record<ToolName, { title: string; description: string; readOnly: boolean; destructive: boolean }> = {
   vibe_review_start: { title: 'Start read-only Vibe review', description: 'Start an independent review run in the selected workspace. Set wait_seconds to wait for the run to need action.', readOnly: false, destructive: false },
   vibe_edit_start: { title: 'Start isolated Vibe edit', description: 'Start an edit run in a detached Git worktree. Review its patch before applying it. Set wait_seconds to wait for the run to need action.', readOnly: false, destructive: true },
-  vibe_status: { title: 'Get Vibe run status', description: 'Read run state and recent normalized events. Set wait_seconds to block until something changes instead of polling.', readOnly: true, destructive: false },
+  vibe_status: { title: 'Get Vibe run status', description: 'Read run state and recent normalized events; a finished run includes its compact result. Set wait_seconds to block until something changes instead of polling.', readOnly: true, destructive: false },
   vibe_continue: { title: 'Continue Vibe run', description: 'Send a follow-up instruction to an active run.', readOnly: false, destructive: false },
   vibe_respond: { title: 'Respond to Vibe request', description: 'Answer a pending permission or input request.', readOnly: false, destructive: false },
-  vibe_result: { title: 'Get Vibe result', description: 'Read the compact run result (default) or the full record with detail=full.', readOnly: true, destructive: false },
+  vibe_result: { title: 'Get Vibe result', description: 'Read the full record with detail=full, or the transcript; a finished run already carries its compact result in vibe_status.', readOnly: true, destructive: false },
   vibe_cancel: { title: 'Cancel Vibe run', description: 'Request cancellation of an active run.', readOnly: false, destructive: false },
   vibe_close: { title: 'Close Vibe run', description: 'Close a run and optionally remove its verified worktree.', readOnly: false, destructive: true },
 };

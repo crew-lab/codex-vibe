@@ -73,7 +73,7 @@ describe('stderr tails never carry a secret', () => {
       const started = await manager.reviewStart({ task: 'review', cwd: source, backend: 'acp' });
       const status = await manager.status({ run_id: started.run_id, wait_seconds: 0 });
       const failed = status.state === 'failed' ? status : await new Promise<Record<string, unknown>>((resolve) => { const poll = setInterval(() => { manager.status({ run_id: started.run_id }).then((value) => { if (value.state === 'failed') { clearInterval(poll); resolve(value); } }); }, 20); });
-      expect(failed.error).toMatchObject({ code: 'VSUP_BACKEND_UNAVAILABLE' });
+      expect(failed.error).toMatchObject({ code: 'VSUP_ACP_INIT_FAILED', details: { stderr_tail: expect.stringContaining('fatal: cannot authenticate') } });
       await expectKeyAbsent('run', KEY, [failed, await manager.result({ run_id: started.run_id })], data);
     } finally { await manager.shutdown(); }
 

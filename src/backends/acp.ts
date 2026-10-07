@@ -8,11 +8,11 @@ import type {
   BackendCapabilities, BackendRespondInput, BackendRunHandle, BackendStartResult, RunRecord,
   StartRunInput, SupervisorBackend, BackendCallbacks, PendingRequest
 } from '../contracts.js';
-import { supervisorError, type SupervisorConfig } from '../contracts.js';
+import { supervisorError, type SupervisorConfig, type SupervisorError } from '../contracts.js';
 import { spawnManaged } from '../process/managed.js';
 import { assertNoProjectVibeExtensions, createVibeChildProfile } from './profile.js';
 import type { VibeChildProfile } from './profile.js';
-import { buildVibeLaunch, describeMissing } from './launcher.js';
+import { buildVibeLaunch, classifyStartFailure, describeMissing, isCodedError, spawned, versionUnsupported } from './launcher.js';
 import { ACP_PROTOCOL_VERSION, SUPPORTED_VIBE } from './pinned.js';
 import { executableProbeKey, ProbeCache } from './probe-cache.js';
 import type { ProbeOptions } from './probe-cache.js';
@@ -24,7 +24,7 @@ import { reportBackgroundFailure } from '../diagnostics/background.js';
 const PROTOCOL_VERSION = ACP_PROTOCOL_VERSION;
 const MAX_WIRE_BYTES = 1024 * 1024;
 const CANCEL_TURN_GRACE_MS = 500;
-const RECOVER_TIMEOUT_MS = 30_000;
+const DEFAULT_RECOVER_TIMEOUT_MS = 30_000;
 const EXITED_MID_TURN = 'Vibe ACP exited before the turn finished.';
 
 function interpreterReason(launcher: string, interpreter: unknown): string {
@@ -142,7 +142,11 @@ function refusalOutcome(options: ReadonlyArray<{ optionId: string; kind?: string
 
 export class AcpBackend implements SupervisorBackend {
   readonly kind = 'acp' as const;
-  constructor(private readonly config: SupervisorConfig, private readonly dataDirectory = config.paths?.dataDir) {}
+  readonly supportsContinue = true;
+  private readonly recoverTimeoutMs: number;
+  constructor(private readonly config: SupervisorConfig, private readonly dataDirectory = config.paths?.dataDir, options: { recoverTimeoutMs?: number } = {}) {
+    this.recoverTimeoutMs = options.recoverTimeoutMs ?? DEFAULT_RECOVER_TIMEOUT_MS;
+  }
   private readonly probeCache = new ProbeCache();
   protected executable(): string { return this.config.paths?.vibeAcp ?? 'vibe-acp'; }
   /** Test subclasses can attach an ACP fixture process; production uses the pinned shim only. */
@@ -198,8 +202,6 @@ export class AcpBackend implements SupervisorBackend {
   }
 
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
-    const capabilities = await this.probe();
-    if (!capabilities.available) throw supervisorError('VSUP_ACP_INIT_FAILED', `Vibe ACP initialize failed or its version is not exactly ${SUPPORTED_VIBE}`, capabilities.details);
     await assertNoProjectVibeExtensions(input.cwd); await assertNoProjectVibeExtensions(input.workerWorkspace);
     try { return await this.launchSession(input, callbacks); }
     catch (error) { this.probeCache.invalidate(); throw error; }
@@ -208,8 +210,11 @@ export class AcpBackend implements SupervisorBackend {
   private async launchSession(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     const profile = await createVibeChildProfile(input, input.mode, { forwardOriginalHome: true });
     profile.env.VIBE_SUPERVISOR_WORKER_TIMEOUT_SECONDS = String(input.limits.timeoutSeconds);
-    const launch = await this.buildLaunch([], profile, input.runDirectory);
-    const stderrRedactor = new StreamingRedactor(environmentSecrets(launch.env));
+    let launch: VibeLaunch;
+    try { launch = await this.buildLaunch([], profile, input.runDirectory); }
+    catch (error) { throw await classifyStartFailure('acp', this.executable(), error); }
+    const secrets = environmentSecrets(launch.env);
+    const stderrRedactor = new StreamingRedactor(secrets);
     let stderrChain = Promise.resolve();
     let outputLimited = false;
     let outputLimitReported = false;
@@ -218,25 +223,35 @@ export class AcpBackend implements SupervisorBackend {
       onLimit: () => { outputLimited = true; outputLimitReported = true; Promise.resolve(callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', 'Vibe ACP output exceeded the configured limit.') })).catch(reportFailure('acp-output-limit')); },
       onStderr: (text) => { const safe = stderrRedactor.push(text); if (safe) stderrChain = stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: safe } })).then(() => undefined).catch(() => undefined); }
     });
+    try { await spawned(child); }
+    catch (error) { child.done.catch(() => undefined); throw await classifyStartFailure('acp', this.executable(), error); }
     const state: AcpState = { process: child, home: profile.home, vibeHome: profile.vibeHome, ready: deferred<BackendStartResult>(), commands: makeQueue(), connected: Promise.resolve(), closed: false, exited: false, readySettled: false, sessionReady: false, failureReported: false, released: false, toolCalls: new Map(), callbacks, input, recovering: false, suppressReplay: false, turnActive: false };
+    let startFailure: Promise<SupervisorError> | undefined;
+    const failStart = (error: unknown): Promise<SupervisorError> => startFailure ??= (async () => {
+      state.closed = true; state.readySettled = true;
+      await child.terminate();
+      const cause = await this.describeStartFailure(error, child, secrets);
+      state.ready.reject(cause);
+      return cause;
+    })();
     state.connected = this.connect(state, launch.env.MISTRAL_API_KEY);
     state.connected.catch(async (error: unknown) => {
       state.closed = true;
-      if (!state.readySettled) { state.readySettled = true; state.ready.reject(error); }
+      const cause = !state.readySettled || startFailure ? await failStart(error) : undefined;
       await child.terminate();
-      const message = redactSecrets(String(error), environmentSecrets(launch.env));
+      const message = redactSecrets(String(error), secrets);
       const exitedIdle = state.sessionReady && !state.turnActive && child.child.exitCode === 0;
       if (!state.failureReported && !state.released && !exitedIdle) {
         state.failureReported = true;
         const exitedMidTurn = state.turnActive && child.child.exitCode === 0;
         const label = /missing api key|unauthorized|\b401\b/i.test(message) ? 'VSUP_AUTH_REQUIRED' : state.sessionReady ? 'VSUP_ACP_PROTOCOL_ERROR' : 'VSUP_ACP_INIT_FAILED';
-        await callbacks.onState('failed', { error: exitedMidTurn ? supervisorError('VSUP_BACKEND_CRASHED', EXITED_MID_TURN) : supervisorError(label, message) });
+        await callbacks.onState('failed', { error: exitedMidTurn ? supervisorError('VSUP_BACKEND_CRASHED', EXITED_MID_TURN) : cause ?? supervisorError(label, message) });
       }
     }).catch(reportFailure('acp-start-failure'));
     child.done.then(({ code, signal }) => {
       state.exited = true;
       closeQueue(state.commands);
-      if (!state.readySettled) { state.closed = true; state.readySettled = true; state.ready.reject(supervisorError('VSUP_ACP_INIT_FAILED', 'Vibe ACP exited before session initialization')); }
+      if (!state.readySettled) failStart(supervisorError('VSUP_ACP_INIT_FAILED', 'Vibe ACP exited before session initialization')).catch(reportFailure('acp-start-failure'));
       const tail = stderrRedactor.flush();
       if (tail) stderrChain = stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: tail } })).then(() => undefined);
       stderrChain.then(() => {
@@ -248,6 +263,16 @@ export class AcpBackend implements SupervisorBackend {
       }).catch(reportFailure('acp-exit'));
     }).catch((error: unknown) => Promise.resolve(callbacks.onState('failed', { error: supervisorError('VSUP_BACKEND_CRASHED', String(error)) })).catch(reportFailure('acp-exit')));
     return state.ready.promise;
+  }
+
+  private async describeStartFailure(error: unknown, child: ReturnType<typeof spawnManaged>, secrets: string[]): Promise<SupervisorError> {
+    const stderr = redactSecrets(child.stderr.toString(), secrets);
+    const classified = await classifyStartFailure('acp', this.executable(), error, stderr);
+    const tail = redactedTail(child.stderr.toBuffer(), 1024, secrets, child.stderr.truncated ? 'tail' : undefined);
+    const withTail = (failure: SupervisorError): SupervisorError => tail && !failure.details && (failure.code === 'VSUP_ACP_INIT_FAILED' || failure.code === 'VSUP_AUTH_REQUIRED') ? supervisorError(failure.code, failure.message, { stderr_tail: tail }) : failure;
+    if (isCodedError(classified)) return withTail(classified);
+    const message = redactSecrets(String(error), secrets);
+    return withTail(supervisorError(/missing api key|unauthorized|\b401\b/i.test(message) ? 'VSUP_AUTH_REQUIRED' : 'VSUP_ACP_INIT_FAILED', message));
   }
 
   private async connect(state: AcpState, secret?: string): Promise<void> {
@@ -292,6 +317,8 @@ export class AcpBackend implements SupervisorBackend {
     await app.connectWith(stream, async (cx: ClientContext) => {
       state.context = cx;
       const init = await cx.request('initialize', { protocolVersion: PROTOCOL_VERSION, clientCapabilities: { elicitation: { form: {} } }, clientInfo: { name: 'vibe-supervisor', version: '0.9.0' } });
+      const agentVersion = init.agentInfo?.version;
+      if (agentVersion !== SUPPORTED_VIBE) throw versionUnsupported('acp', agentVersion ?? 'unknown');
       if (init.protocolVersion !== PROTOCOL_VERSION) throw supervisorError('VSUP_ACP_VERSION_UNSUPPORTED', `Agent negotiated unsupported ACP version ${init.protocolVersion}`);
       state.suppressReplay = state.recovering;
       let sessionId: string;
@@ -494,7 +521,7 @@ export class AcpBackend implements SupervisorBackend {
     }).catch(() => undefined);
     let timer: NodeJS.Timeout | undefined;
     const timedOut = Symbol('recover-timeout');
-    const expiry = new Promise<typeof timedOut>((resolve) => { timer = setTimeout(() => resolve(timedOut), RECOVER_TIMEOUT_MS); });
+    const expiry = new Promise<typeof timedOut>((resolve) => { timer = setTimeout(() => resolve(timedOut), this.recoverTimeoutMs); });
     let outcome: BackendStartResult | typeof timedOut;
     try { outcome = await Promise.race([state.ready.promise, expiry]); }
     catch { return undefined; }
@@ -503,6 +530,6 @@ export class AcpBackend implements SupervisorBackend {
     state.released = true; state.closed = true; state.failureReported = true; state.readySettled = true;
     closeQueue(state.commands);
     await process.terminate();
-    throw supervisorError('VSUP_SESSION_NOT_RESUMABLE', `Vibe did not finish loading the session within ${RECOVER_TIMEOUT_MS / 1000} seconds.`);
+    throw supervisorError('VSUP_SESSION_NOT_RESUMABLE', `Vibe did not finish loading the session within ${this.recoverTimeoutMs / 1000} ${this.recoverTimeoutMs === 1000 ? 'second' : 'seconds'}.`);
   }
 }

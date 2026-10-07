@@ -92,7 +92,7 @@ These are local evidence, not portable defaults. `scripts/package-rc.mjs` and `s
 
 Historical: the last full implementation release verification passed **49 tests across 7 files**, lint, typecheck, build, deterministic acceptance, secret-pattern scan, and SPDX inventory. Counts: tool schemas 4; config 7; MCP integration 2; CLI 3; core 8; security 14; ACP integration 11. This is a historical result, not a substitute for checking later changes.
 
-Current suite after Phase A (2026-10-06): 376 tests (`npx vitest run`, about 35 s; the `load-hang` recovery test alone waits out the 30-second session-load timeout), of which the 2 installed-resolver profile tests (review and edit) skip when Vibe is not installed. Plus 51 Vibe-free Python tests in `src/backends/runtime/test_prompt_file.py` and `src/backends/runtime/test_keychain_credential.py` (`npm run test:python`, also part of `verify:release`).
+Current suite after Phase B (2026-10-07): 436 tests (`npx vitest run`, about 26 s), of which the 2 installed-resolver profile tests (review and edit) skip when Vibe is not installed. Plus 51 Vibe-free Python tests in `src/backends/runtime/test_prompt_file.py` and `src/backends/runtime/test_keychain_credential.py` (`npm run test:python`, also part of `verify:release`).
 
 ACP fake-subprocess coverage includes 100 independently initialized prompt runs, unknown notifications and thought filtering, correlated permissions and expired IDs, form responses, live continuation, loading without original-task replay, malformed JSON, early exit, wrong protocol/mode, and cancellation. It verifies local protocol/lifecycle behavior rather than hosted inference.
 
@@ -209,6 +209,26 @@ Behavior changes worth knowing for rc.4: `vibe_close` always ends `closed` and r
 6. Honest failure reporting: exit 0 without a stop reason fails with `VSUP_BACKEND_CRASHED`; an empty summary adds a warning; every launch failure appends a redacted diagnostic event; `vibe_status` returns capped diagnostic text; `VSUP_VIBE_VERSION_UNSUPPORTED` carries the detected version with a downgrade remedy; the probe cache is invalidated when a start fails before session initialization; `test-acp` and `doctor` include the shim stderr tail.
 
 ### Phase B, latency
+
+Status: implemented on 2026-10-07 against fake backends, together with a follow-up to rc.4 isolation; cold review pending. Decisions: hybrid review snapshot; no availability probe for an explicitly selected backend (kept for `auto`, `doctor`, `test-acp`); event fsync coalesced to at most every 100 ms; `vibe_status` embeds the compact result once a run settles. The `which` and Keychain items were dropped after measurement (2.7 ms per `which`; browser login needs one `security` call).
+
+Measured on the preparing machine (macOS arm64, Node 24.19), before → after:
+
+| Path | Before | After |
+|---|---|---|
+| Review snapshot, 156,169-file tree (mostly `node_modules`), per pass, two passes per review | 30.2 s | 2.6 s (almost all stat scan) |
+| Patch export, 1 modified + 50 untracked files | 1.6–2.1 s | 0.13 s |
+| Event persistence, 1,000 events | 4.8 s (4.8 ms each) | 18 ms |
+| Explicit-backend start | probe launch + session launch | session launch only |
+| `initialize` with 200 retained runs, 1 MiB logs each | reads every log | < 300 ms, logs load on demand |
+| Test suite | ~35 s | ~26 s |
+
+Isolation follow-up: `serve --stdio --isolated` now adopts the most recently used `mcp-sessions/session-*` directory whose owner lock is free (claiming the lock before use and handing it to the run manager), refreshes its `config.toml`, and creates a new directory only when every existing one is held by a live server. Directories are bounded by simultaneous clients and runs survive a reconnect.
+
+Behavior changes for the next release notes: settled `vibe_status` includes `result`; the compact result carries `next_action`; retention runs automatically after the server is serving (first sweep after 5 s, then every 24 h) and also removes `completed` runs past retention without a live session; `configure-codex` writes `startup_timeout_sec = 30`; an explicit backend reports version mismatches from the real start; a recovered review run reports `changed` without paths, even after a mere touch, because only a digest of the launch manifest is persisted; nested repositories and submodules are compared by stat only.
+
+Target-machine measurements still needed: P1 time to first event and to completion, cold and warm, both backends; P2 probe cost before and after B5; P3 `import vibe` and `security` lookup time; P4 events per hosted run.
+
 
 1. Review snapshot: hash with bounded parallelism overlapped with probe, profile and launch preparation; at completion re-hash only files whose stat changed (decision pending: this misses same-size, same-mtime writes); consider excluding gitignored heavy directories (decision pending: this misses writes to ignored paths such as `.env`).
 2. Remove the separate availability probe and validate `agentInfo.version` and the protocol on the real run's `initialize`; the shim already enforces the pin. Resolve executables in-process once per launch instead of spawning `which` 3–6 times.
