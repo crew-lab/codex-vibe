@@ -96,7 +96,7 @@ export type SupervisorErrorCode =
   | "VSUP_CONFIG_INVALID" | "VSUP_VIBE_NOT_FOUND" | "VSUP_VIBE_ACP_NOT_FOUND"
   | "VSUP_VIBE_VERSION_UNSUPPORTED" | "VSUP_ACP_INIT_FAILED"
   | "VSUP_ACP_VERSION_UNSUPPORTED" | "VSUP_ACP_PROTOCOL_ERROR"
-  | "VSUP_AUTH_REQUIRED" | "VSUP_WORKSPACE_DENIED" | "VSUP_WORKSPACE_INVALID"
+  | "VSUP_AUTH_REQUIRED" | "VSUP_WORKSPACE_INVALID"
   | "VSUP_WORKTREE_CREATE_FAILED" | "VSUP_GIT_REQUIRED" | "VSUP_PERMISSION_REQUIRED"
   | "VSUP_INPUT_REQUIRED" | "VSUP_REQUEST_EXPIRED" | "VSUP_SESSION_NOT_RESUMABLE"
   | "VSUP_BACKEND_UNAVAILABLE" | "VSUP_BACKEND_CRASHED" | "VSUP_TIMEOUT"
@@ -163,14 +163,6 @@ export interface SupervisorConfig {
     maxMcpResultChars: number;
     mcpResultFormat: McpResultFormat;
   };
-  phase1: { allowTemporaryTrust: boolean };
-  security: {
-    allowShellInReview: boolean;
-    allowShellInEdit: boolean;
-    allowNetworkTools: boolean;
-    logRawAcp: boolean;
-    persistReasoning: false;
-  };
   paths?: { vibe?: string; vibeAcp?: string; dataDir?: string };
 }
 
@@ -183,7 +175,6 @@ export interface StartRunInput {
   runDirectory: string;
   baseRef?: string;
   contextFiles?: string[];
-  allowShell?: boolean;
   limits: RunLimits;
 }
 
@@ -240,7 +231,6 @@ export interface SupervisorBackend {
 export interface StartToolInput {
   task: string;
   cwd: string;
-  backend?: BackendPreference;
   max_turns?: number;
   timeout_seconds?: number;
   wait_seconds?: number;
@@ -248,7 +238,6 @@ export interface StartToolInput {
 export interface ReviewStartToolInput extends StartToolInput { context_files?: string[] }
 export interface EditStartToolInput extends StartToolInput {
   base_ref?: string;
-  allow_shell?: boolean;
 }
 export interface StatusToolInput { run_id: string; after_seq?: number; max_events?: number; wait_seconds?: number }
 export interface WaitOptions { signal?: AbortSignal }
@@ -256,21 +245,20 @@ export interface ContinueToolInput { run_id: string; message: string }
 export type RespondToolInput =
   | { run_id: string; request_id: string; kind: "permission"; option_id: string }
   | { run_id: string; request_id: string; kind: "elicitation"; action: "accept" | "decline" | "cancel"; content?: Record<string, unknown> };
-export interface ResultToolInput { run_id: string; detail?: "compact" | "summary" | "full"; include_transcript?: boolean }
+export interface ResultToolInput { run_id: string; detail?: "compact" | "full"; include_transcript?: boolean }
 export interface CancelToolInput { run_id: string }
 export interface CloseToolInput { run_id: string; cleanup_worktree?: boolean }
 
-const REMEDIATION: Record<SupervisorErrorCode, string> = {
+export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_CONFIG_INVALID: "Correct the reported config.toml field and try again.",
   VSUP_VIBE_NOT_FOUND: "Install Vibe or set paths.vibe to its executable.",
-  VSUP_VIBE_ACP_NOT_FOUND: "Install Vibe ACP or set paths.vibeAcp to its executable.",
+  VSUP_VIBE_ACP_NOT_FOUND: "Install Vibe ACP or set paths.vibe_acp to its executable.",
   VSUP_VIBE_VERSION_UNSUPPORTED: `Install exactly the supported Vibe version (for example \`uv tool install mistral-vibe==${SUPPORTED_VIBE}\`) or point paths.vibe and paths.vibe_acp at a pinned install.`,
   VSUP_ACP_INIT_FAILED: "Check the Vibe ACP executable and its stderr log, then retry.",
   VSUP_ACP_VERSION_UNSUPPORTED: "Upgrade Vibe ACP to a supported ACP version.",
   VSUP_ACP_PROTOCOL_ERROR: "Check ACP diagnostics and retry with a compatible Vibe release.",
   VSUP_AUTH_REQUIRED: "Sign in to Vibe or configure its supported authentication.",
-  VSUP_WORKSPACE_DENIED: "Choose a workspace under an allowed_workspace_roots entry.",
-  VSUP_WORKSPACE_INVALID: "Provide an existing, accessible workspace directory.",
+  VSUP_WORKSPACE_INVALID: "Provide an existing workspace directory under an allowed_workspace_roots entry.",
   VSUP_WORKTREE_CREATE_FAILED: "Check the repository state and worktree path, then retry.",
   VSUP_GIT_REQUIRED: "Install Git and use a Git repository for edit runs.",
   VSUP_PERMISSION_REQUIRED: "Respond to the pending permission request before continuing.",

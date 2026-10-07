@@ -84,6 +84,12 @@ export function versionMismatchOnStderr(backend: BackendKind, stderr: string): S
   return detected ? versionUnsupported(backend, detected) : undefined;
 }
 
+const RATE_LIMIT_PATTERN = /\b(?:http|status(?: code)?|error|code)\W{0,3}429\b|\b429\W{1,3}(?:too many|rate)|\(429\)|\brate[ -]?limit(?:ed|s)?\b|\btoo many requests\b/i;
+
+export function rateLimitFailure(text: string): SupervisorError | undefined {
+  return RATE_LIMIT_PATTERN.test(text) ? supervisorError('VSUP_RATE_LIMITED', 'Vibe was rate limited by its provider (HTTP 429).', undefined, true) : undefined;
+}
+
 export function isCodedError(error: unknown): error is SupervisorError {
   return typeof error === 'object' && error !== null && typeof (error as { code?: unknown }).code === 'string' && (error as { code: string }).code.startsWith('VSUP_');
 }
@@ -92,6 +98,8 @@ export async function classifyStartFailure(backend: BackendKind, executable: str
   const mismatch = versionMismatchOnStderr(backend, stderr);
   if (mismatch) return mismatch;
   if (isCodedError(error)) return error;
+  const limited = rateLimitFailure(stderr);
+  if (limited) return limited;
   const missing = await describeMissing(executable, error);
   if (missing.executable_missing === true) return supervisorError(backend === 'acp' ? 'VSUP_VIBE_ACP_NOT_FOUND' : 'VSUP_VIBE_NOT_FOUND', backend === 'acp' ? 'The vibe-acp executable was not found.' : 'The vibe executable was not found.', missing);
   if (missing.interpreter_missing === true) return supervisorError('VSUP_BACKEND_UNAVAILABLE', interpreterMissingMessage(backend, missing.interpreter), missing);

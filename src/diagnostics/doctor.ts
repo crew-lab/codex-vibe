@@ -47,6 +47,10 @@ async function probe(executable: string, args: string[], cwd: string, timeoutMs 
   });
 }
 
+export function formatDoctorCheck(check: DoctorCheck): string {
+  return `${check.status === 'unverified' ? 'UNVERIFIED' : check.ok ? 'PASS' : 'CHECK'} ${check.name}: ${check.message}${check.version ? ` (${check.version})` : ''}${check.stderr_tail ? `\n  Vibe ACP stderr: ${check.stderr_tail}` : ''}`;
+}
+
 export async function runDoctor(config: SupervisorConfig): Promise<DoctorReport> {
   const checks: DoctorCheck[] = [];
   const nodeVersion = process.versions.node;

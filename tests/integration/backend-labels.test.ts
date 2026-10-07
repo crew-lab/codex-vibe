@@ -47,8 +47,8 @@ async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean, t
   return value;
 }
 
-async function failedRun(manager: RunManager, source: string, backend: 'acp' | 'programmatic') {
-  const started = await manager.reviewStart({ task: 'review', cwd: source, backend });
+async function failedRun(manager: RunManager, source: string) {
+  const started = await manager.reviewStart({ task: 'review', cwd: source });
   return waitFor(() => manager.status({ run_id: started.run_id }), (value) => ['failed', 'cancelled', 'completed'].includes(String(value.state)));
 }
 
@@ -64,7 +64,7 @@ describe('a missing interpreter is not reported as a missing Vibe executable', (
     expect(probe.details?.executable_missing).toBeUndefined();
     const manager = new RunManager(config, data, [new AcpBackend(config, data)]);
     try {
-      const status = await failedRun(manager, source, 'acp');
+      const status = await failedRun(manager, source);
       expect(status.error).toMatchObject({ code: 'VSUP_BACKEND_UNAVAILABLE', message: expect.stringContaining('/nonexistent/dir/python3') });
       expect((status.error as SupervisorError).message).toMatch(/interpreter/i);
     } finally { await manager.shutdown(); }
@@ -82,7 +82,7 @@ describe('a missing interpreter is not reported as a missing Vibe executable', (
     expect(probe.details?.executable_missing).toBeUndefined();
     const manager = new RunManager(config, data, [new AcpBackend(config, data)]);
     try {
-      expect((await failedRun(manager, source, 'acp')).error).toMatchObject({ code: 'VSUP_BACKEND_UNAVAILABLE', message: expect.stringContaining('python3') });
+      expect((await failedRun(manager, source)).error).toMatchObject({ code: 'VSUP_BACKEND_UNAVAILABLE', message: expect.stringContaining('python3') });
     } finally { await manager.shutdown(); }
   });
 
@@ -96,7 +96,7 @@ describe('a missing interpreter is not reported as a missing Vibe executable', (
     expect(probe.details?.executable_missing).toBeUndefined();
     const manager = new RunManager(config, data, [new ProgrammaticBackend(config)]);
     try {
-      expect((await failedRun(manager, source, 'programmatic')).error).toMatchObject({ code: 'VSUP_BACKEND_UNAVAILABLE', message: expect.stringMatching(/interpreter/i) });
+      expect((await failedRun(manager, source)).error).toMatchObject({ code: 'VSUP_BACKEND_UNAVAILABLE', message: expect.stringMatching(/interpreter/i) });
     } finally { await manager.shutdown(); }
   });
 
@@ -109,7 +109,7 @@ describe('a missing interpreter is not reported as a missing Vibe executable', (
     try {
       const probe = await backend.probe({ fresh: true });
       expect(probe.details).toMatchObject({ executable_missing: true });
-      expect((await failedRun(manager, source, kind)).error).toMatchObject({ code });
+      expect((await failedRun(manager, source)).error).toMatchObject({ code });
     } finally { await manager.shutdown(); }
   });
 });
@@ -131,18 +131,20 @@ describe('ACP connection errors are labeled by phase', () => {
   it.each([
     ['mid-turn-error', 'VSUP_ACP_PROTOCOL_ERROR'],
     ['mid-turn-401', 'VSUP_AUTH_REQUIRED'],
+    ['mid-turn-429', 'VSUP_RATE_LIMITED'],
   ])('labels a %s failure after the session is ready as %s', async (mode, code) => {
     const { source, data, pidDir } = await makeRoot();
     const manager = new RunManager({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots: [source], workerIdleTtlSeconds: 600 }, data, [new LabelBackend(mode, data, [source], pidDir)]);
     try {
-      const status = await failedRun(manager, source, 'acp');
+      const status = await failedRun(manager, source);
       expect(status.state).toBe('failed');
-      expect(status.error).toMatchObject({ code });
+      expect(status.error).toMatchObject({ code, ...(code === 'VSUP_RATE_LIMITED' ? { retryable: true } : {}) });
     } finally { await manager.shutdown(); }
   }, 30_000);
 
   it.each([
     ['init-401', 'VSUP_AUTH_REQUIRED'],
+    ['init-429', 'VSUP_RATE_LIMITED'],
     ['broken-json', 'VSUP_ACP_INIT_FAILED'],
   ])('keeps labeling a %s failure before the session is ready as %s', async (mode, code) => {
     const { source, data, pidDir } = await makeRoot();
@@ -153,6 +155,6 @@ describe('ACP connection errors are labeled by phase', () => {
     const input: StartRunInput = { runId: 'labels', mode: 'review', task: 'review', cwd: source, workerWorkspace: source, runDirectory, limits: { timeoutSeconds: 60, maxTurns: 3, maxEventBytes: 1_048_576, maxTranscriptBytes: 1_048_576, maxArtifactBytes: 8_388_608 } };
     await expect(backend.start(input, callbacks)).rejects.toBeDefined();
     await waitFor(async () => reported.length, (value) => value > 0, 3000);
-    expect(reported[0]).toMatchObject({ code });
+    expect(reported[0]).toMatchObject({ code, ...(code === 'VSUP_RATE_LIMITED' ? { retryable: true } : {}) });
   }, 30_000);
 });

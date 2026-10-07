@@ -351,19 +351,14 @@ describe("result cap shaping", () => {
 });
 
 describe("detail=summary", () => {
-  it("returns the full shape with a deprecation notice", async () => {
+  it("is no longer accepted by the schema or the run manager", async () => {
     const { source, manager, backend } = await setup();
     try {
       const runId = await runningReview(manager, source);
       await backend.callbacks?.onState("completed", { result: { summary: "Review done" } });
-      expect(toolSchemas.vibe_result.parse({ run_id: runId, detail: "summary" }).detail).toBe("summary");
-      const viaSummary = await manager.result({ run_id: runId, detail: "summary" });
-      const full = await manager.result({ run_id: runId, detail: "full" });
-      expect(viaSummary.deprecation).toBe("detail=summary is deprecated; use detail=compact (default) or detail=full.");
-      expect(viaSummary).toEqual({ ...full, deprecation: viaSummary.deprecation });
-      expect(viaSummary.workspace).toBeDefined();
-      expect(full.deprecation).toBeUndefined();
-      expect((await manager.result({ run_id: runId })).deprecation).toBeUndefined();
+      expect(() => toolSchemas.vibe_result.parse({ run_id: runId, detail: "summary" })).toThrow();
+      await expect(manager.result({ run_id: runId, detail: "summary" } as never)).rejects.toMatchObject({ code: "VSUP_INVALID_ARGUMENT" });
+      expect((await manager.result({ run_id: runId, detail: "full" })).deprecation).toBeUndefined();
     } finally { await manager.shutdown(); }
   });
 });

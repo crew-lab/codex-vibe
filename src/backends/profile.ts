@@ -85,12 +85,10 @@ async function writeSupervisorAgentProfile(vibeHome: string, agentId: string, mo
 }
 
 export interface VibeChildProfileOptions {
-  allowShell?: boolean;
   forwardOriginalHome?: boolean;
 }
 
 export async function createVibeChildProfile(input: StartRunInput, mode: RunMode, options: VibeChildProfileOptions = {}): Promise<VibeChildProfile> {
-  const allowShell = options.allowShell === true;
   const home = path.join(input.runDirectory, 'child-home');
   const vibeHome = path.join(input.runDirectory, 'vibe-home');
   await createPrivateDir(home);
@@ -108,7 +106,7 @@ export async function createVibeChildProfile(input: StartRunInput, mode: RunMode
   env.VIBE_ENABLED_AGENTS = JSON.stringify([env.VIBE_DEFAULT_AGENT]);
   const tools = mode === 'review'
     ? ['read_file', 'grep']
-    : ['read_file', 'grep', 'write_file', 'edit', ...(allowShell ? ['bash'] : [])];
+    : ['read_file', 'grep', 'write_file', 'edit'];
   env.VIBE_ENABLED_TOOLS = JSON.stringify(tools);
   env.VIBE_ENABLE_CONNECTORS = 'false';
   env.VIBE_MCP_SERVERS = '[]';
@@ -116,7 +114,6 @@ export async function createVibeChildProfile(input: StartRunInput, mode: RunMode
   for (const tool of ['read_file', 'grep']) setToolPathPolicy(env, tool, input.workerWorkspace, 'never');
   if (mode === 'edit') {
     for (const tool of ['write_file', 'edit']) setToolPathPolicy(env, tool, input.workerWorkspace, 'never');
-    if (allowShell) env.VIBE_TOOLS__BASH__PERMISSION = 'ask';
   }
   await writeSupervisorAgentProfile(vibeHome, env.VIBE_DEFAULT_AGENT, mode, tools);
   return { home, vibeHome, env };

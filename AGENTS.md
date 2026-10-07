@@ -6,7 +6,7 @@ These instructions apply to this repository and its descendants unless a more sp
 
 This is codex-vibe, a local MCP supervisor for Mistral Vibe review and isolated edit runs. The npm package is `vibe-supervisor`, version `0.9.0-rc.5`, ESM, private and unpublished. Preserve the existing MIT license and copyright notice.
 
-Read [Read.md](Read.md) for installation and usage, [Handoff.md](Handoff.md) for implementation status and remaining work, and [docs/functionality.md](docs/functionality.md) for behavior. Consult the focused security, compatibility, configuration, protocol, acceptance, and ADR documents before changing those boundaries.
+Read [README.md](README.md) for installation and usage, [Handoff.md](Handoff.md) for implementation status and remaining work, [docs/reference.md](docs/reference.md) for tools, configuration and CLI, and [docs/functionality.md](docs/functionality.md) for behavior. Consult [docs/security.md](docs/security.md), [docs/compatibility.md](docs/compatibility.md) and the ADRs in `docs/adr/` before changing those boundaries. `docs/errors.md` is generated: run `npm run docs:errors` after changing a remedy. Dated evidence lives in `docs/history/` and is not shipped.
 
 The user's implementation preference is GPT-6 Luna agents. When delegating implementation, use that model where available, assign clear file ownership, and tell workers they share the codebase and must preserve others' changes. Do not create user-owned chats for internal implementation subtasks. If that model is unavailable, report the limitation rather than silently claiming to use it.
 
@@ -43,4 +43,4 @@ VIBE_SUPERVISOR_TEST_NPM_CACHE=/absolute/path/to/populated/npm-cache npm run pac
 
 For documentation-only changes, verify local links and `git diff --check`; a full test rerun is unnecessary without a behavioral change. Packaging should be regenerated when delivering an updated tarball.
 
-Report checks actually performed. Fake ACP fixtures and initialization-only probes do not prove hosted inference, authenticated effective tool inventory, real hosted soak, desktop registration, Intel support, or clean-account installation. Leave those gates unverified until their evidence is recorded. Plugin manifests remain scaffolds until installation is demonstrated.
+Report checks actually performed. Fake ACP fixtures and initialization-only probes do not prove hosted behavior. The gates in [docs/compatibility.md](docs/compatibility.md#unverified-gates) stay unverified until their evidence is recorded there; plugin manifests remain scaffolds until installation is demonstrated.

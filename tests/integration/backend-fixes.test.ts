@@ -246,6 +246,34 @@ function collecting(): BackendCallbacks & { events: Array<Pick<SupervisorEvent, 
 const promptPath = (input: StartRunInput) => path.join(input.runDirectory, PROMPT_FILE_NAME);
 const exists = (file: string) => lstat(file).then(() => true, () => false);
 
+describe('rate limits from the programmatic child', () => {
+  it('maps an HTTP 429 on stderr to a retryable VSUP_RATE_LIMITED failure', async () => {
+    const { root, input } = await prepared();
+    const { vibe } = await installFakeVibe(root, "process.stderr.write('HTTP 429 Too Many Requests\\n'); process.exitCode = 1;");
+    const errors: Array<{ code: string; retryable: boolean }> = [];
+    const callbacks: BackendCallbacks = {
+      onEvent: () => undefined, onPendingRequest: () => undefined,
+      onState: (state, update) => { if (state === 'failed' && update?.error) errors.push(update.error); }
+    };
+    await programmaticBackend(vibe).start(input, callbacks);
+    await waitFor(() => errors, (value) => value.length > 0);
+    expect(errors[0]).toMatchObject({ code: 'VSUP_RATE_LIMITED', retryable: true });
+  });
+
+  it('keeps an unrelated non-zero exit as VSUP_BACKEND_CRASHED', async () => {
+    const { root, input } = await prepared();
+    const { vibe } = await installFakeVibe(root, "process.stderr.write('processed 4290 files\\n'); process.exitCode = 1;");
+    const errors: Array<{ code: string; retryable: boolean }> = [];
+    const callbacks: BackendCallbacks = {
+      onEvent: () => undefined, onPendingRequest: () => undefined,
+      onState: (state, update) => { if (state === 'failed' && update?.error) errors.push(update.error); }
+    };
+    await programmaticBackend(vibe).start(input, callbacks);
+    await waitFor(() => errors, (value) => value.length > 0);
+    expect(errors[0]).toMatchObject({ code: 'VSUP_BACKEND_CRASHED', retryable: false });
+  });
+});
+
 describe('F5: the task prompt file never outlives its launcher', () => {
   it('removes the prompt file when the child exits without consuming it', async () => {
     const { root, input } = await prepared();

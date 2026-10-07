@@ -97,8 +97,8 @@ function managerFor(source: string, data: string, backends: SupervisorBackend[],
   return new RunManager({ ...DEFAULT_CONFIG, backend: 'auto', allowedWorkspaceRoots: [source], workerIdleTtlSeconds: 600, ...overrides }, data, backends);
 }
 
-async function failedRun(manager: RunManager, source: string, backend?: 'acp' | 'programmatic') {
-  const started = await manager.reviewStart({ task: 'review', cwd: source, ...(backend ? { backend } : {}) });
+async function failedRun(manager: RunManager, source: string) {
+  const started = await manager.reviewStart({ task: 'review', cwd: source });
   return waitFor(() => manager.status({ run_id: started.run_id }), (value) => settled(value.state)).then((status) => ({ id: started.run_id, status }));
 }
 

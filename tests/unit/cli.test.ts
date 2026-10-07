@@ -30,7 +30,7 @@ describe('CLI local setup', () => {
     const original = 'title = "keep exactly"\n\n[mcp_servers.other]\ncommand = "other"\n\n[mcp_servers."vibe-supervisor"]\ncommand = "old"\nargs = ["old"]\n\n[projects]\n"repo" = "keep"\n';
     await writeFile(file, original);
     vi.stubEnv('HOME', home); captureOutput();
-    await runCli(['configure-codex', '--scope', 'user']);
+    await runCli(['configure-codex', '--user']);
     const updated = await readFile(file, 'utf8');
     const parsed = parse(updated) as { title: string; mcp_servers: Record<string, { command: string; args: string[] }>; projects: Record<string, string> };
     expect(parsed.title).toBe('keep exactly');
@@ -41,7 +41,7 @@ describe('CLI local setup', () => {
     const names = await readdir(codex); const backups = names.filter((name) => name.startsWith('config.toml.bak-'));
     expect(backups).toHaveLength(1);
     expect((await stat(path.join(codex, backups[0]!))).mode & 0o777).toBe(0o600);
-    await runCli(['configure-codex', '--scope=user']);
+    await runCli(['configure-codex', '--user']);
     expect(await readFile(file, 'utf8')).toBe(updated);
     expect((await readdir(codex)).filter((name) => name.startsWith('config.toml.bak-'))).toHaveLength(1);
   });

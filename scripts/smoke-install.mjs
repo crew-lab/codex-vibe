@@ -33,6 +33,8 @@ try {
 
   // Exercise the installed stdio process and official client without starting a backend run.
   run(process.execPath, [cli, 'init']);
+  const configuredBackend = (await readFile(path.join(env.VIBE_SUPERVISOR_HOME, 'config.toml'), 'utf8')).match(/^backend\s*=\s*"(\w+)"/m)?.[1] ?? 'programmatic';
+  const expectedTools = configuredBackend === 'programmatic' ? 5 : 7;
   const { Client } = await import('@modelcontextprotocol/client');
   const { StdioClientTransport } = await import('@modelcontextprotocol/client/stdio');
   const transport = new StdioClientTransport({ command: process.execPath, args: [cli, 'serve', '--stdio'], env, stderr: 'pipe' });
@@ -41,7 +43,8 @@ try {
     await client.connect(transport);
     if (client.getServerVersion()?.version !== manifest.version) throw new Error("MCP server version mismatch.");
     const listed = await client.listTools();
-    if (listed.tools.length !== 8) throw new Error(`Expected eight MCP tools; received ${listed.tools.length}.`);
+    if (listed.tools.length !== expectedTools) throw new Error(`Expected ${expectedTools} MCP tools for the ${configuredBackend} backend; received ${listed.tools.length}.`);
+    if (listed.tools.some((tool) => tool.name === 'vibe_cancel')) throw new Error('vibe_cancel must not be registered.');
     const status = await client.callTool({ name: 'vibe_status', arguments: { run_id: '00000000-0000-4000-8000-000000000001' } });
     if (!status.isError) throw new Error('Expected status on an unknown run to return a normalized error.');
     const isolated = [0, 1].map(index => {
@@ -51,7 +54,7 @@ try {
     try {
       await Promise.all(isolated.map(async ({ client, transport }) => {
         await client.connect(transport);
-        if ((await client.listTools()).tools.length !== 8) throw new Error('Isolated tool inventory mismatch.');
+        if ((await client.listTools()).tools.length !== expectedTools) throw new Error('Isolated tool inventory mismatch.');
         const response = await client.callTool({ name: 'vibe_status', arguments: { run_id: '00000000-0000-4000-8000-000000000001' } });
         if (!response.isError || !JSON.stringify(response).includes('VSUP_NOT_FOUND')) throw new Error('Isolated backend did not respond.');
       }));
