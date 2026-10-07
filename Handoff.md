@@ -337,7 +337,7 @@ Ground rules:
 - **Workspace:** a throwaway Git repository with no secrets, containing nested source files, a root `.env` with a fake value, an ignored `node_modules/` (any size; a large one also serves D7), and one file outside the repository to try to read.
 - **Cost and consent:** hosted steps send that repository and the tasks to Mistral and are billed; run them only with the owner's authorization. Earlier hosted edits cost about $0.02 each, so the soak (D18) is the only step with noticeable cost.
 - **Stop rule:** stop at the first failing step, record it, and never work around it by weakening policy (no `always` fallback, no shell, no network, no project trust, no editing the generated agent profiles).
-- **Recording:** one dated section per session in [docs/history/acceptance.md](docs/history/acceptance.md), machine-readable status in `docs/acceptance.json`, raw evidence (redacted JSON replies, timings, logs) in `docs/history/reviews/rc6-target-test-<date>/`. Record exact commands, versions, run IDs, timings, PASS or FAIL, and what stays uncertain. Never record credentials; `security` is only ever called without `-w` in these steps.
+- **Recording:** one dated section per session in [docs/history/acceptance.md](docs/history/acceptance.md), machine-readable status in `docs/acceptance.json`, raw evidence (redacted JSON replies, timings, logs) in `docs/history/reviews/rc7-target-test-<date>/`, started as a copy of the [evidence template](docs/history/reviews/phase-d-template/Read.md). Record exact commands, versions, run IDs, timings, PASS or FAIL, and what stays uncertain. Never record credentials; `security` is only ever called without `-w` in these steps.
 
 ### Install and setup
 
