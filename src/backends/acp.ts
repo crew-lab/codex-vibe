@@ -15,6 +15,7 @@ import type { VibeChildProfile } from './profile.js';
 import { APP_VERSION } from '../version.js';
 import { buildVibeLaunch, classifyFailureText, classifyStartFailure, describeMissing, isCodedError, spawned, versionUnsupported } from './launcher.js';
 import { ACP_PROTOCOL_VERSION, SUPPORTED_VIBE } from './pinned.js';
+import { idleDeadlineSeconds, turnDeadlineSeconds, writeWorkerDeadline, WORKER_DEADLINE_FILE_ENV } from './worker-deadline.js';
 import { executableProbeKey, ProbeCache } from './probe-cache.js';
 import type { ProbeOptions } from './probe-cache.js';
 import type { VibeLaunch } from './launcher.js';
@@ -75,6 +76,7 @@ interface AcpState {
   turnActive: boolean;
   turnRedactor?: StreamingRedactor;
   activeTurn?: Promise<void>;
+  deadlineWrite?: Promise<void>;
 }
 interface AcpHandle extends BackendRunHandle { opaque: AcpState }
 
@@ -210,8 +212,10 @@ export class AcpBackend implements SupervisorBackend {
   }
 
   private async launchSession(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
+    const deadlineFile = await writeWorkerDeadline(input.runDirectory, turnDeadlineSeconds(input.limits.timeoutSeconds));
     const profile = await createVibeChildProfile(input, input.mode, { forwardOriginalHome: true });
     profile.env.VIBE_SUPERVISOR_WORKER_TIMEOUT_SECONDS = String(input.limits.timeoutSeconds);
+    profile.env[WORKER_DEADLINE_FILE_ENV] = deadlineFile;
     let launch: VibeLaunch;
     try { launch = await this.buildLaunch([], profile, input.runDirectory); }
     catch (error) { throw await classifyStartFailure('acp', this.executable(), error); }
@@ -349,6 +353,7 @@ export class AcpBackend implements SupervisorBackend {
         const task = await dequeue(state.commands);
         if (!task || task.kind === 'close' || state.closed) break;
         state.turnActive = true;
+        await this.updateWorkerDeadline(state, turnDeadlineSeconds(state.input.limits.timeoutSeconds));
         await state.callbacks.onState('running', { ...(result.acp ? { acp: result.acp } : {}) });
         state.turnRedactor = new StreamingRedactor(secret ? [secret] : []);
         const turn = cx.request('session/prompt', { sessionId, prompt: [{ type: 'text', text: task.message }] });
@@ -359,6 +364,7 @@ export class AcpBackend implements SupervisorBackend {
         finally { delete state.activeTurn; }
         await this.emitTurnTail(state);
         if (state.closed) break;
+        await this.updateWorkerDeadline(state, idleDeadlineSeconds(this.config.workerIdleTtlSeconds));
         await state.callbacks.onState('completed', { ...(result.acp ? { acp: result.acp } : {}), result: { stopReason: response.stopReason } });
       }
       try { await cx.request('session/close', { sessionId }); } catch { /* close is best-effort after bounded session completion */ }
@@ -431,8 +437,16 @@ export class AcpBackend implements SupervisorBackend {
     await Promise.race([state.activeTurn, new Promise<void>((done) => { timer = setTimeout(done, CANCEL_TURN_GRACE_MS); })]);
     if (timer) clearTimeout(timer);
   }
+  private async updateWorkerDeadline(state: AcpState, epochSeconds: number): Promise<void> {
+    if (state.closed) return;
+    const write = writeWorkerDeadline(state.input.runDirectory, epochSeconds).then(() => undefined, (error: unknown) => Promise.resolve(state.callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { reason: 'worker_deadline_write_failed', message: redactSecrets(String(error)) } })).then(() => undefined, () => undefined));
+    state.deadlineWrite = write;
+    await write;
+  }
+
   async cancel(handle: BackendRunHandle): Promise<void> {
     const state = (handle as AcpHandle).opaque; state.released = true; state.closed = true; closeQueue(state.commands);
+    await state.deadlineWrite;
     const answered = this.cancelPendingRequest(state);
     if (state.sessionId && state.context) { try { await state.context.notify('session/cancel', { sessionId: state.sessionId }); } catch { /* process shutdown remains authoritative */ } }
     if (answered) await this.awaitTurnEnd(state);
@@ -441,6 +455,7 @@ export class AcpBackend implements SupervisorBackend {
   }
   async close(handle: BackendRunHandle): Promise<void> {
     const state = (handle as AcpHandle).opaque; state.released = true; state.closed = true; enqueue(state.commands, { kind: 'close' }); closeQueue(state.commands);
+    await state.deadlineWrite;
     if (this.cancelPendingRequest(state)) {
       if (state.sessionId && state.context) { try { await state.context.notify('session/cancel', { sessionId: state.sessionId }); } catch { /* process shutdown remains authoritative */ } }
       await this.awaitTurnEnd(state);
@@ -483,8 +498,12 @@ export class AcpBackend implements SupervisorBackend {
     } catch { return undefined; }
 
     const input: StartRunInput = { runId: record.runId, mode: record.mode, task: '', cwd: record.sourceWorkspace, workerWorkspace: record.workerWorkspace, runDirectory, limits: record.limits };
+    let deadlineFile: string;
+    try { deadlineFile = await writeWorkerDeadline(runDirectory, turnDeadlineSeconds(record.limits.timeoutSeconds)); }
+    catch { return undefined; }
     const profile = await createVibeChildProfile(input, record.mode, { forwardOriginalHome: true });
     profile.env.VIBE_SUPERVISOR_WORKER_TIMEOUT_SECONDS = String(record.limits.timeoutSeconds);
+    profile.env[WORKER_DEADLINE_FILE_ENV] = deadlineFile;
     let launch: VibeLaunch;
     try { launch = await this.buildLaunch([], profile, runDirectory); }
     catch { return undefined; }

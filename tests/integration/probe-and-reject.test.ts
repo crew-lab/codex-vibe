@@ -384,6 +384,7 @@ describe('ACP refusal of requests the supervisor cannot evaluate', () => {
     const started = await h.backend.start(h.input, h.callbacks);
     const outcomes = await waitFor(() => h.outcomes(), (value) => value.length > 0);
     expect(outcomes).toEqual([{ outcome: { outcome: 'cancelled' } }]);
+    await waitFor(() => h.events, (value) => value.some((event) => event.type === 'permission_denied'));
     const denied = h.events.find((event) => event.type === 'permission_denied') as { data?: { outcome?: string } } | undefined;
     expect(denied?.data?.outcome).toBe('cancelled');
     await h.backend.close(started.handle);
