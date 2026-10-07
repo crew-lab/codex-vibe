@@ -1,0 +1,39 @@
+[
+  {
+    "step": "D11-restart-running",
+    "run_id": "011a37f7-ffca-49a8-a67e-59db1fa978e7",
+    "tool_use_before_restart": true,
+    "startup_ms": 98,
+    "state_after": "recoverable",
+    "last_seq": 9
+  },
+  {
+    "step": "D11-running-session-reload",
+    "run_id": "011a37f7-ffca-49a8-a67e-59db1fa978e7",
+    "result": {
+      "run_id": "011a37f7-ffca-49a8-a67e-59db1fa978e7",
+      "state": "completed",
+      "backend": "acp",
+      "stop_reason": "end_turn",
+      "summary": "Vibe completed the delegated task.",
+      "warnings": [],
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+      "integrity": {
+        "status": "verified",
+        "write_tool_observed": false
+      },
+      "changed_files": [],
+      "changed_files_total": 0,
+      "artifacts": [
+        {
+          "name": "transcript.md",
+          "path": "/private/tmp/rc7-phase-d-zotf2wpq/target-acp/runs/011a37f7-ffca-49a8-a67e-59db1fa978e7/transcript.md"
+        },
+        {
+          "name": "events.ndjson",
+          "path": "/private/tmp/rc7-phase-d-zotf2wpq/target-acp/runs/011a37f7-ffca-49a8-a67e-59db1fa978e7/events.ndjson"
+        }
+      ]
+    }
+  }
+]

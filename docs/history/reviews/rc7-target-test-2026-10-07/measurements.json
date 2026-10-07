@@ -1,0 +1,12 @@
+{
+  "vibe_import": {
+    "exit_code": 0,
+    "wall_ms": 20,
+    "total_line": "import time:       172 |       5746 | vibe"
+  },
+  "keychain_metadata_lookup_no_password": {
+    "exit_code": 0,
+    "wall_ms": 8
+  },
+  "codex_desktop_version": "unavailable"
+}

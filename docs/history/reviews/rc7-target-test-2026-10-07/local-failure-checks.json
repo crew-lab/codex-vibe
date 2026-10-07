@@ -1,0 +1,67 @@
+[
+  {
+    "step": "second-client-observation",
+    "error": "SdkError: Connection closed",
+    "stderr": "VSUP_INVALID_STATE: Another vibe-supervisor (pid 15780) owns /private/tmp/rc7-phase-d-zotf2wpq/home. Lock file: /private/tmp/rc7-phase-d-zotf2wpq/home/supervisor.lock. Stop that process, or give each Codex session its own VIBE_SUPERVISOR_HOME. Check the run status and use an action valid for its current state.\n"
+  },
+  {
+    "step": "D15-owner-lock",
+    "error": "SdkError: Connection closed",
+    "stderr": "VSUP_INVALID_STATE: Another vibe-supervisor (pid 15780) owns /private/tmp/rc7-phase-d-zotf2wpq/home. Lock file: /private/tmp/rc7-phase-d-zotf2wpq/home/supervisor.lock. Stop that process, or give each Codex session its own VIBE_SUPERVISOR_HOME. Check the run status and use an action valid for its current state.\n"
+  },
+  {
+    "step": "D15-missing-executable",
+    "reply": {
+      "run_id": "60effc02-1f6d-409f-94d2-1a9e27e03a18",
+      "state": "failed",
+      "backend": "programmatic",
+      "mode": "review",
+      "source_workspace": "/private/tmp/rc7-phase-d-zotf2wpq/workspace",
+      "worker_workspace": "/private/tmp/rc7-phase-d-zotf2wpq/workspace",
+      "created_at": "2026-10-07T12:57:48.350Z",
+      "next_action": "Read error and warnings; call vibe_close when done.",
+      "error": {
+        "code": "VSUP_VIBE_NOT_FOUND",
+        "message": "The vibe executable was not found.",
+        "remediation": "Install Vibe or set paths.vibe to its executable.",
+        "retryable": false,
+        "details": {
+          "executable_missing": true
+        }
+      },
+      "result": {
+        "run_id": "60effc02-1f6d-409f-94d2-1a9e27e03a18",
+        "state": "failed",
+        "backend": "programmatic",
+        "summary": "Vibe run ended before normal completion.",
+        "warnings": [],
+        "next_action": "Read error and warnings; call vibe_close when done.",
+        "integrity": {
+          "status": "verified",
+          "write_tool_observed": false
+        },
+        "error": {
+          "code": "VSUP_VIBE_NOT_FOUND",
+          "message": "The vibe executable was not found.",
+          "remediation": "Install Vibe or set paths.vibe to its executable.",
+          "retryable": false,
+          "details": {
+            "executable_missing": true
+          }
+        },
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc7-phase-d-zotf2wpq/missing-executable/runs/60effc02-1f6d-409f-94d2-1a9e27e03a18/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc7-phase-d-zotf2wpq/missing-executable/runs/60effc02-1f6d-409f-94d2-1a9e27e03a18/events.ndjson"
+          }
+        ]
+      }
+    }
+  }
+]

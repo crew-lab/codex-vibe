@@ -66,5 +66,136 @@
       "run_id": "d00fe37d-8c7f-4500-b0c1-6285b678ab2e",
       "evidence": "https://github.com/crew-lab/codex-vibe/blob/main/docs/history/reviews/rc2-target-test-2026-10-05/desktop-hosted-edits.json"
     }
+  ],
+  "sessions": [
+    {
+      "date": "2026-10-07",
+      "version": "0.9.0-rc.7",
+      "source_commit": "f30f8d74be9d442b5c315b51dc4e5c3cf5722757",
+      "status": "FAIL",
+      "evidence": "history/reviews/rc7-target-test-2026-10-07/session.json",
+      "scope": "Official MCP client; private synthetic workspace; no native desktop restart or clean-account/Intel evidence",
+      "steps": [
+        {
+          "id": "D0",
+          "status": "PARTIAL",
+          "detail": "Environment and rebuilt tarball recorded; desktop bundle version unavailable."
+        },
+        {
+          "id": "D1",
+          "status": "PASS",
+          "detail": "Offline install into a private prefix prints rc.7; checksums pass."
+        },
+        {
+          "id": "D2",
+          "status": "PARTIAL",
+          "detail": "Project-scoped plan/write/repeat and doctor pass; user-global registration was not changed."
+        },
+        {
+          "id": "D3",
+          "status": "PARTIAL",
+          "detail": "Official MCP client sees five programmatic and seven ACP tools; desktop restart not exercised."
+        },
+        {
+          "id": "D4",
+          "status": "PASS",
+          "detail": "Five automatic probe checks and both installed Vibe resolver/layering tests pass."
+        },
+        {
+          "id": "D5",
+          "status": "PARTIAL",
+          "detail": "Two hosted nested reviews finish end_turn with verified integrity; official client rather than native Codex. Driver adds a result call for usage (four calls, not three)."
+        },
+        {
+          "id": "D6",
+          "status": "PARTIAL",
+          "detail": "Live edit launcher had no task in argv and consumed prompt file; manifests 0600, public/native records omit reasoning fields. Scope is the observed launcher, not every process."
+        },
+        {
+          "id": "D7",
+          "status": "PARTIAL",
+          "detail": "Real content change detected. Combined tracked touch/ignored rewrite reports only node_modules/fixture/index.js. Original plan expectation failed; ignored stat comparison is intentional. No large-tree timing."
+        },
+        {
+          "id": "D8",
+          "status": "PASS",
+          "detail": "Eleven-file patch applies, four arithmetic cases pass, source unchanged, worktree_removed true."
+        },
+        {
+          "id": "D9",
+          "status": "PASS",
+          "detail": "Hosted ACP same-session continuation reaches end_turn."
+        },
+        {
+          "id": "D10",
+          "status": "PASS",
+          "detail": "Additional test observes running before close; final closed, verified integrity, no backend failure. Result has no stop_reason; cancellation after generated output remains untested."
+        },
+        {
+          "id": "D11",
+          "status": "PASS",
+          "detail": "Completed session reloads; separate restart after live tool use becomes recoverable and reloads to end_turn. Graceful restart, not SIGKILL. Early negotiation interruption correctly returns VSUP_SESSION_NOT_RESUMABLE."
+        },
+        {
+          "id": "D12",
+          "status": "PASS",
+          "detail": "60-second TTL, observed idle_expired after 65 seconds, continuation reloads to end_turn."
+        },
+        {
+          "id": "D13",
+          "status": "PASS",
+          "detail": "Actual tool refusals for outside path and fake .env; unknown write_file in review; allow_shell rejected; source verified and zero permission requests."
+        },
+        {
+          "id": "D14",
+          "status": "PARTIAL",
+          "detail": "Offline installed-package smoke passes concurrent isolated clients; native desktop/CLI adoption not exercised."
+        },
+        {
+          "id": "D15",
+          "status": "PASS",
+          "detail": "Second shared client names owner PID/lock path; missing executable reports VSUP_VIBE_NOT_FOUND."
+        },
+        {
+          "id": "D16",
+          "status": "PARTIAL",
+          "detail": "Official client accepts wait_seconds 300 with 600-second request timeout; native desktop/CLI deadline and model-visible reply/progress content remain unverified."
+        },
+        {
+          "id": "D17",
+          "status": "PARTIAL",
+          "detail": "Doctor 1422 ms; import vibe wall 20 ms (cumulative import 5746 us); metadata-only Keychain lookup 8 ms. No large-tree/export timing."
+        },
+        {
+          "id": "D18",
+          "status": "FAIL",
+          "detail": "Stopped on run 1/100: 12-turn limit, exit 1, VSUP_BACKEND_CRASHED. No leaked processes/worktrees, no permission requests, bounded artifacts."
+        },
+        {
+          "id": "D19",
+          "status": "SKIP",
+          "detail": "Optional; legacy harness is the supported scope."
+        },
+        {
+          "id": "D20",
+          "status": "SKIP",
+          "detail": "Clean OS account and Intel hardware unavailable in this session."
+        }
+      ]
+    },
+    {
+      "date": "2026-10-07",
+      "version": "0.9.0-rc.7 locally patched",
+      "base_commit": "f30f8d74be9d442b5c315b51dc4e5c3cf5722757",
+      "implementation": "PASS",
+      "release_verification": "PASS",
+      "typescript_tests": 603,
+      "hosted_soak": "FAIL",
+      "attempted_runs": 1,
+      "requested_runs": 100,
+      "run_id": "d9ce1a35-e7c4-43d4-b619-32383d3353af",
+      "failure": "driver:stop_reason_max_turn_requests",
+      "evidence": "history/reviews/rc7-turn-limit-fix-2026-10-07/Read.md"
+    }
   ]
 }

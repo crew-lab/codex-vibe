@@ -1,0 +1,14 @@
+{
+  "run_id": "b4f043f2-99b7-4972-ab29-61ec4ce8a19c",
+  "saved_state": "failed",
+  "error_matches_mcp_reply": true,
+  "error": {
+    "code": "VSUP_VIBE_NOT_FOUND",
+    "message": "The vibe executable was not found.",
+    "remediation": "Install Vibe or set paths.vibe to its executable.",
+    "retryable": false,
+    "details": {
+      "executable_missing": true
+    }
+  }
+}

@@ -120,3 +120,9 @@ Run IDs belong to the directory that holds them, and two live clients never shar
 Concurrency and queues apply per server, not globally. Retention runs inside each server over the directory it holds, automatically shortly after start and then daily, so a directory that no client ever reconnects to is not swept; it is adopted by the next start that finds no more recently used free directory.
 
 Without `--isolated`, startup retains the existing shared-directory behavior. Re-running `configure-codex` without that option restores direct shared storage; retain the option when upgrading an isolated installation. A custom local adapter is unnecessary with this release.
+
+## Programmatic limits and saved errors
+
+For pinned Vibe 2.25.8, a programmatic turn-limit stop exits with code 1 rather than 0. The supervisor reports it as `completed` with `stop_reason: max_turn_requests` and a partial-result warning only when the configured turn count, final streamed assistant stop marker, standalone stderr marker and exit code all agree. A marker in ordinary assistant output, an unconfirmed marker, another exit code or additional error text does not establish a turn-limit stop; authentication, version and crash failures keep their existing classification. Limits are not raised automatically, and the coordinator must check the stop reason before trusting the result.
+
+Saved `result.json` includes the same structured `error` as the run record when settlement fails or is cancelled, including errors discovered during artifact finalization. Its error fields are filtered by the existing persistence sanitizer. Successful results omit `error`.

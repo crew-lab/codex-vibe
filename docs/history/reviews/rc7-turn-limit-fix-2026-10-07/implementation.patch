@@ -1,0 +1,162 @@
+diff --git a/docs/functionality.md b/docs/functionality.md
+index 52d970a..fd68b05 100644
+--- a/docs/functionality.md
++++ b/docs/functionality.md
+@@ -120,3 +120,9 @@ Run IDs belong to the directory that holds them, and two live clients never shar
+ Concurrency and queues apply per server, not globally. Retention runs inside each server over the directory it holds, automatically shortly after start and then daily, so a directory that no client ever reconnects to is not swept; it is adopted by the next start that finds no more recently used free directory.
+ 
+ Without `--isolated`, startup retains the existing shared-directory behavior. Re-running `configure-codex` without that option restores direct shared storage; retain the option when upgrading an isolated installation. A custom local adapter is unnecessary with this release.
++
++## Programmatic limits and saved errors
++
++For pinned Vibe 2.25.8, a programmatic turn-limit stop exits with code 1 rather than 0. The supervisor reports it as `completed` with `stop_reason: max_turn_requests` and a partial-result warning only when the configured turn count, final streamed assistant stop marker, standalone stderr marker and exit code all agree. A marker in ordinary assistant output, an unconfirmed marker, another exit code or additional error text does not establish a turn-limit stop; authentication, version and crash failures keep their existing classification. Limits are not raised automatically, and the coordinator must check the stop reason before trusting the result.
++
++Saved `result.json` includes the same structured `error` as the run record when settlement fails or is cancelled, including errors discovered during artifact finalization. Its error fields are filtered by the existing persistence sanitizer. Successful results omit `error`.
+diff --git a/schemas/result.schema.json b/schemas/result.schema.json
+index 034cb4b..05b5063 100644
+--- a/schemas/result.schema.json
++++ b/schemas/result.schema.json
+@@ -9,6 +9,7 @@
+     "workspace": { "type": "object", "additionalProperties": false, "required": ["source", "worker"], "properties": { "source": { "type": "string" }, "worker": { "type": "string" } } },
+     "artifacts": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["name", "path", "sha256", "bytes", "media_type"], "properties": { "name": { "type": "string" }, "path": { "type": "string" }, "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "bytes": { "type": "integer", "minimum": 0 }, "media_type": { "type": "string" } } } },
+     "changed_files": { "type": "array", "items": { "type": "string" } }, "usage": { "type": "object" }, "warnings": { "type": "array", "items": { "type": "string" } },
++    "error": {"type": "object", "additionalProperties": false, "required": ["code", "message", "remediation", "retryable"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}, "remediation": {"type": "string"}, "retryable": {"type": "boolean"}, "details": {"type": "object"}}},
+     "next_action": { "type": "string" }
+   }
+ }
+diff --git a/src/backends/programmatic.ts b/src/backends/programmatic.ts
+index 166633a..7b7224e 100644
+--- a/src/backends/programmatic.ts
++++ b/src/backends/programmatic.ts
+@@ -139,16 +139,24 @@ export class ProgrammaticBackend implements SupervisorBackend {
+     child.done.then(async ({ code, signal }) => {
+       opaque.done = true;
+       await discardPromptFile();
++      await outputChain;
++      await stderrChain;
+       if (outputLimited || parserFailed) return;
+-      if (code === 0) {
+-        await outputChain;
+-        await stderrChain;
+-        await chunks.flush();
+-        const diagnosticTail = stderrRedactor.flush();
+-        if (diagnosticTail) await stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: diagnosticTail } }));
+-        await callbacks.onState('completed', { result: { stopReason: 'end_turn', summary: opaque.summary, ...(opaque.summary.trim() ? {} : { warnings: [NO_FINAL_MESSAGE_WARNING] }) } });
++      await chunks.flush();
++      const diagnosticTail = stderrRedactor.flush();
++      if (diagnosticTail) await callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: diagnosticTail } });
++      const stderrText = redactSecrets(child.stderr.toString(), environmentSecrets(profile.env));
++      // Vibe 2.25.8 prints its final assistant stop marker on stderr when
++      // ProgrammaticLimitError exits 1. Assistant text alone is not authority.
++      const turnLimitMarker = `<vibe_stop_event>Turn limit of ${input.limits.maxTurns} reached</vibe_stop_event>`;
++      const reachedTurnLimit = code === 1 && !signal && opaque.summary.trim() === turnLimitMarker && stderrText.trim() === turnLimitMarker;
++      if (code === 0 || reachedTurnLimit) {
++        await callbacks.onState('completed', { result: {
++          stopReason: reachedTurnLimit ? 'max_turn_requests' : 'end_turn',
++          summary: reachedTurnLimit ? '' : opaque.summary,
++          ...(!reachedTurnLimit && !opaque.summary.trim() ? { warnings: [NO_FINAL_MESSAGE_WARNING] } : {})
++        } });
+       } else {
+-        const stderrText = redactSecrets(child.stderr.toString(), environmentSecrets(profile.env));
+         const exitMessage = `Vibe exited with code ${code ?? 'null'}${signal ? ` (${signal})` : ''}`;
+         const failure = versionMismatchOnStderr(this.kind, stderrText) ?? classifyFailureText(stderrTailText(stderrText), 'VSUP_BACKEND_CRASHED', exitMessage);
+         await callbacks.onState('failed', { error: failure });
+diff --git a/src/core/run-manager.ts b/src/core/run-manager.ts
+index 907841f..5e3fdb0 100644
+--- a/src/core/run-manager.ts
++++ b/src/core/run-manager.ts
+@@ -971,11 +971,13 @@ export class RunManager {
+     try {
+       await this.ensureLoaded(runtime);
+       this.endTranscriptTurn(runtime);
++      if (outcome.error) runtime.record.error = outcome.error;
+       if (outcome.state !== "recoverable") await this.assessReviewIntegrity(runtime, outcome.state);
+       try { await this.finalizeArtifacts(runtime, outcome.state); }
+       catch (error) {
+         if (outcome.state === "completed") outcome = { state: "failed", error: isCodedFailure(error) ? normalizeError(error) : supervisorError("VSUP_ARTIFACT_ERROR", "Could not finish and verify the run artifacts.") };
+         else await this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "warning", data: { reason: "artifact_finalization_failed", message: describeFailure(error) } }, true).catch(() => undefined);
++        if (outcome.error) runtime.record.error = outcome.error;
+         await this.writeFallbackResult(runtime, outcome.state);
+       }
+       await this.setState(runtime, outcome.state, { ...(outcome.error ? { error: outcome.error } : {}), finishedAt: new Date().toISOString() });
+@@ -1076,6 +1078,7 @@ export class RunManager {
+       summary: result?.summary ?? "",
+       workspace: { source: record.sourceWorkspace, worker: record.workerWorkspace },
+       artifacts: (result?.artifacts ?? []).map(artifactToWire), changed_files: result?.changedFiles ?? [],
++      ...(record.error ? { error: record.error } : {}),
+       ...(record.usage ? { usage: usageToWire(record.usage) } : {}), warnings: result?.warnings ?? [],
+       ...(result?.integrity ? { integrity: integrityToWire(result.integrity) } : {})
+     };
+diff --git a/tests/integration/failure-reporting.test.ts b/tests/integration/failure-reporting.test.ts
+index 87fa4c0..6d8025d 100644
+--- a/tests/integration/failure-reporting.test.ts
++++ b/tests/integration/failure-reporting.test.ts
+@@ -240,6 +240,45 @@ describe('an empty final message', () => {
+   });
+ });
+ 
++describe('programmatic turn-limit exits', () => {
++  const marker = '<vibe_stop_event>Turn limit of 12 reached</vibe_stop_event>';
++  const cases = [
++    { name: 'matching pinned markers, including an unterminated last streaming line', code: 1, stdout: marker, stderr: marker, capped: true },
++    { name: 'a marker mentioned only by the assistant', code: 1, stdout: marker, stderr: 'boom', capped: false },
++    { name: 'a marker on stderr without a streamed assistant marker', code: 1, stdout: 'Partial findings.', stderr: marker, capped: false },
++    { name: 'a marker for a different configured turn limit', code: 1, stdout: marker.replace('12', '13'), stderr: marker.replace('12', '13'), capped: false },
++    { name: 'a genuine crash after a matching marker', code: 2, stdout: marker, stderr: marker, capped: false },
++    { name: 'an additional error after the marker', code: 1, stdout: marker, stderr: `${marker}\nError: 401 Unauthorized`, capped: false },
++    { name: 'a marker in ordinary successful assistant output', code: 0, stdout: marker, stderr: marker, capped: false },
++  ];
++  it.each(cases)('$name', async (test) => {
++    const { parent, source, data } = await makeParent();
++    const entry = JSON.stringify({ type: 'message', role: 'assistant', content: [{ type: 'text', text: test.stdout }] });
++    const body = `process.stdout.write(${JSON.stringify(entry.slice(0, 17))}); setTimeout(() => { process.stdout.write(${JSON.stringify(entry.slice(17))}); process.stderr.write(${JSON.stringify(test.stderr + '\n')}); process.exitCode = ${test.code}; }, 20);`;
++    const { vibe } = await installFakeVibe(parent, body);
++    const manager = managerFor(source, data, [new ProgrammaticBackend({ ...DEFAULT_CONFIG, backend: 'programmatic', paths: { vibe } })], { backend: 'programmatic' });
++    try {
++      const { id, status } = await failedRun(manager, source);
++      const result = await manager.result({ run_id: id });
++      if (test.capped) {
++        expect(status.state).toBe('completed');
++        expect(status.error).toBeUndefined();
++        expect(result).toMatchObject({ stop_reason: 'max_turn_requests', warnings: [expect.stringContaining('max_turn_requests')] });
++        expect(result.summary).toContain('turn limit');
++        expect(result.summary).not.toContain('<vibe_stop_event>');
++        const saved = JSON.parse(await readFile(path.join(data, 'runs', id, 'result.json'), 'utf8'));
++        expect(saved).toMatchObject({ state: 'completed', stop_reason: 'max_turn_requests', warnings: [expect.stringContaining('max_turn_requests')] });
++        expect(saved.error).toBeUndefined();
++      } else if (test.code === 0) {
++        expect(result).toMatchObject({ state: 'completed', stop_reason: 'end_turn' });
++      } else {
++        expect(result).toMatchObject({ state: 'failed', error: { code: test.stderr.includes('401 Unauthorized') ? 'VSUP_AUTH_REQUIRED' : 'VSUP_BACKEND_CRASHED' } });
++        expect(result.stop_reason).toBeUndefined();
++      }
++    } finally { await manager.shutdown(); }
++  });
++});
++
+ describe('backend selection errors', () => {
+   it('names the detected and the supported version when a probe saw the wrong one', async () => {
+     const { source, data } = await makeParent();
+diff --git a/tests/integration/settle.test.ts b/tests/integration/settle.test.ts
+index 090e663..e789fa2 100644
+--- a/tests/integration/settle.test.ts
++++ b/tests/integration/settle.test.ts
+@@ -104,8 +104,8 @@ const base: Scenario[] = [
+ const quietBackend = new Set(['the user cancels a running run', 'the deadline expires', 'the transcript limit is reached', 'a permission request violates the policy and offers no rejection']);
+ const scenarios: Scenario[] = base.flatMap((scenario) => quietBackend.has(scenario.name) ? [scenario, { ...scenario, name: `${scenario.name} (backend cancel reports nothing)`, silentCancel: true }] : [scenario]);
+ 
+-async function readResultFile(data: string, runId: string): Promise<{ state: string; integrity?: { status: string } } | undefined> {
+-  try { return JSON.parse(await readFile(path.join(data, 'runs', runId, 'result.json'), 'utf8')) as { state: string; integrity?: { status: string } }; }
++async function readResultFile(data: string, runId: string): Promise<{ state: string; error?: { code: string }; integrity?: { status: string } } | undefined> {
++  try { return JSON.parse(await readFile(path.join(data, 'runs', runId, 'result.json'), 'utf8')) as { state: string; error?: { code: string }; integrity?: { status: string } }; }
+   catch { return undefined; }
+ }
+ 
+@@ -137,6 +137,7 @@ describe('settle: every end-of-run path ends the run the same way', () => {
+       const result = await readResultFile(data, target.run_id);
+       expect(result, 'result.json must exist').toBeDefined();
+       expect(result?.state).toBe(scenario.state);
++      if (scenario.errorCode) expect(result?.error).toEqual(status.error); else expect(result?.error).toBeUndefined();
+       if (scenario.launched && scenario.state !== 'recoverable') expect(result?.integrity?.status, 'launched review runs carry integrity').toBeDefined();
+       if (!scenario.launched) expect(result?.integrity).toBeUndefined();
+ 
