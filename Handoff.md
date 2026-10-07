@@ -250,9 +250,9 @@ Status: implemented on 2026-10-07 against fake backends. A cold review of `6397e
 
 ### Phase D, target machine and release
 
-T7, T8, T11, T12, R1–R3, restart, stale-lock and upgrade-path checks added to the field plan, the hosted soak as redefined in gate 3, then T14–T16; cut rc.4 after Phases A–C and 1.0 after D.
+See [Phase D test plan (rc.6)](#phase-d-test-plan-rc6). Cut rc.7 or 1.0 after it.
 
-Open decisions: integrity versus speed for the review snapshot (B1); whether 1.0 ships programmatic-only with ACP marked experimental (removes `continue`, `respond`, the `auto` fallback and most recovery surface, but also continuation); whether the Keychain key may live in supervisor memory; whether R3 (unified harness) gates 1.0 or "legacy only" is documented with the flag made conditional; whether `private: true` with GitHub Releases stays the install story.
+Open decisions: whether R3 (unified harness) gates 1.0 or 1.0 documents "legacy harness only"; whether the Keychain key may live in supervisor memory (dropped from Phase B because measurement showed no gain, kept open only if P3 shows a slow lookup). Settled: hybrid snapshot (Phase B), ACP ships alongside programmatic (Phase C), GitHub Releases with `private: true` (Phase C).
 
 ## Platform research (2026-10-05)
 
@@ -327,7 +327,71 @@ These need the installed Vibe 2.25.8 package but no credential or inference, so 
 - **B3:** inspect the installed Vibe source for how the Plan and Accept Edits agents layer permissions over the tool configuration, then record the effective permissions for both modes. Fix only through a mechanism the pinned source supports; never through `VIBE_AGENTS__...` overrides or an `always` fallback.
 - **B2:** the B2 fix was tested only with a mocked or fake `security` on the preparing machine. Before T6, confirm the real Keychain lookup finds the browser-login item without exporting `MISTRAL_API_KEY`.
 
+## Phase D test plan (rc.6)
+
+This plan replaces the 2026-10-05 field plan below (kept for history) for the rc.6 surface: `setup`, five tools for programmatic or seven for `acp`/`auto`, no `vibe_cancel`, no `test-acp` as a primary command. It also absorbs the open research checks R1 to R3 and the Phase B measurements P1 to P4. Its goal is the evidence for the 1.0 decision.
+
+Ground rules:
+
+- **Machine:** the target Mac with Vibe 2.25.8 installed (`uv tool install mistral-vibe==2.25.8`) and browser login done once with `vibe`. Install rc.6 from `release/0.9.0-rc.6/` after `shasum -a 256 -c SHA256SUMS`.
+- **Workspace:** a throwaway Git repository with no secrets, containing nested source files, a root `.env` with a fake value, an ignored `node_modules/` (any size; a large one also serves D7), and one file outside the repository to try to read.
+- **Cost and consent:** hosted steps send that repository and the tasks to Mistral and are billed; run them only with the owner's authorization. Earlier hosted edits cost about $0.02 each, so the soak (D18) is the only step with noticeable cost.
+- **Stop rule:** stop at the first failing step, record it, and never work around it by weakening policy (no `always` fallback, no shell, no network, no project trust, no editing the generated agent profiles).
+- **Recording:** one dated section per session in [docs/history/acceptance.md](docs/history/acceptance.md), machine-readable status in `docs/acceptance.json`, raw evidence (redacted JSON replies, timings, logs) in `docs/history/reviews/rc6-target-test-<date>/`. Record exact commands, versions, run IDs, timings, PASS or FAIL, and what stays uncertain. Never record credentials; `security` is only ever called without `-w` in these steps.
+
+### Install and setup
+
+| ID | Step | Expected | Covers |
+|---|---|---|---|
+| D0 | Record macOS version and arch, Node, npm, Git, `vibe --version`, the Vibe Python path, Codex CLI and desktop versions, the rc.6 tarball sha256. | All recorded. | Baseline |
+| D1 | `npm install -g ./vibe-supervisor-0.9.0-rc.6.tgz` (or `--prefix` into a private prefix); `vibe-supervisor --version`. | Installs offline-capable files only; prints `0.9.0-rc.6`. | Release install |
+| D2 | `vibe-supervisor setup --workspace <repo>` without `--yes`, then again with `--yes`; then `vibe-supervisor doctor --json`. | First run prints the planned Codex change and writes nothing to `~/.codex`; second run writes it, keeps a `.bak` of an existing supervisor config, prints the restart note; `[paths]` holds absolute `vibe`/`vibe-acp`; doctor has no required failure and no ignored-key warning. Running `setup` a third time changes nothing. | C3 setup, plan-then-write |
+| D3 | Restart Codex desktop; open a new chat; list the supervisor tools. Then set `backend = "acp"`, restart, list again. | Five tools for programmatic; seven for `acp` (adds `vibe_continue`, `vibe_respond`); no `vibe_cancel`; the descriptions mention `wait_seconds`, `stop_reason` and closing. | C2 surface, registration |
+| D4 | From a source checkout of `db3c9ef`: `npm run compat:probe -- --out <file>`; repeat the manual `tool_path_resolver` check for a nested file, root `.env`, an outside path and a symlink to outside, in review and edit mode. | Probe checks PASS; nested in-root files ALWAYS, the others NEVER, in both modes. | Pin, B1 regression |
+
+### Hosted programmatic runs (backend `programmatic`)
+
+| ID | Step | Expected | Covers |
+|---|---|---|---|
+| D5 | In Codex, ask for a review of a nested file. Let the coordinator follow the skill: `vibe_review_start` with `wait_seconds` 120 to 300, then `vibe_status` with `wait_seconds`, then `vibe_close`. Do it once right after a supervisor start (cold) and once again (warm). | Three tool calls per run; the settled `vibe_status` carries `result` with `stop_reason: end_turn`, `next_action`, `integrity.status: verified`; P1: record time to first event and to `completed`, cold and warm. | B4 loop, P1, R2 |
+| D6 | While D5 runs: `ps -axww -o pid,command` and a listing of the run directory. Afterwards inspect `transcript.md`, `events.ndjson`, `result.json`, `launch-manifest.json`. | No task text in any argv; `task-prompt.txt` gone once Vibe starts; no reasoning text; events in order; manifest owner-only. Record the event count (P4). | T7, T8, P4 |
+| D7 | Two reviews: during the first, edit a tracked file by hand; during the second, only `touch` a tracked file and rewrite a file under `node_modules/` with the same content. Time the launch snapshot on the large `node_modules/` (from the run's events or by timestamps). | First: `changed` with that path; second: `verified`. Snapshot time recorded against the 2.6 s preparing-machine figure. | B1 hybrid snapshot |
+| D8 | Edit run that changes one file and creates at least ten new files; read the result; `vibe_close` with `cleanup_worktree: true`. | Patch exported and applies to the base; source checkout untouched; worktree removed with `worktree_removed: true`. Record export time. | B2 export, close |
+
+### Hosted ACP runs (backend `acp`)
+
+| ID | Step | Expected | Covers |
+|---|---|---|---|
+| D9 | Review, then `vibe_continue` with a follow-up after it completes. | Same session continues; each turn has its own `stop_reason` and integrity; zero permission requests. | Continuation |
+| D10 | Start a longer task and call `vibe_close` mid-turn. | Run ends `cancelled`, then `closed`; never `failed`; no Vibe process left (`pgrep -fl vibe`). | T11 cancel via close |
+| D11 | Restart the supervisor (quit and reopen Codex) once after a run completed and once while a run is in progress; then `vibe_continue` on each. | Startup is fast and starts no Vibe process; the completed run reloads lazily and continues; the interrupted run is `recoverable` and continues, or fails with an accurate code; never a replay of the original task. | T11 restart, lazy recovery |
+| D12 | Set `worker_idle_ttl_seconds = 60`, restart, complete a run, wait more than 60 s, then `vibe_continue`. | `idle_expired` event; the continuation reloads the session lazily. | T11 idle expiry |
+| D13 | Policy probes in a review: ask Vibe to read the outside file, read `.env`, and write a file; in Codex try to pass `allow_shell: true` to `vibe_edit_start`. | Outside and `.env` reads refused; review write refused; `allow_shell` rejected as an unknown field; permission requests counted (expected zero). | T12, gate 3 premise |
+
+### Clients, failures and research checks
+
+| ID | Step | Expected | Covers |
+|---|---|---|---|
+| D14 | `vibe-supervisor setup --workspace <repo> --isolated --yes`; use Codex desktop and the Codex CLI at the same time; then restart Codex desktop. | Both clients work; the desktop's stderr line says `adopted` after the restart and its earlier run is reachable by ID; at most two `mcp-sessions/session-*` directories. | Isolation reuse |
+| D15 | Without `--isolated`, open a second client on the shared directory; point `paths.vibe` at a missing file and start a run; restore it. | The second client fails with a message naming the lock path and owner PID; the missing executable gives `VSUP_VIBE_NOT_FOUND`. | Lock, error labels |
+| D16 | R1: record what the model sees from a tool reply (text, structured content, or both) and whether progress notifications appear. R2: a `vibe_status` call with `wait_seconds: 300` in both the desktop app and the CLI. | R1 answered; R2 returns before the 600 s `tool_timeout_sec`. | R1, R2 |
+| D17 | Measurements: P2 `time vibe-supervisor doctor` (probe cost, cold); P3 Vibe import time with the Vibe interpreter (`python -X importtime -c "import vibe"`, total only) and `time /usr/bin/security find-generic-password -s ai.mistral.vibe -a MISTRAL_API_KEY` (no `-w`, output discarded); P4 event counts from D5, D8 and D9. | Numbers recorded next to the Phase B table. | P2 to P4 |
+
+### Soak and platforms
+
+| ID | Step | Expected | Covers |
+|---|---|---|---|
+| D18 | Hosted soak of 100 runs through the MCP client: about 60 reviews, 30 edits, and 10 ACP runs with a continuation, a mid-turn `vibe_close`, and a supervisor restart spread through them. Needs a soak driver (`scripts/soak.mjs`, not written yet; it should use the official MCP client like `smoke-install.mjs` and record per-run outcome, timing and cost). | Zero unexpected failures, zero permission requests, no leaked processes or worktrees, bounded artifacts, retention leaves recent runs. | Gate 3 hosted soak |
+| D19 | R3: repeat D4, D9 and D13 with the unified harness (a build without `--legacy-harness`). | Record differences. Not a 1.0 blocker unless the decision below says so. | R3 |
+| D20 | Repeat D0 to D5 on an Intel Mac and on a clean macOS account. | Same results. | Gate 6 |
+
+Exit criteria for 1.0: D0 to D18 pass; D20 passes at least on a clean account; D19 either passes or 1.0 documents "legacy harness only"; the release workflow is pushed and its first tagged run produces the release assets. The plugin scaffold is no longer packaged and stays out of scope for 1.0.
+
+Before the session: write the soak driver for D18 and decide R3's status. After it: fix what failed, cut rc.7 or 1.0 accordingly.
+
 ## Field test plan for the target machine
+
+Superseded by the Phase D test plan above; kept as the record of the 2026-10-05 session.
 
 Run on a macOS machine with Vibe 2.25.8 installed and browser login completed. Hosted steps (T6 onward) send source and tasks to Mistral and incur usage; run them only with the owner's authorization and only against a throwaway repository containing no secrets. Stop at the first failing step, record it, and do not work around a blocker by weakening policy (no `always` fallback, shell, network, or project trust).
 
