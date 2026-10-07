@@ -14,6 +14,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '20.19'
@@ -22,6 +23,12 @@ jobs:
           version=$(node -p "require('./package.json').version")
           if [ "$GITHUB_REF_NAME" != "v$version" ]; then
             echo "Tag $GITHUB_REF_NAME does not equal v$version from package.json." >&2
+            exit 1
+          fi
+      - name: Check the tagged commit is on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "Tag $GITHUB_REF_NAME points at a commit that is not on main." >&2
             exit 1
           fi
       - name: Install dependencies into a job-local npm cache

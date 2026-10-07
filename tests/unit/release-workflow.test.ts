@@ -17,6 +17,14 @@ describe('release workflow', () => {
     expect(workflow).toMatch(/exit 1/);
   });
 
+  it('refuses a tag whose commit is not on main, with the full history checked out', () => {
+    expect(workflow).toMatch(/fetch-depth: 0/);
+    expect(workflow).toMatch(/git merge-base --is-ancestor "\$GITHUB_SHA" refs\/remotes\/origin\/main/);
+    const guard = workflow.indexOf('merge-base --is-ancestor');
+    expect(guard).toBeGreaterThan(0);
+    expect(guard).toBeLessThan(workflow.indexOf('npm ci'));
+  });
+
   it('grants no permissions by default and contents write only to the release job', () => {
     expect(workflow).toMatch(/^permissions: \{\}$|^permissions:\n {2}contents: read$/m);
     const release = workflow.slice(workflow.indexOf('\n  release:'));
