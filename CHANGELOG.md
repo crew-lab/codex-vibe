@@ -7,6 +7,9 @@ Breaking changes for coordinators (Phase C):
 - `vibe_cancel` is removed; `vibe_close` cancels a live run, and a closed run stays readable through `vibe_status` and `vibe_result` until retention.
 - `vibe_edit_start` no longer accepts `allow_shell`, the start tools no longer accept `backend` (the backend comes from configuration), and `vibe_result` no longer accepts `detail: "summary"`.
 - `vibe_continue` and `vibe_respond` are listed only when the configured backend is `acp` or `auto`: five tools for programmatic, seven otherwise.
+- `configure-codex --path <dir>` without `--project` exits 2 instead of being silently ignored.
+- `allowed_workspace_roots` entries must be absolute or start with `~/`, `paths.vibe` and `paths.vibe_acp` must be absolute or a bare command name, and `paths.data_dir` must be absolute; relative values that used to load now fail validation.
+- `allow` and `setup` refuse `/` and the home directory as a workspace.
 
 Surface:
 
@@ -14,6 +17,10 @@ Surface:
 - `limits.review_timeout_seconds`, `limits.edit_timeout_seconds`, `limits.max_turns_review` and `limits.max_turns_edit` now set the defaults when a call omits them. `phase1.*` and the `security.*` keys are removed: shell, network tools, raw ACP logging and reasoning persistence are always off, and a file that still sets them loads with a warning and is never loosened by them.
 - A Vibe rate limit (HTTP 429) is `VSUP_RATE_LIMITED` with `retryable: true`; the unused `VSUP_WORKSPACE_DENIED` code is gone.
 - New `setup --workspace <dir>` (configuration, allowlist, executable paths, doctor and a confirmed Codex registration in one command) and `allow <dir>`; `doctor --config <path>` validates a file; `test-acp` and `config validate` remain as aliases; `configure-codex` drops the `--scope` and `--path=` forms; `init` writes a minimal file; the version comes from `package.json`.
+- `vibe_status` paging is lossless under `max_mcp_result_chars`: events are trimmed from the end, and `next_after_seq` (and the `after_seq` in `next_action`) names the last event actually delivered.
+- `next_action` offers `vibe_continue` from the run's own backend, so a programmatic run reached through `backend = "auto"` is no longer told to continue.
+- Failures are classified authentication first, and a rate limit needs an explicit 429 or "too many requests" in the final error (not `x-ratelimit-*` headers or retry log lines); a missing executable or interpreter is reported before either.
+- `allow` and `setup` say that a running MCP server must be restarted (reconnected for `--isolated`) to read a changed allowlist; the `VSUP_WORKSPACE_INVALID` remedy says so too. They keep one owner-only `config.toml.bak-<timestamp>` copy before rewriting an existing file (comments and layout are not preserved), compare `~`-prefixed roots as the same directory, and `setup` validates the Codex config before writing anything.
 - A tag `v<version>` builds, verifies and attaches the tarball, checksums, SBOM and acceptance report to a GitHub Release; nothing is published to npm.
 
 Documentation and package contents:

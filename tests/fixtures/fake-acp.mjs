@@ -25,6 +25,7 @@ async function handle(message) {
   if (message.method === 'initialize') {
     if (mode === 'early-exit') { process.exit(17); return; }
     if (mode === 'init-401') { send({ jsonrpc: '2.0', id: message.id, error: { code: -32000, message: 'Unauthorized (401): missing api key' } }); return; }
+    if (mode === 'init-401-ratelimit') { send({ jsonrpc: '2.0', id: message.id, error: { code: -32000, message: 'Unauthorized (401): x-ratelimit-limit: 100, retrying after rate limit' } }); return; }
     if (mode === 'init-429') { send({ jsonrpc: '2.0', id: message.id, error: { code: -32000, message: 'Rate limit exceeded (429): too many requests' } }); return; }
     if (mode === 'init-stderr') { process.stderr.write('fatal: cannot start sk-abcdef1234567890xyz during init\n', () => process.exit(17)); return; }
     if (mode === 'broken-json') { process.stdout.write('{broken-json\n', () => process.exit(23)); return; }
@@ -48,6 +49,7 @@ async function handle(message) {
     promptCount += 1;
     if (mode === 'mid-turn-error') { send({ jsonrpc: '2.0', id: message.id, error: { code: -32000, message: 'upstream exploded' } }); return; }
     if (mode === 'mid-turn-401') { send({ jsonrpc: '2.0', id: message.id, error: { code: -32000, message: 'Unauthorized (401): session expired' } }); return; }
+    if (mode === 'mid-turn-401-ratelimit') { send({ jsonrpc: '2.0', id: message.id, error: { code: -32000, message: 'Unauthorized (401): x-ratelimit-limit: 100, retrying after rate limit' } }); return; }
     if (mode === 'mid-turn-429') { send({ jsonrpc: '2.0', id: message.id, error: { code: -32000, message: 'Rate limit exceeded (429): too many requests' } }); return; }
     if (mode === 'exit-zero-mid-turn') {
       chunk('partial answer');

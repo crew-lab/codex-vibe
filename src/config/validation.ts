@@ -1,3 +1,4 @@
+import path from "node:path";
 import { z } from "zod";
 import type { SupervisorConfig } from "../contracts.js";
 
@@ -8,10 +9,13 @@ const REMOVED_KEYS: Readonly<Record<string, readonly string[]>> = {
 
 const removedSection = (keys: readonly string[]) => z.object(Object.fromEntries(keys.map((key) => [key, z.unknown().optional()]))).strict().optional();
 const pathString = z.string().min(1).max(4096);
+const rootString = pathString.refine((value) => path.isAbsolute(value) || value === "~" || value.startsWith("~/"), "must be an absolute path or start with ~/");
+const executableString = pathString.refine((value) => path.isAbsolute(value) || !/[\\/]/.test(value), "must be an absolute path or a bare command name");
+const absoluteString = pathString.refine((value) => path.isAbsolute(value), "must be an absolute path");
 const configSchema = z.object({
   version: z.literal(1),
   backend: z.enum(["auto", "acp", "programmatic"]).default("programmatic"),
-  allowed_workspace_roots: z.array(pathString).max(100).default([]),
+  allowed_workspace_roots: z.array(rootString).max(100).default([]),
   max_concurrent_runs: z.number().int().min(1).max(32).default(2),
   max_queued_runs: z.number().int().min(0).max(256).default(8),
   worker_idle_ttl_seconds: z.number().int().min(0).max(86_400).default(600),
@@ -32,7 +36,7 @@ const configSchema = z.object({
   }).strict().prefault({}),
   phase1: removedSection(REMOVED_KEYS.phase1 ?? []),
   security: removedSection(REMOVED_KEYS.security ?? []),
-  paths: z.object({ vibe: pathString.optional(), vibe_acp: pathString.optional(), data_dir: pathString.optional() }).strict().optional()
+  paths: z.object({ vibe: executableString.optional(), vibe_acp: executableString.optional(), data_dir: absoluteString.optional() }).strict().optional()
 }).strict();
 
 export function validateConfig(input: unknown): SupervisorConfig {

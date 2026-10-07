@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPrivateFile } from '../security/paths.js';
 import { supervisorError } from '../contracts.js';
-import type { BackendKind, SupervisorError } from '../contracts.js';
+import type { BackendKind, SupervisorError, SupervisorErrorCode } from '../contracts.js';
 import type { ManagedProcess } from '../process/managed.js';
 import { SUPPORTED_VIBE } from './pinned.js';
 import type { VibeChildProfile } from './profile.js';
@@ -84,10 +84,25 @@ export function versionMismatchOnStderr(backend: BackendKind, stderr: string): S
   return detected ? versionUnsupported(backend, detected) : undefined;
 }
 
-const RATE_LIMIT_PATTERN = /\b(?:http|status(?: code)?|error|code)\W{0,3}429\b|\b429\W{1,3}(?:too many|rate)|\(429\)|\brate[ -]?limit(?:ed|s)?\b|\btoo many requests\b/i;
+const RATE_LIMIT_PATTERN = /\b(?:http|status(?: code)?|error|code)\W{0,3}429\b|\b429\W{1,3}(?:too many|rate)|\(429\)|\btoo many requests\b/i;
+const AUTH_PATTERN = /missing api key|\bunauthori[sz]ed\b|\bforbidden\b|\b(?:http|status(?: code)?|error|code)\W{0,3}40[13]\b|\(40[13]\)|\b40[13]\W{1,3}(?:unauthori[sz]ed|forbidden)/i;
+const TAIL_LINES = 5;
+
+export function stderrTailText(text: string): string {
+  return text.split('\n').filter((line) => line.trim()).slice(-TAIL_LINES).join('\n');
+}
 
 export function rateLimitFailure(text: string): SupervisorError | undefined {
   return RATE_LIMIT_PATTERN.test(text) ? supervisorError('VSUP_RATE_LIMITED', 'Vibe was rate limited by its provider (HTTP 429).', undefined, true) : undefined;
+}
+
+export function authFailureText(text: string): boolean {
+  return AUTH_PATTERN.test(text);
+}
+
+export function classifyFailureText(text: string, fallback: SupervisorErrorCode, message = text): SupervisorError {
+  if (authFailureText(text)) return supervisorError('VSUP_AUTH_REQUIRED', message);
+  return rateLimitFailure(text) ?? supervisorError(fallback, message);
 }
 
 export function isCodedError(error: unknown): error is SupervisorError {
@@ -98,12 +113,12 @@ export async function classifyStartFailure(backend: BackendKind, executable: str
   const mismatch = versionMismatchOnStderr(backend, stderr);
   if (mismatch) return mismatch;
   if (isCodedError(error)) return error;
-  const limited = rateLimitFailure(stderr);
-  if (limited) return limited;
   const missing = await describeMissing(executable, error);
   if (missing.executable_missing === true) return supervisorError(backend === 'acp' ? 'VSUP_VIBE_ACP_NOT_FOUND' : 'VSUP_VIBE_NOT_FOUND', backend === 'acp' ? 'The vibe-acp executable was not found.' : 'The vibe executable was not found.', missing);
   if (missing.interpreter_missing === true) return supervisorError('VSUP_BACKEND_UNAVAILABLE', interpreterMissingMessage(backend, missing.interpreter), missing);
-  return error;
+  const tail = stderrTailText(stderr);
+  if (authFailureText(tail)) return supervisorError('VSUP_AUTH_REQUIRED', 'Vibe rejected the credentials (authentication failure).');
+  return rateLimitFailure(tail) ?? error;
 }
 
 export function spawned(process: ManagedProcess): Promise<void> {

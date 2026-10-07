@@ -13,7 +13,7 @@ import { spawnManaged } from '../process/managed.js';
 import { assertNoProjectVibeExtensions, createVibeChildProfile } from './profile.js';
 import type { VibeChildProfile } from './profile.js';
 import { APP_VERSION } from '../version.js';
-import { buildVibeLaunch, classifyStartFailure, describeMissing, isCodedError, rateLimitFailure, spawned, versionUnsupported } from './launcher.js';
+import { buildVibeLaunch, classifyFailureText, classifyStartFailure, describeMissing, isCodedError, spawned, versionUnsupported } from './launcher.js';
 import { ACP_PROTOCOL_VERSION, SUPPORTED_VIBE } from './pinned.js';
 import { executableProbeKey, ProbeCache } from './probe-cache.js';
 import type { ProbeOptions } from './probe-cache.js';
@@ -246,8 +246,8 @@ export class AcpBackend implements SupervisorBackend {
       if (!state.failureReported && !state.released && !exitedIdle) {
         state.failureReported = true;
         const exitedMidTurn = state.turnActive && child.child.exitCode === 0;
-        const label = /missing api key|unauthorized|\b401\b/i.test(message) ? 'VSUP_AUTH_REQUIRED' : state.sessionReady ? 'VSUP_ACP_PROTOCOL_ERROR' : 'VSUP_ACP_INIT_FAILED';
-        await callbacks.onState('failed', { error: exitedMidTurn ? supervisorError('VSUP_BACKEND_CRASHED', EXITED_MID_TURN) : cause ?? rateLimitFailure(message) ?? supervisorError(label, message) });
+        const fallback = state.sessionReady ? 'VSUP_ACP_PROTOCOL_ERROR' : 'VSUP_ACP_INIT_FAILED';
+        await callbacks.onState('failed', { error: exitedMidTurn ? supervisorError('VSUP_BACKEND_CRASHED', EXITED_MID_TURN) : cause ?? classifyFailureText(message, fallback) });
       }
     }).catch(reportFailure('acp-start-failure'));
     child.done.then(({ code, signal }) => {
@@ -274,7 +274,7 @@ export class AcpBackend implements SupervisorBackend {
     const withTail = (failure: SupervisorError): SupervisorError => tail && !failure.details && (failure.code === 'VSUP_ACP_INIT_FAILED' || failure.code === 'VSUP_AUTH_REQUIRED') ? supervisorError(failure.code, failure.message, { stderr_tail: tail }) : failure;
     if (isCodedError(classified)) return withTail(classified);
     const message = redactSecrets(String(error), secrets);
-    return withTail(rateLimitFailure(message) ?? supervisorError(/missing api key|unauthorized|\b401\b/i.test(message) ? 'VSUP_AUTH_REQUIRED' : 'VSUP_ACP_INIT_FAILED', message));
+    return withTail(classifyFailureText(message, 'VSUP_ACP_INIT_FAILED'));
   }
 
   private async connect(state: AcpState, secret?: string): Promise<void> {

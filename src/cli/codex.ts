@@ -33,7 +33,10 @@ export async function planCodexConfig(scope: CodexScope, projectPath: string, is
   let original = '';
   try { original = await readFile(file, 'utf8'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   let parsedExisting: Record<string, unknown> = {};
-  if (original.trim()) parsedExisting = parse(original) as Record<string, unknown>;
+  if (original.trim()) {
+    try { parsedExisting = parse(original) as Record<string, unknown>; }
+    catch (error) { fail(`Codex config ${file} is not valid TOML (${(error as Error).message.split('\n')[0]}); no changes were made.`, 2); }
+  }
   const servers = parsedExisting.mcp_servers;
   if (servers !== undefined && (!servers || typeof servers !== 'object' || Array.isArray(servers))) fail('Codex config mcp_servers must be a table; no changes were made.', 2);
   const existingEntry = servers && typeof servers === 'object' ? (servers as Record<string, unknown>)['vibe-supervisor'] : undefined;

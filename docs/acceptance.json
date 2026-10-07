@@ -40,7 +40,7 @@
       "date": "2026-10-05",
       "scope": "Local patched rc.2, native Codex programmatic review of approved synthetic fixture; edit and ACP lifecycle unverified",
       "run_id": "958f15a5-93bb-48cd-8312-4c9ce3f9cdab",
-      "evidence": "history/reviews/rc2-target-test-2026-10-05/desktop-hosted-review.json"
+      "evidence": "https://github.com/crew-lab/codex-vibe/blob/main/docs/history/reviews/rc2-target-test-2026-10-05/desktop-hosted-review.json"
     },
     {
       "name": "real-codex-desktop-registration",
@@ -48,7 +48,7 @@
       "date": "2026-10-05",
       "scope": "Local patched rc.2, native Codex programmatic review of approved synthetic fixture; edit and ACP lifecycle unverified",
       "run_id": "958f15a5-93bb-48cd-8312-4c9ce3f9cdab",
-      "evidence": "history/reviews/rc2-target-test-2026-10-05/desktop-hosted-review.json"
+      "evidence": "https://github.com/crew-lab/codex-vibe/blob/main/docs/history/reviews/rc2-target-test-2026-10-05/desktop-hosted-review.json"
     },
     {
       "name": "hosted-programmatic-edit-export-cleanup",
@@ -56,7 +56,7 @@
       "date": "2026-10-05",
       "scope": "Local patched rc.2, synthetic fixture, exact patch and arithmetic checks, unchanged source and verified worktree removal",
       "run_id": "0644977e-82c7-4fa3-ac6f-f47beb8a88ee",
-      "evidence": "history/reviews/rc2-target-test-2026-10-05/desktop-hosted-edits.json"
+      "evidence": "https://github.com/crew-lab/codex-vibe/blob/main/docs/history/reviews/rc2-target-test-2026-10-05/desktop-hosted-edits.json"
     },
     {
       "name": "hosted-acp-edit-live-continuation-export-cleanup",
@@ -64,7 +64,7 @@
       "date": "2026-10-05",
       "scope": "Requested initial and follow-up changes independently verified; follow-up stopped at max_turn_requests; recovery/cancellation/callbacks unverified",
       "run_id": "d00fe37d-8c7f-4500-b0c1-6285b678ab2e",
-      "evidence": "history/reviews/rc2-target-test-2026-10-05/desktop-hosted-edits.json"
+      "evidence": "https://github.com/crew-lab/codex-vibe/blob/main/docs/history/reviews/rc2-target-test-2026-10-05/desktop-hosted-edits.json"
     }
   ]
 }

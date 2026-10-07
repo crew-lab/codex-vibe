@@ -50,14 +50,30 @@ describe('rate limit classification', () => {
     'Rate limit exceeded (429): too many requests',
     'status code: 429',
     'API error 429',
-    'rate-limited by the provider',
     'Too many requests, retry later'
   ])('recognizes %s', (text) => {
     expect(rateLimitFailure(text)).toMatchObject({ code: 'VSUP_RATE_LIMITED', retryable: true });
   });
 
-  it.each(['processed 4290 files', 'exit code 1', 'Unauthorized (401): missing api key', 'line 1429 failed', ''])('ignores %s', (text) => {
+  it.each(['processed 4290 files', 'exit code 1', 'Unauthorized (401): missing api key', 'line 1429 failed', 'x-ratelimit-limit: 100', 'Retrying after rate limit in 5s', 'rate-limited by the provider', ''])('ignores %s', (text) => {
     expect(rateLimitFailure(text)).toBeUndefined();
+  });
+
+  it('reads a 401 before any rate-limit text', async () => {
+    expect(await classifyStartFailure('acp', 'vibe-acp', new Error('boom'), 'HTTP 401 Unauthorized\nx-ratelimit-limit: 100')).toMatchObject({ code: 'VSUP_AUTH_REQUIRED' });
+  });
+
+  it('reports a missing interpreter even when stderr mentions a 429', async () => {
+    const orphan = path.join(scratch, 'orphan-vibe');
+    await writeFile(orphan, '#!/nonexistent/interpreter\n');
+    await chmod(orphan, 0o755);
+    const failure = await classifyStartFailure('programmatic', orphan, Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }), 'HTTP 429 Too Many Requests');
+    expect(failure).toMatchObject({ code: 'VSUP_BACKEND_UNAVAILABLE', details: { interpreter_missing: true, interpreter: '/nonexistent/interpreter' } });
+  });
+
+  it('reports a missing executable even when stderr mentions a 429', async () => {
+    const failure = await classifyStartFailure('programmatic', path.join(scratch, 'absent'), Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }), 'HTTP 429 Too Many Requests');
+    expect(failure).toMatchObject({ code: 'VSUP_VIBE_NOT_FOUND' });
   });
 
   it('classifies a start failure whose stderr reports a rate limit', async () => {

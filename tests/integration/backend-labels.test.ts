@@ -131,6 +131,7 @@ describe('ACP connection errors are labeled by phase', () => {
   it.each([
     ['mid-turn-error', 'VSUP_ACP_PROTOCOL_ERROR'],
     ['mid-turn-401', 'VSUP_AUTH_REQUIRED'],
+    ['mid-turn-401-ratelimit', 'VSUP_AUTH_REQUIRED'],
     ['mid-turn-429', 'VSUP_RATE_LIMITED'],
   ])('labels a %s failure after the session is ready as %s', async (mode, code) => {
     const { source, data, pidDir } = await makeRoot();
@@ -144,6 +145,7 @@ describe('ACP connection errors are labeled by phase', () => {
 
   it.each([
     ['init-401', 'VSUP_AUTH_REQUIRED'],
+    ['init-401-ratelimit', 'VSUP_AUTH_REQUIRED'],
     ['init-429', 'VSUP_RATE_LIMITED'],
     ['broken-json', 'VSUP_ACP_INIT_FAILED'],
   ])('keeps labeling a %s failure before the session is ready as %s', async (mode, code) => {

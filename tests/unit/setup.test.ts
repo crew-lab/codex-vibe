@@ -182,22 +182,133 @@ describe('allow', () => {
   it('keeps existing entries untouched when adding another root', async () => {
     const box = await sandbox(); capture();
     await runCli(['allow', box.workspace]);
-    const second = path.join(box.bin, '..', 'home');
+    const second = path.join(box.bin, '..', 'extra'); await mkdir(second);
     await runCli(['allow', second]);
     const parsed = parse(await readFile(box.config, 'utf8')) as ParsedConfig;
-    expect(parsed.allowed_workspace_roots).toEqual([box.workspace, box.home]);
+    expect(parsed.allowed_workspace_roots).toEqual([box.workspace, path.join(path.dirname(box.bin), 'extra')]);
   });
 
   it('refuses a symlink, a missing directory and a wrong argument count', async () => {
     const box = await sandbox(); capture();
     const link = path.join(path.dirname(box.workspace), 'link'); await symlink(box.workspace, link);
-    for (const args of [[link], [path.join(box.workspace, 'missing')], [], [box.workspace, box.home]]) {
+    for (const args of [[link], [path.join(box.workspace, 'missing')], [], [box.workspace, box.bin]]) {
       process.exitCode = undefined;
       await runCli(['allow', ...args]);
       expect(process.exitCode).toBe(2);
     }
     expect(await exists(box.config)).toBe(false);
   });
+});
+
+describe('allow and setup reload note', () => {
+  it('tells the user to restart the MCP server after a change and stays quiet when nothing changed', async () => {
+    const box = await sandbox(); capture();
+    await runCli(['allow', box.workspace]);
+    expect(output.join('')).toMatch(/restart the Codex MCP server/i);
+    expect(output.join('')).toMatch(/--isolated/);
+    output.length = 0;
+    await runCli(['allow', box.workspace]);
+    expect(output.join('')).not.toMatch(/restart/i);
+  });
+
+  it('prints the same note from setup when the allowlist changed', async () => {
+    const box = await sandbox(); capture();
+    await runCli(['setup', '--workspace', box.workspace]);
+    expect(output.join('')).toMatch(/restart the Codex MCP server/i);
+  }, 60_000);
+});
+
+describe('config rewrite backup', () => {
+  const ORIGINAL = '# my comment\nversion = 1\nallowed_workspace_roots = []   # none yet\n';
+
+  it('keeps an owner-only backup with the original bytes before allow rewrites the file', async () => {
+    const box = await sandbox(); capture();
+    await mkdir(box.data, { recursive: true });
+    await writeFile(box.config, ORIGINAL, { mode: 0o600 });
+    await runCli(['allow', box.workspace]);
+    const backups = (await readdir(box.data)).filter((name) => name.startsWith('config.toml.bak-'));
+    expect(backups).toHaveLength(1);
+    const backup = path.join(box.data, backups[0] as string);
+    expect(await readFile(backup, 'utf8')).toBe(ORIGINAL);
+    expect((await stat(backup)).mode & 0o777).toBe(0o600);
+    expect(output.join('')).toContain(backup);
+    expect(await readFile(box.config, 'utf8')).not.toContain('# my comment');
+  });
+
+  it('makes no backup when the file is created or left unchanged', async () => {
+    const box = await sandbox(); capture();
+    await runCli(['allow', box.workspace]);
+    await runCli(['allow', box.workspace]);
+    expect((await readdir(box.data)).filter((name) => name.includes('.bak-'))).toEqual([]);
+  });
+});
+
+describe('allow comparisons and broad roots', () => {
+  it('treats a ~-prefixed root as the same directory and does not rewrite the file', async () => {
+    const box = await sandbox(); capture();
+    const project = path.join(box.home, 'proj'); await mkdir(project);
+    await mkdir(box.data, { recursive: true });
+    const original = 'version = 1\nallowed_workspace_roots = ["~/proj"]\n';
+    await writeFile(box.config, original, { mode: 0o600 });
+    await runCli(['allow', project]);
+    expect(await readFile(box.config, 'utf8')).toBe(original);
+    expect((await readdir(box.data)).filter((name) => name.includes('.bak-'))).toEqual([]);
+    expect(output.join('')).toContain('already allowed');
+  });
+
+  it.each(['/', 'home'])('refuses %s as a root with exit 2 and writes nothing', async (target) => {
+    const box = await sandbox(); capture();
+    const dir = target === 'home' ? box.home : target;
+    await runCli(['allow', dir]);
+    expect(process.exitCode).toBe(2);
+    expect(errors.join('')).toMatch(/too broad/i);
+    expect(await exists(box.config)).toBe(false);
+    process.exitCode = undefined;
+    await runCli(['setup', '--workspace', dir]);
+    expect(process.exitCode).toBe(2);
+    expect(await exists(box.config)).toBe(false);
+  });
+
+  it('refuses the home directory reached through a dot segment', async () => {
+    const box = await sandbox(); capture();
+    await runCli(['allow', path.join(box.home, 'sub', '..')]).catch(() => undefined);
+    expect(process.exitCode).toBe(2);
+    expect(await exists(box.config)).toBe(false);
+  });
+
+  it('accepts a directory below home', async () => {
+    const box = await sandbox(); capture();
+    const project = path.join(box.home, 'proj'); await mkdir(project);
+    await runCli(['allow', project]);
+    expect(process.exitCode).toBeUndefined();
+    expect((parse(await readFile(box.config, 'utf8')) as ParsedConfig).allowed_workspace_roots).toEqual([project]);
+  });
+});
+
+describe('setup plans before writing', () => {
+  it('leaves the supervisor config untouched when the Codex config is malformed', async () => {
+    const box = await sandbox(); capture();
+    await mkdir(path.dirname(box.codex), { recursive: true });
+    await writeFile(box.codex, '[mcp_servers\nbroken = \n');
+    await runCli(['setup', '--workspace', box.workspace, '--yes']);
+    expect(process.exitCode).toBe(2);
+    expect(await exists(box.config)).toBe(false);
+    expect(await readFile(box.codex, 'utf8')).toBe('[mcp_servers\nbroken = \n');
+    expect(errors.join('')).toMatch(/Codex config/);
+  }, 60_000);
+
+  it('leaves an existing supervisor config byte-identical when the Codex config is malformed', async () => {
+    const box = await sandbox(); capture();
+    await mkdir(box.data, { recursive: true });
+    const original = 'version = 1\nallowed_workspace_roots = []\n';
+    await writeFile(box.config, original, { mode: 0o600 });
+    await mkdir(path.dirname(box.codex), { recursive: true });
+    await writeFile(box.codex, 'not = [valid');
+    await runCli(['setup', '--workspace', box.workspace, '--yes']);
+    expect(process.exitCode).toBe(2);
+    expect(await readFile(box.config, 'utf8')).toBe(original);
+    expect((await readdir(box.data)).filter((name) => name.includes('.bak-'))).toEqual([]);
+  }, 60_000);
 });
 
 describe('doctor --config and command aliases', () => {
@@ -215,6 +326,8 @@ describe('doctor --config and command aliases', () => {
     const file = path.join(box.data, 'bad.toml'); await writeFile(file, 'version = 2\n');
     await runCli(['doctor', '--config', file]);
     expect(process.exitCode).toBe(1);
+    expect(errors.join('')).toContain('VSUP_CONFIG_INVALID');
+    expect(errors.join('')).toContain('Invalid supervisor configuration');
   });
 
   it('doctor --config requires a value', async () => {
