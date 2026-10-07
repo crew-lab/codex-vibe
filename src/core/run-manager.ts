@@ -43,6 +43,7 @@ interface Runtime {
   transcript: string;
   serial: Promise<void>;
   timer?: NodeJS.Timeout;
+  deadlineAt?: number;
   slot: boolean;
   cancelRequested: boolean;
   started: boolean;
@@ -940,6 +941,9 @@ export class RunManager {
     if (state !== "completed" && state !== "failed" && state !== "cancelled") return undefined;
     if (runtime.requestedOutcome) return runtime.requestedOutcome;
     if (state === "completed") return { state };
+    if (state === "failed" && error?.code === "VSUP_BACKEND_CRASHED" && runtime.deadlineAt !== undefined && Date.now() >= runtime.deadlineAt) {
+      return { state, error: supervisorError("VSUP_TIMEOUT", "The run exceeded its configured timeout.") };
+    }
     return state === "failed" && error ? { state, error } : { state };
   }
 
@@ -1257,6 +1261,7 @@ export class RunManager {
 
   private armDeadline(runtime: Runtime, milliseconds: number): void {
     if (runtime.timer) clearTimeout(runtime.timer);
+    runtime.deadlineAt = Date.now() + milliseconds;
     runtime.timer = setTimeout(() => { this.deadline(runtime).catch((error: unknown) => this.reportBackground(runtime, "deadline", error)); }, milliseconds);
     runtime.timer.unref?.();
   }

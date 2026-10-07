@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import atexit
 import inspect
+import math
 import os
 import re
 import selectors
@@ -23,6 +24,9 @@ ENTRYPOINTS = {
 }
 PROMPT_FILE_ENV = "VIBE_SUPERVISOR_PROMPT_FILE"
 MAX_PROMPT_BYTES = 4 * 1024 * 1024
+WORKER_DEADLINE_FILE_ENV = "VIBE_SUPERVISOR_WORKER_DEADLINE_FILE"
+MAX_DEADLINE_FILE_BYTES = 64
+HARD_CAP_SECONDS = 48 * 3600
 ORIGINAL_HOME_ENV = "VIBE_SUPERVISOR_ORIGINAL_HOME"
 CREDENTIAL_ENV = "MISTRAL_API_KEY"
 SECURITY_BINARY = "/usr/bin/security"
@@ -316,18 +320,78 @@ def _patch_session_logger() -> None:
     SessionLogger._persist_metadata_sync = staticmethod(persist_metadata)
 
 
+def read_worker_deadline(path: Optional[str], expected_directory: str, owner_uid: int) -> Optional[float]:
+    if not path or not os.path.isabs(path):
+        return None
+    try:
+        if os.path.realpath(os.path.dirname(path)) != os.path.realpath(expected_directory):
+            return None
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        descriptor = os.open(path, flags)
+        try:
+            info = os.fstat(descriptor)
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != owner_uid or info.st_mode & 0o077:
+                return None
+            raw = os.read(descriptor, MAX_DEADLINE_FILE_BYTES + 1)
+        finally:
+            os.close(descriptor)
+        if len(raw) > MAX_DEADLINE_FILE_BYTES:
+            return None
+        value = float(raw.decode("ascii").strip())
+    except (OSError, ValueError, UnicodeDecodeError):
+        return None
+    if not math.isfinite(value) or value <= 0:
+        return None
+    return value
+
+
+class WorkerWatchdog:
+    def __init__(
+        self,
+        parent_pid: int,
+        timeout_seconds: int,
+        deadline_file: Optional[str],
+        expected_directory: str,
+        owner_uid: int,
+        hard_cap_seconds: float,
+        wall_clock: Callable[[], float],
+        monotonic_clock: Callable[[], float],
+        get_parent_pid: Callable[[], int],
+        kill: Callable[[], None],
+    ) -> None:
+        self.parent_pid = parent_pid
+        self.deadline_file = deadline_file
+        self.expected_directory = expected_directory
+        self.owner_uid = owner_uid
+        self.hard_cap_seconds = hard_cap_seconds
+        self.wall_clock = wall_clock
+        self.monotonic_clock = monotonic_clock
+        self.get_parent_pid = get_parent_pid
+        self.kill = kill
+        self.started = monotonic_clock()
+        self.deadline = wall_clock() + timeout_seconds
+
+    def tick(self) -> bool:
+        if self.get_parent_pid() != self.parent_pid:
+            self.kill()
+            return True
+        latest = read_worker_deadline(self.deadline_file, self.expected_directory, self.owner_uid)
+        if latest is not None:
+            self.deadline = latest
+        if self.monotonic_clock() - self.started >= self.hard_cap_seconds or self.wall_clock() >= self.deadline:
+            self.kill()
+            return True
+        return False
+
+
 def _start_parent_watchdog() -> None:
-    parent_pid = os.getppid()
     try:
         timeout = max(1, int(os.environ.get("VIBE_SUPERVISOR_WORKER_TIMEOUT_SECONDS", "2400")))
     except ValueError as exc:
         raise RuntimeError("Invalid VIBE_SUPERVISOR_WORKER_TIMEOUT_SECONDS") from exc
-    started = time.monotonic()
 
     def terminate_own_group() -> None:
         pgid = os.getpgrp()
-        # launcher's Node parent creates a detached process group. Never use a
-        # guessed/stored child PID, and never signal an inherited interactive group.
         if pgid != os.getpid():
             os.kill(os.getpid(), signal.SIGKILL)
         try:
@@ -335,11 +399,23 @@ def _start_parent_watchdog() -> None:
         except ProcessLookupError:
             pass
 
+    watchdog = WorkerWatchdog(
+        parent_pid=os.getppid(),
+        timeout_seconds=timeout,
+        deadline_file=os.environ.pop(WORKER_DEADLINE_FILE_ENV, None),
+        expected_directory=os.path.dirname(os.path.realpath(__file__)),
+        owner_uid=os.getuid(),
+        hard_cap_seconds=HARD_CAP_SECONDS,
+        wall_clock=time.time,
+        monotonic_clock=time.monotonic,
+        get_parent_pid=os.getppid,
+        kill=terminate_own_group,
+    )
+
     def monitor() -> None:
         while True:
             time.sleep(1)
-            if os.getppid() != parent_pid or time.monotonic() - started >= timeout:
-                terminate_own_group()
+            if watchdog.tick():
                 return
 
     threading.Thread(target=monitor, name="vibe-supervisor-parent-watchdog", daemon=True).start()

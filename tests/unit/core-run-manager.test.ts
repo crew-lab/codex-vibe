@@ -3,9 +3,10 @@ import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, PendingRequest, RunRecord, StartRunInput, SupervisorBackend } from "../../src/contracts.js";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
+import { supervisorError } from "../../src/contracts.js";
 import { RunManager } from "../../src/core/run-manager.js";
 
 const roots: string[] = [];
@@ -181,6 +182,36 @@ describe("RunManager core lifecycle", () => {
       expect(await readFile(join(source, "tracked.txt"), "utf8")).toBe("original\n");
       await manager.close({ run_id: started.run_id, cleanup_worktree: true });
       await expect(access(worker)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally { await manager.shutdown(); }
+  });
+});
+
+describe("RunManager worker death after the supervisor deadline", () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("reports a worker that dies once the run deadline has passed as a timeout", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const { source, manager, backend } = await setup();
+    try {
+      const started = await manager.reviewStart({ task: "review", cwd: source });
+      await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
+      vi.setSystemTime(Date.now() + (DEFAULT_CONFIG.limits.reviewTimeoutSeconds + 1) * 1000);
+      await backend.callbacks?.onState("failed", { error: supervisorError("VSUP_BACKEND_CRASHED", "Vibe ACP exited null") });
+      const status = await manager.status({ run_id: started.run_id });
+      expect(status.state).toBe("failed");
+      expect(status.error?.code).toBe("VSUP_TIMEOUT");
+    } finally { await manager.shutdown(); }
+  });
+
+  it("keeps reporting a crash before the deadline as a crash", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const { source, manager, backend } = await setup();
+    try {
+      const started = await manager.reviewStart({ task: "review", cwd: source });
+      await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
+      vi.setSystemTime(Date.now() + 60_000);
+      await backend.callbacks?.onState("failed", { error: supervisorError("VSUP_BACKEND_CRASHED", "Vibe ACP exited null") });
+      expect((await manager.status({ run_id: started.run_id })).error?.code).toBe("VSUP_BACKEND_CRASHED");
     } finally { await manager.shutdown(); }
   });
 });
