@@ -11,7 +11,7 @@ Do not use it for deployment, credential handling, shell access, or workspaces o
 
 ## Before starting
 
-- The canonical workspace path, inside an allowed root. If it is not, tell the user to run `vibe-supervisor allow <dir>`.
+- The canonical workspace path, inside an allowed root. If it is not, tell the user to run `vibe-supervisor allow <dir>` and then restart the Codex MCP server (reconnect for `--isolated`); a running server keeps the allowlist it started with, so `allow` alone does not fix `VSUP_WORKSPACE_INVALID`.
 - A concise task with the expected outcome, constraints and, for an edit, the Git base and files that must not change. Never put secrets in the task.
 - If the tools are missing or a run fails at launch, run `vibe-supervisor doctor --json`; it proves local prerequisites, not hosted authentication.
 

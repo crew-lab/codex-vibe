@@ -260,6 +260,27 @@ describe('rate limits from the programmatic child', () => {
     expect(errors[0]).toMatchObject({ code: 'VSUP_RATE_LIMITED', retryable: true });
   });
 
+  it('reads a 401 with rate-limit headers as VSUP_AUTH_REQUIRED', async () => {
+    const { root, input } = await prepared();
+    const { vibe } = await installFakeVibe(root, "process.stderr.write('x-ratelimit-limit: 100\\nHTTP 401 Unauthorized\\n'); process.exitCode = 1;");
+    const errors: Array<{ code: string; retryable: boolean }> = [];
+    const callbacks: BackendCallbacks = { onEvent: () => undefined, onPendingRequest: () => undefined, onState: (state, update) => { if (state === 'failed' && update?.error) errors.push(update.error); } };
+    await programmaticBackend(vibe).start(input, callbacks);
+    await waitFor(() => errors, (value) => value.length > 0);
+    expect(errors[0]).toMatchObject({ code: 'VSUP_AUTH_REQUIRED', retryable: false });
+  });
+
+  it('keeps a crash after an earlier retry log line as VSUP_BACKEND_CRASHED', async () => {
+    const { root, input } = await prepared();
+    const lines = ['retrying after rate limit (HTTP 429)', ...Array.from({ length: 8 }, (_, index) => `step ${index} ok`), 'Traceback: boom'];
+    const { vibe } = await installFakeVibe(root, `process.stderr.write(${JSON.stringify(lines.join('\n') + '\n')}); process.exitCode = 1;`);
+    const errors: Array<{ code: string; retryable: boolean }> = [];
+    const callbacks: BackendCallbacks = { onEvent: () => undefined, onPendingRequest: () => undefined, onState: (state, update) => { if (state === 'failed' && update?.error) errors.push(update.error); } };
+    await programmaticBackend(vibe).start(input, callbacks);
+    await waitFor(() => errors, (value) => value.length > 0);
+    expect(errors[0]).toMatchObject({ code: 'VSUP_BACKEND_CRASHED', retryable: false });
+  });
+
   it('keeps an unrelated non-zero exit as VSUP_BACKEND_CRASHED', async () => {
     const { root, input } = await prepared();
     const { vibe } = await installFakeVibe(root, "process.stderr.write('processed 4290 files\\n'); process.exitCode = 1;");

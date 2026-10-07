@@ -14,7 +14,7 @@ An error carries `code`, `message`, `remediation`, `retryable` and sometimes `de
 | `VSUP_ACP_VERSION_UNSUPPORTED` | Vibe ACP negotiated an unsupported ACP protocol version. | Upgrade Vibe ACP to a supported ACP version. | no |
 | `VSUP_ACP_PROTOCOL_ERROR` | The ACP connection failed after the session was ready. | Check ACP diagnostics and retry with a compatible Vibe release. | no |
 | `VSUP_AUTH_REQUIRED` | Vibe reported a missing or rejected credential (401, unauthorized, missing API key). | Sign in to Vibe or configure its supported authentication. | no |
-| `VSUP_WORKSPACE_INVALID` | The workspace does not exist, is not a directory or lies outside every allowed root. | Provide an existing workspace directory under an allowed_workspace_roots entry. | no |
+| `VSUP_WORKSPACE_INVALID` | The workspace does not exist, is not a directory or lies outside every allowed root. | Provide an existing workspace directory under an allowed_workspace_roots entry; after vibe-supervisor allow, restart the Codex MCP server (reconnect when it uses --isolated) so it reads the new list. | no |
 | `VSUP_WORKTREE_CREATE_FAILED` | git worktree add failed for the edit run; details.stderr_tail and details.operation say why. | Check the repository state and worktree path, then retry. | no |
 | `VSUP_GIT_REQUIRED` | The git executable is missing. | Install Git and use a Git repository for edit runs. | no |
 | `VSUP_PERMISSION_REQUIRED` | The run is waiting for a permission decision. | Respond to the pending permission request before continuing. | no |

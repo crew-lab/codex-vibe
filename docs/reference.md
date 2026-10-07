@@ -90,7 +90,7 @@ Every reply carries `next_action`, a one-sentence instruction for the next call.
 
 ### Result encoding and size
 
-`limits.mcp_result_format` selects the wire format: `text` (default, one JSON text block), `structured` (`structuredContent` plus a short pointer text) or `both`. Error results use the same format. A reply is bounded to `limits.max_mcp_result_chars` (default 8000). When it is larger it is reduced in this order until it fits: the inline `patch` (keeping `patch_path` and `patch_bytes`), `transcript`, `diff_stat`, `changed_files` and `events` (totals are kept), then `summary` (head and tail kept). `run_id`, `state`, `error`, `warnings`, `integrity`, `pending_request`, `patch_path` and `next_action` are never dropped. A reduced reply carries `truncated: true` and `truncated_fields`.
+`limits.mcp_result_format` selects the wire format: `text` (default, one JSON text block), `structured` (`structuredContent` plus a short pointer text) or `both`. Error results use the same format. A reply is bounded to `limits.max_mcp_result_chars` (default 8000). When it is larger it is reduced in this order until it fits: the inline `patch` (keeping `patch_path` and `patch_bytes`), `transcript`, `diff_stat`, `changed_files` and `events` (totals are kept), then `summary` (head and tail kept). `run_id`, `state`, `error`, `warnings`, `integrity`, `pending_request`, `patch_path` and `next_action` are never dropped. A reduced reply carries `truncated: true` and `truncated_fields`. `events` are trimmed from the end so paging stays lossless: the reply's `next_after_seq` (and the `after_seq` in `next_action`) is the `seq` of the last event actually delivered, or just before the first event when none fit, and `events_total` counts the events before trimming.
 
 ## Run states
 
@@ -110,7 +110,7 @@ Run `vibe-supervisor init` (or `setup`) to create the private config, then edit 
 |---|---|---|
 | `version` | required | `1` |
 | `backend` | `programmatic` | `programmatic`, `acp` or `auto`; `acp` and `auto` also register `vibe_continue` and `vibe_respond` |
-| `allowed_workspace_roots` | `[]` (denies all work) | up to 100 absolute canonical directories |
+| `allowed_workspace_roots` | `[]` (denies all work) | up to 100 directories, each an absolute path or one starting with `~/` (or `~`); relative paths are rejected, and each entry is canonicalized when a workspace is checked |
 | `max_concurrent_runs` | 2 | 1 to 32 |
 | `max_queued_runs` | 8 | 0 to 256 |
 | `worker_idle_ttl_seconds` | 600 | 0 to 86400 |
@@ -125,8 +125,8 @@ Run `vibe-supervisor init` (or `setup`) to create the private config, then edit 
 | `limits.max_artifact_bytes` | 104857600 | 1024 to 2147483648 |
 | `limits.max_mcp_result_chars` | 8000 | 1000 to 1000000 |
 | `limits.mcp_result_format` | `text` | `text`, `structured`, `both` |
-| `paths.vibe` | found on PATH | absolute path, up to 4096 characters |
-| `paths.vibe_acp` | found on PATH | absolute path, up to 4096 characters |
+| `paths.vibe` | found on PATH | absolute path or a bare command name resolved from PATH (no other relative paths), up to 4096 characters |
+| `paths.vibe_acp` | found on PATH | absolute path or a bare command name resolved from PATH (no other relative paths), up to 4096 characters |
 | `paths.data_dir` | the config directory | absolute path; rejected with `--isolated` |
 
 Unknown keys are rejected. Shell tools, network tools, raw ACP logging and reasoning persistence are always off and have no key.
@@ -139,8 +139,8 @@ Installed use is `vibe-supervisor <command>`.
 
 | Command | Purpose |
 |---|---|
-| `setup --workspace <dir> [--codex user\|project] [--isolated] [--yes]` | Create the config if missing, add the canonical workspace, fill `[paths]` from PATH, run doctor (non-PASS lines only), then show the Codex change; written only with `--yes` or an interactive confirmation. |
-| `allow <dir>` | Add one canonical workspace root; idempotent. Symlinked or missing directories are refused. |
+| `setup --workspace <dir> [--codex user\|project] [--isolated] [--yes]` | Plan every change first (a malformed Codex config aborts before anything is written), then create the config if missing, add the canonical workspace, fill `[paths]` from PATH, run doctor (non-PASS lines only), then show the Codex change; written only with `--yes` or an interactive confirmation. Refuses `/` and the home directory. Rewriting an existing `config.toml` drops its comments and layout and keeps a `config.toml.bak-<timestamp>` copy. A running MCP server must be restarted (reconnected for `--isolated`) to read a changed allowlist. |
+| `allow <dir>` | Add one canonical workspace root; idempotent, including for roots written with `~`. Symlinked or missing directories, `/` and the home directory are refused. A change rewrites `config.toml` (comments and layout are lost; the previous file is kept as `config.toml.bak-<timestamp>`) and needs a restart of the Codex MCP server, or a reconnect for `--isolated`, to take effect. |
 | `doctor [--json] [--config <path>]` | Report local prerequisites without a model request; `--config` validates that file and warns about ignored keys. Its `acp-initialize` check negotiates ACP without a prompt. |
 | `serve --stdio [--isolated]` | Run the MCP server. The client owns stdin and stdout. |
 | `init` | Create a private starter config; refuses to overwrite. |

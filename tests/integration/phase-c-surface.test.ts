@@ -105,13 +105,14 @@ describe("removed security keys never loosen the policy", () => {
     return loadConfig({ env: { VIBE_SUPERVISOR_HOME: home } });
   }
 
-  it.each([["fetch"], ["execute"]])("denies a %s tool request despite the old allow keys", async (toolKind) => {
-    const { parent, source, data } = await setup();
+  it.each([["fetch", "review"], ["execute", "review"], ["fetch", "edit"], ["execute", "edit"]] as const)("denies a %s tool request in a %s run despite the old allow keys", async (toolKind, mode) => {
+    const { parent, source, data } = await setup({ git: true });
     const backend = new FakeBackend();
     backend.nextPending = { requestId: "req-1", kind: "permission", title: "Tool", options: [{ optionId: "allow-once", name: "Allow once", kind: "allow_once" }, { optionId: "reject-once", name: "Reject once", kind: "reject_once" }], tool: { kind: toolKind, locations: [] } };
     const manager = new RunManager(await loaded(source, parent), join(data, "loaded"), [backend]);
     try {
-      const started = await manager.reviewStart({ task: "review", cwd: source });
+      const started = mode === "edit" ? await manager.editStart({ task: "edit", cwd: source }) : await manager.reviewStart({ task: "review", cwd: source });
+      expect(started.mode).toBe(mode);
       const status = await waitFor(() => manager.status({ run_id: started.run_id, max_events: 100 }), (value) => (value.events as { type: string }[]).some((event) => event.type === "permission_denied_by_policy"));
       expect((status.events as { type: string }[]).map((event) => event.type)).toContain("permission_denied_by_policy");
       expect(status.state).not.toBe("waiting_permission");

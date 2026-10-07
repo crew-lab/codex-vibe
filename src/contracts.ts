@@ -258,7 +258,7 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_ACP_VERSION_UNSUPPORTED: "Upgrade Vibe ACP to a supported ACP version.",
   VSUP_ACP_PROTOCOL_ERROR: "Check ACP diagnostics and retry with a compatible Vibe release.",
   VSUP_AUTH_REQUIRED: "Sign in to Vibe or configure its supported authentication.",
-  VSUP_WORKSPACE_INVALID: "Provide an existing workspace directory under an allowed_workspace_roots entry.",
+  VSUP_WORKSPACE_INVALID: "Provide an existing workspace directory under an allowed_workspace_roots entry; after vibe-supervisor allow, restart the Codex MCP server (reconnect when it uses --isolated) so it reads the new list.",
   VSUP_WORKTREE_CREATE_FAILED: "Check the repository state and worktree path, then retry.",
   VSUP_GIT_REQUIRED: "Install Git and use a Git repository for edit runs.",
   VSUP_PERMISSION_REQUIRED: "Respond to the pending permission request before continuing.",

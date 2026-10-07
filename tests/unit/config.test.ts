@@ -91,3 +91,23 @@ describe("supervisor config", () => {
     await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: linkRoot } })).rejects.toThrow("symlink");
   });
 });
+
+describe("path contracts", () => {
+  it("requires absolute or ~-prefixed workspace roots", () => {
+    expect(validateConfig({ version: 1, allowed_workspace_roots: ["/work/project", "~", "~/code"] }).allowedWorkspaceRoots).toEqual(["/work/project", "~", "~/code"]);
+    for (const root of ["relative/dir", ".", "..", "./here", "~other/dir", "work"]) expect(() => validateConfig({ version: 1, allowed_workspace_roots: [root] }), root).toThrow();
+  });
+
+  it("accepts an absolute executable path or a bare command name and rejects relative paths", () => {
+    expect(validateConfig({ version: 1, paths: { vibe: "/opt/bin/vibe", vibe_acp: "vibe-acp" } }).paths).toEqual({ vibe: "/opt/bin/vibe", vibeAcp: "vibe-acp" });
+    for (const value of ["bin/vibe", "./vibe", "../vibe", "~/bin/vibe"]) {
+      expect(() => validateConfig({ version: 1, paths: { vibe: value } }), value).toThrow();
+      expect(() => validateConfig({ version: 1, paths: { vibe_acp: value } }), value).toThrow();
+    }
+  });
+
+  it("requires an absolute data_dir", () => {
+    expect(validateConfig({ version: 1, paths: { data_dir: "/var/vibe" } }).paths).toEqual({ dataDir: "/var/vibe" });
+    expect(() => validateConfig({ version: 1, paths: { data_dir: "data" } })).toThrow();
+  });
+});

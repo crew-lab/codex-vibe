@@ -42,7 +42,7 @@ vibe-supervisor setup --workspace /absolute/path/to/your/repository
 
 `setup` creates the private config if it is missing, adds the canonical workspace to the allowlist (existing entries are never broadened), records `vibe` and `vibe-acp` from your PATH, runs `doctor` and prints only the checks that are not PASS, then shows the Codex MCP entry. It writes `~/.codex/config.toml` only after you confirm, or with `--yes`; without a terminal and without `--yes` it only prints. Use `--codex project` for a project-scoped entry and `--isolated` when several Codex clients must run at once (see [How it works](docs/functionality.md#independent-clients)).
 
-Add another repository later with `vibe-supervisor allow <dir>`. Check the installation at any time with `vibe-supervisor doctor`; it makes no model request.
+Add another repository later with `vibe-supervisor allow <dir>`, then restart the Codex MCP server (reconnect for `--isolated`): a running server does not reread the allowlist. `setup` and `allow` refuse `/` and your home directory as a root, and when they change an existing `config.toml` they rewrite it without its comments or layout and keep the previous file next to it as `config.toml.bak-<timestamp>` (owner-only). `setup` checks the Codex config before it writes anything, so a malformed `~/.codex/config.toml` leaves the supervisor config untouched. Check the installation at any time with `vibe-supervisor doctor`; it makes no model request.
 
 Restart Codex so it starts the server, then check that the Vibe tools are listed.
 
@@ -85,7 +85,7 @@ From a clone, link `skills/vibe-supervisor` and `skills/vibe-acp` from the repos
 | Symptom | Next action |
 |---|---|
 | `doctor` reports an unsupported or missing Vibe | Install exactly 2.25.8 with `uv tool install mistral-vibe==2.25.8`, or set `[paths]` in the config. |
-| `VSUP_WORKSPACE_INVALID` | The path must exist, be a real directory and sit under an allowed root: `vibe-supervisor allow <dir>`. |
+| `VSUP_WORKSPACE_INVALID` | The path must exist, be a real directory and sit under an allowed root: run `vibe-supervisor allow <dir>`, then restart the Codex MCP server (or reconnect when it was registered with `--isolated`); a running server keeps the allowlist it started with. |
 | `VSUP_AUTH_REQUIRED` | Run `vibe` in a terminal and sign in again; never put a key in a task. |
 | Tools absent in Codex | Restart Codex; check `[mcp_servers.vibe-supervisor]` in `~/.codex/config.toml` and the client's startup log. |
 | `VSUP_INVALID_STATE` naming a lock | Another supervisor owns the data directory. Stop it, or register with `--isolated`; never delete a live lock. |

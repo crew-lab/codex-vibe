@@ -71,7 +71,33 @@ function trimList(scope: JsonRecord, key: string, totalKey: string, keep: number
   const list = scope[key];
   if (!Array.isArray(list) || list.length <= keep) return false;
   if (typeof scope[totalKey] !== 'number') scope[totalKey] = list.length;
-  scope[key] = key === 'events' ? list.slice(-keep) : list.slice(0, keep);
+  scope[key] = list.slice(0, keep);
+  if (key === 'events') retargetPaging(scope, list as unknown[], keep);
+  return true;
+}
+
+function eventSeq(value: unknown): number | undefined {
+  const seq = isRecord(value) ? value.seq : undefined;
+  return typeof seq === 'number' ? seq : undefined;
+}
+
+function retargetPaging(scope: JsonRecord, original: unknown[], keep: number): void {
+  if (typeof scope.next_after_seq !== 'number') return;
+  const next = keep > 0 ? eventSeq(original[keep - 1]) : (eventSeq(original[0]) ?? 1) - 1;
+  if (next === undefined) return;
+  scope.next_after_seq = next;
+  if (typeof scope.next_action === 'string') scope.next_action = scope.next_action.replace(/after_seq=\d+/, `after_seq=${next}`);
+}
+
+function shrinkEvents(scope: JsonRecord, fits: () => boolean): boolean {
+  const events = scope.events;
+  if (!Array.isArray(events) || events.length === 0) return false;
+  let keep = events.length;
+  while (keep > 0 && !fits()) {
+    keep = Math.floor(keep / 2);
+    scope.events = events.slice(0, keep);
+    retargetPaging(scope, events, keep);
+  }
   return true;
 }
 
@@ -111,6 +137,11 @@ function emergency(object: JsonRecord, reduced: JsonRecord, fields: string[], ma
     if (JSON.stringify(compact).length > maxChars) delete compact[key];
   };
   for (const key of ['error', 'warnings', 'integrity', 'patch_path', 'pending_request', 'next_action']) tryAdd(key, reduced[key] ?? nested[key]);
+  if (typeof object.next_after_seq === 'number') {
+    const events = Array.isArray(object.events) ? object.events : [];
+    const first = eventSeq(events[0]);
+    tryAdd('next_after_seq', first === undefined ? object.next_after_seq : first - 1);
+  }
   const artifacts = Array.isArray(reduced.artifacts) ? reduced.artifacts : Array.isArray(nested.artifacts) ? nested.artifacts : [];
   if (artifacts.length) tryAdd('artifacts', artifacts.slice(0, 1).filter(isRecord).map((artifact) => ({ name: artifact.name, path: artifact.path, sha256: artifact.sha256 })));
   tryAdd('truncated_fields', fields.slice(0, 20));
@@ -137,6 +168,7 @@ export function bounded(value: unknown, maxChars: number): { structuredContent: 
       for (const field of reduceOnce(scope, step, maxChars, excess)) fields.push(`${prefix}${field}`);
     }
   }
+  if (measure() > maxChars && shrinkEvents(reduced, () => measure() <= maxChars)) fields.push('events');
   let result = JSON.stringify(reduced);
   if (result.length > maxChars) result = emergency(object, reduced, fields, maxChars);
   return { structuredContent: JSON.parse(result) as Record<string, unknown>, text: result };

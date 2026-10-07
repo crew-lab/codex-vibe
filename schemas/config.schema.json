@@ -8,7 +8,7 @@
   "properties": {
     "version": { "const": 1 },
     "backend": { "enum": ["auto", "acp", "programmatic"], "default": "programmatic" },
-    "allowed_workspace_roots": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1, "maxLength": 4096 }, "default": [] },
+    "allowed_workspace_roots": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^(/|~$|~/)" }, "default": [] },
     "max_concurrent_runs": { "type": "integer", "minimum": 1, "maximum": 32, "default": 2 },
     "max_queued_runs": { "type": "integer", "minimum": 0, "maximum": 256, "default": 8 },
     "worker_idle_ttl_seconds": { "type": "integer", "minimum": 0, "maximum": 86400, "default": 600 },
@@ -32,6 +32,6 @@
     },
     "phase1": { "deprecated": true, "description": "Removed section; accepted and ignored." },
     "security": { "deprecated": true, "description": "Removed section; accepted and ignored. Shell, network tools, raw ACP logging and reasoning persistence are always off." },
-    "paths": { "type": "object", "additionalProperties": false, "properties": { "vibe": { "type": "string", "minLength": 1 }, "vibe_acp": { "type": "string", "minLength": 1 }, "data_dir": { "type": "string", "minLength": 1 } } }
+    "paths": { "type": "object", "additionalProperties": false, "properties": { "vibe": { "type": "string", "minLength": 1, "pattern": "^(/|[^/]+$)" }, "vibe_acp": { "type": "string", "minLength": 1, "pattern": "^(/|[^/]+$)" }, "data_dir": { "type": "string", "minLength": 1, "pattern": "^/" } } }
   }
 }

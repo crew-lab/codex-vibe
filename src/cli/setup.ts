@@ -1,4 +1,5 @@
-import { lstat, readFile, realpath, rename, rm } from 'node:fs/promises';
+import { chmod, copyFile, lstat, readFile, realpath, rename, rm } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { parse, stringify } from 'smol-toml';
@@ -7,7 +8,7 @@ import { getConfigPath, getDataDir, loadConfig } from '../config/config.js';
 import { DEFAULT_CONFIG } from '../config/defaults.js';
 import { ignoredConfigKeys, validateConfig } from '../config/validation.js';
 import { formatDoctorCheck, runDoctor } from '../diagnostics/doctor.js';
-import { createPrivateDir, createPrivateFile } from '../security/paths.js';
+import { createPrivateDir, createPrivateFile, expandHome } from '../security/paths.js';
 import { applyCodexPlan, planCodexConfig, type CodexScope } from './codex.js';
 import { configInvalid, fail } from './fail.js';
 
@@ -22,7 +23,10 @@ export interface SetupOptions {
   confirm?: (question: string) => Promise<boolean>;
 }
 
-export interface WorkspaceUpdate { file: string; created: boolean; added: boolean; canonical: string; notes: string[]; warnings: string[] }
+export interface WorkspaceUpdate { file: string; created: boolean; added: boolean; canonical: string; notes: string[]; warnings: string[]; backup?: string }
+export interface WorkspacePlan { file: string; created: boolean; added: boolean; canonical: string; notes: string[]; warnings: string[]; text?: string; changed: boolean }
+
+export const RELOAD_NOTE = 'Restart the Codex MCP server to apply the new allowlist (reconnect the client when it uses --isolated); a running server keeps the list it started with.';
 
 const MAX_CONFIG_BYTES = 1_048_576;
 
@@ -38,20 +42,27 @@ export async function canonicalWorkspace(input: string): Promise<string> {
   try { info = await lstat(resolved); } catch { return fail(`Workspace does not exist: ${resolved}`, 2); }
   if (info.isSymbolicLink()) fail(`Workspace must not be a symlink; pass the real directory: ${resolved}`, 2);
   if (!info.isDirectory()) fail(`Workspace must be a directory: ${resolved}`, 2);
-  return await realpath(resolved);
+  const canonical = await realpath(resolved);
+  const home = await comparable(process.env.HOME ?? homedir());
+  if (canonical === path.parse(canonical).root || canonical === home) fail(`Workspace is too broad: ${canonical}. Allow a project directory, not the filesystem root or your home directory.`, 2);
+  return canonical;
 }
 
-export async function readConfigDocument(file: string): Promise<Document | undefined> {
+export async function readConfigSource(file: string): Promise<{ text: string; document: Document } | undefined> {
   let info;
   try { info = await lstat(file); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined; throw error; }
   if (info.isSymbolicLink() || !info.isFile()) fail(`Refusing unsafe config path: ${file}`, 2);
   if (info.size > MAX_CONFIG_BYTES) fail('Config exceeds 1 MiB.', 2);
-  try { return parse(await readFile(file, 'utf8')) as Document; }
+  try { const text = await readFile(file, 'utf8'); return { text, document: parse(text) as Document }; }
   catch (error) { throw configInvalid(`Invalid supervisor configuration: ${(error as Error).message}`); }
 }
 
+export async function readConfigDocument(file: string): Promise<Document | undefined> {
+  return (await readConfigSource(file))?.document;
+}
+
 async function comparable(root: string): Promise<string> {
-  const resolved = path.resolve(root);
+  const resolved = path.resolve(expandHome(root));
   try { return await realpath(resolved); } catch { return resolved; }
 }
 
@@ -88,20 +99,40 @@ async function writeConfig(file: string, text: string, created: boolean): Promis
   await rename(temp, file);
 }
 
-export async function updateWorkspaceConfig(workspace: string, options: { resolveExecutables: boolean }): Promise<WorkspaceUpdate> {
-  const canonical = await canonicalWorkspace(workspace);
-  await createPrivateDir(getDataDir());
+export async function planWorkspaceConfig(canonical: string, options: { resolveExecutables: boolean }): Promise<WorkspacePlan> {
   const file = getConfigPath();
-  const existing = await readConfigDocument(file);
+  const existing = await readConfigSource(file);
   const created = existing === undefined;
-  const document: Document = existing ?? parse(initialConfigText()) as Document;
+  const document: Document = existing?.document ?? parse(initialConfigText()) as Document;
   const notes: string[] = [];
   const added = await addRoot(document, canonical);
   const pathsChanged = options.resolveExecutables ? await resolvePaths(document, notes) : false;
   try { validateConfig(document); }
   catch (error) { throw configInvalid(`Invalid supervisor configuration; no changes were made: ${(error as Error).message}`); }
-  if (created || added || pathsChanged) await writeConfig(file, stringify(document), created);
-  return { file, created, added, canonical, notes, warnings: ignoredConfigKeys(document).map((key) => `config: ignored key ${key}; it has no effect`) };
+  const changed = created || added || pathsChanged;
+  return { file, created, added, canonical, notes, changed, warnings: ignoredConfigKeys(document).map((key) => `config: ignored key ${key}; it has no effect`), ...(changed ? { text: stringify(document) } : {}) };
+}
+
+export async function applyWorkspacePlan(plan: WorkspacePlan): Promise<WorkspaceUpdate> {
+  const { text, changed: _changed, ...update } = plan;
+  if (text === undefined) return update;
+  await createPrivateDir(getDataDir());
+  if (plan.created) { await writeConfig(plan.file, text, true); return update; }
+  const backup = `${plan.file}.bak-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  await copyFile(plan.file, backup);
+  await chmod(backup, 0o600);
+  await writeConfig(plan.file, text, false);
+  return { ...update, backup };
+}
+
+export async function updateWorkspaceConfig(workspace: string, options: { resolveExecutables: boolean }): Promise<WorkspaceUpdate> {
+  const canonical = await canonicalWorkspace(workspace);
+  return await applyWorkspacePlan(await planWorkspaceConfig(canonical, options));
+}
+
+function reportUpdate(update: WorkspaceUpdate): void {
+  if (update.backup) say(`Rewrote ${update.file} without its comments or layout; the previous file is kept as ${update.backup}`);
+  if (update.added) say(RELOAD_NOTE);
 }
 
 export function parseSetupArgs(args: string[]): Omit<SetupOptions, 'interactive' | 'confirm'> {
@@ -128,15 +159,18 @@ async function askYesNo(question: string): Promise<boolean> {
 }
 
 export async function runSetup(options: SetupOptions): Promise<void> {
-  const update = await updateWorkspaceConfig(options.workspace, { resolveExecutables: true });
+  const canonical = await canonicalWorkspace(options.workspace);
+  const configPlan = await planWorkspaceConfig(canonical, { resolveExecutables: true });
+  const plan = await planCodexConfig(options.codex, canonical, options.isolated);
+  const update = await applyWorkspacePlan(configPlan);
   say(`${update.created ? 'Created private config' : 'Using config'} at ${update.file}`);
   say(update.added ? `Allowed workspace: ${update.canonical}` : `Workspace already allowed: ${update.canonical}`);
   for (const note of update.notes) say(note);
+  reportUpdate(update);
   for (const warning of update.warnings) say(`WARN ${warning}`);
   const report = await runDoctor(await loadConfig());
   const lines = report.checks.map(formatDoctorCheck).filter((line) => !line.startsWith('PASS '));
   say(lines.length ? `Doctor (non-PASS checks only):\n${lines.join('\n')}` : 'Doctor: all checks PASS.');
-  const plan = await planCodexConfig(options.codex, update.canonical, options.isolated);
   if (!plan.changed) say(`Codex config is already up to date: ${plan.file}`);
   else {
     say(`Codex config change for ${plan.file}:\n${plan.block}`);
@@ -158,5 +192,6 @@ export async function allowCommand(args: string[]): Promise<void> {
   if (args.length !== 1 || !args[0] || args[0].startsWith('--')) fail('Usage: vibe-supervisor allow <dir>', 2);
   const update = await updateWorkspaceConfig(args[0], { resolveExecutables: false });
   say(update.added ? `Allowed workspace: ${update.canonical} (${update.file})` : `Workspace already allowed: ${update.canonical}`);
+  reportUpdate(update);
   for (const warning of update.warnings) say(`WARN ${warning}`);
 }
