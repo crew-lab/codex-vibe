@@ -21,7 +21,7 @@
       "properties": {
         "review_timeout_seconds": { "type": "integer", "minimum": 30, "maximum": 7200, "default": 1800, "description": "Default timeout_seconds for a review start that omits it." },
         "edit_timeout_seconds": { "type": "integer", "minimum": 30, "maximum": 7200, "default": 2400, "description": "Default timeout_seconds for an edit start that omits it." },
-        "max_turns_review": { "type": "integer", "minimum": 1, "maximum": 50, "default": 12, "description": "Default max_turns for a review start that omits it." },
+        "max_turns_review": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20, "description": "Default max_turns for a review start that omits it." },
         "max_turns_edit": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20, "description": "Default max_turns for an edit start that omits it." },
         "max_event_bytes": { "type": "integer", "minimum": 1024, "maximum": 1073741824, "default": 52428800 },
         "max_transcript_bytes": { "type": "integer", "minimum": 1024, "maximum": 1073741824, "default": 10485760 },

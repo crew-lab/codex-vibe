@@ -12,7 +12,7 @@ preserve_failed_runs = true
 [limits]
 review_timeout_seconds = 1800
 edit_timeout_seconds = 2400
-max_turns_review = 12
+max_turns_review = 20
 max_turns_edit = 20
 max_event_bytes = 52428800
 max_transcript_bytes = 10485760

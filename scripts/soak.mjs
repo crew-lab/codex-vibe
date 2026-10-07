@@ -125,16 +125,16 @@ function shuffle(items, random) {
 
 const BUILT_IN_TASKS = {
   review: [
-    { id: 'review-file', task: 'Review the file {file} for correctness problems and unclear code. Only read files; do not modify anything. Reply with a short list of findings.' },
-    { id: 'review-bug-class', task: 'Look for missing error handling, resource leaks and unchecked inputs in this repository. Only read files; do not modify anything. Report at most five findings with file names.' },
+    { id: 'review-file', task: 'Review the file {file} for correctness problems and unclear code. Use only the file read and search tools; there is no shell. Read at most three files. Do not modify anything. Reply with a short list of findings.' },
+    { id: 'review-bug-class', task: 'Look for missing error handling, resource leaks and unchecked inputs, starting with the file {file}. Use only the file read and search tools; there is no shell. Read at most five files. Do not modify anything. Report at most five findings with file names.' },
   ],
   edit: [
     { id: 'edit-add-file', task: 'Create one new file named soak-note-{n}.txt in the repository root containing a single sentence describing this repository. Do not change any other file.' },
     { id: 'edit-one-line', task: 'In the file {file}, change exactly one line to fix a typo or improve a name. Do not change any other line or file. If nothing needs changing, append one short neutral line to the end of that file instead.' },
   ],
   acp: [
-    { id: 'review-file', task: 'Review the file {file} for correctness problems and unclear code. Only read files; do not modify anything. Reply with a short list of findings.' },
-    { id: 'review-bug-class', task: 'Look for missing error handling, resource leaks and unchecked inputs in this repository. Only read files; do not modify anything. Report at most five findings with file names.' },
+    { id: 'review-file', task: 'Review the file {file} for correctness problems and unclear code. Use only the file read and search tools; there is no shell. Read at most three files. Do not modify anything. Reply with a short list of findings.' },
+    { id: 'review-bug-class', task: 'Look for missing error handling, resource leaks and unchecked inputs, starting with the file {file}. Use only the file read and search tools; there is no shell. Read at most five files. Do not modify anything. Report at most five findings with file names.' },
   ],
   long: [
     { id: 'review-long', task: 'Read every source file in this repository one at a time and write a detailed review of each, file by file. Only read files; do not modify anything.' },
