@@ -1,6 +1,6 @@
 # Implementation handoff
 
-Status as of **2026-10-06**: implemented release candidate 0.9.0-rc.6, with hosted review, edit and continuation evidence from the 2026-10-05 target-machine session (history below starts from rc.1 on 2026-10-03), not a production 1.0 certification; the plan for 1.0 is recorded below. Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.6`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
+Status as of **2026-10-06**: implemented release candidate 0.9.0-rc.7, with hosted review, edit and continuation evidence from the 2026-10-05 target-machine session (history below starts from rc.1 on 2026-10-03), not a production 1.0 certification; the plan for 1.0 is recorded below. Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.7`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
 
 ## Multi-client setup correction (2026-10-06)
 
@@ -110,18 +110,18 @@ Documentation additions were checked for local link targets and whitespace. They
 
 ## Release artifacts and reproduction
 
-`release/` is ignored by Git. The current candidate is **0.9.0-rc.6**, built on 2026-10-07 on the preparing machine (Node 24.19.0, npm 11.17.0, macOS arm64) from the working tree that bumps the version on top of `9ed470e`, so it contains Phases A, B and C and all three cold-review fix rounds. It is the first candidate with the Phase C surface (breaking changes for coordinators are in `CHANGELOG.md`). The release workflow is not in it; it waits on `claude/release-workflow`.
+`release/` is ignored by Git. The current candidate is **0.9.0-rc.7**, built on 2026-10-07 on the preparing machine (Node 24.19.0, npm 11.17.0, macOS arm64) from the working tree that bumps the version on top of the W14 commit (worker-deadline fix, legacy-harness decision, soak driver), so it contains Phases A to C, all cold-review fix rounds and W14. The release workflow is not in it; it waits on `claude/release-workflow`.
 
 ```text
-vibe-supervisor-0.9.0-rc.6.tgz  sha256 c4a1b54ef5c3921be8c4842636038cd93e1f85824f53aec703b54f8af7483f11
-sbom.spdx.json                  sha256 273545f61ab726edd60ccd94ae3a689f1423d864b9d09d382d98744a94881d9a
-acceptance.json                 sha256 5d0c46c93a2a154f73bdf1aa03473438a7bb38401f58a10c2f53f3914db59eab; 7 deterministic checks PASS; hosted, soak and platform gates listed UNVERIFIED
+vibe-supervisor-0.9.0-rc.7.tgz  sha256 8a81c34c9fca2e9f93702ed75815fa40441bc2ff91b843d7aff0e69b009d6d10
+sbom.spdx.json                  sha256 dbb68ebedde69170fadaf9dabb76ffd3780b5c08e8ab5adaabc40259bc510e7f
+acceptance.json                 sha256 59030f12c4b2c4511d094232eda1cb7ed592e5d131ddb251846c39cfa826b90c; 7 deterministic checks PASS; hosted, soak and platform gates listed UNVERIFIED
 SHA256SUMS
 ```
 
-`package:rc` passed end to end, including the offline installed-package smoke test (MCP initialize, the backend-dependent tool listing, EOF shutdown, and two concurrent `--isolated` clients from the installed tarball). The tarball has no `docs/history/`, `.mcp.json` or `.codex-plugin/`. Earlier candidates (rc.1 to rc.5) are superseded. Never edit archive contents manually; rebuild instead.
+`package:rc` passed end to end, including the offline installed-package smoke test (MCP initialize, the backend-dependent tool listing, EOF shutdown, and two concurrent `--isolated` clients from the installed tarball). The tarball has no `docs/history/`, `.mcp.json` or `.codex-plugin/`. Earlier candidates (rc.1 to rc.6) are superseded. The first `package:rc` attempt for rc.7 failed in a step whose output was truncated; the immediate rerun and two further `verify:release` runs passed, so treat a single unexplained failure as a possible remaining flake and capture the full log if it recurs. Never edit archive contents manually; rebuild instead.
 
-The delivered copy of these four files is kept on the preparing machine at `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.6/` (older candidates are next to it), Git-ignored; verify it with `shasum -a 256 -c SHA256SUMS` in that folder before installing on the target machine. What to check there first: `vibe-supervisor setup --workspace <repo>` end to end including the Codex registration; that Codex lists five tools (programmatic) or seven (`acp`/`auto`); the Phase B measurements P1 to P4; T11 (hosted ACP cancellation, restart and lazy reload, idle expiry); and that `--isolated` reuses its session directory across Codex restarts. npm 11 warns that the dev dependencies `esbuild` and `fsevents` have install scripts outside `allowScripts`; the project's own `prepare` build still runs.
+The delivered copy of these four files is kept on the preparing machine at `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.7/` (older candidates are next to it), Git-ignored; verify it with `shasum -a 256 -c SHA256SUMS` in that folder before installing on the target machine. What to check there first: `vibe-supervisor setup --workspace <repo>` end to end including the Codex registration; that Codex lists five tools (programmatic) or seven (`acp`/`auto`); the Phase B measurements P1 to P4; T11 (hosted ACP cancellation, restart and lazy reload, idle expiry); and that `--isolated` reuses its session directory across Codex restarts. npm 11 warns that the dev dependencies `esbuild` and `fsevents` have install scripts outside `allowScripts`; the project's own `prepare` build still runs.
 
 Populating the offline cache needs two steps. `npm ci --cache /abs/cache` stores package tarballs but not the registry metadata the offline tarball install needs, so the first `package:rc` run fails with `ENOTCACHED`. Warm the metadata once by packing the tarball and installing it online with `--ignore-scripts` into a throwaway prefix using the same cache, then run `package:rc`. The smoke install uses `--ignore-scripts`, so it does not exercise the `prepare` script; field test T1 covers that.
 
@@ -250,9 +250,9 @@ Status: implemented on 2026-10-07 against fake backends. A cold review of `6397e
 
 ### Phase D, target machine and release
 
-See [Phase D test plan (rc.6)](#phase-d-test-plan-rc6). Cut rc.7 or 1.0 after it.
+See [Phase D test plan (rc.6)](#phase-d-test-plan-rc6). Cut rc.8 or 1.0 after it.
 
-Open decisions: whether R3 (unified harness) gates 1.0 or 1.0 documents "legacy harness only"; whether the Keychain key may live in supervisor memory (dropped from Phase B because measurement showed no gain, kept open only if P3 shows a slow lookup). Settled: hybrid snapshot (Phase B), ACP ships alongside programmatic (Phase C), GitHub Releases with `private: true` (Phase C).
+Open decisions: whether the Keychain key may live in supervisor memory (dropped from Phase B because measurement showed no gain, kept open only if P3 shows a slow lookup). Settled: R3 (user, 2026-10-07): 1.0 supports the legacy harness only and the unified harness is validated before supporting a Vibe release that removes the legacy harness; hybrid snapshot (Phase B), ACP ships alongside programmatic (Phase C), GitHub Releases with `private: true` (Phase C).
 
 ## Platform research (2026-10-05)
 
@@ -333,7 +333,7 @@ This plan replaces the 2026-10-05 field plan below (kept for history) for the rc
 
 Ground rules:
 
-- **Machine:** the target Mac with Vibe 2.25.8 installed (`uv tool install mistral-vibe==2.25.8`) and browser login done once with `vibe`. Install rc.6 from `release/0.9.0-rc.6/` after `shasum -a 256 -c SHA256SUMS`.
+- **Machine:** the target Mac with Vibe 2.25.8 installed (`uv tool install mistral-vibe==2.25.8`) and browser login done once with `vibe`. Install rc.7 (or later) from `release/0.9.0-rc.7/` after `shasum -a 256 -c SHA256SUMS`.
 - **Workspace:** a throwaway Git repository with no secrets, containing nested source files, a root `.env` with a fake value, an ignored `node_modules/` (any size; a large one also serves D7), and one file outside the repository to try to read.
 - **Cost and consent:** hosted steps send that repository and the tasks to Mistral and are billed; run them only with the owner's authorization. Earlier hosted edits cost about $0.02 each, so the soak (D18) is the only step with noticeable cost.
 - **Stop rule:** stop at the first failing step, record it, and never work around it by weakening policy (no `always` fallback, no shell, no network, no project trust, no editing the generated agent profiles).
@@ -382,12 +382,12 @@ Ground rules:
 | ID | Step | Expected | Covers |
 |---|---|---|---|
 | D18 | Hosted soak of 100 runs through the official MCP client with `scripts/soak.mjs` (written and tested against a fake server; not yet run hosted): 60 programmatic reviews, 30 programmatic edits and 10 ACP runs with continuations, mid-turn `vibe_close` and supervisor restarts spread through them. On the target machine, from a source checkout after `npm ci && npm run build`, with the workspace already allowed (`vibe-supervisor allow <repo>`): `node scripts/soak.mjs --workspace <repo> --reviews 60 --edits 30 --acp 10 --out <evidence-dir> --server-command node --server-arg dist/cli.js --server-arg serve --server-arg --stdio --yes` (omit `--yes` to print the plan, run count and cost warning and start nothing; omit `--server-command` to use `vibe-supervisor` from PATH; `--seed`, `--tasks <file.json>`, `--wait-seconds`, `--run-timeout`, `--stop-on-fail` are optional). The driver copies the template `config.toml` (`VIBE_SUPERVISOR_HOME` or the default home) into private `home-programmatic` and `home-acp` under `--out` with only `backend` changed, runs one server per home, follows the coordinator loop (start with `wait_seconds`, `vibe_status` with `after_seq`, `vibe_close`, `cleanup_worktree` for edits), and never approves a request: a permission request is answered with the offered reject option, recorded, and fails the criterion. It writes `runs.ndjson` (per run: task id only, tool calls, events, time to first event and to settled, final state, `stop_reason`, error code, warnings, integrity, usage and cost, worktree removal, restart and mid-turn-close outcome, failures), `summary.json` (totals per kind and backend, p50 and p95 latencies, failures by code, leftover processes by `pgrep -fl vibe` against a baseline counting only orphaned or driver-descended ones, leftover worktrees, artifact bytes per home, retention check, PASS or FAIL per criterion) and the redacted server stderr; the exit code is 0 only when every criterion passes. Limits: runs execute one at a time (no concurrency stress), cost is the supervisor's non-authoritative figure, and the restart scenarios stop the server gracefully (as quitting Codex does), not by SIGKILL. | Zero unexpected failures, zero permission requests, no leaked processes or worktrees, bounded artifacts, retention leaves recent runs. | Gate 3 hosted soak |
-| D19 | R3: repeat D4, D9 and D13 with the unified harness (a build without `--legacy-harness`). | Record differences. Not a 1.0 blocker unless the decision below says so. | R3 |
+| D19 | Optional, not a 1.0 criterion (R3 decision, 2026-10-07: 1.0 supports the legacy harness only): repeat D4, D9 and D13 with the unified harness (a build without `--legacy-harness`). | Record differences. | R3 |
 | D20 | Repeat D0 to D5 on an Intel Mac and on a clean macOS account. | Same results. | Gate 6 |
 
-Exit criteria for 1.0: D0 to D18 pass; D20 passes at least on a clean account; D19 either passes or 1.0 documents "legacy harness only"; the release workflow is pushed and its first tagged run produces the release assets. The plugin scaffold is no longer packaged and stays out of scope for 1.0.
+Exit criteria for 1.0: D0 to D18 pass; D20 passes at least on a clean account; D19 is optional because 1.0 supports the legacy harness only; the release workflow is pushed and its first tagged run produces the release assets. The plugin scaffold is no longer packaged and stays out of scope for 1.0.
 
-Before the session: decide R3's status (the D18 soak driver, `scripts/soak.mjs`, is written). After it: fix what failed, cut rc.7 or 1.0 accordingly.
+Before the session: the D18 soak driver, `scripts/soak.mjs`, is written. After it: fix what failed, cut rc.8 or 1.0 accordingly.
 
 ## Field test plan for the target machine
 
@@ -423,7 +423,7 @@ After T6 to T12 pass, decide whether ACP reject options should be sent as `selec
 
 Fixed after the hosted ACP continuation (2026-10-06): a turn that stopped with `max_turn_requests` used to be reported with the generic summary "Vibe completed the delegated task." The default summary now follows the stop reason (`end_turn`, `max_tokens`, `max_turn_requests`, `refusal`, `cancelled`, or an unknown reason), any non-`end_turn` stop adds a warning naming it, and each continuation's result replaces the previous turn's summary and stop-reason warning while keeping unrelated warnings. The run state stays `completed`; the skills tell the coordinator to check `stop_reason` and warnings, not the summary.
 
-Test fragility: four full-suite runs launched at the same time on one machine occasionally time out (5 s) in the Git worktree tests in `tests/unit/core-run-manager.test.ts` and `tests/security/security-primitives.test.ts`. Sequential runs and `verify:release` pass. This is CPU oversubscription, not a product defect; raise those test timeouts if parallel runs are needed.
+Test fragility: the suite runs its files in parallel, and the Git worktree and soak tests take 1–3 s alone but could exceed the 5-second default under CPU load; `vitest.config.ts` sets `testTimeout` to 15 s (2026-10-07). Two real races found while chasing such failures were fixed instead of timed out: a test that read temporary files mid-rename (`stderr-secrets`) and ACP deadline writes after close (W14).
 
 A next maintainer should inspect Git status, read this handoff and the usage guide, reproduce local checks when making code changes, and finish those gates before claiming production readiness. Hosted validation sends source/tasks to a provider and may incur usage charges; keep it within user-authorized scope. Record exact versions, commands, outcomes, and remaining uncertainty in acceptance/compatibility docs. Any new version support requires renewed shim, profile, protocol, and effective-tool validation.
 
