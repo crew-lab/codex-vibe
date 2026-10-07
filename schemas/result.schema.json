@@ -8,6 +8,7 @@
     "schema_version": { "const": 1 }, "run_id": { "type": "string", "format": "uuid" }, "state": { "enum": ["completed", "failed", "cancelled", "closed", "recoverable"] }, "backend": { "enum": ["acp", "programmatic"] }, "stop_reason": { "type": "string" }, "summary": { "type": "string" },
     "workspace": { "type": "object", "additionalProperties": false, "required": ["source", "worker"], "properties": { "source": { "type": "string" }, "worker": { "type": "string" } } },
     "artifacts": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["name", "path", "sha256", "bytes", "media_type"], "properties": { "name": { "type": "string" }, "path": { "type": "string" }, "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "bytes": { "type": "integer", "minimum": 0 }, "media_type": { "type": "string" } } } },
-    "changed_files": { "type": "array", "items": { "type": "string" } }, "usage": { "type": "object" }, "warnings": { "type": "array", "items": { "type": "string" } }
+    "changed_files": { "type": "array", "items": { "type": "string" } }, "usage": { "type": "object" }, "warnings": { "type": "array", "items": { "type": "string" } },
+    "next_action": { "type": "string" }
   }
 }

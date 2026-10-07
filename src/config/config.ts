@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { parse } from "smol-toml";
 import { DEFAULT_CONFIG } from "./defaults.js";
-import { validateConfig } from "./validation.js";
+import { ignoredConfigKeys, validateConfig } from "./validation.js";
 import { supervisorError } from "../contracts.js";
 import type { SupervisorConfig } from "../contracts.js";
 import { createPrivateDir } from "../security/paths.js";
@@ -49,7 +49,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Super
   try {
     handle = await open(join(dataDir, "config.toml"), fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
   } catch (error) {
-    if (isNodeError(error) && error.code === "ENOENT") return { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits }, retention: { ...DEFAULT_CONFIG.retention }, phase1: { ...DEFAULT_CONFIG.phase1 }, security: { ...DEFAULT_CONFIG.security } };
+    if (isNodeError(error) && error.code === "ENOENT") return { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits }, retention: { ...DEFAULT_CONFIG.retention } };
     throw error;
   }
   try {
@@ -70,6 +70,17 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Super
   } finally {
     await handle.close();
   }
+}
+
+export async function configFileIgnoredKeys(env: NodeJS.ProcessEnv = process.env): Promise<string[]> {
+  let handle;
+  try {
+    handle = await open(getConfigPath(env), fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+    const stat = await handle.stat();
+    if (!stat.isFile() || stat.size > 1_048_576) return [];
+    return ignoredConfigKeys(parse(await handle.readFile("utf8")));
+  } catch { return []; }
+  finally { await handle?.close(); }
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

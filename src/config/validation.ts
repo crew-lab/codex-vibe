@@ -1,6 +1,12 @@
 import { z } from "zod";
 import type { SupervisorConfig } from "../contracts.js";
 
+const REMOVED_KEYS: Readonly<Record<string, readonly string[]>> = {
+  phase1: ["allow_temporary_trust"],
+  security: ["allow_shell_in_review", "allow_shell_in_edit", "allow_network_tools", "log_raw_acp", "persist_reasoning"]
+};
+
+const removedSection = (keys: readonly string[]) => z.object(Object.fromEntries(keys.map((key) => [key, z.unknown().optional()]))).strict().optional();
 const pathString = z.string().min(1).max(4096);
 const configSchema = z.object({
   version: z.literal(1),
@@ -24,14 +30,8 @@ const configSchema = z.object({
     max_mcp_result_chars: z.number().int().min(1000).max(1_000_000).default(8000),
     mcp_result_format: z.enum(["text", "structured", "both"]).default("text")
   }).strict().prefault({}),
-  phase1: z.object({ allow_temporary_trust: z.boolean().default(false) }).strict().prefault({}),
-  security: z.object({
-    allow_shell_in_review: z.boolean().default(false),
-    allow_shell_in_edit: z.boolean().default(false),
-    allow_network_tools: z.boolean().default(false),
-    log_raw_acp: z.boolean().default(false),
-    persist_reasoning: z.literal(false).default(false)
-  }).strict().prefault({}),
+  phase1: removedSection(REMOVED_KEYS.phase1 ?? []),
+  security: removedSection(REMOVED_KEYS.security ?? []),
   paths: z.object({ vibe: pathString.optional(), vibe_acp: pathString.optional(), data_dir: pathString.optional() }).strict().optional()
 }).strict();
 
@@ -56,18 +56,22 @@ export function validateConfig(input: unknown): SupervisorConfig {
       maxMcpResultChars: parsed.limits.max_mcp_result_chars,
       mcpResultFormat: parsed.limits.mcp_result_format
     },
-    phase1: { allowTemporaryTrust: parsed.phase1.allow_temporary_trust },
-    security: {
-      allowShellInReview: parsed.security.allow_shell_in_review,
-      allowShellInEdit: parsed.security.allow_shell_in_edit,
-      allowNetworkTools: parsed.security.allow_network_tools,
-      logRawAcp: parsed.security.log_raw_acp,
-      persistReasoning: false
-    },
     ...(parsed.paths ? { paths: {
       ...(parsed.paths.vibe === undefined ? {} : { vibe: parsed.paths.vibe }),
       ...(parsed.paths.vibe_acp === undefined ? {} : { vibeAcp: parsed.paths.vibe_acp }),
       ...(parsed.paths.data_dir === undefined ? {} : { dataDir: parsed.paths.data_dir })
     } } : {})
   };
+}
+
+export function ignoredConfigKeys(raw: unknown): string[] {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+  const root = raw as Record<string, unknown>;
+  const ignored: string[] = [];
+  for (const [section, keys] of Object.entries(REMOVED_KEYS)) {
+    const value = root[section];
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    for (const key of keys) if (key in value) ignored.push(`${section}.${key}`);
+  }
+  return ignored;
 }

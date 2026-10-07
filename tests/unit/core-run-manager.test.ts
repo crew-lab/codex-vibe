@@ -101,10 +101,12 @@ describe("RunManager core lifecycle", () => {
     } finally { await manager.shutdown(); await other.shutdown(); }
   });
 
-  it("rejects an explicit shell request until a kernel sandbox is certified", async () => {
+  it("rejects an allow_shell input because the field no longer exists", async () => {
     const { source, manager } = await setup();
     try {
-      await expect(manager.editStart({ task: "edit", cwd: source, allow_shell: true })).rejects.toMatchObject({ code: "VSUP_PERMISSION_DENIED" });
+      await expect(manager.editStart({ task: "edit", cwd: source, allow_shell: true } as never)).rejects.toMatchObject({ code: "VSUP_INVALID_ARGUMENT" });
+      await expect(manager.editStart({ task: "edit", cwd: source, allow_shell: false } as never)).rejects.toMatchObject({ code: "VSUP_INVALID_ARGUMENT" });
+      await expect(manager.reviewStart({ task: "review", cwd: source, backend: "acp" } as never)).rejects.toMatchObject({ code: "VSUP_INVALID_ARGUMENT" });
     } finally { await manager.shutdown(); }
   });
 

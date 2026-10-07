@@ -12,7 +12,8 @@ import { supervisorError, type SupervisorConfig, type SupervisorError } from '..
 import { spawnManaged } from '../process/managed.js';
 import { assertNoProjectVibeExtensions, createVibeChildProfile } from './profile.js';
 import type { VibeChildProfile } from './profile.js';
-import { buildVibeLaunch, classifyStartFailure, describeMissing, isCodedError, spawned, versionUnsupported } from './launcher.js';
+import { APP_VERSION } from '../version.js';
+import { buildVibeLaunch, classifyStartFailure, describeMissing, isCodedError, rateLimitFailure, spawned, versionUnsupported } from './launcher.js';
 import { ACP_PROTOCOL_VERSION, SUPPORTED_VIBE } from './pinned.js';
 import { executableProbeKey, ProbeCache } from './probe-cache.js';
 import type { ProbeOptions } from './probe-cache.js';
@@ -185,7 +186,7 @@ export class AcpBackend implements SupervisorBackend {
       const stream = ndJsonStream(Writable.toWeb(child.child.stdin!) as WritableStream<Uint8Array>, Readable.toWeb(child.child.stdout!) as ReadableStream<Uint8Array>, { maxMessageBytes: MAX_WIRE_BYTES });
       const probe = client({ name: 'vibe-supervisor-probe' });
       const connected = probe.connectWith(stream, async (cx) => {
-        const init = await cx.request('initialize', { protocolVersion: PROTOCOL_VERSION, clientInfo: { name: 'vibe-supervisor', version: '0.9.0' } });
+        const init = await cx.request('initialize', { protocolVersion: PROTOCOL_VERSION, clientInfo: { name: 'vibe-supervisor', version: APP_VERSION } });
         version = init.agentInfo?.version ?? undefined;
         protocolVersion = init.protocolVersion;
         loadSession = init.agentCapabilities?.loadSession === true;
@@ -246,7 +247,7 @@ export class AcpBackend implements SupervisorBackend {
         state.failureReported = true;
         const exitedMidTurn = state.turnActive && child.child.exitCode === 0;
         const label = /missing api key|unauthorized|\b401\b/i.test(message) ? 'VSUP_AUTH_REQUIRED' : state.sessionReady ? 'VSUP_ACP_PROTOCOL_ERROR' : 'VSUP_ACP_INIT_FAILED';
-        await callbacks.onState('failed', { error: exitedMidTurn ? supervisorError('VSUP_BACKEND_CRASHED', EXITED_MID_TURN) : cause ?? supervisorError(label, message) });
+        await callbacks.onState('failed', { error: exitedMidTurn ? supervisorError('VSUP_BACKEND_CRASHED', EXITED_MID_TURN) : cause ?? rateLimitFailure(message) ?? supervisorError(label, message) });
       }
     }).catch(reportFailure('acp-start-failure'));
     child.done.then(({ code, signal }) => {
@@ -273,7 +274,7 @@ export class AcpBackend implements SupervisorBackend {
     const withTail = (failure: SupervisorError): SupervisorError => tail && !failure.details && (failure.code === 'VSUP_ACP_INIT_FAILED' || failure.code === 'VSUP_AUTH_REQUIRED') ? supervisorError(failure.code, failure.message, { stderr_tail: tail }) : failure;
     if (isCodedError(classified)) return withTail(classified);
     const message = redactSecrets(String(error), secrets);
-    return withTail(supervisorError(/missing api key|unauthorized|\b401\b/i.test(message) ? 'VSUP_AUTH_REQUIRED' : 'VSUP_ACP_INIT_FAILED', message));
+    return withTail(rateLimitFailure(message) ?? supervisorError(/missing api key|unauthorized|\b401\b/i.test(message) ? 'VSUP_AUTH_REQUIRED' : 'VSUP_ACP_INIT_FAILED', message));
   }
 
   private async connect(state: AcpState, secret?: string): Promise<void> {
@@ -317,7 +318,7 @@ export class AcpBackend implements SupervisorBackend {
     const stream = ndJsonStream(Writable.toWeb(state.process.child.stdin!) as WritableStream<Uint8Array>, Readable.toWeb(state.process.child.stdout!) as ReadableStream<Uint8Array>, { maxMessageBytes: MAX_WIRE_BYTES });
     await app.connectWith(stream, async (cx: ClientContext) => {
       state.context = cx;
-      const init = await cx.request('initialize', { protocolVersion: PROTOCOL_VERSION, clientCapabilities: { elicitation: { form: {} } }, clientInfo: { name: 'vibe-supervisor', version: '0.9.0' } });
+      const init = await cx.request('initialize', { protocolVersion: PROTOCOL_VERSION, clientCapabilities: { elicitation: { form: {} } }, clientInfo: { name: 'vibe-supervisor', version: APP_VERSION } });
       const agentVersion = init.agentInfo?.version;
       if (agentVersion !== SUPPORTED_VIBE) throw versionUnsupported('acp', agentVersion ?? 'unknown');
       if (init.protocolVersion !== PROTOCOL_VERSION) throw supervisorError('VSUP_ACP_VERSION_UNSUPPORTED', `Agent negotiated unsupported ACP version ${init.protocolVersion}`);

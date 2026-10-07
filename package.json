@@ -14,15 +14,14 @@
   "files": [
     "dist",
     "schemas",
-    "docs",
     "examples",
     "skills",
-    ".codex-plugin",
-    ".mcp.json",
+    "docs",
+    "!docs/history",
     "README.md",
-    "LICENSE",
     "SECURITY.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "scripts": {
     "lint": "eslint .",
@@ -39,6 +38,7 @@
     "sbom": "node scripts/sbom.mjs",
     "secret-scan": "node scripts/secret-scan.mjs",
     "checksum": "node scripts/checksum.mjs",
+    "docs:errors": "node scripts/errors-doc.mjs",
     "package:rc": "node scripts/package-rc.mjs",
     "verify:release": "npm run lint && npm run typecheck && npm run build && npm test && npm run test:python && npm run acceptance && npm run secret-scan && npm run sbom",
     "prepack": "npm run verify:release",

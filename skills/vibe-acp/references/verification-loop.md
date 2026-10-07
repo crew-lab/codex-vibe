@@ -31,8 +31,6 @@ The coordinator will rerun <affected tests/checks> and review the new patch.
 Explain what changed and anything still unresolved.
 ```
 
-For the observed draft, actionable feedback would identify the TypeScript environment-object index error, unsupported `VIBE_AGENTS__...` overrides, the missing Keychain account selector and output bounds, and noncanonical test fixture paths. Do not send raw credentials or private reasoning as evidence.
-
 ## State and decision table
 
 | Observation | Next action |
@@ -46,21 +44,3 @@ For the observed draft, actionable feedback would identify the TypeScript enviro
 | Repeated failures | Narrow the task and identify the shared cause; reassess budget and harness before more model calls. |
 | New worker changes after verification | Prior patch hashes and check results are stale; export/review again. |
 | Missing real MCP tools | Report visibility separately from standalone-client discovery; do not invent tool availability. |
-
-## Known integration failures
-
-These are observed defects from the 2026-10-03 attempts, not instructions to bypass policy. Consult current acceptance evidence before assuming they remain open or have been fixed.
-
-- **Browser-login credential and private HOME:** the login credential was present in normal macOS Keychain lookup but absent with a fresh HOME. Repeating setup did not repair supervisor lookup. A private in-memory diagnostic bridge reached hosted generation, but the normal integration remains unverified. Keep authentication in the provider runtime; never put credentials into tasks, files, or logs. Do not advise an API-plan upgrade solely because the internal credential name is `MISTRAL_API_KEY`.
-- **Nested path grants:** Vibe 2.25.8 matches absolute glob allowlists with `PurePath.match`; `<root>/**` did not authorize nested descendants. The installed matcher recognized `vibe-path:directory_recursive:<canonical-root>`. Any implementation must test nested, sibling, outside, sensitive, and symlink paths against the real pinned resolver. Retain `never` fallback and deny patterns.
-- **Built-in agent overrides:** Plan replaces the read-file allowlist, and Accept Edits overrides write/edit permission. Effective mode, tool inventory, and permissions must be checked after all configuration layers. Unrecognized environment keys do not establish enforcement.
-- **Drafts are proposals:** one generated draft changed fallback to `always`; another failed typecheck, lint, and eight tests. The coordinator rejected them. Passing a model turn is distinct from delivering a verified fix.
-- **macOS test paths:** `/tmp` may resolve through a symlink. Use a canonical private `mkdtemp` directory and complete valid contracts. Do not disable the application's symlink protections.
-
-## Research and scope
-
-Reviewed 2026-10-03. Official ACP v1 documentation establishes repeated prompt turns, streamed tool updates, correlated permission choices, cancellation, and capability-gated session loading. The repository's schemas and RunManager further restrict which states accept continuation; those local contracts govern actual MCP calls.
-
-Comparable [acpx session skill](https://github.com/Dwsy/agent/blob/main/skills/acpx/SKILL.md) covers persistent session commands, while [use-acpx](https://github.com/FradSer/dotclaude/blob/main/acpx/skills/use-acpx/SKILL.md) emphasizes assessment of worker proposals. This skill uses the repository's MCP API and coordinator verification, without importing their CLI flags, blanket permission settings, or mandatory subagent workflows. Its gap is the concrete correction loop with isolated artifacts, verification failures, and fail-closed recovery in this supervisor.
-
-See the [Agent Skills specification](https://agentskills.io/specification) for portable skill structure. This repository skill is included by the plugin's existing skills directory and npm files allowlist; authoring it does not demonstrate plugin installation or activate it globally.

@@ -4,15 +4,15 @@ const runId = z.string().uuid({ version: "v4" });
 const workspace = z.string().min(1).max(4096);
 const task = z.string().min(1).max(100_000);
 const waitSeconds = z.number().int().min(0).max(300).default(0);
-const backend = z.enum(["auto", "acp", "programmatic"]).default("auto");
+const maxTurns = z.number().int().min(1).max(50).optional();
+const timeoutSeconds = z.number().int().min(30).max(7200).optional();
 
 export const reviewStartSchema = z.object({
   task,
   cwd: workspace,
   context_files: z.array(z.string().min(1).max(4096)).max(50).default([]),
-  backend,
-  max_turns: z.number().int().min(1).max(50).default(12),
-  timeout_seconds: z.number().int().min(30).max(7200).default(1800),
+  max_turns: maxTurns,
+  timeout_seconds: timeoutSeconds,
   wait_seconds: waitSeconds
 }).strict();
 
@@ -20,10 +20,8 @@ export const editStartSchema = z.object({
   task,
   cwd: workspace,
   base_ref: z.string().min(1).max(512).default("HEAD"),
-  backend,
-  allow_shell: z.boolean().default(false),
-  max_turns: z.number().int().min(1).max(50).default(20),
-  timeout_seconds: z.number().int().min(30).max(7200).default(2400),
+  max_turns: maxTurns,
+  timeout_seconds: timeoutSeconds,
   wait_seconds: waitSeconds
 }).strict();
 
@@ -49,7 +47,7 @@ export const respondSchema = z.discriminatedUnion("kind", [
 
 export const resultSchema = z.object({
   run_id: runId,
-  detail: z.enum(["compact", "summary", "full"]).default("compact"),
+  detail: z.enum(["compact", "full"]).default("compact"),
   include_transcript: z.boolean().default(false)
 }).strict();
 
@@ -63,7 +61,6 @@ export const toolSchemas = {
   vibe_continue: continueSchema,
   vibe_respond: respondSchema,
   vibe_result: resultSchema,
-  vibe_cancel: cancelSchema,
   vibe_close: closeSchema
 } as const;
 

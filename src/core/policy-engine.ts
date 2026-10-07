@@ -1,6 +1,6 @@
 import path from "node:path";
 import { realpath } from "node:fs/promises";
-import type { PendingRequest, RunMode, SupervisorConfig } from "../contracts.js";
+import type { PendingRequest, RunMode } from "../contracts.js";
 import { isPathWithinRoot } from "../security/paths.js";
 
 export type PermissionPolicyDecision =
@@ -9,20 +9,14 @@ export type PermissionPolicyDecision =
 
 /** Deny unsafe or incomplete requests; every remaining permission still requires an explicit user response. */
 export class PolicyEngine {
-  constructor(private readonly config: SupervisorConfig) {}
-
-  async evaluate(mode: RunMode, workerRoot: string, pending: PendingRequest, allowShellRequested: boolean): Promise<PermissionPolicyDecision> {
+  async evaluate(mode: RunMode, workerRoot: string, pending: PendingRequest): Promise<PermissionPolicyDecision> {
     if (pending.kind !== "permission") return { kind: "prompt" };
     const toolKind = normalizeKind(pending.tool?.kind);
     if (!toolKind) return { kind: "deny", reason: "unknown_tool_kind" };
-    if (toolKind === "execute") {
-      // No kernel sandbox has been certified for the current Vibe release profile.
-      if (mode === "review" || !allowShellRequested || !this.config.security.allowShellInEdit) return { kind: "deny", reason: "shell_disabled" };
-      return { kind: "deny", reason: "shell_sandbox_unavailable" };
-    }
-    if (toolKind === "fetch" && !this.config.security.allowNetworkTools) return { kind: "deny", reason: "network_disabled" };
+    if (toolKind === "execute") return { kind: "deny", reason: "shell_disabled" };
+    if (toolKind === "fetch") return { kind: "deny", reason: "network_disabled" };
     if (mode === "review" && ["edit", "delete", "move"].includes(toolKind)) return { kind: "deny", reason: "review_is_read_only" };
-    if (!["read", "edit", "delete", "move", "fetch"].includes(toolKind)) return { kind: "deny", reason: "unsupported_tool_kind" };
+    if (!["read", "edit", "delete", "move"].includes(toolKind)) return { kind: "deny", reason: "unsupported_tool_kind" };
     const locations = collectLocations(pending);
     if (["read", "edit", "delete", "move"].includes(toolKind) && locations.length === 0) return { kind: "deny", reason: "missing_path_scope" };
     for (const location of locations) if (!(await containedPath(workerRoot, location))) return { kind: "deny", reason: "workspace_boundary" };
@@ -38,7 +32,7 @@ export class PolicyEngine {
     if (pending.kind !== "permission") return false;
     if (!pending.options.some((option) => option.optionId === optionId)) return false;
     const decision = normalizeKind(pending.tool?.kind);
-    if (!decision || decision === "execute" || (decision === "fetch" && !this.config.security.allowNetworkTools)) return this.offeredDenyOption(pending) === optionId;
+    if (!decision || decision === "execute" || decision === "fetch") return this.offeredDenyOption(pending) === optionId;
     return true;
   }
 }

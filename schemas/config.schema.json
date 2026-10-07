@@ -19,10 +19,10 @@
     "limits": {
       "type": "object", "additionalProperties": false,
       "properties": {
-        "review_timeout_seconds": { "type": "integer", "minimum": 30, "maximum": 7200, "default": 1800 },
-        "edit_timeout_seconds": { "type": "integer", "minimum": 30, "maximum": 7200, "default": 2400 },
-        "max_turns_review": { "type": "integer", "minimum": 1, "maximum": 50, "default": 12 },
-        "max_turns_edit": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 },
+        "review_timeout_seconds": { "type": "integer", "minimum": 30, "maximum": 7200, "default": 1800, "description": "Default timeout_seconds for a review start that omits it." },
+        "edit_timeout_seconds": { "type": "integer", "minimum": 30, "maximum": 7200, "default": 2400, "description": "Default timeout_seconds for an edit start that omits it." },
+        "max_turns_review": { "type": "integer", "minimum": 1, "maximum": 50, "default": 12, "description": "Default max_turns for a review start that omits it." },
+        "max_turns_edit": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20, "description": "Default max_turns for an edit start that omits it." },
         "max_event_bytes": { "type": "integer", "minimum": 1024, "maximum": 1073741824, "default": 52428800 },
         "max_transcript_bytes": { "type": "integer", "minimum": 1024, "maximum": 1073741824, "default": 10485760 },
         "max_artifact_bytes": { "type": "integer", "minimum": 1024, "maximum": 2147483648, "default": 104857600 },
@@ -30,17 +30,8 @@
         "mcp_result_format": { "enum": ["text", "structured", "both"], "default": "text" }
       }
     },
-    "phase1": { "type": "object", "additionalProperties": false, "properties": { "allow_temporary_trust": { "type": "boolean", "default": false } } },
-    "security": {
-      "type": "object", "additionalProperties": false,
-      "properties": {
-        "allow_shell_in_review": { "type": "boolean", "default": false },
-        "allow_shell_in_edit": { "type": "boolean", "default": false },
-        "allow_network_tools": { "type": "boolean", "default": false },
-        "log_raw_acp": { "type": "boolean", "default": false },
-        "persist_reasoning": { "const": false, "default": false }
-      }
-    },
+    "phase1": { "deprecated": true, "description": "Removed section; accepted and ignored." },
+    "security": { "deprecated": true, "description": "Removed section; accepted and ignored. Shell, network tools, raw ACP logging and reasoning persistence are always off." },
     "paths": { "type": "object", "additionalProperties": false, "properties": { "vibe": { "type": "string", "minLength": 1 }, "vibe_acp": { "type": "string", "minLength": 1 }, "data_dir": { "type": "string", "minLength": 1 } } }
   }
 }

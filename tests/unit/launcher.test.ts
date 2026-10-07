@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { chmod, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { buildVibeLaunch, PROMPT_FILE_ENV, PROMPT_FILE_NAME } from '../../src/backends/launcher.js';
+import { buildVibeLaunch, classifyStartFailure, PROMPT_FILE_ENV, PROMPT_FILE_NAME, rateLimitFailure } from '../../src/backends/launcher.js';
 import type { VibeChildProfile } from '../../src/backends/profile.js';
 
 const TASK = 'task-canary-never-in-argv-7c1d';
@@ -41,5 +41,26 @@ describe('buildVibeLaunch prompt handoff', () => {
   it('refuses to overwrite an existing prompt file', async () => {
     await buildVibeLaunch(vibe, 'programmatic', [], profile, scratch, { promptText: TASK });
     await expect(buildVibeLaunch(vibe, 'programmatic', [], profile, scratch, { promptText: 'other' })).rejects.toThrow();
+  });
+});
+
+describe('rate limit classification', () => {
+  it.each([
+    'HTTP 429 Too Many Requests',
+    'Rate limit exceeded (429): too many requests',
+    'status code: 429',
+    'API error 429',
+    'rate-limited by the provider',
+    'Too many requests, retry later'
+  ])('recognizes %s', (text) => {
+    expect(rateLimitFailure(text)).toMatchObject({ code: 'VSUP_RATE_LIMITED', retryable: true });
+  });
+
+  it.each(['processed 4290 files', 'exit code 1', 'Unauthorized (401): missing api key', 'line 1429 failed', ''])('ignores %s', (text) => {
+    expect(rateLimitFailure(text)).toBeUndefined();
+  });
+
+  it('classifies a start failure whose stderr reports a rate limit', async () => {
+    expect(await classifyStartFailure('acp', 'vibe-acp', new Error('boom'), 'error: HTTP 429 Too Many Requests')).toMatchObject({ code: 'VSUP_RATE_LIMITED', retryable: true });
   });
 });

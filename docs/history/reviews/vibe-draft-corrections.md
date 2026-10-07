@@ -1,6 +1,6 @@
 # Correction request for the Vibe integration draft
 
-Reviewed 2026-10-03 using [vibe-acp](../../skills/vibe-acp/SKILL.md). This request targets the retained draft from the temporary CLI bootstrap, not the unchanged source implementation. The draft remains rejected. No corrections have been sent to a live ACP session and no draft code has been applied.
+Reviewed 2026-10-03 using [vibe-acp](../../../skills/vibe-acp/SKILL.md). This request targets the retained draft from the temporary CLI bootstrap, not the unchanged source implementation. The draft remains rejected. No corrections have been sent to a live ACP session and no draft code has been applied.
 
 ## Verification evidence
 

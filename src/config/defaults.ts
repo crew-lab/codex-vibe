@@ -18,13 +18,5 @@ export const DEFAULT_CONFIG: SupervisorConfig = {
     maxArtifactBytes: 104_857_600,
     maxMcpResultChars: 8000,
     mcpResultFormat: "text"
-  },
-  phase1: { allowTemporaryTrust: false },
-  security: {
-    allowShellInReview: false,
-    allowShellInEdit: false,
-    allowNetworkTools: false,
-    logRawAcp: false,
-    persistReasoning: false
   }
 };

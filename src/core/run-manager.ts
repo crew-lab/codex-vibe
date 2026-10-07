@@ -33,8 +33,6 @@ interface Runtime {
   directory: string;
   task: string;
   contextFiles: string[];
-  allowShell: boolean;
-  backendPreference: "auto" | BackendKind;
   handle?: BackendRunHandle;
   backend?: SupervisorBackend;
   events: SupervisorEvent[];
@@ -86,7 +84,6 @@ type StartResult = {
   result?: Record<string, unknown>;
 };
 
-const SUMMARY_DEPRECATION = "detail=summary is deprecated; use detail=compact (default) or detail=full.";
 const START_ENVELOPE_RESERVE_CHARS = 1500;
 const STATUS_RESULT_RESERVE_CHARS = 100;
 const MAX_META_BYTES = 1_048_576;
@@ -130,7 +127,7 @@ export class RunManager {
   constructor(private readonly config: SupervisorConfig, private readonly dataDir: string, backends: readonly SupervisorBackend[] = [], preAcquiredLock?: OwnerLock) {
     this.ownerLock = preAcquiredLock;
     this.runRoot = path.join(path.resolve(dataDir), "runs");
-    this.policy = new PolicyEngine(config);
+    this.policy = new PolicyEngine();
     for (const backend of backends) this.backends.set(backend.kind, backend);
   }
 
@@ -158,7 +155,7 @@ export class RunManager {
         if (info.isSymbolicLink() || !info.isFile() || info.size > MAX_META_BYTES) continue;
         const record = runFromWire(JSON.parse(await readFile(file, "utf8")) as unknown);
         if (record.runId !== entry.name || !isPathWithinRoot(this.runRoot, path.resolve(directory))) continue;
-        const runtime = this.makeRuntime(record, directory, "", [], false, record.backend, true);
+        const runtime = this.makeRuntime(record, directory, "", [], true);
         if (record.workspaceSnapshotSha256) runtime.sourceSnapshot = record.workspaceSnapshotSha256;
         if (isTerminal(record.state)) {
           this.runs.set(record.runId, runtime); this.persisted.set(record.runId, record); continue;
@@ -180,19 +177,18 @@ export class RunManager {
 
   async reviewStart(value: ReviewStartToolInput, wait?: WaitOptions): Promise<StartResult> {
     const input = parseInput(reviewStartSchema, value);
-    const started = await this.start("review", input.task, input.cwd, input.backend, {
-      maxTurns: input.max_turns, timeoutSeconds: input.timeout_seconds,
-      contextFiles: input.context_files, allowShell: false
+    const started = await this.start("review", input.task, input.cwd, {
+      maxTurns: input.max_turns ?? this.config.limits.maxTurnsReview, timeoutSeconds: input.timeout_seconds ?? this.config.limits.reviewTimeoutSeconds,
+      contextFiles: input.context_files
     });
     return this.awaitStartOutcome(started, input.wait_seconds, wait?.signal);
   }
 
   async editStart(value: EditStartToolInput, wait?: WaitOptions): Promise<StartResult> {
     const input = parseInput(editStartSchema, value);
-    if (input.allow_shell) throw codedError("VSUP_PERMISSION_DENIED", "Shell access is unavailable because this release has no certified kernel sandbox.");
-    const started = await this.start("edit", input.task, input.cwd, input.backend, {
-      maxTurns: input.max_turns, timeoutSeconds: input.timeout_seconds,
-      baseRef: input.base_ref, allowShell: input.allow_shell
+    const started = await this.start("edit", input.task, input.cwd, {
+      maxTurns: input.max_turns ?? this.config.limits.maxTurnsEdit, timeoutSeconds: input.timeout_seconds ?? this.config.limits.editTimeoutSeconds,
+      baseRef: input.base_ref
     });
     return this.awaitStartOutcome(started, input.wait_seconds, wait?.signal);
   }
@@ -205,7 +201,7 @@ export class RunManager {
     const settled = SETTLED_RESULT_STATES.has(record.state);
     return {
       ...started, state: record.state, backend: record.backend, worker_workspace: record.workerWorkspace,
-      next_action: settled ? "Read the compact result above; call vibe_close when done." : "Call vibe_status with wait_seconds until the run needs action.",
+      next_action: this.nextAction(record.state),
       ...(record.pendingRequest ? { pending_request: pendingToWire(record.pendingRequest) } : {}),
       ...(record.error ? { error: record.error } : {}),
       ...(settled ? { result: await this.compactResult(runtime, false, START_ENVELOPE_RESERVE_CHARS) } : {})
@@ -232,7 +228,7 @@ export class RunManager {
     for (const check of [...runtime.waiters]) check();
   }
 
-  private async start(mode: RunMode, task: string, cwd: string, requested: "auto" | BackendKind, options: { maxTurns: number; timeoutSeconds: number; contextFiles?: string[]; baseRef?: string; allowShell: boolean }): Promise<StartResult> {
+  private async start(mode: RunMode, task: string, cwd: string, options: { maxTurns: number; timeoutSeconds: number; contextFiles?: string[]; baseRef?: string }): Promise<StartResult> {
     await this.ready();
     if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
     const source = await resolveCanonicalRoot(cwd, this.config.allowedWorkspaceRoots);
@@ -240,7 +236,7 @@ export class RunManager {
     const id = randomUUID();
     const now = new Date().toISOString();
     const workerWorkspace = mode === "edit" ? path.join(this.dataDir, "worktrees", id) : source;
-    const backendGuess: BackendKind = requested === "auto" ? (this.config.backend === "programmatic" ? "programmatic" : "acp") : requested;
+    const backendGuess: BackendKind = this.config.backend === "programmatic" ? "programmatic" : "acp";
     const limits: RunLimits = {
       timeoutSeconds: options.timeoutSeconds,
       maxTurns: options.maxTurns,
@@ -263,7 +259,7 @@ export class RunManager {
     };
     const slot = this.activeSlots < this.config.maxConcurrentRuns;
     if (!slot && this.pending.length >= this.config.maxQueuedRuns) throw codedError("VSUP_LIMIT_EXCEEDED", "The active and queued run limits are full.");
-    const runtime = this.makeRuntime(record, path.join(this.runRoot, id), task, options.contextFiles ?? [], options.allowShell, requested);
+    const runtime = this.makeRuntime(record, path.join(this.runRoot, id), task, options.contextFiles ?? []);
     runtime.slot = slot;
     if (mode === "edit") runtime.baseRef = options.baseRef ?? "HEAD";
     this.runs.set(id, runtime);
@@ -280,7 +276,7 @@ export class RunManager {
     return {
       run_id: id, state: runtime.record.state, backend: runtime.record.backend, mode,
       source_workspace: source, worker_workspace: workerWorkspace, created_at: now,
-      next_action: "Call vibe_status with this run_id and wait_seconds.",
+      next_action: this.nextAction(runtime.record.state),
       ...(mode === "edit" ? { base_ref: options.baseRef ?? "HEAD" } : {})
     };
   }
@@ -299,9 +295,11 @@ export class RunManager {
       ...(typeof event.data.kind === "string" ? { kind: event.data.kind } : {}),
       ...(typeof event.data.status === "string" ? { status: event.data.status } : {})
     }));
+    const nextAfterSeq = events.at(-1)?.seq ?? input.after_seq;
     const body = {
       run_id: runtime.record.runId, state: runtime.record.state, backend: runtime.record.backend,
-      last_seq: runtime.eventSeq, events,
+      last_seq: runtime.eventSeq, next_after_seq: nextAfterSeq, events,
+      next_action: this.nextAction(runtime.record.state, nextAfterSeq),
       ...(runtime.record.pendingRequest ? { pending_request: pendingToWire(runtime.record.pendingRequest) } : {}),
       ...(runtime.record.error ? { error: runtime.record.error } : {}),
       ...(runtime.storageDegraded ? { warnings: [`Run state could not be saved (${runtime.storageDegraded.code} in ${runtime.storageDegraded.directory}); progress recorded since may be lost if the supervisor restarts.`] } : {})
@@ -359,7 +357,7 @@ export class RunManager {
       if (resumed && isSessionGone(error)) {
         const reattached = await this.reattach(runtime, backend, live);
         if (reattached.handle) {
-          try { await backend.continue(reattached.handle, input.message); return { run_id: record.runId, state: record.state }; }
+          try { await backend.continue(reattached.handle, input.message); return this.continueReply(runtime); }
           catch (second) { failure = second; }
         } else if (reattached.failure) failure = Object.assign(new Error(reattached.failure.message), reattached.failure);
         else if (reattached.reason) failure = codedError("VSUP_SESSION_NOT_RESUMABLE", reattached.reason);
@@ -367,7 +365,11 @@ export class RunManager {
       if (resumed) await this.serial(runtime, () => this.settle(runtime, { state: "recoverable", error: versionFailure(failure) ?? supervisorError("VSUP_SESSION_NOT_RESUMABLE", "The backend session did not accept the continuation; a later continue can reattach.") }));
       throw failure;
     }
-    return { run_id: record.runId, state: record.state };
+    return this.continueReply(runtime);
+  }
+
+  private continueReply(runtime: Runtime): Record<string, unknown> {
+    return { run_id: runtime.record.runId, state: runtime.record.state, next_action: this.nextAction("running", runtime.eventSeq) };
   }
 
   private async recoverHandle(runtime: Runtime, backend: SupervisorBackend): Promise<RecoverOutcome> {
@@ -411,7 +413,7 @@ export class RunManager {
     if (!pending || pending.requestId !== input.request_id || pending.kind !== input.kind) throw codedError("VSUP_REQUEST_EXPIRED", "The request is no longer pending for this run.");
     if (!runtime.backend) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available to receive this response.");
     if (input.kind === "permission" && pending.kind === "permission") {
-      const policy = await this.policy.evaluate(runtime.record.mode, runtime.record.workerWorkspace, pending, runtime.allowShell);
+      const policy = await this.policy.evaluate(runtime.record.mode, runtime.record.workerWorkspace, pending);
       if (policy.kind === "deny" && this.policy.offeredDenyOption(pending) !== input.option_id) throw codedError("VSUP_PERMISSION_REQUIRED", "This permission is outside the configured safety policy.");
     }
     const response: BackendRespondInput = input.kind === "permission"
@@ -426,7 +428,7 @@ export class RunManager {
         return { requestId: input.request_id, kind: "elicitation", action: input.action, ...(input.content ? { content: input.content } : {}) };
       })();
     if (pending.kind === "permission") {
-      const latest = await this.policy.evaluate(runtime.record.mode, runtime.record.workerWorkspace, pending, runtime.allowShell);
+      const latest = await this.policy.evaluate(runtime.record.mode, runtime.record.workerWorkspace, pending);
       if (latest.kind === "deny" && this.policy.offeredDenyOption(pending) !== response.optionId) throw codedError("VSUP_PERMISSION_REQUIRED", "This permission is outside the configured safety policy.");
       if (!this.policy.userChoiceAllowed(pending, response.optionId ?? "")) throw codedError("VSUP_PERMISSION_REQUIRED", "This permission is outside the configured safety policy.");
     }
@@ -435,7 +437,7 @@ export class RunManager {
     delete runtime.record.pendingRequest;
     await this.persist(runtime);
     await this.setState(runtime, "running");
-    return { run_id: runtime.record.runId, state: runtime.record.state };
+    return { run_id: runtime.record.runId, state: runtime.record.state, next_action: this.nextAction(runtime.record.state) };
   }
 
   async result(value: ResultToolInput): Promise<Record<string, unknown>> {
@@ -445,8 +447,8 @@ export class RunManager {
     await this.flushQuietly(runtime);
     const result = record.result;
     if (input.detail === "compact") return this.compactResult(runtime, input.include_transcript);
-    const deprecation = input.detail === "summary" ? { deprecation: SUMMARY_DEPRECATION } : {};
-    if (!result) return { run_id: record.runId, state: record.state, backend: record.backend, summary: "Run has not produced a result yet.", artifacts: [], changed_files: [], warnings: [], ...(record.error ? { error: record.error } : {}), ...deprecation };
+    const next_action = this.nextAction(record.state);
+    if (!result) return { run_id: record.runId, state: record.state, backend: record.backend, summary: "Run has not produced a result yet.", artifacts: [], changed_files: [], warnings: [], ...(record.error ? { error: record.error } : {}), next_action };
     const output: Record<string, unknown> = {
       schema_version: 1, run_id: record.runId, state: record.state, backend: record.backend,
       ...(result.stopReason ? { stop_reason: result.stopReason } : {}),
@@ -454,7 +456,7 @@ export class RunManager {
       workspace: { source: record.sourceWorkspace, worker: record.workerWorkspace },
       artifacts: (result.artifacts ?? []).map(artifactToWire),
       changed_files: result.changedFiles ?? [], ...(record.usage ? { usage: usageToWire(record.usage) } : {}), warnings: result.warnings ?? [], ...(result.integrity ? { integrity: integrityToWire(result.integrity) } : {}), ...(record.error ? { error: record.error } : {}),
-      ...deprecation
+      next_action
     };
     if (input.include_transcript) {
       const transcriptPath = path.join(runtime.directory, "transcript.md");
@@ -473,14 +475,14 @@ export class RunManager {
       output.summary = "Run has not produced a result yet.";
       output.warnings = [];
       if (record.error) output.error = record.error;
-      output.next_action = nextActionFor(record.state);
+      output.next_action = this.nextAction(record.state);
       return output;
     }
     const artifacts = result.artifacts ?? []; const files = result.changedFiles ?? [];
     if (result.stopReason) output.stop_reason = result.stopReason;
     output.summary = result.summary ?? "";
     output.warnings = result.warnings ?? [];
-    output.next_action = nextActionFor(record.state);
+    output.next_action = this.nextAction(record.state);
     if (result.integrity) output.integrity = integrityToWire(result.integrity);
     if (record.error) output.error = record.error;
     if (record.mode === "edit") output.worker = record.workerWorkspace;
@@ -521,12 +523,12 @@ export class RunManager {
 
   async cancel(value: CancelToolInput): Promise<Record<string, unknown>> {
     const input = parseInput(cancelSchema, value); const runtime = this.requireRun(input.run_id);
-    if (isTerminal(runtime.record.state) || runtime.record.state === "completed" || runtime.record.state === "closing") return { run_id: input.run_id, state: runtime.record.state };
+    if (isTerminal(runtime.record.state) || runtime.record.state === "completed" || runtime.record.state === "closing") return { run_id: input.run_id, state: runtime.record.state, next_action: this.nextAction(runtime.record.state) };
     const outcome = this.requestOutcome(runtime, { state: "cancelled" });
     this.removeFromPending(runtime);
     await this.cancelBackendSession(runtime);
     await this.serial(runtime, () => this.settle(runtime, outcome));
-    return { run_id: input.run_id, state: runtime.record.state };
+    return { run_id: input.run_id, state: runtime.record.state, next_action: this.nextAction(runtime.record.state) };
   }
 
   async close(value: CloseToolInput): Promise<Record<string, unknown>> {
@@ -564,7 +566,7 @@ export class RunManager {
   }
 
   private closeOutcome(runtime: Runtime, cleanup: WorktreeCleanup): Record<string, unknown> {
-    return { run_id: runtime.record.runId, state: runtime.record.state, worktree_removed: cleanup.removed, ...(cleanup.reason ? { worktree_retained_reason: cleanup.reason } : {}) };
+    return { run_id: runtime.record.runId, state: runtime.record.state, next_action: this.nextAction(runtime.record.state), worktree_removed: cleanup.removed, ...(cleanup.reason ? { worktree_retained_reason: cleanup.reason } : {}) };
   }
 
   async runsList(): Promise<Record<string, unknown>[]> {
@@ -715,8 +717,8 @@ export class RunManager {
     await lock?.release();
   }
 
-  private makeRuntime(record: RunRecord, directory: string, task: string, contextFiles: string[], allowShell: boolean, backendPreference: "auto" | BackendKind, lazy = false): Runtime {
-    return { record, directory, task, contextFiles, allowShell, backendPreference, events: [], eventSeq: 0, eventBytes: 0, ...(lazy ? {} : { loading: Promise.resolve() }), transcript: "", serial: Promise.resolve(), slot: false, cancelRequested: false, started: false, deferredResponses: [], transcriptOverflow: false, completionOrder: 0, persistChain: Promise.resolve(), closeChain: Promise.resolve(), waiters: new Set() };
+  private makeRuntime(record: RunRecord, directory: string, task: string, contextFiles: string[], lazy = false): Runtime {
+    return { record, directory, task, contextFiles, events: [], eventSeq: 0, eventBytes: 0, ...(lazy ? {} : { loading: Promise.resolve() }), transcript: "", serial: Promise.resolve(), slot: false, cancelRequested: false, started: false, deferredResponses: [], transcriptOverflow: false, completionOrder: 0, persistChain: Promise.resolve(), closeChain: Promise.resolve(), waiters: new Set() };
   }
 
   private async loadDefaultBackends(): Promise<void> {
@@ -742,7 +744,7 @@ export class RunManager {
         await this.persist(runtime);
       }
       if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
-      const backend = await this.selectBackend(runtime.backendPreference);
+      const backend = await this.selectBackend();
       runtime.backend = backend; runtime.record.backend = backend.kind;
       await snapshotTask;
       if (snapshotTask) await this.persist(runtime);
@@ -752,7 +754,7 @@ export class RunManager {
       const input = {
         runId: runtime.record.runId, mode: runtime.record.mode, task: runtime.task,
         cwd: runtime.record.sourceWorkspace, workerWorkspace, runDirectory: runtime.directory,
-        ...(baseRef ? { baseRef } : {}), ...(contextFiles.length ? { contextFiles } : {}), allowShell: runtime.record.mode === "edit" && runtime.allowShell && this.config.security.allowShellInEdit,
+        ...(baseRef ? { baseRef } : {}), ...(contextFiles.length ? { contextFiles } : {}),
         limits
       };
       await this.setState(runtime, "negotiating");
@@ -791,9 +793,8 @@ export class RunManager {
     }
   }
 
-  private async selectBackend(preference: "auto" | BackendKind): Promise<SupervisorBackend> {
-    const configured = this.config.backend;
-    const kind = preference !== "auto" ? preference : configured !== "auto" ? configured : "auto";
+  private async selectBackend(): Promise<SupervisorBackend> {
+    const kind = this.config.backend;
     const candidates = kind === "auto" ? ["acp", "programmatic"] as const : [kind];
     if (kind !== "auto") {
       const backend = this.backends.get(kind);
@@ -888,7 +889,7 @@ export class RunManager {
       });
       return;
     }
-    const decision = await this.policy.evaluate(runtime.record.mode, runtime.record.workerWorkspace, pending, runtime.allowShell);
+    const decision = await this.policy.evaluate(runtime.record.mode, runtime.record.workerWorkspace, pending);
     if (decision.kind === "prompt") {
       await this.serial(runtime, async () => {
         if (isTerminal(runtime.record.state)) return;
@@ -1320,25 +1321,28 @@ export class RunManager {
     if (index >= 0) this.pending.splice(index, 1);
   }
 
+  private nextAction(state: RunState, afterSeq?: number): string {
+    const canContinue = this.config.backend !== "programmatic";
+    switch (state) {
+      case "completed": return canContinue ? "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done." : "Check stop_reason and warnings before trusting the result; call vibe_close when done.";
+      case "failed":
+      case "cancelled": return "Read error and warnings; call vibe_close when done.";
+      case "waiting_permission":
+      case "waiting_input": return "Answer the pending request with vibe_respond.";
+      case "recoverable": return canContinue ? "Call vibe_continue to resume the session or vibe_close to discard it." : "Call vibe_close to discard the run.";
+      case "closing":
+      case "closed": return "The run is closed; start a new run for more work.";
+      default: return afterSeq === undefined
+        ? "Call vibe_status with wait_seconds 120-300 until the run needs action."
+        : `Call vibe_status again with after_seq=${afterSeq} and wait_seconds 120-300 until the run needs action.`;
+    }
+  }
+
   private requireRun(id: string): Runtime {
     if (!UUID_V4.test(id)) throw codedError("VSUP_NOT_FOUND", "Run was not found.");
     const runtime = this.runs.get(id);
     if (!runtime) throw codedError("VSUP_NOT_FOUND", "Run was not found.");
     return runtime;
-  }
-}
-
-function nextActionFor(state: RunState): string {
-  switch (state) {
-    case "completed": return "Read the result; call vibe_continue for a follow-up or vibe_close when done.";
-    case "failed":
-    case "cancelled": return "Read error and warnings; call vibe_close when done.";
-    case "waiting_permission":
-    case "waiting_input": return "Answer the pending request with vibe_respond.";
-    case "recoverable": return "Call vibe_continue to resume the session or vibe_close to discard it.";
-    case "closing":
-    case "closed": return "The run is closed.";
-    default: return "Call vibe_status with wait_seconds until the run needs action.";
   }
 }
 

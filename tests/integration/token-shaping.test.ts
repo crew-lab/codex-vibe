@@ -352,17 +352,13 @@ describe("vibe_result detail", () => {
     } finally { await manager.shutdown(); }
   });
 
-  it("accepts the deprecated summary value and returns the full shape with a deprecation notice", async () => {
+  it("rejects the removed summary value", async () => {
     const { source, manager, backend } = await setup();
     try {
       const runId = await runningRun(manager, source);
       await backend.callbacks?.onState("completed", { result: { summary: "Review done" } });
-      expect(toolSchemas.vibe_result.parse({ run_id: runId, detail: "summary" }).detail).toBe("summary");
-      const viaSummary = await manager.result({ run_id: runId, detail: "summary" });
-      const full = await manager.result({ run_id: runId, detail: "full" });
-      expect(viaSummary).toEqual({ ...full, deprecation: "detail=summary is deprecated; use detail=compact (default) or detail=full." });
-      expect(viaSummary.workspace).toBeDefined();
-      expect(viaSummary.changed_files_total).toBeUndefined();
+      expect(() => toolSchemas.vibe_result.parse({ run_id: runId, detail: "summary" })).toThrow();
+      await expect(manager.result({ run_id: runId, detail: "summary" } as never)).rejects.toMatchObject({ code: "VSUP_INVALID_ARGUMENT" });
     } finally { await manager.shutdown(); }
   });
 
@@ -408,7 +404,7 @@ function stubManager(overrides: Partial<RunManagerTools> = {}): RunManagerTools 
     reviewStart: vi.fn(async () => ({})), editStart: vi.fn(async () => ({})),
     status: vi.fn(async () => ({ run_id: RUN_ID, state: "running", events: [{ seq: 1, type: "tool_call" }] })),
     continue: vi.fn(async () => ({})), respond: vi.fn(async () => ({})), result: vi.fn(async () => ({})),
-    cancel: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
+    close: vi.fn(async () => ({})),
     ...overrides,
   };
 }

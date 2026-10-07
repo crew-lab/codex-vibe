@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio, type StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 import type { SupervisorConfig } from '../contracts.js';
+import { APP_VERSION } from '../version.js';
 import { registerSupervisorTools, type RunManagerTools } from './tools.js';
 
 export interface McpServerOptions {
@@ -10,10 +11,11 @@ export interface McpServerOptions {
 
 export function createSupervisorMcpServer(manager: RunManagerTools, options: McpServerOptions): McpServer {
   const server = new McpServer(
-    { name: 'vibe-supervisor', version: '0.9.0-rc.5' },
+    { name: 'vibe-supervisor', version: APP_VERSION },
     { capabilities: { tools: {} } },
   );
   registerSupervisorTools(server, manager, {
+    backend: options.config.backend,
     maxResultChars: options.config.limits.maxMcpResultChars,
     resultFormat: options.config.limits.mcpResultFormat,
     onError: (error) => options.onError?.(`${error.code}: ${error.message}`),

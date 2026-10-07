@@ -11,7 +11,7 @@ import { supervisorError } from '../contracts.js';
 import type { SupervisorConfig } from '../contracts.js';
 import { spawnManaged } from '../process/managed.js';
 import { assertNoProjectVibeExtensions, createVibeChildProfile } from './profile.js';
-import { buildVibeLaunch, classifyStartFailure, describeMissing, removePromptFile, spawned, versionMismatchOnStderr } from './launcher.js';
+import { buildVibeLaunch, classifyStartFailure, describeMissing, rateLimitFailure, removePromptFile, spawned, versionMismatchOnStderr } from './launcher.js';
 import type { VibeLaunch } from './launcher.js';
 import { SUPPORTED_VIBE } from './pinned.js';
 import { executableProbeKey, ProbeCache } from './probe-cache.js';
@@ -148,7 +148,8 @@ export class ProgrammaticBackend implements SupervisorBackend {
         if (diagnosticTail) await stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: diagnosticTail } }));
         await callbacks.onState('completed', { result: { stopReason: 'end_turn', summary: opaque.summary, ...(opaque.summary.trim() ? {} : { warnings: [NO_FINAL_MESSAGE_WARNING] }) } });
       } else {
-        const mismatch = versionMismatchOnStderr(this.kind, redactSecrets(child.stderr.toString(), environmentSecrets(profile.env)));
+        const stderrText = redactSecrets(child.stderr.toString(), environmentSecrets(profile.env));
+        const mismatch = versionMismatchOnStderr(this.kind, stderrText) ?? rateLimitFailure(stderrText);
         await callbacks.onState('failed', { error: mismatch ?? supervisorError('VSUP_BACKEND_CRASHED', `Vibe exited with code ${code ?? 'null'}${signal ? ` (${signal})` : ''}`) });
       }
     }).catch(async (error: unknown) => {

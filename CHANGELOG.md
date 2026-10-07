@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+Breaking changes for coordinators (Phase C):
+
+- `vibe_cancel` is removed; `vibe_close` cancels a live run, and a closed run stays readable through `vibe_status` and `vibe_result` until retention.
+- `vibe_edit_start` no longer accepts `allow_shell`, the start tools no longer accept `backend` (the backend comes from configuration), and `vibe_result` no longer accepts `detail: "summary"`.
+- `vibe_continue` and `vibe_respond` are listed only when the configured backend is `acp` or `auto`: five tools for programmatic, seven otherwise.
+
+Surface:
+
+- Every reply carries `next_action`; `vibe_status` returns `next_after_seq`. Tool descriptions carry the wait, `stop_reason` and close guidance.
+- `limits.review_timeout_seconds`, `limits.edit_timeout_seconds`, `limits.max_turns_review` and `limits.max_turns_edit` now set the defaults when a call omits them. `phase1.*` and the `security.*` keys are removed: shell, network tools, raw ACP logging and reasoning persistence are always off, and a file that still sets them loads with a warning and is never loosened by them.
+- A Vibe rate limit (HTTP 429) is `VSUP_RATE_LIMITED` with `retryable: true`; the unused `VSUP_WORKSPACE_DENIED` code is gone.
+- New `setup --workspace <dir>` (configuration, allowlist, executable paths, doctor and a confirmed Codex registration in one command) and `allow <dir>`; `doctor --config <path>` validates a file; `test-acp` and `config validate` remain as aliases; `configure-codex` drops the `--scope` and `--path=` forms; `init` writes a minimal file; the version comes from `package.json`.
+- A tag `v<version>` builds, verifies and attaches the tarball, checksums, SBOM and acceptance report to a GitHub Release; nothing is published to npm.
+
+Documentation and package contents:
+
+- `README.md` is the single entry point; `docs/reference.md` replaces the protocol, configuration and chat-usage documents, and `docs/errors.md` is generated from the error remedies and checked by a test.
+- Dated evidence, reviews and the first ADR moved to `docs/history/`, which is not packaged. The package no longer ships `.codex-plugin/` or `.mcp.json`.
+
 ## 0.9.0-rc.5
 
 Reliability (Phase A; these changes were already in the rc.4 package but not listed there):
@@ -41,4 +62,4 @@ Refuse uncorrelated or overlapping ACP permission requests by selecting an offer
 
 ## 0.9.0-rc.1
 
-Initial private release candidate: local MCP stdio server, review/edit run lifecycle, private persistence, detached-worktree patch artifacts, CLI diagnostics/configuration, and a pinned Vibe launcher compatibility shim. Production authentication and long-run ACP gates remain unverified; see `docs/acceptance.md`.
+Initial private release candidate: local MCP stdio server, review/edit run lifecycle, private persistence, detached-worktree patch artifacts, CLI diagnostics/configuration, and a pinned Vibe launcher compatibility shim. Production authentication and long-run ACP gates remain unverified; see `docs/history/acceptance.md`.

@@ -19,13 +19,3 @@ max_transcript_bytes = 10485760
 max_artifact_bytes = 104857600
 max_mcp_result_chars = 8000
 mcp_result_format = "text"
-
-[phase1]
-allow_temporary_trust = false
-
-[security]
-allow_shell_in_review = false
-allow_shell_in_edit = false
-allow_network_tools = false
-log_raw_acp = false
-persist_reasoning = false

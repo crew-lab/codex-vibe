@@ -50,7 +50,10 @@ async function expectKeyAbsent(label: string, key: string, values: unknown[], di
   if (!directory) return;
   for (const file of await filesUnder(directory)) {
     if (file.endsWith('.py')) continue;
-    expect(await readFile(file, 'utf8'), `${label}: ${file}`).not.toContain(key);
+    let text: string;
+    try { text = await readFile(file, 'utf8'); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue; throw error; }
+    expect(text, `${label}: ${file}`).not.toContain(key);
   }
 }
 
@@ -70,7 +73,7 @@ describe('stderr tails never carry a secret', () => {
 
     const manager = new RunManager(config, data, [new AcpBackend(config, data)]);
     try {
-      const started = await manager.reviewStart({ task: 'review', cwd: source, backend: 'acp' });
+      const started = await manager.reviewStart({ task: 'review', cwd: source });
       const status = await manager.status({ run_id: started.run_id, wait_seconds: 0 });
       const failed = status.state === 'failed' ? status : await new Promise<Record<string, unknown>>((resolve) => { const poll = setInterval(() => { manager.status({ run_id: started.run_id }).then((value) => { if (value.state === 'failed') { clearInterval(poll); resolve(value); } }); }, 20); });
       expect(failed.error).toMatchObject({ code: 'VSUP_ACP_INIT_FAILED', details: { stderr_tail: expect.stringContaining('fatal: cannot authenticate') } });

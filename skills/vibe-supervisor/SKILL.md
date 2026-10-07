@@ -5,60 +5,32 @@ description: Use when a task benefits from delegating a bounded code review or i
 
 # Vibe Supervisor
 
-Use the local Vibe Supervisor tools to delegate bounded review and edit work while keeping run state and changes reviewable.
+Delegate a bounded review or edit to Vibe and keep the result reviewable. The supervisor is an application-level policy boundary, not an operating-system sandbox; never claim OS-level isolation.
 
-For coding tasks requiring verification and correction rounds, read [vibe-acp](../vibe-acp/SKILL.md) and select the ACP backend explicitly. Keep the session open through review and correction; do not stop at the first failed draft when a safe continuation is available.
+Do not use it for deployment, credential handling, shell access, or workspaces outside the configured allowed roots. For verification and correction rounds on an edit, use [vibe-acp](../vibe-acp/SKILL.md).
 
-## When To Use
+## Before starting
 
-Use this skill when the user asks for a Vibe-assisted code review or a self-contained implementation task in an allowed local workspace. Keep the user’s original goal and constraints in the Vibe task description.
+- The canonical workspace path, inside an allowed root. If it is not, tell the user to run `vibe-supervisor allow <dir>`.
+- A concise task with the expected outcome, constraints and, for an edit, the Git base and files that must not change. Never put secrets in the task.
+- If the tools are missing or a run fails at launch, run `vibe-supervisor doctor --json`; it proves local prerequisites, not hosted authentication.
 
-Do not use it for production deployment, unrestricted shell access, credential handling, or workspaces outside the configured allowed roots. Vibe Supervisor is an application-level policy boundary, not an operating-system sandbox.
+## Loop
 
-## Inputs To Collect First
+1. Start: `vibe_review_start` for a read-only review, `vibe_edit_start` for a change (`base_ref` defaults to `HEAD`; uncommitted changes are not copied). Pass `wait_seconds` 120 to 300 so the call waits until the run needs action. Limits default from the configuration; set `max_turns` or `timeout_seconds` only when the task needs it.
+2. Wait: while the run is not settled, call `vibe_status` with `wait_seconds` 120 to 300 and `after_seq` set to the previous `next_after_seq`. Do not poll turn by turn.
+3. Read: a settled `vibe_status` (or start reply) already carries the compact `result`. Call `vibe_result` only for `detail: "full"` or the transcript.
+4. Close: call `vibe_close` when finished. Pass `cleanup_worktree: true` only after the patch is verified; if cleanup is refused, keep the worktree and report `worktree_retained_reason`.
 
-- The canonical local workspace path. Confirm it is within a configured allowed root.
-- A concise task with expected outcome and relevant constraints.
-- Whether the requested work is review-only or may edit files.
-- For edits, the base Git reference and any files that must not change.
+Every reply has `next_action`; follow it.
 
-Do not put secrets, API keys, or private user data in task text. Avoid asking for context files unless they are necessary and safe to persist.
+## Check before trusting a result
 
-## Procedure
-
-### Step 1 — Check local availability
-
-Use `vibe-supervisor doctor --json` when configuring or diagnosing the local installation. Treat auth and desktop registration as unverified unless an explicit local check establishes them. Do not infer hosted auth from an environment variable.
-
-### Step 2 — Start the narrowest run
-
-For review, call `vibe_review_start` with the workspace path and a read-only task. For changes, call `vibe_edit_start` and specify the intended base reference. Keep task scope limited to the files and behavior needed. Pass `wait_seconds` (120 to 300) so the start call itself waits until the run needs action; if the run finished, the response already holds the compact result.
-
-### Step 3 — Monitor safely
-
-Do not poll turn by turn. While the run is not finished, call `vibe_status` with `wait_seconds` (up to 300) and `after_seq` set to the last event received; it returns on a new event, state change, pending request, or a state that needs you (`completed`, `failed`, `cancelled`, `waiting_permission`, `waiting_input`, `recoverable`). Continue only with actionable instructions that preserve the original scope. Permission and input requests must be answered based on the actual request details; deny unknown, incomplete, or out-of-scope requests.
-
-### Step 4 — Inspect outputs
-
-For a review, report its bounded findings and cite relevant paths. For an edit, read the compact `result` that the settling `vibe_status` (or the start call) already returned: summary, changed-file list, diff stat, `next_action`, and the patch, inline when small or at `patch_path` otherwise. Call `vibe_result` only with `detail: "full"` for digests or workspace paths, or with `include_transcript` for the transcript. Read the patch before suggesting or performing application to the source checkout. Before accepting a result, check `stop_reason` and `warnings`, not the summary: a state of `completed` with any `stop_reason` other than `end_turn` (for example `max_turn_requests`) means Vibe stopped early and the result may be partial. Report test results and any limitations separately.
-
-### Step 5 — Close the run
-
-Call `vibe_close` when the user’s task is complete. Request worktree cleanup only after the exported artifact is verified and no further inspection is needed. If cleanup refuses because the worktree changed or contains unexported files, preserve it and report the reason.
-
-## Completion Checks
-
-- The run used the intended workspace and review/edit mode.
-- Results contain no credentials or hidden reasoning.
-- Every edit is represented in a reviewable patch and changed-file record.
-- The patch and tests were inspected before reporting completion.
-- The run was closed or its remaining state and artifacts were clearly reported.
-
-If a run fails, a version is unsupported, an artifact is missing, or a permission request cannot be safely classified, stop unsafe execution and inspect the stable error and recovery options. Verification failures on a usable ACP candidate belong in the [correction loop](../vibe-acp/SKILL.md); a process failure does not authorize replaying the task or weakening policy. Do not claim OS-level isolation.
+- `stop_reason`: a `completed` run whose value is not `end_turn` (for example `max_turn_requests`) stopped early and may be partial.
+- `warnings`, and for reviews `integrity`: `changed` or `unverified` means the source workspace may have changed during the review, so inspect `changed_paths` first.
+- For edits, read the patch (inline, or at `patch_path`) and `changed_files`, not just the summary, then run the checks yourself: Vibe has no shell. The patch is never applied, committed or pushed for you; apply it only when the user authorized it.
+- On `failed`, read `error.code` in [errors](../../docs/errors.md). A process failure never authorizes replaying the task or loosening policy.
 
 ## References
 
-- [Vibe Supervisor README](../../README.md)
-- [Security model](../../docs/security.md)
-- [MCP tool reference](../../docs/protocol.md)
-- [Release acceptance status](../../docs/acceptance.md)
+- [README](../../README.md), [reference](../../docs/reference.md), [security](../../docs/security.md)

@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/server';
-import { supervisorError, type SupervisorError, type SupervisorErrorCode, type ReviewStartToolInput, type EditStartToolInput, type StatusToolInput, type ContinueToolInput, type RespondToolInput, type ResultToolInput, type CancelToolInput, type CloseToolInput, type McpResultFormat, type WaitOptions } from '../contracts.js';
+import { supervisorError, type SupervisorError, type SupervisorErrorCode, type ReviewStartToolInput, type EditStartToolInput, type StatusToolInput, type ContinueToolInput, type RespondToolInput, type ResultToolInput, type CloseToolInput, type BackendPreference, type McpResultFormat, type WaitOptions } from '../contracts.js';
 import { toolSchemas, type ToolName } from './schemas.js';
 import { sanitizeForPersistence } from '../persistence/atomic.js';
 import { describeFailure } from '../diagnostics/background.js';
@@ -12,25 +12,24 @@ export interface RunManagerTools {
   continue(input: ContinueToolInput): Promise<unknown>;
   respond(input: RespondToolInput): Promise<unknown>;
   result(input: ResultToolInput): Promise<unknown>;
-  cancel(input: CancelToolInput): Promise<unknown>;
   close(input: CloseToolInput): Promise<unknown>;
 }
 
 export interface ToolRegistrationOptions {
+  backend: BackendPreference;
   maxResultChars: number;
   resultFormat: McpResultFormat;
   onError?: (error: SupervisorError) => void;
 }
 
 const DEFINITIONS: Record<ToolName, { title: string; description: string; readOnly: boolean; destructive: boolean }> = {
-  vibe_review_start: { title: 'Start read-only Vibe review', description: 'Start an independent review run in the selected workspace. Set wait_seconds to wait for the run to need action.', readOnly: false, destructive: false },
-  vibe_edit_start: { title: 'Start isolated Vibe edit', description: 'Start an edit run in a detached Git worktree. Review its patch before applying it. Set wait_seconds to wait for the run to need action.', readOnly: false, destructive: true },
-  vibe_status: { title: 'Get Vibe run status', description: 'Read run state and recent normalized events; a finished run includes its compact result. Set wait_seconds to block until something changes instead of polling.', readOnly: true, destructive: false },
-  vibe_continue: { title: 'Continue Vibe run', description: 'Send a follow-up instruction to an active run.', readOnly: false, destructive: false },
-  vibe_respond: { title: 'Respond to Vibe request', description: 'Answer a pending permission or input request.', readOnly: false, destructive: false },
-  vibe_result: { title: 'Get Vibe result', description: 'Read the full record with detail=full, or the transcript; a finished run already carries its compact result in vibe_status.', readOnly: true, destructive: false },
-  vibe_cancel: { title: 'Cancel Vibe run', description: 'Request cancellation of an active run.', readOnly: false, destructive: false },
-  vibe_close: { title: 'Close Vibe run', description: 'Close a run and optionally remove its verified worktree.', readOnly: false, destructive: true },
+  vibe_review_start: { title: 'Start read-only Vibe review', description: 'Start an independent read-only review in a workspace under an allowed root. Poll vibe_status with wait_seconds 120-300 instead of polling fast, or set wait_seconds here to wait for the run to need action. Check stop_reason and warnings before trusting a completed result. Call vibe_close when done.', readOnly: false, destructive: false },
+  vibe_edit_start: { title: 'Start isolated Vibe edit', description: 'Start an edit run in a detached Git worktree. Its patch is never applied automatically: review it, then apply it yourself. Poll vibe_status with wait_seconds 120-300, or set wait_seconds here. Check stop_reason and warnings before trusting a completed result. Call vibe_close when done.', readOnly: false, destructive: true },
+  vibe_status: { title: 'Get Vibe run status', description: 'Read run state and recent events; wait_seconds 120-300 blocks until something changes. Pass next_after_seq back as after_seq to page events. A finished run includes its compact result: check stop_reason and warnings before trusting completed.', readOnly: true, destructive: false },
+  vibe_continue: { title: 'Continue Vibe run', description: 'Send a follow-up instruction to a completed or ready run, then poll vibe_status with wait_seconds 120-300.', readOnly: false, destructive: false },
+  vibe_respond: { title: 'Respond to Vibe request', description: 'Answer a pending permission or input request shown by vibe_status, using an option_id it offered.', readOnly: false, destructive: false },
+  vibe_result: { title: 'Get Vibe result', description: 'Read the full record with detail=full, or the transcript; a finished run already carries its compact result in vibe_status. Check stop_reason and warnings before trusting completed.', readOnly: true, destructive: false },
+  vibe_close: { title: 'Close Vibe run', description: 'Cancel the run if it is still live and close it; call when done. A closed run stays readable through vibe_status and vibe_result until retention. cleanup_worktree removes a verified edit worktree.', readOnly: false, destructive: true },
 };
 
 function normalizeError(error: unknown): SupervisorError {
@@ -168,10 +167,11 @@ export function registerSupervisorTools(server: McpServer, manager: RunManagerTo
     vibe_continue: (input) => manager.continue(input as unknown as ContinueToolInput),
     vibe_respond: (input) => manager.respond(input as unknown as RespondToolInput),
     vibe_result: (input) => manager.result(input as unknown as ResultToolInput),
-    vibe_cancel: (input) => manager.cancel(input as unknown as CancelToolInput),
     vibe_close: (input) => manager.close(input as unknown as CloseToolInput),
   };
+  const interactive = options.backend !== 'programmatic';
   for (const name of Object.keys(toolSchemas) as ToolName[]) {
+    if (!interactive && (name === 'vibe_continue' || name === 'vibe_respond')) continue;
     const definition = DEFINITIONS[name];
     server.registerTool(name, {
       title: definition.title,
