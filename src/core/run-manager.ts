@@ -22,7 +22,7 @@ import { SUPPORTED_VIBE } from "../backends/pinned.js";
 import { interpreterMissingMessage } from "../backends/launcher.js";
 import { eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
-import { changedSinceSnapshot, snapshotWorkspace } from "./workspace-snapshot.js";
+import { changedSinceSnapshot, parseManifest, serializeManifest, snapshotWorkspace } from "./workspace-snapshot.js";
 import type { ManifestEntry } from "./workspace-snapshot.js";
 import { acquireOwnerLock } from "./owner-lock.js";
 import type { OwnerLock } from "./owner-lock.js";
@@ -59,6 +59,9 @@ interface Runtime {
   requestedOutcome?: RequestedOutcome;
   storageDegraded?: { code: string; directory: string };
   storageHealed?: { meta: boolean; event: boolean };
+  reportedEventFailures?: Set<string>;
+  manifestWrite?: Promise<void>;
+  logUnavailable?: { kind: "content" | "filesystem"; reason: string; code?: string };
   completionOrder: number;
   persistChain: Promise<void>;
   closeChain: Promise<void>;
@@ -87,6 +90,8 @@ const SUMMARY_DEPRECATION = "detail=summary is deprecated; use detail=compact (d
 const START_ENVELOPE_RESERVE_CHARS = 1500;
 const STATUS_RESULT_RESERVE_CHARS = 100;
 const MAX_META_BYTES = 1_048_576;
+const MAX_MANIFEST_BYTES = 192 * 1024 * 1024;
+const LAUNCH_MANIFEST_FILE = "launch-manifest.json";
 const MAX_INLINE_TRANSCRIPT = 32_768;
 const COMPACT_TRANSCRIPT_CHARS = 4000;
 const COMPACT_PATCH_BYTES = 4000;
@@ -283,6 +288,7 @@ export class RunManager {
   async status(value: StatusToolInput, wait?: WaitOptions): Promise<Record<string, unknown>> {
     const input = parseInput(statusSchema, value); const runtime = this.requireRun(input.run_id);
     await this.ensureLoaded(runtime);
+    this.assertLogReadable(runtime);
     if (runtime.storageDegraded) await this.flushQuietly(runtime);
     const initialState = runtime.record.state;
     await this.waitUntil(runtime, () => runtime.eventSeq > input.after_seq || runtime.record.state !== initialState || runtime.record.pendingRequest !== undefined || COORDINATOR_ACTION_STATES.has(runtime.record.state), input.wait_seconds, wait?.signal);
@@ -307,6 +313,7 @@ export class RunManager {
   async continue(value: ContinueToolInput): Promise<Record<string, unknown>> {
     const input = parseInput(continueSchema, value); const runtime = this.requireRun(input.run_id);
     await this.ensureLoaded(runtime);
+    this.assertLogReadable(runtime);
     const record = runtime.record;
     if (!runtime.backend) {
       const backend = this.backends.get(record.backend);
@@ -325,7 +332,11 @@ export class RunManager {
       runtime.slot = true; this.activeSlots += 1;
       if (!runtime.handle) {
         const recovered = await this.recoverHandle(runtime, backend);
-        if (!recovered.handle) { await this.rejectContinuation(runtime, recovered.reason); throw codedError("VSUP_SESSION_NOT_RESUMABLE", recovered.reason ?? NO_SESSION_MESSAGE); }
+        if (!recovered.handle) {
+          const rejection = recovered.failure ?? supervisorError("VSUP_SESSION_NOT_RESUMABLE", recovered.reason ?? NO_SESSION_MESSAGE);
+          await this.rejectContinuation(runtime, rejection);
+          throw Object.assign(new Error(rejection.message), rejection);
+        }
         if (this.stopping || !CONTINUABLE_STATES.has(record.state)) {
           await backend.close(recovered.handle).catch(() => undefined);
           this.releaseSlot(runtime);
@@ -350,24 +361,27 @@ export class RunManager {
         if (reattached.handle) {
           try { await backend.continue(reattached.handle, input.message); return { run_id: record.runId, state: record.state }; }
           catch (second) { failure = second; }
-        } else if (reattached.reason) failure = codedError("VSUP_SESSION_NOT_RESUMABLE", reattached.reason);
+        } else if (reattached.failure) failure = Object.assign(new Error(reattached.failure.message), reattached.failure);
+        else if (reattached.reason) failure = codedError("VSUP_SESSION_NOT_RESUMABLE", reattached.reason);
       }
-      if (resumed) await this.serial(runtime, () => this.settle(runtime, { state: "recoverable", error: supervisorError("VSUP_SESSION_NOT_RESUMABLE", "The backend session did not accept the continuation; a later continue can reattach.") }));
+      if (resumed) await this.serial(runtime, () => this.settle(runtime, { state: "recoverable", error: versionFailure(failure) ?? supervisorError("VSUP_SESSION_NOT_RESUMABLE", "The backend session did not accept the continuation; a later continue can reattach.") }));
       throw failure;
     }
     return { run_id: record.runId, state: record.state };
   }
 
-  private async recoverHandle(runtime: Runtime, backend: SupervisorBackend): Promise<{ handle?: BackendRunHandle; reason?: string }> {
+  private async recoverHandle(runtime: Runtime, backend: SupervisorBackend): Promise<RecoverOutcome> {
     try {
       const handle = await backend.recover(runtime.record, this.callbacks(runtime));
       return handle ? { handle } : {};
     } catch (error) {
+      const version = versionFailure(error);
+      if (version) return { failure: version };
       return isSessionGone(error) ? { reason: (error as Error).message } : {};
     }
   }
 
-  private async reattach(runtime: Runtime, backend: SupervisorBackend, dead: BackendRunHandle): Promise<{ handle?: BackendRunHandle; reason?: string }> {
+  private async reattach(runtime: Runtime, backend: SupervisorBackend, dead: BackendRunHandle): Promise<RecoverOutcome> {
     if (runtime.handle === dead) delete runtime.handle;
     await backend.close(dead).catch(() => undefined);
     const recovered = await this.recoverHandle(runtime, backend);
@@ -380,11 +394,11 @@ export class RunManager {
     return recovered;
   }
 
-  private async rejectContinuation(runtime: Runtime, reason = NO_SESSION_MESSAGE): Promise<void> {
+  private async rejectContinuation(runtime: Runtime, error: SupervisorError): Promise<void> {
     this.releaseSlot(runtime);
     const record = runtime.record;
     if (record.state === "completed") return;
-    record.error = supervisorError("VSUP_SESSION_NOT_RESUMABLE", reason);
+    record.error = error;
     record.updatedAt = new Date().toISOString();
     try { await this.persist(runtime); }
     catch (error) { if (!this.degrade(runtime, error)) this.reportBackground(runtime, "continue-rejection", error); }
@@ -427,6 +441,7 @@ export class RunManager {
   async result(value: ResultToolInput): Promise<Record<string, unknown>> {
     const input = parseInput(resultSchema, value); const runtime = this.requireRun(input.run_id); const record = runtime.record;
     await this.ensureLoaded(runtime);
+    this.assertLogReadable(runtime);
     await this.flushQuietly(runtime);
     const result = record.result;
     if (input.detail === "compact") return this.compactResult(runtime, input.include_transcript);
@@ -609,7 +624,8 @@ export class RunManager {
       delete record.worktree;
       await this.persist(runtime).catch((error: unknown) => this.degrade(runtime, error));
     }
-    if (Date.parse(record.updatedAt) > cutoff || record.worktree) return false;
+    const completedCutoff = Math.min(cutoff, Date.now() - DAY_MS);
+    if (Date.parse(record.updatedAt) > (completed ? completedCutoff : cutoff) || record.worktree) return false;
     if (record.state === "failed" && this.config.retention.preserveFailedRuns) return false;
     if (completed) {
       await this.close({ run_id: record.runId });
@@ -643,6 +659,7 @@ export class RunManager {
       try { await runtime.eventLog?.flush(); } catch (error) { this.noteEventFailure(runtime, error); }
       runtime.eventLog?.dispose();
     }));
+    await Promise.all([...this.runs.values()].map((runtime) => runtime.manifestWrite));
     await this.releaseOwnerLock();
   }
 
@@ -654,16 +671,27 @@ export class RunManager {
   private async loadRuntime(runtime: Runtime): Promise<void> {
     const record = runtime.record;
     const eventsPath = path.join(runtime.directory, "events.ndjson");
-    const wireEvents = await readNdjsonRecovering<unknown>(eventsPath, { maxBytes: record.limits.maxEventBytes, truncatePartial: true });
-    const events = wireEvents.map(eventFromWire).filter((event, index) => event.runId === record.runId && event.seq === index + 1);
+    let events: SupervisorEvent[] = [];
+    try {
+      const wireEvents = await readNdjsonRecovering<unknown>(eventsPath, { maxBytes: record.limits.maxEventBytes, truncatePartial: true });
+      events = wireEvents.map(eventFromWire).filter((event, index) => event.runId === record.runId && event.seq === index + 1);
+    } catch (error) { runtime.logUnavailable = describeUnreadableLog(error); }
     let transcript = "";
     try {
       const transcriptPath = path.join(runtime.directory, "transcript.md");
       const transcriptInfo = await lstat(transcriptPath);
       if (transcriptInfo.isFile() && !transcriptInfo.isSymbolicLink() && transcriptInfo.size <= record.limits.maxTranscriptBytes) transcript = await readFile(transcriptPath, "utf8");
     } catch {}
-    const eventBytes = await lstat(eventsPath).then((info) => info.size, () => 0);
+    const eventBytes = runtime.logUnavailable ? 0 : await lstat(eventsPath).then((info) => info.size, () => 0);
     runtime.events = events; runtime.eventSeq = events.at(-1)?.seq ?? 0; runtime.eventBytes = eventBytes; runtime.transcript = transcript;
+  }
+
+  private assertLogReadable(runtime: Runtime): void {
+    const unavailable = runtime.logUnavailable;
+    if (!unavailable) return;
+    const message = `The event log of this run cannot be read (${unavailable.reason}); the file was left untouched. Close the run to discard it.`;
+    if (unavailable.kind === "filesystem") throw codedError("VSUP_STORAGE_ERROR", message, { code: unavailable.code ?? "UNKNOWN", directory: runtime.directory });
+    throw codedError("VSUP_ARTIFACT_ERROR", message);
   }
 
   private logFor(runtime: Runtime): EventLog {
@@ -756,6 +784,7 @@ export class RunManager {
       const snapshot = await snapshotWorkspace(runtime.record.sourceWorkspace);
       runtime.sourceSnapshot = snapshot.sha256; runtime.sourceManifest = snapshot.manifest;
       runtime.record.workspaceSnapshotSha256 = snapshot.sha256;
+      runtime.manifestWrite = this.atomicWriteText(path.join(runtime.directory, LAUNCH_MANIFEST_FILE), serializeManifest(snapshot)).catch((error: unknown) => reportBackgroundFailure("launch-manifest", error));
     } catch {
       delete runtime.sourceSnapshot; delete runtime.sourceManifest; delete runtime.record.workspaceSnapshotSha256;
       runtime.snapshotFailed = true;
@@ -799,7 +828,7 @@ export class RunManager {
   private async appendEvent(runtime: Runtime, event: Parameters<BackendCallbacks["onEvent"]>[0], allowTerminal = false): Promise<void> {
     if (isTerminal(runtime.record.state) && !allowTerminal) return;
     await this.ensureLoaded(runtime);
-    if (isTerminal(runtime.record.state) && !allowTerminal) return;
+    if (runtime.logUnavailable || (isTerminal(runtime.record.state) && !allowTerminal)) return;
     const type = redactSecrets(String(event.type).slice(0, 128));
     let data = event.data ?? {};
     if (/reasoning|thought/i.test(type)) {
@@ -826,14 +855,14 @@ export class RunManager {
       severity: event.severity,
       data
     };
-    try { this.logFor(runtime).append(eventToWire(full)); }
+    try { if (!this.logFor(runtime).append(eventToWire(full))) return; }
     catch (error) {
       if (error instanceof RangeError) {
         runtime.cancelRequested = true;
         queueMicrotask(() => { this.fail(runtime, supervisorError("VSUP_OUTPUT_LIMIT", "The event log reached its configured byte limit.")).catch((failure: unknown) => this.reportBackground(runtime, "output-limit", failure)); });
         return;
       }
-      throw asStorageError(error, runtime.directory);
+      throw asStorageError(error, runtime.directory, { eventLog: true });
     }
     runtime.events.push(full); runtime.eventSeq = full.seq;
     this.notify(runtime);
@@ -992,7 +1021,12 @@ export class RunManager {
   }
 
   private noteEventFailure(runtime: Runtime, error: unknown): void {
-    if (!this.degrade(runtime, asStorageError(error, runtime.directory))) this.reportBackground(runtime, "event", error);
+    if (this.degrade(runtime, asStorageError(error, runtime.directory, { eventLog: true }))) return;
+    const description = describeFailure(error);
+    runtime.reportedEventFailures ??= new Set();
+    if (runtime.reportedEventFailures.has(description)) return;
+    runtime.reportedEventFailures.add(description);
+    reportBackgroundFailure("event", error);
   }
 
   private degrade(runtime: Runtime, error: unknown): boolean {
@@ -1054,8 +1088,11 @@ export class RunManager {
     }
     await this.atomicWriteText(path.join(runtime.directory, "transcript.md"), runtime.transcript.slice(0, runtime.record.limits.maxTranscriptBytes));
     const eventsPath = path.join(runtime.directory, "events.ndjson");
-    await runtime.eventLog?.flush();
-    try { await lstat(eventsPath); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") await this.atomicWriteText(eventsPath, ""); else throw error; }
+    try { await runtime.eventLog?.flush(); } catch (error) { throw asStorageError(error, runtime.directory, { eventLog: true }); }
+    if (!runtime.logUnavailable) try {
+      const info = await lstat(eventsPath);
+      if (!info.isFile()) throw asStorageError(Object.assign(new Error("Unsafe event log"), { code: info.isSymbolicLink() ? "ELOOP" : info.isDirectory() ? "EISDIR" : "ENOTSUP", path: eventsPath }), runtime.directory, { eventLog: true });
+    } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") await this.atomicWriteText(eventsPath, ""); else throw error; }
     const artifacts: NonNullable<RunRecord["result"]>["artifacts"] = [];
     if (patchInfo) {
       artifacts.push(await describeArtifact("diff.patch", patchInfo.patchPath, "text/x-diff"));
@@ -1064,7 +1101,7 @@ export class RunManager {
       artifacts.push(await describeArtifact("changed-files.json", changedPath, "application/json"));
     }
     artifacts.push(await describeArtifact("transcript.md", path.join(runtime.directory, "transcript.md"), "text/markdown"));
-    artifacts.push(await describeArtifact("events.ndjson", path.join(runtime.directory, "events.ndjson"), "application/x-ndjson"));
+    if (!runtime.logUnavailable) artifacts.push(await describeArtifact("events.ndjson", path.join(runtime.directory, "events.ndjson"), "application/x-ndjson"));
     const artifactBytes = artifacts.reduce((sum, artifact) => sum + artifact.bytes, 0);
     if (artifactBytes > runtime.record.limits.maxArtifactBytes) throw codedError("VSUP_OUTPUT_LIMIT", "Run artifacts exceeded the configured byte limit.");
     const stopReason = runtime.record.result?.stopReason;
@@ -1072,6 +1109,7 @@ export class RunManager {
     const summary = hasText(recordedSummary) ? recordedSummary : resultState === "completed" ? completedSummary(stopReason) : "Vibe run ended before normal completion.";
     const stopWarning = resultState === "completed" ? stopReasonWarning(stopReason) : undefined;
     const carriedWarnings = withoutStopReasonWarnings(runtime.record.result?.warnings ?? []);
+    if (runtime.logUnavailable) carriedWarnings.push(`${UNREADABLE_LOG_WARNING} (${runtime.logUnavailable.reason})`);
     runtime.record.result = {
       ...(stopReason ? { stopReason } : {}),
       summary,
@@ -1166,7 +1204,7 @@ export class RunManager {
 
   private async persist(runtime: Runtime): Promise<void> {
     try { await runtime.eventLog?.flush(); }
-    catch (error) { if (!this.degrade(runtime, asStorageError(error, runtime.directory))) throw error; }
+    catch (error) { if (!this.degrade(runtime, asStorageError(error, runtime.directory, { eventLog: true }))) throw error; }
     const write = runtime.persistChain.then(() => atomicWriteJson(path.join(runtime.directory, "meta.json"), runToWire(runtime.record)));
     runtime.persistChain = write.then(() => undefined, () => undefined);
     try { await write; }
@@ -1222,23 +1260,31 @@ export class RunManager {
     runtime.timer.unref?.();
   }
 
+  private async loadLaunchManifest(runtime: Runtime): Promise<void> {
+    const text = await this.readArtifactText(runtime, path.join(runtime.directory, LAUNCH_MANIFEST_FILE), MAX_MANIFEST_BYTES);
+    const snapshot = text === undefined ? undefined : parseManifest(text);
+    if (snapshot && snapshot.sha256 === runtime.sourceSnapshot) runtime.sourceManifest = snapshot.manifest;
+  }
+
   private async assessReviewIntegrity(runtime: Runtime, outcome: SettleOutcome["state"]): Promise<void> {
     if (runtime.record.mode !== "review" || !runtime.record.launchedAt || runtime.record.result?.integrity) return;
     if (outcome !== "completed" && !runtime.sourceSnapshot && !runtime.snapshotFailed) return;
     const writeToolObserved = runtime.events.some(isWriteEvidence);
     let integrity: ReviewIntegrity;
+    if (runtime.sourceSnapshot && !runtime.sourceManifest) await this.loadLaunchManifest(runtime);
     if (!runtime.sourceSnapshot) {
       integrity = { status: "unverified", writeToolObserved, reason: runtime.snapshotFailed ? "The launch snapshot failed: the workspace is too large or unreadable." : "No launch snapshot is available for this run." };
+    } else if (!runtime.sourceManifest) {
+      integrity = { status: "unverified", writeToolObserved, reason: "The launch manifest was not saved or could not be read (the run predates manifest persistence or the file is damaged), so the source workspace cannot be compared after the restart." };
     } else {
       try {
-        const manifest = runtime.sourceManifest;
-        const paths = manifest ? await changedSinceSnapshot(runtime.record.sourceWorkspace, manifest) : (await snapshotWorkspace(runtime.record.sourceWorkspace)).sha256 === runtime.sourceSnapshot ? [] : undefined;
-        if (paths?.length === 0) integrity = { status: "verified", writeToolObserved };
+        const paths = await changedSinceSnapshot(runtime.record.sourceWorkspace, runtime.sourceManifest);
+        if (paths.length === 0) integrity = { status: "verified", writeToolObserved };
         else {
           integrity = {
             status: "changed", writeToolObserved,
-            changedPaths: (paths ?? []).slice(0, MAX_INTEGRITY_PATHS), changedPathsTotal: (paths ?? []).length,
-            reason: paths ? `The source workspace content changed between the launch snapshot and the end of the run (${paths.length} paths).` : "The source workspace content changed, but the launch manifest is unavailable so the paths are unknown."
+            changedPaths: paths.slice(0, MAX_INTEGRITY_PATHS), changedPathsTotal: paths.length,
+            reason: `The source workspace content changed between the launch snapshot and the end of the run (${paths.length} paths).`
           };
         }
       } catch {
@@ -1347,6 +1393,14 @@ function backendUnavailableError(failures: ProbeFailure[]): Error {
   return codedError("VSUP_BACKEND_UNAVAILABLE", "No configured backend passed its availability probe.", { candidates });
 }
 
+function describeUnreadableLog(error: unknown): NonNullable<Runtime["logUnavailable"]> {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  if (typeof code === "string" && !code.startsWith("VSUP_")) return { kind: "filesystem", code, reason: `file system error ${code}` };
+  if (error instanceof RangeError) return { kind: "content", reason: "the file is larger than the configured event byte limit" };
+  if (error instanceof SyntaxError) return { kind: "content", reason: "an event record is not valid JSON" };
+  return { kind: "content", reason: "the file is not a valid event log" };
+}
+
 function hasReusableSession(record: RunRecord): boolean {
   return record.acp?.sessionId !== undefined && record.acp.capabilities?.loadSession === true;
 }
@@ -1361,6 +1415,12 @@ function parseInput<T>(schema: { parse(value: unknown): T }, value: unknown): T 
 function codedError(code: SupervisorErrorCode, message: string, details?: Record<string, unknown>): Error & { code: SupervisorErrorCode; remediation: string; retryable: boolean } {
   const normalized = supervisorError(code, message, details);
   return Object.assign(new Error(message), normalized);
+}
+
+type RecoverOutcome = { handle?: BackendRunHandle; reason?: string; failure?: SupervisorError };
+
+function versionFailure(error: unknown): SupervisorError | undefined {
+  return isCodedFailure(error) && (error as { code: string }).code === "VSUP_VIBE_VERSION_UNSUPPORTED" ? normalizeError(error) : undefined;
 }
 
 function isSessionGone(error: unknown): boolean {
@@ -1405,6 +1465,7 @@ async function describeArtifact(name: string, file: string, mediaType: string): 
   return { name, path: file, sha256: createHash("sha256").update(bytes).digest("hex"), bytes: bytes.byteLength, mediaType } as NonNullable<RunRecord["result"]>["artifacts"] extends (infer A)[] | undefined ? A : never;
 }
 
+const UNREADABLE_LOG_WARNING = "The event log of this run could not be read and was left untouched; it is not included in the artifacts";
 const ARTIFACTS_INCOMPLETE_WARNING = "Run artifacts could not be finalized; the listed artifacts may be missing or incomplete.";
 const RESTARTED_WARNING = "The supervisor restarted before this run finished; artifacts were not re-exported and may be incomplete.";
 const CHANGED_WITH_WRITE_WARNING = "Possible read-only boundary violation: the review worker issued a write-capable tool call and the source workspace changed. Inspect the changed paths before trusting the review.";

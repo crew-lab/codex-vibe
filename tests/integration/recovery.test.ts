@@ -42,6 +42,13 @@ class FakeAcpBackend extends AcpBackend {
   }
 }
 
+class ShimVersionBackend extends FakeAcpBackend {
+  constructor(dataDir: string, allowedWorkspaceRoots: string[], private readonly script: string) { super('normal', dataDir, allowedWorkspaceRoots); }
+  protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {
+    return { command: process.execPath, args: [this.script], env: { ...profile.env } };
+  }
+}
+
 class FakeBackend implements SupervisorBackend {
   recoverCalls = 0;
   constructor(readonly kind: 'acp' | 'programmatic' = 'programmatic') {}
@@ -262,5 +269,48 @@ describe('restart recovery', () => {
       expect(livePids).toEqual([]);
       expect(await second.status({ run_id: started.run_id })).toMatchObject({ state: 'recoverable' });
     } finally { await first.shutdown(); await second.shutdown(); }
+  }, 30_000);
+
+  const completedThenRecoverable = async (source: string, data: string, pidDir: string, config: typeof DEFAULT_CONFIG & { backend: 'acp' }) => {
+    const firstBackend = new FakeAcpBackend('normal', data, [source]); firstBackend.pidDir = pidDir;
+    const first = new RunManager(config, data, [firstBackend]);
+    const started = await first.reviewStart({ task: 'review', cwd: source });
+    await waitFor(() => first.status({ run_id: started.run_id }), (value) => value.state === 'completed' || value.state === 'failed');
+    await first.shutdown();
+    const metaPath = path.join(data, 'runs', started.run_id, 'meta.json');
+    const meta = JSON.parse(await readFile(metaPath, 'utf8')) as Record<string, unknown>;
+    meta.state = 'running'; delete meta.finished_at; delete meta.result;
+    await writeFile(metaPath, JSON.stringify(meta));
+    return started.run_id;
+  };
+
+  it('reports and records the version rejection when a continuation meets an upgraded Vibe at initialize', async () => {
+    const { source, data, pidDir } = await makeParent();
+    const config = { ...DEFAULT_CONFIG, backend: 'acp' as const, allowedWorkspaceRoots: [source] };
+    const runId = await completedThenRecoverable(source, data, pidDir, config);
+    const upgraded = new FakeAcpBackend('wrong-version', data, [source]); upgraded.pidDir = pidDir;
+    const manager = new RunManager(config, data, [upgraded]);
+    try {
+      await manager.initialize();
+      const failure = await manager.continue({ run_id: runId, message: 'again' }).then(() => undefined, (error: unknown) => error as { code: string; message: string });
+      expect(failure).toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED', message: expect.stringMatching(/2\.26\.0.*2\.25\.8/) });
+      expect(activeSlots(manager)).toBe(0);
+      expect(await manager.status({ run_id: runId })).toMatchObject({ state: 'recoverable', error: { code: 'VSUP_VIBE_VERSION_UNSUPPORTED', message: expect.stringMatching(/2\.26\.0.*2\.25\.8/) } });
+      expect(await readMeta(data, runId)).toMatchObject({ error: { code: 'VSUP_VIBE_VERSION_UNSUPPORTED' } });
+    } finally { await manager.shutdown(); }
+  }, 30_000);
+
+  it('maps the shim version message on stderr to the version code when a continuation reloads the session', async () => {
+    const { parent, source, data, pidDir } = await makeParent();
+    const config = { ...DEFAULT_CONFIG, backend: 'acp' as const, allowedWorkspaceRoots: [source] };
+    const runId = await completedThenRecoverable(source, data, pidDir, config);
+    const script = path.join(parent, 'shim-child.mjs');
+    await writeFile(script, "process.stderr.write('Vibe privacy shim supports exactly 2.25.8; found 2.26.0\\n'); process.exit(1);\n");
+    const manager = new RunManager(config, data, [new ShimVersionBackend(data, [source], script)]);
+    try {
+      await manager.initialize();
+      await expect(manager.continue({ run_id: runId, message: 'again' })).rejects.toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED', message: expect.stringMatching(/2\.26\.0.*2\.25\.8/) });
+      expect(await manager.status({ run_id: runId })).toMatchObject({ state: 'recoverable', error: { code: 'VSUP_VIBE_VERSION_UNSUPPORTED' } });
+    } finally { await manager.shutdown(); }
   }, 30_000);
 });

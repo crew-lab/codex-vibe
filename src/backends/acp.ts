@@ -25,6 +25,7 @@ const PROTOCOL_VERSION = ACP_PROTOCOL_VERSION;
 const MAX_WIRE_BYTES = 1024 * 1024;
 const CANCEL_TURN_GRACE_MS = 500;
 const DEFAULT_RECOVER_TIMEOUT_MS = 30_000;
+const RECOVER_STDERR_CHARS = 4096;
 const EXITED_MID_TURN = 'Vibe ACP exited before the turn finished.';
 
 function interpreterReason(launcher: string, interpreter: unknown): string {
@@ -488,10 +489,11 @@ export class AcpBackend implements SupervisorBackend {
     catch { return undefined; }
     const redactor = new StreamingRedactor(environmentSecrets(launch.env));
     let eventChain = Promise.resolve();
+    let stderrTail = '';
     const process = spawnManaged(launch.command, launch.args, {
       cwd: record.workerWorkspace, env: launch.env, forwardEnv: Object.keys(launch.env), stdio: ['pipe', 'pipe', 'pipe'],
       maxStdoutBytes: record.limits.maxTranscriptBytes, maxStderrBytes: record.limits.maxEventBytes,
-      onStderr: (chunk) => { const safe = redactor.push(chunk); if (safe) eventChain = eventChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: safe } })).then(() => undefined); }
+      onStderr: (chunk) => { stderrTail = `${stderrTail}${chunk}`.slice(-RECOVER_STDERR_CHARS); const safe = redactor.push(chunk); if (safe) eventChain = eventChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: safe } })).then(() => undefined); }
     });
     const state: AcpState = { process, home: profile.home, vibeHome: profile.vibeHome, ready: deferred<BackendStartResult>(), commands: makeQueue(), connected: Promise.resolve(), closed: false, exited: false, readySettled: false, sessionReady: false, failureReported: false, released: false, toolCalls: new Map(), callbacks, input, sessionId: acp.sessionId, recovering: true, suppressReplay: true, turnActive: false };
     state.connected = this.connect(state, launch.env.MISTRAL_API_KEY);
@@ -524,7 +526,12 @@ export class AcpBackend implements SupervisorBackend {
     const expiry = new Promise<typeof timedOut>((resolve) => { timer = setTimeout(() => resolve(timedOut), this.recoverTimeoutMs); });
     let outcome: BackendStartResult | typeof timedOut;
     try { outcome = await Promise.race([state.ready.promise, expiry]); }
-    catch { return undefined; }
+    catch (error) {
+      await process.done.catch(() => undefined);
+      const cause = await classifyStartFailure('acp', this.executable(), error, stderrTail).catch(() => undefined);
+      if (isCodedError(cause) && cause.code === 'VSUP_VIBE_VERSION_UNSUPPORTED') throw cause;
+      return undefined;
+    }
     finally { if (timer) clearTimeout(timer); }
     if (outcome !== timedOut) return outcome.handle;
     state.released = true; state.closed = true; state.failureReported = true; state.readySettled = true;

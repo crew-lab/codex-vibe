@@ -49,3 +49,21 @@ describe('storage error mapping', () => {
     expect(storageErrorDetails(plain)).toBeUndefined();
   });
 });
+
+describe('event log structural faults', () => {
+  it.each([
+    ['ENOENT', /disappeared/],
+    ['EISDIR', /directory instead of a regular file/],
+    ['ELOOP', /symbolic link/],
+    ['ENOTDIR', /not a directory/],
+  ])('maps %s to an accurate VSUP_STORAGE_ERROR only for the event log', (code, pattern) => {
+    const error = Object.assign(new Error('x'), { code, path: '/data/runs/abc/events.ndjson' });
+    const mapped = asStorageError(error, '/fallback', { eventLog: true }) as Error & { code: string; details: Record<string, unknown>; remediation: string };
+    expect(mapped.code).toBe('VSUP_STORAGE_ERROR');
+    expect(mapped.message).toMatch(pattern);
+    expect(mapped.message).toContain(code);
+    expect(mapped.details).toEqual({ code, directory: '/data/runs/abc' });
+    expect(mapped.remediation).not.toMatch(/disk space/);
+    expect(asStorageError(error, '/fallback')).toBe(error);
+  });
+});

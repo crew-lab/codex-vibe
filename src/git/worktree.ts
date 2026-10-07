@@ -22,9 +22,9 @@ export class WorktreeCreateError extends Error {
 
 async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = process.env, allowedCodes: readonly number[] = [0]): Promise<Buffer> {
   return await new Promise<Buffer>((resolve, reject) => {
-    const safeEnv: NodeJS.ProcessEnv = { PATH: env.PATH, HOME: env.HOME, LANG: env.LANG, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
+    const safeEnv: NodeJS.ProcessEnv = { PATH: env.PATH, HOME: env.HOME, LANG: env.LANG, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_OPTIONAL_LOCKS: '0' };
     if (env.GIT_INDEX_FILE) safeEnv.GIT_INDEX_FILE = env.GIT_INDEX_FILE;
-    const fixed = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.attributesFile=/dev/null'];
+    const fixed = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.attributesFile=/dev/null', '-c', 'core.splitIndex=false', '-c', 'core.untrackedCache=false', '-c', 'index.skipHash=false'];
     const child = spawn('git', [...fixed, '-C', cwd, ...args], { cwd, env: safeEnv, shell: false, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
     const chunks: Buffer[] = []; let size = 0; let overflow = false;
     let stderr = Buffer.alloc(0);
@@ -181,6 +181,15 @@ export async function exportDirtySnapshot(source: string, artifactDir: string, b
   return { ...snapshot, patchPath, statPath };
 }
 
+function patchSections(patch: Buffer): string[] {
+  return patch.toString('latin1').split(/^(?=diff --git )/m).filter(Boolean).sort();
+}
+
+function samePatchContent(saved: Buffer, fresh: Buffer): boolean {
+  const left = patchSections(saved); const right = patchSections(fresh);
+  return left.length === right.length && left.every((section, index) => section === right[index]);
+}
+
 /** Remove only a registered supervisor-created worktree after patch export was verified. */
 export async function removeVerifiedWorktree(source: string, record: { path: string; baseRef?: string; createdBySupervisor: boolean }, verifiedExport: { patchPath: string; sha256: string }): Promise<void> {
   if (!record.createdBySupervisor) throw new Error('Refusing to remove a worktree not created by the supervisor');
@@ -192,7 +201,7 @@ export async function removeVerifiedWorktree(source: string, record: { path: str
   const registered = (await git(root, ['worktree', 'list', '--porcelain', '-z'])).toString('utf8').split('\0');
   if (!registered.includes(`worktree ${target}`)) throw new Error('Worktree is not registered with the expected source repository; refusing cleanup');
   const fresh = await captureDirtySnapshot(record.path, record.baseRef ?? 'HEAD');
-  if (fresh.sha256 !== verifiedExport.sha256) throw new Error('Worktree changed after export; refusing cleanup');
+  if (fresh.sha256 !== verifiedExport.sha256 && !samePatchContent(patch, fresh.patch)) throw new Error('Worktree changed after export; refusing cleanup');
   const status = await git(record.path, ['status', '--porcelain=v1', '-z', '--ignored=matching', '--untracked-files=all', '--no-renames']);
   if (status.toString('utf8').split('\0').some((line) => line.startsWith('!!'))) throw new Error('Ignored files remain in worktree; refusing cleanup');
   await git(root, ['worktree', 'remove', '--force', '--', target]);

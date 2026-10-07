@@ -63,7 +63,8 @@ async function seed(data: string, source: string, options: { state: RunState; ag
     sourceWorkspace: source, workerWorkspace: options.worktree ?? source, createdAt: updated, updatedAt: updated, finishedAt: updated,
     taskSha256: 'a'.repeat(64),
     limits: { timeoutSeconds: 600, maxTurns: 5, maxEventBytes: DEFAULT_CONFIG.limits.maxEventBytes, maxTranscriptBytes: DEFAULT_CONFIG.limits.maxTranscriptBytes, maxArtifactBytes: DEFAULT_CONFIG.limits.maxArtifactBytes },
-    ...(options.worktree ? { worktree: { path: options.worktree, baseRef: 'HEAD', createdBySupervisor: true } } : {})
+    ...(options.worktree ? { worktree: { path: options.worktree, baseRef: 'HEAD', createdBySupervisor: true } } : {}),
+    ...(options.pendingRequest ? { pendingRequest: options.pendingRequest } : {})
   };
   const directory = path.join(data, 'runs', runId);
   await mkdir(directory, { mode: 0o700 });
@@ -92,7 +93,7 @@ describe('lazy startup', () => {
       const status = await manager.status({ run_id: target, max_events: 5 });
       expect(status.last_seq).toBeGreaterThan(1000);
       expect((status.events as { seq: number }[]).map((event) => event.seq)).toEqual([1, 2, 3, 4, 5]);
-      await expect(manager.status({ run_id: ids[18]! })).rejects.toBeDefined();
+      await expect(manager.status({ run_id: ids[18]! })).rejects.toMatchObject({ code: 'VSUP_STORAGE_ERROR' });
     } finally { await manager.shutdown(); }
   }, 120_000);
 
@@ -109,8 +110,31 @@ describe('lazy startup', () => {
   });
 });
 
+class GatedBackend extends FakeBackend {
+  recoverCalled = false;
+  release: (() => void) | undefined;
+  override async recover(_record: RunRecord) {
+    this.recoverCalled = true;
+    await new Promise<void>((resolve) => { this.release = resolve; });
+    return undefined;
+  }
+}
+
+async function waitUntil(done: () => boolean | Promise<boolean>, attempts = 300): Promise<void> {
+  for (let attempt = 0; attempt < attempts && !await done(); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 20));
+}
+
+async function sweepAfter(manager: RunManager, data: string, control: string, days = 30): Promise<Set<string>> {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(Date.now() + days * DAY);
+  manager.startAutomaticRetention({ firstDelayMs: 10, intervalMs: 60_000 });
+  await waitUntil(async () => !await exists(path.join(data, 'runs', control)));
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  return new Set(await readdir(path.join(data, 'runs')));
+}
+
 describe('automatic retention', () => {
-  it('removes exactly the eligible runs and keeps worktrees, live sessions, slots and pending requests', async () => {
+  it('removes exactly the eligible runs and keeps worktrees and failed runs', async () => {
     const { source, data, parent } = await root();
     const worktree = path.join(parent, 'wt'); await mkdir(worktree);
     const oldClosed = await seed(data, source, { state: 'closed', ageDays: 30 });
@@ -119,28 +143,95 @@ describe('automatic retention', () => {
     const oldCompleted = await seed(data, source, { state: 'completed', ageDays: 30 });
     const recentClosed = await seed(data, source, { state: 'closed', ageDays: -29 });
     const oldWorktree = await seed(data, source, { state: 'closed', ageDays: 30, worktree });
-    const backend = new FakeBackend();
-    const manager = new RunManager(configFor(source, { maxConcurrentRuns: 4 }), data, [backend]);
+    const manager = new RunManager(configFor(source, { maxConcurrentRuns: 4 }), data, [new FakeBackend()]);
     await manager.initialize();
-    const live = await manager.reviewStart({ task: 'live', cwd: source });
-    const slotted = await manager.reviewStart({ task: 'slot', cwd: source });
-    const waiting = await manager.reviewStart({ task: 'pending', cwd: source });
-    for (const id of [live.run_id, slotted.run_id, waiting.run_id]) for (let attempt = 0; attempt < 500 && !backend.callbacks.has(id); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
-    await backend.callbacks.get(live.run_id)!.onState('completed', { result: { summary: 'idle but live' } });
-    await backend.callbacks.get(waiting.run_id)!.onPendingRequest({ requestId: 'req-1', kind: 'permission', title: 'Read', options: [{ optionId: 'allow', name: 'Allow' }], tool: { kind: 'read', locations: [source] } });
     try {
-      vi.useFakeTimers({ toFake: ['Date'] });
-      vi.setSystemTime(Date.now() + 30 * DAY);
-      manager.startAutomaticRetention({ firstDelayMs: 10, intervalMs: 60_000 });
-      for (let attempt = 0; attempt < 300 && await exists(path.join(data, 'runs', oldClosed)); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 20));
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      const remaining = new Set(await readdir(path.join(data, 'runs')));
+      const remaining = await sweepAfter(manager, data, oldClosed);
       expect([oldClosed, oldCancelled, oldCompleted].filter((id) => remaining.has(id))).toEqual([]);
-      const keep = { oldFailed, recentClosed, oldWorktree, live: live.run_id, slotted: slotted.run_id, waiting: waiting.run_id };
-      expect(Object.entries(keep).filter(([, id]) => !remaining.has(id)).map(([name]) => name)).toEqual([]);
+      expect(Object.entries({ oldFailed, recentClosed, oldWorktree }).filter(([, id]) => !remaining.has(id)).map(([name]) => name)).toEqual([]);
       expect(await exists(worktree)).toBe(true);
     } finally { vi.useRealTimers(); await manager.shutdown(); }
   }, 60_000);
+
+  it('keeps an otherwise eligible completed run that still holds its live session', async () => {
+    const { source, data } = await root();
+    const control = await seed(data, source, { state: 'closed', ageDays: 30 });
+    const backend = new FakeBackend();
+    const manager = new RunManager(configFor(source), data, [backend]);
+    await manager.initialize();
+    const live = await manager.reviewStart({ task: 'live', cwd: source });
+    await waitUntil(() => backend.callbacks.has(live.run_id));
+    await backend.callbacks.get(live.run_id)!.onState('completed', { result: { summary: 'idle but live' } });
+    try {
+      const remaining = await sweepAfter(manager, data, control);
+      expect(remaining.has(control)).toBe(false);
+      expect(remaining.has(live.run_id)).toBe(true);
+    } finally { vi.useRealTimers(); await manager.shutdown(); }
+  }, 60_000);
+
+  it('keeps an otherwise eligible completed run that holds a run slot while a continuation starts', async () => {
+    const { source, data } = await root();
+    const control = await seed(data, source, { state: 'closed', ageDays: 30 });
+    const slotted = await seed(data, source, { state: 'completed', ageDays: 30 });
+    const backend = new GatedBackend();
+    const manager = new RunManager(configFor(source), data, [backend]);
+    await manager.initialize();
+    const continuing = manager.continue({ run_id: slotted, message: 'again' }).catch(() => undefined);
+    try {
+      await waitUntil(() => backend.recoverCalled);
+      expect(backend.recoverCalled).toBe(true);
+      const remaining = await sweepAfter(manager, data, control);
+      expect(remaining.has(control)).toBe(false);
+      expect(remaining.has(slotted)).toBe(true);
+    } finally { vi.useRealTimers(); backend.release?.(); await continuing; await manager.shutdown(); }
+  }, 60_000);
+
+  it('keeps an otherwise eligible terminal run that still has a pending request', async () => {
+    const { source, data } = await root();
+    const control = await seed(data, source, { state: 'closed', ageDays: 30 });
+    const waiting = await seed(data, source, { state: 'cancelled', ageDays: 30, pendingRequest: { requestId: 'req-1', kind: 'permission', title: 'Read', options: [{ optionId: 'allow', name: 'Allow' }] } });
+    const manager = new RunManager(configFor(source), data, [new FakeBackend()]);
+    await manager.initialize();
+    try {
+      const remaining = await sweepAfter(manager, data, control);
+      expect(remaining.has(control)).toBe(false);
+      expect(remaining.has(waiting)).toBe(true);
+    } finally { vi.useRealTimers(); await manager.shutdown(); }
+  }, 60_000);
+
+  it('keeps an otherwise eligible terminal run that is still queued', async () => {
+    const { source, data } = await root();
+    const control = await seed(data, source, { state: 'closed', ageDays: 30 });
+    const queued = await seed(data, source, { state: 'closed', ageDays: 30 });
+    const manager = new RunManager(configFor(source), data, [new FakeBackend()]);
+    await manager.initialize();
+    const internals = manager as unknown as { runs: Map<string, unknown>; pending: unknown[] };
+    internals.pending.push(internals.runs.get(queued));
+    try {
+      const remaining = await sweepAfter(manager, data, control);
+      expect(remaining.has(control)).toBe(false);
+      expect(remaining.has(queued)).toBe(true);
+    } finally { vi.useRealTimers(); internals.pending.length = 0; await manager.shutdown(); }
+  }, 60_000);
+
+  it('never removes a fresh completed run when retention is set to zero days, but still removes old terminal ones', async () => {
+    const { source, data } = await root();
+    const freshCompleted = await seed(data, source, { state: 'completed', ageDays: 0 });
+    const dayOldCompleted = await seed(data, source, { state: 'completed', ageDays: 2 });
+    const justClosed = await seed(data, source, { state: 'closed', ageDays: 0.001 });
+    const manager = new RunManager(configFor(source, { retention: { days: 0, preserveFailedRuns: true } }), data, [new FakeBackend()]);
+    try {
+      await manager.initialize();
+      manager.startAutomaticRetention({ firstDelayMs: 10, intervalMs: 60_000 });
+      await waitUntil(async () => !await exists(path.join(data, 'runs', justClosed)));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const remaining = new Set(await readdir(path.join(data, 'runs')));
+      expect(remaining.has(justClosed)).toBe(false);
+      expect(remaining.has(dayOldCompleted)).toBe(false);
+      expect(remaining.has(freshCompleted)).toBe(true);
+      expect((await manager.status({ run_id: freshCompleted })).state).toBe('completed');
+    } finally { await manager.shutdown(); }
+  });
 
   it('removes old failed runs when preserve_failed_runs is off', async () => {
     const { source, data } = await root();

@@ -103,3 +103,77 @@ describe('EventLog', () => {
     expect((await stat(file)).mode & 0o777).toBe(0o600);
   });
 });
+
+class ClosingLog extends EventLog {
+  closeFailures = 0;
+  protected override async openHandle(flags: number, mode: number) {
+    const handle = await super.openHandle(flags, mode);
+    const close = handle.close.bind(handle);
+    handle.close = async () => { await close(); if (this.closeFailures > 0) { this.closeFailures -= 1; throw Object.assign(new Error('close failed'), { code: 'EIO' }); } };
+    return handle;
+  }
+}
+
+describe('EventLog after the run directory or file is replaced', () => {
+  it('recreates a deleted run directory and resumes writing', async () => {
+    const { directory, file } = await fixture();
+    const log = new EventLog(file, { maxBytes: 1_000_000, windowMs: 60_000 });
+    log.append({ seq: 1 }); await log.flush();
+    await rm(directory, { recursive: true });
+    log.append({ seq: 2 }); await log.flush();
+    expect(await readNdjsonRecovering<{ seq: number }>(file)).toEqual([{ seq: 2 }]);
+    log.append({ seq: 3 }); await log.flush();
+    expect((await readNdjsonRecovering<{ seq: number }>(file)).map((record) => record.seq)).toEqual([2, 3]);
+    log.dispose();
+  });
+
+  it('does not zero-extend a recreated file when a later write fails', async () => {
+    const { directory, file } = await fixture();
+    const log = new FailingLog(file, { maxBytes: 1_000_000, windowMs: 60_000 });
+    log.append({ seq: 1 }); await log.flush();
+    await rm(directory, { recursive: true });
+    log.append({ seq: 2 }); await log.flush();
+    log.failures = 1;
+    log.append({ seq: 3 });
+    await expect(log.flush()).rejects.toMatchObject({ code: 'ENOSPC' });
+    await log.flush();
+    expect(await readNdjsonRecovering<{ seq: number }>(file)).toEqual([{ seq: 2 }, { seq: 3 }]);
+    log.dispose();
+  });
+
+  it.each([
+    ['a directory', 'EISDIR'],
+    ['a symlink', 'ELOOP'],
+  ])('stops after one coded failure when the events file becomes %s', async (kind, code) => {
+    const { directory, file } = await fixture();
+    const failures: unknown[] = [];
+    const log = new EventLog(file, { maxBytes: 400, windowMs: 60_000, onFailure: (error) => failures.push(error) });
+    log.append({ seq: 1 }); await log.flush();
+    await rm(file);
+    const elsewhere = path.join(directory, 'elsewhere');
+    if (kind === 'a directory') await mkdir(file); else { await writeFile(elsewhere, ''); await symlink(elsewhere, file); }
+    log.append({ seq: 2 });
+    await expect(log.flush()).rejects.toMatchObject({ code });
+    for (let index = 0; index < 200; index += 1) log.append({ seq: index + 3, filler: 'x'.repeat(50) });
+    await expect(log.flush()).resolves.toBeUndefined();
+    await expect(log.flush()).resolves.toBeUndefined();
+    if (kind === 'a symlink') expect(await readFile(elsewhere, 'utf8')).toBe('');
+    expect(failures).toEqual([]);
+    log.dispose();
+  });
+
+  it('counts a batch as persisted when only close fails, and reports the close error', async () => {
+    const { file } = await fixture();
+    const failures: unknown[] = [];
+    const log = new ClosingLog(file, { maxBytes: 60, windowMs: 60_000, onFailure: (error) => failures.push(error) });
+    log.closeFailures = 1;
+    log.append({ seq: 1, text: 'aaaa' });
+    await log.flush();
+    expect(failures).toHaveLength(1);
+    log.append({ seq: 2, text: 'bbbb' });
+    await log.flush();
+    expect((await readNdjsonRecovering<{ seq: number }>(file)).map((record) => record.seq)).toEqual([1, 2]);
+    expect(() => log.append({ seq: 3, text: 'c'.repeat(40) })).toThrow(RangeError);
+    log.dispose();
+  });
+});

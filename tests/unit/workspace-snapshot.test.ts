@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, realpath, symlink, unlink, utimes, writeFile } from
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { changedSinceSnapshot, snapshotWorkspace } from '../../src/core/workspace-snapshot.js';
+import { changedSinceSnapshot, parseManifest, serializeManifest, snapshotWorkspace } from '../../src/core/workspace-snapshot.js';
 
 const dirs: string[] = [];
 async function tempDir(): Promise<string> {
@@ -105,4 +105,30 @@ describe('workspace snapshot', () => {
     expect(snapshot.manifest.size).toBeGreaterThan(20_000);
     expect(elapsed).toBeLessThan(3000);
   }, 30_000);
+
+  it('counts only files toward the file cap and bounds directories separately', async () => {
+    const root = await tempDir();
+    for (let index = 0; index < 8; index += 1) await writeFile(path.join(root, `f${index}`), 'x');
+    for (let index = 0; index < 20; index += 1) await mkdir(path.join(root, `dir${index}`));
+    await symlink('f0', path.join(root, 'link'));
+    await expect(snapshotWorkspace(root, { maxFiles: 10, maxBytes: 1_000 })).resolves.toBeDefined();
+    await expect(snapshotWorkspace(root, { maxFiles: 7, maxBytes: 1_000 })).rejects.toMatchObject({ code: 'VSUP_OUTPUT_LIMIT' });
+    await expect(snapshotWorkspace(root, { maxFiles: 10, maxBytes: 1_000, maxEntries: 25 })).rejects.toMatchObject({ code: 'VSUP_OUTPUT_LIMIT' });
+  });
+
+  it('round-trips a manifest through its persisted form and rejects anything malformed', async () => {
+    const root = await gitRoot();
+    await symlink('tracked.txt', path.join(root, 'link')); await mkdir(path.join(root, 'sub'));
+    const snapshot = await snapshotWorkspace(root);
+    const text = serializeManifest(snapshot);
+    expect(text).not.toContain('original');
+    const parsed = parseManifest(text);
+    expect(parsed?.sha256).toBe(snapshot.sha256);
+    expect(parsed?.manifest).toEqual(snapshot.manifest);
+    expect(await changedSinceSnapshot(root, parsed!.manifest)).toEqual([]);
+    expect(parseManifest(text.replace('tracked.txt', 'other.txt'))).toBeUndefined();
+    expect(parseManifest('{"schema_version":1,"entries":[["a",{"kind":"X"}]]}')).toBeUndefined();
+    expect(parseManifest('not json')).toBeUndefined();
+    expect(parseManifest(text, { maxFiles: 1, maxBytes: 1 })).toBeUndefined();
+  });
 });
