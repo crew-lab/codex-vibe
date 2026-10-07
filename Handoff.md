@@ -1,6 +1,6 @@
 # Implementation handoff
 
-Status as of **2026-10-06**: implemented release candidate 0.9.0-rc.4, with hosted review, edit and continuation evidence from the 2026-10-05 target-machine session (history below starts from rc.1 on 2026-10-03), not a production 1.0 certification; the plan for 1.0 is recorded below. Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.4`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
+Status as of **2026-10-06**: implemented release candidate 0.9.0-rc.5, with hosted review, edit and continuation evidence from the 2026-10-05 target-machine session (history below starts from rc.1 on 2026-10-03), not a production 1.0 certification; the plan for 1.0 is recorded below. Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.5`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
 
 ## Multi-client setup correction (2026-10-06)
 
@@ -110,18 +110,18 @@ Documentation additions were checked for local link targets and whitespace. They
 
 ## Release artifacts and reproduction
 
-`release/` is ignored by Git. The current candidate is **0.9.0-rc.3**, built on 2026-10-06 from commit `6f2ca54` on the preparing machine (Node 24.19.0, macOS arm64). It includes the B1/B3 fix from `291fc8c`:
+`release/` is ignored by Git. The current candidate is **0.9.0-rc.5**, built on 2026-10-07 on the preparing machine (Node 24.19.0, macOS arm64) from the working tree that bumps the version on top of `be7bb6a`, so it contains Phase A, Phase B, the isolation follow-up and both cold-review fix rounds:
 
 ```text
-vibe-supervisor-0.9.0-rc.3.tgz  sha256 82eb6a48476ac203037ae2a79548fe899fc703d44780fee292f9856277e27a83
-sbom.spdx.json
-acceptance.json                 7 deterministic checks PASS; hosted, soak and platform gates listed UNVERIFIED
+vibe-supervisor-0.9.0-rc.5.tgz  sha256 03a113702d0200b01426402e5a4dd6892c1282bd0ac6e026d40d3dd53f6c226f
+sbom.spdx.json                  sha256 190a5865e1ebd2ad85b526c9c5fcc5b071a6b22200e5c64cdc4433eadc5a1f7d
+acceptance.json                 sha256 64d6be108108197c2a8aeb6adad2d9635062e061e4f556ce222efa0e44e3e2b0; 7 deterministic checks PASS; hosted, soak and platform gates listed UNVERIFIED
 SHA256SUMS
 ```
 
-`package:rc` passed end to end, including the offline installed-package smoke test (MCP initialize, tool listing and EOF shutdown from the installed tarball). The tarball includes `SECURITY.md` and `CHANGELOG.md`; the Phase 0 change that dropped them from the `files` allowlist was a mistake (both files exist) and is reverted. The rc.1 tarball and both tarballs that carried the rc.2 version (`37a97be…` from the preparing machine and the target machine's permission-fix build `df76993…`) are superseded. Never edit archive contents manually; rebuild instead.
+`package:rc` passed end to end, including the offline installed-package smoke test (MCP initialize, tool listing, EOF shutdown, and two concurrent `--isolated` clients from the installed tarball). The rc.4 tarball was built on the target machine and is not in the preparing machine's release folder; rc.1, both rc.2 tarballs (`37a97be…`, `df76993…`) and rc.3 (`82eb6a4…`) are superseded. Never edit archive contents manually; rebuild instead.
 
-The delivered copy of these four files is kept on the preparing machine at `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.3/` (the superseded rc.2 copy is next to it in `release/0.9.0-rc.2/`) (Git-ignored); verify it with `shasum -a 256 -c SHA256SUMS` in that folder before installing on the target machine.
+The delivered copy of these four files is kept on the preparing machine at `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.5/` (older candidates are next to it), Git-ignored; verify it with `shasum -a 256 -c SHA256SUMS` in that folder before installing on the target machine. What to check there first: the Phase B target-machine measurements P1–P4, T11 (hosted ACP cancellation, restart and lazy reload, idle expiry), and that `configure-codex --isolated` reuses its session directory across Codex restarts.
 
 Populating the offline cache needs two steps. `npm ci --cache /abs/cache` stores package tarballs but not the registry metadata the offline tarball install needs, so the first `package:rc` run fails with `ENOTCACHED`. Warm the metadata once by packing the tarball and installing it online with `--ignore-scripts` into a throwaway prefix using the same cache, then run `package:rc`. The smoke install uses `--ignore-scripts`, so it does not exercise the `prepare` script; field test T1 covers that.
 
