@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0-rc.6
 
 Breaking changes for coordinators (Phase C):
 
