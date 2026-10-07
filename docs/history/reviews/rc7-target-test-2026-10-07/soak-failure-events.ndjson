@@ -1,0 +1,2 @@
+{"schema_version":1,"seq":1,"timestamp":"2026-10-07T12:58:37.636Z","run_id":"12ad387d-307c-420c-a123-63da3d0e17e3","backend":"programmatic","source":"vibe","type":"message","severity":"info","data":{"text":"<vibe_stop_event>Turn limit of 12 reached</vibe_stop_event>\n"}}
+{"schema_version":1,"seq":2,"timestamp":"2026-10-07T12:58:37.641Z","run_id":"12ad387d-307c-420c-a123-63da3d0e17e3","backend":"programmatic","source":"supervisor","type":"diagnostic","severity":"warning","data":{"text":"<vibe_stop_event>Turn limit of 12 reached</vibe_stop_event>\n"}}

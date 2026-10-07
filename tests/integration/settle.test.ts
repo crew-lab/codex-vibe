@@ -104,8 +104,8 @@ const base: Scenario[] = [
 const quietBackend = new Set(['the user cancels a running run', 'the deadline expires', 'the transcript limit is reached', 'a permission request violates the policy and offers no rejection']);
 const scenarios: Scenario[] = base.flatMap((scenario) => quietBackend.has(scenario.name) ? [scenario, { ...scenario, name: `${scenario.name} (backend cancel reports nothing)`, silentCancel: true }] : [scenario]);
 
-async function readResultFile(data: string, runId: string): Promise<{ state: string; integrity?: { status: string } } | undefined> {
-  try { return JSON.parse(await readFile(path.join(data, 'runs', runId, 'result.json'), 'utf8')) as { state: string; integrity?: { status: string } }; }
+async function readResultFile(data: string, runId: string): Promise<{ state: string; error?: { code: string }; integrity?: { status: string } } | undefined> {
+  try { return JSON.parse(await readFile(path.join(data, 'runs', runId, 'result.json'), 'utf8')) as { state: string; error?: { code: string }; integrity?: { status: string } }; }
   catch { return undefined; }
 }
 
@@ -137,6 +137,7 @@ describe('settle: every end-of-run path ends the run the same way', () => {
       const result = await readResultFile(data, target.run_id);
       expect(result, 'result.json must exist').toBeDefined();
       expect(result?.state).toBe(scenario.state);
+      if (scenario.errorCode) expect(result?.error).toEqual(status.error); else expect(result?.error).toBeUndefined();
       if (scenario.launched && scenario.state !== 'recoverable') expect(result?.integrity?.status, 'launched review runs carry integrity').toBeDefined();
       if (!scenario.launched) expect(result?.integrity).toBeUndefined();
 

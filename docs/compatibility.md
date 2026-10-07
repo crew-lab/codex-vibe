@@ -86,10 +86,10 @@ Verified on 2026-10-05 on macOS arm64 with a locally patched rc.2 build: native 
 
 | Gate | What is missing |
 |---|---|
-| Hosted ACP lifecycle | Cancellation, permission and elicitation callbacks, restart and `session/load` recovery and idle expiry against hosted Vibe; real Vibe behavior after a selected reject option. |
-| Hosted soak | A 100-run soak against hosted Vibe. The fake-peer 100-run soak passes and proves supervisor lifecycle only. |
-| Effective tool inventory | The authenticated real-session tool inventory for the current build. |
-| Current-build hosted runs | Hosted review and edit with the current release, the programmatic prompt-file path against real Vibe, and the real macOS Keychain lookup (tests use a fake `security`). |
+| Hosted ACP lifecycle | Permission and elicitation callbacks, real behavior after a selected reject option, and cancellation after generated output. rc.7 official-client continuation, close in running state, completed/in-progress graceful restart/load and idle expiry have scoped evidence below; native desktop lifecycle remains unverified. |
+| Hosted soak | rc.7 attempt stopped at run 1/100 after Vibe reached its 12-turn cap and exited 1 (VSUP_BACKEND_CRASHED). A successful 100-run hosted soak remains unverified. |
+| Effective tool inventory | rc.7 authenticated programmatic review/edit and ACP review inventories were verified through private session metadata. Current native desktop-session inventory remains unverified. |
+| Current-build hosted runs | rc.7 official-client programmatic reviews/edit, private prompt-file removal and browser-login authentication passed with no parent MISTRAL_API_KEY. Native desktop use of rc.7 remains unverified. |
 | Plugin installation | `.codex-plugin/` and `.mcp.json` are a scaffold; no Codex plugin validation or installation has been run. |
 | macOS Intel | Only arm64 was tested. |
 | Clean account | Installation on a fresh OS account. |
@@ -97,3 +97,11 @@ Verified on 2026-10-05 on macOS arm64 with a locally patched rc.2 build: native 
 ### Stated limitation: legacy harness only
 
 1.0 forces `--legacy-harness`; the unified harness is not supported and will be validated before supporting a Vibe release that removes the legacy harness.
+
+### rc.7 target-machine follow-up (2026-10-07)
+
+The [dated evidence](history/reviews/rc7-target-test-2026-10-07/Read.md) records deterministic and scoped hosted checks on macOS arm64, plus the failed first run of the hosted soak. It does not certify 1.0, native desktop integration for rc.7, callbacks, Intel or clean-account installation. The handoff's D7 expectation was corrected to reflect stat-only detection for ignored files.
+
+### Locally patched rc.7 limit follow-up (2026-10-07)
+
+The [follow-up evidence](history/reviews/rc7-turn-limit-fix-2026-10-07/Read.md) confirms pinned turn-limit classification and saved-error corrections, full release verification and installed-package validation. The identical hosted soak still stops on its first review at the configured 12-turn cap, now accurately identified as max_turn_requests. A successful full soak remains unverified; no budget or permission boundary was broadened.

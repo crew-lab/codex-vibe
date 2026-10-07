@@ -1,0 +1,52 @@
+[
+  {
+    "step": "D3-official-client-programmatic",
+    "tools": [
+      "vibe_review_start",
+      "vibe_edit_start",
+      "vibe_status",
+      "vibe_result",
+      "vibe_close"
+    ]
+  },
+  {
+    "step": "D7-real-change",
+    "run_id": "4f516c98-cb85-4fac-a081-7c920127ecf3",
+    "result": {
+      "run_id": "4f516c98-cb85-4fac-a081-7c920127ecf3",
+      "state": "completed",
+      "backend": "programmatic",
+      "stop_reason": "end_turn",
+      "summary": "**Brief review:** No. The `add` function in `src/nested/arithmetic.py` returns `a - b` (subtraction), not a sum.",
+      "warnings": [
+        "The source workspace changed during this read-only review. The changes may be your own edits or a read-only boundary violation; inspect the changed paths before trusting the review."
+      ],
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done.",
+      "integrity": {
+        "status": "changed",
+        "write_tool_observed": false,
+        "changed_paths": [
+          "src/nested/arithmetic.py"
+        ],
+        "changed_paths_total": 1,
+        "reason": "The source workspace content changed between the launch snapshot and the end of the run (1 paths)."
+      },
+      "changed_files": [],
+      "changed_files_total": 0,
+      "artifacts": [
+        {
+          "name": "transcript.md",
+          "path": "/private/tmp/rc7-phase-d-zotf2wpq/target-programmatic/runs/4f516c98-cb85-4fac-a081-7c920127ecf3/transcript.md"
+        },
+        {
+          "name": "events.ndjson",
+          "path": "/private/tmp/rc7-phase-d-zotf2wpq/target-programmatic/runs/4f516c98-cb85-4fac-a081-7c920127ecf3/events.ndjson"
+        }
+      ]
+    }
+  },
+  {
+    "step": "FAIL",
+    "message": "Error: Touch or ignored rewrite invalidated integrity"
+  }
+]

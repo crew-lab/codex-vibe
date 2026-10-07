@@ -1,0 +1,103 @@
+[
+  {
+    "session_id": "2bdfe375-bb61-671f-b2f5-ce1cf88f588c",
+    "mode": "plan",
+    "tools": [
+      "grep",
+      "read_file"
+    ],
+    "active_model": "mistral-medium-3.5",
+    "mcp_servers_configured": 0,
+    "reasoning_fields_saved": false
+  },
+  {
+    "session_id": "b00036a8-1c70-f3f5-8d0d-7a47445f25bf",
+    "mode": "plan",
+    "tools": [
+      "grep",
+      "read_file"
+    ],
+    "active_model": "mistral-medium-3.5",
+    "mcp_servers_configured": 0,
+    "reasoning_fields_saved": false
+  },
+  {
+    "session_id": "356a7bcf-2c43-ab89-25fe-867c88055b2b",
+    "mode": "plan",
+    "tools": [
+      "grep",
+      "read_file"
+    ],
+    "active_model": "mistral-medium-3.5",
+    "mcp_servers_configured": 0,
+    "reasoning_fields_saved": false
+  },
+  {
+    "session_id": "f788ad72-2511-53cb-3ec8-3ea1c7adc56c",
+    "mode": "plan",
+    "tools": [
+      "grep",
+      "read_file"
+    ],
+    "active_model": "mistral-medium-3.5",
+    "mcp_servers_configured": 0,
+    "reasoning_fields_saved": false
+  },
+  {
+    "session_id": "204ec579-1edb-fe97-85cb-f8d97c0b5aa6",
+    "mode": "accept-edits",
+    "tools": [
+      "edit",
+      "grep",
+      "read_file",
+      "write_file"
+    ],
+    "active_model": "mistral-medium-3.5",
+    "mcp_servers_configured": 0,
+    "reasoning_fields_saved": false
+  },
+  {
+    "session_id": "0b80d0f8-bfe5-c1ca-4a0b-8ea4b4e03f96",
+    "mode": "plan",
+    "tools": [
+      "grep",
+      "read_file"
+    ],
+    "active_model": "mistral-medium-3.5",
+    "mcp_servers_configured": 0,
+    "reasoning_fields_saved": false
+  },
+  {
+    "session_id": "3b14d296-d7e5-0b5c-2f2d-7b655275bf61",
+    "mode": "plan",
+    "tools": [
+      "grep",
+      "read_file"
+    ],
+    "active_model": "mistral-medium-3.5",
+    "mcp_servers_configured": 0,
+    "reasoning_fields_saved": false
+  },
+  {
+    "session_id": "4c0f8677-243c-005e-f0bf-03eaf3ba5e0f",
+    "mode": "plan",
+    "tools": [
+      "grep",
+      "read_file"
+    ],
+    "active_model": "mistral-medium-3.5",
+    "mcp_servers_configured": 0,
+    "reasoning_fields_saved": false
+  },
+  {
+    "session_id": "beb801c6-f413-a322-f523-e6a5e9939b83",
+    "mode": "plan",
+    "tools": [
+      "grep",
+      "read_file"
+    ],
+    "active_model": "mistral-medium-3.5",
+    "mcp_servers_configured": 0,
+    "reasoning_fields_saved": false
+  }
+]

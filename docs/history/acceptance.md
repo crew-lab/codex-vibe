@@ -37,3 +37,13 @@ After restarting Codex, all eight Vibe Supervisor tools appeared in the chat. Na
 ### Hosted edits and ACP follow-up
 
 Native programmatic run `0644977e-82c7-4fa3-ac6f-f47beb8a88ee` and ACP run `d00fe37d-8c7f-4500-b0c1-6285b678ab2e` exported the intended minimal arithmetic fix in detached worktrees. An ACP same-session follow-up added the requested README example; it hit the six-turn cap after making the requested change, so it is a verified artifact outcome with a `max_turn_requests` caveat. Independent arithmetic and exact-file checks passed, the source fixture remained unchanged, and both worktrees and Git registrations were removed after close. Review/edit tool inventories matched the intended modes. [Evidence and remaining gates](reviews/rc2-target-test-2026-10-05/Read.md). These results do not certify cancellation, callbacks, restart/load recovery, idle expiry, or hosted soak.
+
+## 2026-10-07 — rc.7 target-machine follow-up
+
+Source f30f8d7, macOS 27.0.1 arm64, Node 24.21.0, Vibe 2.25.8. Offline installation, release verification (596 TypeScript tests including installed-Vibe resolver checks, plus the Python suite), packaging, checksums and compatibility passed. Official-client hosted review/edit, ACP continuation, close in running state, graceful completed/in-progress restart/load, idle expiry and synthetic policy probes have scoped evidence.
+
+D18 FAIL: stopped at run 1/100 on the 12-turn limit; Vibe exited 1 and the supervisor classified VSUP_BACKEND_CRASHED. Zero requests/leaks were recorded for that attempt; the full hosted soak remains unverified. D7's original expectation conflicted with the intentional stat-only handling of ignored files and was corrected without changing runtime behavior. Native desktop restart/client long waits, callbacks, clean-account and Intel remain unverified. See [session report](reviews/rc7-target-test-2026-10-07/Read.md) and [machine-readable results](reviews/rc7-target-test-2026-10-07/session.json).
+
+## 2026-10-07 — locally patched rc.7 turn-limit follow-up
+
+Turn-limit classification and missing saved errors were corrected and verified (603 TypeScript tests, Python suite, installed-Vibe profile checks, lint/typecheck/build, offline package smoke and checksums). The unchanged original hosted soak stopped at run 1/100, now reporting max_turn_requests and driver:stop_reason_max_turn_requests. This confirms the classification correction but does not pass the hosted soak. See [implementation, hashes, commands and outcomes](reviews/rc7-turn-limit-fix-2026-10-07/Read.md). Source corrections remain uncommitted in the isolated checkout; no upstream release was cut.
