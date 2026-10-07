@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- A programmatic run that reaches Vibe's turn limit is reported as `completed` with `stop_reason: max_turn_requests` and a partial-result warning instead of `VSUP_BACKEND_CRASHED`. It is recognized only when Vibe exits 1 and its final message, its stderr marker and the configured turn count all agree.
+- A saved `result.json` now carries the run's structured `error` for failed and cancelled runs, the same as the MCP reply.
+- The default `limits.max_turns_review` is 20 instead of 12. A broad hosted review used up 12 turns in about 15 to 27 seconds on the target machine; edits already defaulted to 20. A config file that sets the key keeps its value.
+- The soak driver's built-in review tasks name a starting file, say that only the file read and search tools exist, and cap the number of files read.
+
 ## 0.9.0-rc.7
 
 - An ACP session that is continued long after it started is no longer killed mid-turn by the launcher's fixed lifetime. The supervisor keeps a private worker-deadline file in the run directory and moves it forward on every turn and over the idle window; the launcher re-reads it, keeps its last valid value when the file is missing, unsafe or malformed, still stops on parent death, and never runs past a 48-hour hard cap. A worker stopped after the supervisor's own deadline is reported as `VSUP_TIMEOUT` instead of `VSUP_BACKEND_CRASHED`. A failed deadline write is a diagnostic, not a session failure, and nothing is written after a session closes.

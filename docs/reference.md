@@ -118,7 +118,7 @@ Run `vibe-supervisor init` (or `setup`) to create the private config, then edit 
 | `retention.preserve_failed_runs` | `true` | boolean |
 | `limits.review_timeout_seconds` | 1800 | 30 to 7200 |
 | `limits.edit_timeout_seconds` | 2400 | 30 to 7200 |
-| `limits.max_turns_review` | 12 | 1 to 50 |
+| `limits.max_turns_review` | 20 | 1 to 50 |
 | `limits.max_turns_edit` | 20 | 1 to 50 |
 | `limits.max_event_bytes` | 52428800 | 1024 to 1073741824 |
 | `limits.max_transcript_bytes` | 10485760 | 1024 to 1073741824 |

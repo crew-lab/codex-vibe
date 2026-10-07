@@ -93,7 +93,7 @@ describe("limits defaults from the configuration", () => {
     try {
       await manager.reviewStart({ task: "review", cwd: source });
       await waitFor(() => backend.inputs.length, (count) => count >= 1);
-      expect(backend.inputs[0]?.limits).toMatchObject({ maxTurns: 12, timeoutSeconds: 1800 });
+      expect(backend.inputs[0]?.limits).toMatchObject({ maxTurns: 20, timeoutSeconds: 1800 });
     } finally { await manager.shutdown(); }
   });
 });

@@ -146,8 +146,6 @@ export class ProgrammaticBackend implements SupervisorBackend {
       const diagnosticTail = stderrRedactor.flush();
       if (diagnosticTail) await callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: diagnosticTail } });
       const stderrText = redactSecrets(child.stderr.toString(), environmentSecrets(profile.env));
-      // Vibe 2.25.8 prints its final assistant stop marker on stderr when
-      // ProgrammaticLimitError exits 1. Assistant text alone is not authority.
       const turnLimitMarker = `<vibe_stop_event>Turn limit of ${input.limits.maxTurns} reached</vibe_stop_event>`;
       const reachedTurnLimit = code === 1 && !signal && opaque.summary.trim() === turnLimitMarker && stderrText.trim() === turnLimitMarker;
       if (code === 0 || reachedTurnLimit) {

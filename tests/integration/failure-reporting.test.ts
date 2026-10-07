@@ -241,12 +241,14 @@ describe('an empty final message', () => {
 });
 
 describe('programmatic turn-limit exits', () => {
-  const marker = '<vibe_stop_event>Turn limit of 12 reached</vibe_stop_event>';
+  const turnLimitMarker = (turns: number) => `<vibe_stop_event>Turn limit of ${turns} reached</vibe_stop_event>`;
+  const marker = turnLimitMarker(DEFAULT_CONFIG.limits.maxTurnsReview);
+  const otherMarker = turnLimitMarker(DEFAULT_CONFIG.limits.maxTurnsReview + 1);
   const cases = [
     { name: 'matching pinned markers, including an unterminated last streaming line', code: 1, stdout: marker, stderr: marker, capped: true },
     { name: 'a marker mentioned only by the assistant', code: 1, stdout: marker, stderr: 'boom', capped: false },
     { name: 'a marker on stderr without a streamed assistant marker', code: 1, stdout: 'Partial findings.', stderr: marker, capped: false },
-    { name: 'a marker for a different configured turn limit', code: 1, stdout: marker.replace('12', '13'), stderr: marker.replace('12', '13'), capped: false },
+    { name: 'a marker for a different configured turn limit', code: 1, stdout: otherMarker, stderr: otherMarker, capped: false },
     { name: 'a genuine crash after a matching marker', code: 2, stdout: marker, stderr: marker, capped: false },
     { name: 'an additional error after the marker', code: 1, stdout: marker, stderr: `${marker}\nError: 401 Unauthorized`, capped: false },
     { name: 'a marker in ordinary successful assistant output', code: 0, stdout: marker, stderr: marker, capped: false },

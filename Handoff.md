@@ -38,7 +38,7 @@ Reviews read/search an allowed source workspace and check integrity. Edits creat
 
 ## Lifecycle and persistence details
 
-Start returns a run ID asynchronously. Default capacity is two active workers and eight queued runs. Default idle lifetime is 600 seconds. Review defaults are 1,800 seconds and 12 turns; edit defaults are 2,400 seconds and 20 turns. Default byte caps are 52,428,800 for events, 10,485,760 for transcripts, and 104,857,600 for artifacts; MCP results are capped at 8,000 characters by default (`limits.max_mcp_result_chars`) and shrink in a fixed order when over the cap.
+Start returns a run ID asynchronously. Default capacity is two active workers and eight queued runs. Default idle lifetime is 600 seconds. Review defaults are 1,800 seconds and 20 turns (12 before the Phase D soak); edit defaults are 2,400 seconds and 20 turns. Default byte caps are 52,428,800 for events, 10,485,760 for transcripts, and 104,857,600 for artifacts; MCP results are capped at 8,000 characters by default (`limits.max_mcp_result_chars`) and shrink in a fixed order when over the cap.
 
 State includes queued/startup/negotiation/ready/running, permission/input waits, completed/failed/cancelled, closing/closed, and recovery states. Owner-only directories/files use 0700/0600. Persistent records are versioned, writes are atomic, initialization is single-flight, and a data-directory owner lock excludes concurrent supervisors. Defaults retain seven days and preserve failed runs.
 
@@ -126,7 +126,7 @@ Use the Python interpreter from the installed Vibe tool environment (on the orig
 
 The unverified gates are listed once, in [docs/compatibility.md](docs/compatibility.md#unverified-gates), and stay UNVERIFIED until their evidence is recorded: the hosted ACP lifecycle (cancellation, permission and input callbacks, restart and load recovery, idle expiry), the 100-run hosted soak, the effective tool inventory and hosted runs for the current build, macOS Intel and a clean OS account. The [Phase D test plan](#phase-d-test-plan) covers all of them; plugin installation is out of scope for 1.0.
 
-Next work, in order: push the release workflow (blocked on the push token's `workflow` scope), decide on Vibe 2.26.0, run Phase D on the target machine, then cut rc.8 or 1.0. A dev.to launch article is planned in [articles/devto/plan.md](articles/devto/plan.md); it is published only after a v1.0.0 GitHub Release exists and Phase D has supplied its numbers, and the GitHub repository description ("Codex ASP client for Mistral Vibe") must be corrected first.
+Next work, in order: cut rc.8 with the turn-limit fix and the review budget of 20, rerun the full D18 soak and the unexercised native-client steps (D2, D3, D14, D16 in the Codex app, D20), push the release workflow (blocked on the push token's `workflow` scope), decide on Vibe 2.26.0, then cut 1.0. Results so far are in [Phase D results](#phase-d-results). A dev.to launch article is planned in [articles/devto/plan.md](articles/devto/plan.md); it is published only after a v1.0.0 GitHub Release exists and Phase D has supplied its numbers, and the GitHub repository description ("Codex ASP client for Mistral Vibe") must be corrected first.
 
 Standing decisions:
 
@@ -284,6 +284,24 @@ Test fragility: the suite runs its files in parallel, and the Git worktree and s
 
 A next maintainer should inspect Git status, read this handoff and `README.md`, reproduce local checks when making code changes, and finish those gates before claiming production readiness. Hosted validation sends source/tasks to a provider and may incur usage charges; keep it within user-authorized scope. Record exact versions, commands, outcomes, and remaining uncertainty in acceptance/compatibility docs. Any new version support requires renewed shim, profile, protocol, and effective-tool validation.
 
+## Phase D results
+
+### Phase D results, first session (2026-10-07, rc.7)
+
+Fetched and tested `f30f8d7` in an isolated checkout while preserving the dirty primary checkout. Offline source installation, release packaging/checksums, 596 TypeScript tests (including the two real installed-Vibe profile tests), Python tests and compatibility checks passed. Hosted nested reviews, an independently verified eleven-file edit, ACP continuation, completed/in-progress graceful restart loading, idle expiry and synthetic policy refusals passed through the official MCP client. Native desktop registration, long waits in native clients, clean-account/Intel and callbacks remain unverified.
+
+The D7 test-plan expectation was corrected to match the existing hybrid snapshot contract: a tracked touch is unchanged after hash comparison; an ignored same-content rewrite reports changed by stat. No runtime policy changed. D18 then stopped at run 1/100: Vibe reached the 12-turn cap and exited 1, classified as VSUP_BACKEND_CRASHED. The saved result lacks the error that remains in run metadata. The hosted soak gate did not pass; investigate before rc.8/1.0. See [dated evidence and exact scopes](docs/history/reviews/rc7-target-test-2026-10-07/Read.md). No commit, push, global registration or upstream release was performed.
+
+### Turn-limit and saved-result correction (2026-10-07)
+
+The two defects from the first D18 attempt are corrected in the isolated f30f8d7 checkout: a strictly confirmed pinned programmatic limit exit now reports completed/max_turn_requests with an incomplete-result warning, and result.json includes settlement/fallback errors before state finalization. Seven process-backed marker/conflict tests and saved-error assertions across settlement paths passed; full release verification passed 603 tests in 53 files, Python tests, real installed-Vibe profiles, lint/typecheck/build, offline package smoke and checksums. A locally patched rc.7 package is preserved; no upstream release was cut.
+
+The original 60/30/10 hosted soak was retried with unchanged tasks, seed, workspace and limits. It stopped at run 1/100, d9ce1a35-e7c4-43d4-b619-32383d3353af, now accurately rejected by the driver as driver:stop_reason_max_turn_requests rather than a backend crash. No requests/leaks were recorded. The code defects are resolved; reliable task completion within the declared budget remains the release blocker. Preserve the failure, explicitly scope the soak tasks to the available tools/fixture paths or document a deliberate budget decision, then rerun the full plan. Native desktop/platform/callback gates remain unverified. See [implementation and verification evidence](docs/history/reviews/rc7-turn-limit-fix-2026-10-07/Read.md).
+
+### Follow-up decisions (2026-10-07)
+
+The user chose both remedies for the soak blocker. The default review budget `limits.max_turns_review` is now 20, matching edits, because a broad hosted review exhausted 12 turns in 15 to 27 seconds. The soak driver's built-in review tasks now name a starting file, state that only the file read and search tools exist (the hosted transcripts show attempts to call `bash` and repeated filename greps) and cap the files read. The two failed attempts stay recorded as failures; the next soak runs with the new defaults and tasks against rc.8 and is reported as a new attempt, not a rerun of the original plan.
+
 ## Design references
 
 - [Private RC decision](docs/history/adr/0001-private-release.md).
@@ -292,15 +310,3 @@ A next maintainer should inspect Git status, read this handoff and `README.md`, 
 - [Detailed compatibility findings](docs/compatibility.md).
 - [Security contract](docs/security.md) and [release acceptance](docs/history/acceptance.md).
 - [Plugin scaffold status](README.md#status-and-plugin-scaffold).
-
-## Target-machine follow-up (2026-10-07, rc.7)
-
-Fetched and tested `f30f8d7` in an isolated checkout while preserving the dirty primary checkout. Offline source installation, release packaging/checksums, 596 TypeScript tests (including the two real installed-Vibe profile tests), Python tests and compatibility checks passed. Hosted nested reviews, an independently verified eleven-file edit, ACP continuation, completed/in-progress graceful restart loading, idle expiry and synthetic policy refusals passed through the official MCP client. Native desktop registration, long waits in native clients, clean-account/Intel and callbacks remain unverified.
-
-The D7 test-plan expectation was corrected to match the existing hybrid snapshot contract: a tracked touch is unchanged after hash comparison; an ignored same-content rewrite reports changed by stat. No runtime policy changed. D18 then stopped at run 1/100: Vibe reached the 12-turn cap and exited 1, classified as VSUP_BACKEND_CRASHED. The saved result lacks the error that remains in run metadata. The hosted soak gate did not pass; investigate before rc.8/1.0. See [dated evidence and exact scopes](docs/history/reviews/rc7-target-test-2026-10-07/Read.md). No commit, push, global registration or upstream release was performed.
-
-## Turn-limit and saved-result correction follow-up (2026-10-07)
-
-The two defects from the first D18 attempt are corrected in the isolated f30f8d7 checkout: a strictly confirmed pinned programmatic limit exit now reports completed/max_turn_requests with an incomplete-result warning, and result.json includes settlement/fallback errors before state finalization. Seven process-backed marker/conflict tests and saved-error assertions across settlement paths passed; full release verification passed 603 tests in 53 files, Python tests, real installed-Vibe profiles, lint/typecheck/build, offline package smoke and checksums. A locally patched rc.7 package is preserved; no upstream release was cut.
-
-The original 60/30/10 hosted soak was retried with unchanged tasks, seed, workspace and limits. It stopped at run 1/100, d9ce1a35-e7c4-43d4-b619-32383d3353af, now accurately rejected by the driver as driver:stop_reason_max_turn_requests rather than a backend crash. No requests/leaks were recorded. The code defects are resolved; reliable task completion within the declared budget remains the release blocker. Preserve the failure, explicitly scope the soak tasks to the available tools/fixture paths or document a deliberate budget decision, then rerun the full plan. Native desktop/platform/callback gates remain unverified. See [implementation and verification evidence](docs/history/reviews/rc7-turn-limit-fix-2026-10-07/Read.md).
