@@ -40,6 +40,7 @@
     "checksum": "node scripts/checksum.mjs",
     "docs:errors": "node scripts/errors-doc.mjs",
     "package:rc": "node scripts/package-rc.mjs",
+    "soak": "node scripts/soak.mjs",
     "verify:release": "npm run lint && npm run typecheck && npm run build && npm test && npm run test:python && npm run acceptance && npm run secret-scan && npm run sbom",
     "prepack": "npm run verify:release",
     "pack:dry-run": "npm pack --dry-run --ignore-scripts"
