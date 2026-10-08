@@ -199,6 +199,7 @@ export interface BackendRunHandle {
 export interface BackendCallbacks {
   onEvent(event: Omit<SupervisorEvent, "schemaVersion" | "seq" | "timestamp" | "runId" | "backend">): void | Promise<void>;
   onPendingRequest(request: PendingRequest | undefined): void | Promise<void>;
+  onActivity?(kind: string): void;
   onState(state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "acp">>): void | Promise<void>;
 }
 

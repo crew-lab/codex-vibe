@@ -94,7 +94,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
       const redacted = redactSecrets(text, environmentSecrets(profile.env));
       latestSummary = redacted.slice(-input.limits.maxTranscriptBytes);
       await callbacks.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: `${redacted}\n` } });
-    }, input.limits.maxEventBytes);
+    }, input.limits.maxEventBytes, () => callbacks.onActivity?.('stdout'));
     const stderrRedactor = new StreamingRedactor(environmentSecrets(profile.env));
     let outputLimited = false;
     let parserFailed = false;
@@ -122,6 +122,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
           await child.terminate();
         }); },
         onStderr: (chunk) => {
+          callbacks.onActivity?.('stderr');
           const text = stderrRedactor.push(chunk);
           if (text) stderrChain = stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text } })).then(() => undefined).catch(() => undefined);
         }
@@ -220,7 +221,7 @@ function extractAssistantText(entry: unknown): string {
   return parts.join('');
 }
 
-function createStreamingOutputParser(onAssistantText: (text: string) => Promise<void>, maxLineBytes: number) {
+function createStreamingOutputParser(onAssistantText: (text: string) => Promise<void>, maxLineBytes: number, onLine: () => void = () => undefined) {
   let pending = '';
   return {
     async push(chunk: string): Promise<void> {
@@ -230,6 +231,7 @@ function createStreamingOutputParser(onAssistantText: (text: string) => Promise<
       while ((newline = pending.indexOf('\n')) >= 0) {
         const line = pending.slice(0, newline).trim(); pending = pending.slice(newline + 1);
         if (!line) continue;
+        onLine();
         let entry: unknown;
         try { entry = JSON.parse(line); } catch { continue; }
         const text = extractAssistantText(entry);

@@ -123,7 +123,7 @@ Run `vibe-supervisor init` (or `setup`) to create the private config, then edit 
 | `limits.max_event_bytes` | 52428800 | 1024 to 1073741824 |
 | `limits.max_transcript_bytes` | 10485760 | 1024 to 1073741824 |
 | `limits.max_artifact_bytes` | 104857600 | 1024 to 2147483648 |
-| `limits.worker_progress_timeout_seconds` | 600 | `0` (disabled) or 60 to 7200; a running worker that emits no event for this long fails with `VSUP_NO_PROGRESS` |
+| `limits.worker_progress_timeout_seconds` | 600 | `0` (disabled) or 60 to 7200; a running worker with no activity for this long (no vibe event, ACP notification or request, complete programmatic stdout line, or stderr output) fails with `VSUP_NO_PROGRESS` |
 | `limits.max_mcp_result_chars` | 8000 | 1000 to 1000000 |
 | `limits.mcp_result_format` | `text` | `text`, `structured`, `both` |
 | `paths.vibe` | found on PATH | absolute path or a bare command name resolved from PATH (no other relative paths), up to 4096 characters |
