@@ -1,5 +1,20 @@
 # Implementation handoff
 
+## Next work: ACP field lessons (2026-10-08)
+
+The user-provided deployment report used Supervisor rc.4 with pinned Vibe 2.25.8. It records successful isolated drafting, three correction rounds, patch export and worktree removal, but exhausted-budget continuation made no useful progress and the official client required explicit shutdown. These observations are hypotheses to reproduce on the patched rc.7 package, not proof of current supervisor defects. Independent review caught a denied-invalidation exit-status bug; worker execution claims were not accepted with shell disabled. Keep coordinator ownership of test execution and policy-sensitive acceptance. See [field observations and scope](docs/history/reviews/deployment-acp-lessons-2026-10-08.md).
+
+Run the next checks in this order:
+
+1. **ACP budget and continuation:** use an isolated synthetic fixture and explicit supported limits; reach the turn cap, then attempt one small correction in the same usable session. Record state, stop reason, per-turn/cumulative budget behavior, patch progress and whether continuation executes. Confirm the pinned Vibe contract before changing code. Do not replay an uncertain task, silently increase limits or enable shell/network.
+2. **Client shutdown:** exercise official MCP start/continue/close and connection shutdown with a bounded exit deadline. Record remaining client handles, owned supervisor/worker PIDs, locks and worktrees. Acceptance requires the client to exit and owned resources to settle; attribute any failure to its actual owner before fixing or terminating it. Do not terminate arbitrary saved PIDs.
+3. **Hosted soak:** define a separate task plan using known nested fixture paths and available file tools, then rerun all 60 reviews, 30 edits and 10 ACP scenarios with the existing 12-turn review limit and stop-on-failure. Preserve both earlier broad-task failures. Require normal end_turn finishes, verified integrity and cleanup; partial capped results do not pass.
+4. **Remaining release gates:** after the soak passes, complete native desktop adoption/tool-result visibility/long waits, callbacks/reject behavior, cancellation after generated output, clean-account installation and Intel evidence. Keep missing evidence unverified.
+
+Use narrow worker contracts: objective, owned files, acceptance criteria, available tools and coordinator-run checks. Validate fake executable interception and denied-command/nonzero-exit cases before executing worker-produced deployment-helper tests, with cloud credentials excluded. Existing skills already state the execution boundary; inspect the installed skill and actual prompt before adding duplicate guidance. Session wall time includes coordinator pauses; cached input totals and estimated provider cost do not establish time savings or contribution percentage.
+
+**Delivery status:** the rc.7 fixes, handoff and dated test evidence were committed as `042f641` and pushed to `origin/codex/rc7-testing-fixes` on 2026-10-07. Earlier “no commit/push” statements describe their original test sessions. The branch is not a new published package or proof of merge. This field-lessons update changes documentation only; no new runtime tests, hosted runs, configuration changes or deployment were performed.
+
 Status as of **2026-10-06**: implemented release candidate 0.9.0-rc.7, with hosted review, edit and continuation evidence from the 2026-10-05 target-machine session (history below starts from rc.1 on 2026-10-03), not a production 1.0 certification; the plan for 1.0 is recorded below. Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.7`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
 
 ## Multi-client setup correction (2026-10-06)
