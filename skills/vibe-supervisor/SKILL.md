@@ -12,7 +12,10 @@ Do not use it for deployment, credential handling, shell access, or workspaces o
 ## Before starting
 
 - The canonical workspace path, inside an allowed root. If it is not, tell the user to run `vibe-supervisor allow <dir>` and then restart the Codex MCP server (reconnect for `--isolated`); a running server keeps the allowlist it started with, so `allow` alone does not fix `VSUP_WORKSPACE_INVALID`.
-- A concise task with the expected outcome, constraints and, for an edit, the Git base and files that must not change. Never put secrets in the task.
+- A concise task with the expected outcome, constraints and, for an edit, the Git base and files that must not change. Never put secrets in the task. Vibe does not inherit project instructions or skills, so put the rules it must follow in the task text.
+- For a review, ask for the final answer in this turn: each finding with its file and location, the trigger and the incorrect behavior, or an explicit statement that no defect was found in the inspected scope. Never require a number of findings.
+- A workspace whose root contains `.agents` or `.vibe` is refused, even when those belong to Codex. Do not delete them or work around the guard; tell the user.
+- With `--isolated`, a run belongs to the server connection that started it; keep every call for that `run_id` on the same connection.
 - If the tools are missing or a run fails at launch, run `vibe-supervisor doctor --json`; it proves local prerequisites, not hosted authentication.
 
 ## Loop
@@ -27,6 +30,7 @@ Every reply has `next_action`; follow it.
 ## Check before trusting a result
 
 - `stop_reason`: a `completed` run whose value is not `end_turn` (for example `max_turn_requests`) stopped early and may be partial.
+- For reviews, a style preference, an implementation plan or a request to switch to edit mode is not a correctness finding. `completed` with `end_turn` means the turn finished, not that the review is good.
 - `warnings`, and for reviews `integrity`: `changed` or `unverified` means the source workspace may have changed during the review, so inspect `changed_paths` first.
 - For edits, read the patch (inline, or at `patch_path`) and `changed_files`, not just the summary, then run the checks yourself: Vibe has no shell. The patch is never applied, committed or pushed for you; apply it only when the user authorized it.
 - On `failed`, read `error.code` in [errors](../../docs/errors.md). A process failure never authorizes replaying the task or loosening policy.
