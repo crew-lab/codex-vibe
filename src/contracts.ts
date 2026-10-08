@@ -277,7 +277,7 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_BACKEND_ERROR: "Inspect backend diagnostics and retry if the problem is transient.",
   VSUP_LIMIT_EXCEEDED: "Wait for capacity or increase the configured limit.",
   VSUP_PERMISSION_DENIED: "Review the requested action and grant only if appropriate.",
-  VSUP_TURN_LIMIT_REACHED: "Vibe counts turns cumulatively per session: pass max_turns greater than the current limit to continue, or start a new run from a deliberate base; the task is never replayed.",
+  VSUP_TURN_LIMIT_REACHED: "Vibe counts turns cumulatively per session: pass max_turns greater than the current limit when it is below 50, otherwise start a new run from a deliberate base; the task is never replayed.",
   VSUP_INVALID_STATE: "Check the run status and use an action valid for its current state.",
   VSUP_STORAGE_ERROR: "Check the supervisor data directory permissions and disk space.",
   VSUP_RECOVERY_ERROR: "Inspect recovery diagnostics and start a new run if needed.",

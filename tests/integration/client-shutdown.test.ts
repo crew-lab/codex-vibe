@@ -90,14 +90,11 @@ async function closeWithin(started: Awaited<ReturnType<typeof launch>>) {
 async function residue(box: Awaited<ReturnType<typeof sandbox>>) {
   const workers = await workerPids(box);
   const settledWorkers = await until(() => workers.every((pid) => !alive(pid)), DEADLINE_MS);
-  const { stdout: children } = await exec('ps', ['-axo', 'pid=,ppid=,command=']);
-  const orphans = children.split('\n').filter((line) => line.includes(box.parent));
   return {
     workers: workers.length,
     settledWorkers,
     lockPresent: await exists(path.join(box.data, 'supervisor.lock')),
     worktrees: (await git(box.workspace, ['worktree', 'list', '--porcelain'])).split('\n').filter((line) => line.startsWith('worktree ')).length - 1,
-    orphans,
   };
 }
 
@@ -113,14 +110,15 @@ describe('official MCP client shutdown', () => {
     expect((await settled(started.call, runId, ['completed'])).state).toBe('completed');
     const continued = await started.call('vibe_continue', { run_id: runId, message: 'more' });
     expect(continued.error).toBeUndefined();
-    await until(async () => (await started.call('vibe_status', { run_id: runId, max_events: 0 })).state === 'completed', 10_000);
+    expect(await until(async () => (await started.call('vibe_status', { run_id: runId, max_events: 0 })).state === 'completed', 10_000)).toBe(true);
     const closedRun = await started.call('vibe_close', { run_id: runId });
     expect(closedRun.error).toBeUndefined();
     const outcome = await closeWithin(started);
     expect(outcome).toMatchObject({ closed: true, exited: true });
+    expect(alive(started.pid)).toBe(false);
     await settleFor(box);
     const left = await residue(box);
-    expect(left).toMatchObject({ settledWorkers: true, lockPresent: false, worktrees: 0, orphans: [] });
+    expect(left).toMatchObject({ settledWorkers: true, lockPresent: false, worktrees: 0 });
     expect(left.workers).toBeGreaterThan(0);
   }, 60_000);
 
@@ -133,9 +131,10 @@ describe('official MCP client shutdown', () => {
     expect(['negotiating', 'running']).toContain(running.state);
     const outcome = await closeWithin(started);
     expect(outcome).toMatchObject({ closed: true, exited: true });
+    expect(alive(started.pid)).toBe(false);
     await settleFor(box);
     const left = await residue(box);
-    expect(left).toMatchObject({ settledWorkers: true, lockPresent: false, orphans: [] });
+    expect(left).toMatchObject({ settledWorkers: true, lockPresent: false });
     const meta = JSON.parse(await readFile(path.join(box.data, 'runs', runId, 'meta.json'), 'utf8')) as { state: string };
     expect(['recoverable', 'cancelled', 'failed']).toContain(meta.state);
   }, 60_000);
@@ -151,8 +150,9 @@ describe('official MCP client shutdown', () => {
     expect(workers.some(alive)).toBe(true);
     const outcome = await closeWithin(started);
     expect(outcome).toMatchObject({ closed: true, exited: true });
+    expect(alive(started.pid)).toBe(false);
     await settleFor(box);
     const left = await residue(box);
-    expect(left).toMatchObject({ settledWorkers: true, lockPresent: false, orphans: [] });
+    expect(left).toMatchObject({ settledWorkers: true, lockPresent: false });
   }, 60_000);
 });

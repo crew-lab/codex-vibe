@@ -85,6 +85,7 @@ type StartResult = {
   result?: Record<string, unknown>;
 };
 
+const MAX_TURNS_CEILING = 50;
 const START_ENVELOPE_RESERVE_CHARS = 1500;
 const STATUS_RESULT_RESERVE_CHARS = 100;
 const MAX_META_BYTES = 1_048_576;
@@ -325,8 +326,12 @@ export class RunManager {
     if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
     if (record.pendingRequest || !CONTINUABLE_STATES.has(record.state)) throw codedError("VSUP_INVALID_STATE", "This run cannot accept a continuation in its current state.");
     const raised = input.max_turns;
-    if (record.result?.stopReason === "max_turn_requests" && (raised === undefined || raised <= record.limits.maxTurns)) {
-      throw codedError("VSUP_TURN_LIMIT_REACHED", `Vibe counts turns cumulatively per session and this run has used its limit of ${record.limits.maxTurns}; pass max_turns greater than ${record.limits.maxTurns} to continue.`);
+    const spent = record.result?.stopReason === "max_turn_requests";
+    if (raised !== undefined && raised < record.limits.maxTurns) throw codedError("VSUP_INVALID_ARGUMENT", "max_turns on vibe_continue is the session's cumulative ceiling and cannot be lowered.");
+    if (spent && (raised === undefined || raised <= record.limits.maxTurns)) {
+      throw codedError("VSUP_TURN_LIMIT_REACHED", record.limits.maxTurns >= MAX_TURNS_CEILING
+        ? `Vibe counts turns cumulatively per session and this run has used its limit of ${record.limits.maxTurns}, the maximum; the session cannot be extended, so start a new run from a deliberate base.`
+        : `Vibe counts turns cumulatively per session and this run has used its limit of ${record.limits.maxTurns}; pass max_turns greater than ${record.limits.maxTurns} to continue.`);
     }
     const resumed = record.state !== "ready";
     if (resumed) {
@@ -349,14 +354,19 @@ export class RunManager {
       }
       if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
       delete record.finishedAt; delete record.error;
-      if (record.result) record.result = withoutIntegrity(record.result);
+      if (record.result) { record.result = withoutIntegrity(record.result); delete record.result.stopReason; }
+      if (raised !== undefined) record.limits.maxTurns = raised;
       record.launchedAt = new Date().toISOString();
       await this.setState(runtime, "running", { startedAt: record.launchedAt });
       this.armDeadline(runtime, record.limits.timeoutSeconds * 1000);
     }
     const live = runtime.handle;
     if (!live) throw codedError("VSUP_SESSION_NOT_RESUMABLE", NO_SESSION_MESSAGE);
-    if (raised !== undefined && raised !== record.limits.maxTurns) { record.limits.maxTurns = raised; await this.persist(runtime); }
+    if (!resumed && raised !== undefined && raised !== record.limits.maxTurns) {
+      record.limits.maxTurns = raised;
+      try { await this.persist(runtime); }
+      catch (error) { if (!this.degrade(runtime, error)) throw error; }
+    }
     const continueOptions = raised === undefined ? undefined : { maxTurns: raised };
     try { await backend.continue(live, input.message, continueOptions); }
     catch (error) {
@@ -1120,7 +1130,7 @@ export class RunManager {
     if (artifactBytes > runtime.record.limits.maxArtifactBytes) throw codedError("VSUP_OUTPUT_LIMIT", "Run artifacts exceeded the configured byte limit.");
     const stopReason = runtime.record.result?.stopReason;
     const recordedSummary = runtime.record.result?.summary;
-    const summary = hasText(recordedSummary) ? recordedSummary : resultState === "completed" ? completedSummary(stopReason) : "Vibe run ended before normal completion.";
+    const summary = hasText(recordedSummary) ? recordedSummary : resultState === "completed" ? completedSummary(stopReason, runtime.record.backend) : "Vibe run ended before normal completion.";
     const stopWarning = resultState === "completed" ? stopReasonWarning(stopReason) : undefined;
     const carriedWarnings = withoutStopReasonWarnings(runtime.record.result?.warnings ?? []);
     if (runtime.logUnavailable) carriedWarnings.push(`${UNREADABLE_LOG_WARNING} (${runtime.logUnavailable.reason})`);
@@ -1338,12 +1348,12 @@ export class RunManager {
   private nextAction(record: RunRecord, state: RunState, afterSeq?: number): string {
     const canContinue = record.backend !== "programmatic";
     switch (state) {
-      case "completed": return canContinue && record.result?.stopReason === "max_turn_requests" ? "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns, start a new run, or call vibe_close when done." : canContinue ? "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done." : "Check stop_reason and warnings before trusting the result; call vibe_close when done.";
+      case "completed": return canContinue && record.result?.stopReason === "max_turn_requests" ? `The turn budget is used up for this session: check stop_reason and warnings, then ${budgetAdvice(record)}, or call vibe_close when done.` : canContinue ? "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done." : "Check stop_reason and warnings before trusting the result; call vibe_close when done.";
       case "failed":
       case "cancelled": return "Read error and warnings; call vibe_close when done.";
       case "waiting_permission":
       case "waiting_input": return "Answer the pending request with vibe_respond.";
-      case "recoverable": return canContinue ? "Call vibe_continue to resume the session or vibe_close to discard it." : "Call vibe_close to discard the run.";
+      case "recoverable": return canContinue ? (record.result?.stopReason === "max_turn_requests" ? `The turn budget is used up for this session: ${budgetAdvice(record)}, or call vibe_close to discard it.` : "Call vibe_continue to resume the session or vibe_close to discard it.") : "Call vibe_close to discard the run.";
       case "closing":
       case "closed": return "The run is closed; start a new run for more work.";
       default: return afterSeq === undefined
@@ -1495,11 +1505,17 @@ function printableStopReason(reason: string): string {
   return cleaned.length > MAX_STOP_REASON_CHARS ? `${cleaned.slice(0, MAX_STOP_REASON_CHARS)}...` : cleaned;
 }
 
-function completedSummary(stopReason: string | undefined): string {
+function budgetAdvice(record: RunRecord): string {
+  return record.limits.maxTurns >= MAX_TURNS_CEILING
+    ? "the session cannot be extended, so start a new run from a deliberate base"
+    : "call vibe_continue with a larger max_turns or start a new run";
+}
+
+function completedSummary(stopReason: string | undefined, backend: RunRecord["backend"]): string {
   switch (stopReason) {
     case undefined:
     case "end_turn": return "Vibe completed the delegated task.";
-    case "max_turn_requests": return "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so continue with vibe_continue only with a larger max_turns, or start a new run.";
+    case "max_turn_requests": return `Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so ${backend === "programmatic" ? "start a new run with a larger max_turns" : "continue with vibe_continue only with a larger max_turns, or start a new run"}.`;
     case "max_tokens": return "Vibe stopped at the token limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; continue the run if more work is needed.";
     case "refusal": return "Vibe declined the request. Inspect the artifacts and stop_reason before trusting the result.";
     case "cancelled": return "The Vibe turn was cancelled before it finished. Inspect the artifacts and stop_reason before trusting the result.";
