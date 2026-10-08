@@ -19,3 +19,7 @@ Permission rejections follow the ACP specification: a policy or user denial is s
 Run directories hold two supervisor-written files that mirror the workspace: `launch-manifest.json` (relative paths, stat fields and SHA-256 hashes of Git-visible files, never file content; owner-only, written atomically, read back only when it is a regular file inside the run directory and its digest matches the recorded one) and `events.ndjson` (opened without following links; if it is replaced by a directory, a symlink or another special file the supervisor stops writing, reports a storage error and never touches the replacement). Patch export reads Git state through a private temporary index with split-index and untracked-cache features disabled, so the source repository's git directory is not modified beyond object storage.
 
 What has and has not been verified against hosted Vibe is listed once, in [compatibility](compatibility.md#unverified-gates).
+
+## Opt-in hosted-test diagnostic metadata
+
+The soak diagnostics described in [functionality](functionality.md#optional-worker-diagnostics-and-overall-soak-budget) preserve fixed launcher stages and bounded Python frame locations only. They never serialize frame locals, call arguments or source lines, and do not expose credentials, prompts, reasoning, native histories or raw ACP/provider payloads. Diagnostic files are private, bounded and fail closed on unsafe paths; diagnostics neither grant tools nor weaken runtime deadlines. Normal execution leaves this diagnostic channel disabled.

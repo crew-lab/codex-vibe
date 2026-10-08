@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add opt-in bounded programmatic worker stage/frame diagnostics and an overall hosted-soak budget with reserved cleanup time.
+
 - Bound initial hosted-soak worker deadlines below the driver budget so silent workers can record supervisor timeouts before cleanup; preserve shorter configured limits.
 
 - Fix the npm-installed executable silently exiting when invoked through its symlink. The CLI now resolves the entry path before checking whether to run, and offline package smoke exercises the installed executable directly. Module imports remain inactive.

@@ -97,6 +97,7 @@ export async function createVibeChildProfile(input: StartRunInput, mode: RunMode
   const env = buildChildEnvironment(process.env);
   const originalHome = process.env.HOME;
   if (options.forwardOriginalHome === true && originalHome && path.isAbsolute(originalHome)) env[ORIGINAL_HOME_ENV] = originalHome;
+  if (process.env.VIBE_SUPERVISOR_DIAGNOSTICS === '1') env.VIBE_SUPERVISOR_DIAGNOSTICS = '1';
   env.HOME = home;
   env.VIBE_HOME = vibeHome;
   env.VIBE_ACP_LOGGING_ENABLED = '0';

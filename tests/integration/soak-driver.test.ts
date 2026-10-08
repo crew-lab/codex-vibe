@@ -256,6 +256,38 @@ describe('soak driver', () => {
     expect(starts[0].timeoutSeconds).toBe(45);
   });
 
+  it('preserves only validated diagnostic fields before closing the run', async () => {
+    const box = await sandbox();
+    expect((await soak(box, real(box, { reviews: 1, edits: 0, acp: 0 }, ['--diagnostics']), { FAKE_DIAGNOSTICS_MODE: 'valid' })).code).toBe(0);
+    const [run] = await readRuns(box);
+    const file = path.join(box.out, 'diagnostics', `${run?.runId}.json`);
+    const text = await readFile(file, 'utf8');
+    expect(text).not.toContain('PRIVATE-FIXTURE-CANARY');
+    expect(JSON.parse(text)).toEqual({ schema_version: 1, stages: [{ stage: 'launch', elapsed_ms: 1 }], snapshots: [] });
+    expect((await stat(file)).mode & 0o777).toBe(0o600);
+  });
+
+  it('rejects symlinked diagnostics without changing the run outcome', async () => {
+    const box = await sandbox();
+    expect((await soak(box, real(box, { reviews: 1, edits: 0, acp: 0 }, ['--diagnostics']), { FAKE_DIAGNOSTICS_MODE: 'symlink' })).code).toBe(0);
+    expect(await exists(path.join(box.out, 'diagnostics'))).toBe(false);
+    expect((await readRuns(box))[0]?.closeState).toBe('closed');
+  });
+
+  it('bounds the overall hosted budget and cleans up without starting another run', async () => {
+    const box = await sandbox();
+    const outcome = await soak(box, real(box, { reviews: 3, edits: 0, acp: 0 }, ['--total-timeout', '63', '--wait-seconds', '1', '--diagnostics']), { FAKE_MODE_PROGRAMMATIC: 'silent' });
+    expect(outcome.code).toBe(1);
+    const summary = await readSummary(box);
+    expect(summary.result).toBe('INCOMPLETE');
+    expect(summary.totals.runs).toBe(1);
+    const [run] = await readRuns(box);
+    expect(run?.failures.map((failure) => failure.code)).toContain('driver:total_timeout');
+    expect(run?.closeState).toBe('closed');
+    expect(criterion(summary, 'no_leaked_processes_or_worktrees')).toBe('PASS');
+    expect((await fakeLog(box)).filter((entry) => entry.operation === 'start')).toHaveLength(1);
+  }, 30_000);
+
   it('survives a server that exits mid-soak, records the failure and carries on with a fresh server', async () => {
     const box = await sandbox();
     const outcome = await soak(box, real(box, { reviews: 3, edits: 0, acp: 0 }), { FAKE_MODE_PROGRAMMATIC: 'exit', FAKE_ONLY_NTH: '2' });

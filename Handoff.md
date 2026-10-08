@@ -1,5 +1,9 @@
 # Implementation handoff
 
+## Diagnostic candidate (2026-10-08)
+
+The earlier CLI/deadline fixes are committed on `codex/rc8-stall-diagnostics`, with fetched article revision 7d68f3d incorporated. Opt-in bounded programmatic startup/frame diagnostics and a total soak budget are implemented without MCP-schema or normal-mode changes. Full offline package verification passed 623 TypeScript tests, Python/installed-Vibe checks and installed npm executable/MCP smoke. The single authorized 60/30/10 hosted pass uses the current account, original synthetic fixture and seed soak; it stops on the first failure and reserves one minute within its two-hour budget for cleanup. Previous failures remain recorded; no account rotation, automatic retry or native/platform certification is implied. See [candidate and forthcoming results](docs/history/reviews/rc8-stall-diagnostics-2026-10-08/Read.md).
+
 ## Latest follow-up: soak deadline fix (2026-10-08)
 
 The npm CLI entry fix remains verified. The soak now sets an explicit initial worker timeout below the driver budget (30 seconds reserved for supervisor cleanup) while retaining shorter configured limits. A silent-worker regression records VSUP_TIMEOUT before driver cleanup and verifies worktree removal; short driver-only fault probes and multi-turn ACP limits are documented. Full offline package:rc passed 620 TypeScript tests/56 files, Python tests, installed-Vibe profiles, lint/typecheck/build and direct-executable MCP smoke.
