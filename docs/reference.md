@@ -36,7 +36,7 @@ The backend comes only from the configuration. There is no cancel tool (`vibe_cl
 | | `after_seq` | integer 0 or more | 0 |
 | | `max_events` | integer 0 to 100 | 10 |
 | | `wait_seconds` | integer 0 to 300 | 0 |
-| `vibe_continue` | `run_id`, `message`, `max_turns` | UUID; string 1 to 100000 characters; integer 1 to 50 | `run_id` and `message` required; `max_turns` has no default and a limit is never raised implicitly. After a `max_turn_requests` stop it is required and must exceed the run's current limit, otherwise the call fails with `VSUP_TURN_LIMIT_REACHED` before anything reaches Vibe. The new value becomes the run's limit and is sent with `session/set_config_option` before the prompt. |
+| `vibe_continue` | `run_id`, `message`, `max_turns` | UUID; string 1 to 100000 characters; integer 1 to 50 | `run_id` and `message` required; `max_turns` has no default and a limit is never raised implicitly. It is the session's cumulative ceiling, not an increment: a value below the run's current limit fails with `VSUP_INVALID_ARGUMENT`. After a `max_turn_requests` stop it is required and must exceed the current limit, otherwise the call fails with `VSUP_TURN_LIMIT_REACHED` before anything reaches Vibe; at the maximum of 50 the session cannot be extended and a new run is needed. The new value becomes the run's limit and is sent with `session/set_config_option` before the prompt. |
 | `vibe_respond` | `run_id`, `request_id` | UUID; string 1 to 512 characters | required |
 | | `kind` | `permission` or `elicitation` | required |
 | | `option_id` | permission only: an offered option, 1 to 512 characters | required |

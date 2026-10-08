@@ -24,7 +24,8 @@ afterEach(async () => {
 });
 
 const COMPLETED = "Vibe completed the delegated task.";
-const TURN_LIMIT = "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so continue with vibe_continue only with a larger max_turns, or start a new run.";
+const TURN_LIMIT = "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so start a new run with a larger max_turns.";
+const TURN_LIMIT_ACP = "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so continue with vibe_continue only with a larger max_turns, or start a new run.";
 const CHANGED_PLAIN = "The source workspace changed during this read-only review. The changes may be your own edits or a read-only boundary violation; inspect the changed paths before trusting the review.";
 
 class StdioClientHarness implements Transport {
@@ -252,7 +253,7 @@ describe("stop reason reporting", () => {
       const second = await waitFor(() => manager.result({ run_id: started.run_id }), (value) => value.state === "completed" && value.stop_reason === "max_turn_requests");
       expect(second.state).toBe("completed");
       expect(second.stop_reason).toBe("max_turn_requests");
-      expect(second.summary).toBe(TURN_LIMIT);
+      expect(second.summary).toBe(TURN_LIMIT_ACP);
       expect(second.warnings).toEqual([expect.stringContaining("max_turn_requests")]);
     } finally { await manager.shutdown(); }
   }, 30_000);

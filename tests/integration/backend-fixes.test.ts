@@ -393,3 +393,20 @@ describe('F6: probes never carry the original HOME to the launcher shim', () => 
     expect(await readFile(path.join(dir, 'start-original-home'), 'utf8')).toBe(realHome);
   });
 });
+
+describe('programmatic output limits', () => {
+  it('fails the run when stderr exceeds the event limit instead of leaving it running', async () => {
+    const { root, input } = await prepared();
+    const { vibe } = await installFakeVibe(root, "process.stderr.write('x'.repeat(200000)); setTimeout(() => {}, 30000);");
+    const limited = { ...input, limits: { ...input.limits, maxEventBytes: 1024 } };
+    const errors: Array<{ code: string }> = [];
+    const callbacks: BackendCallbacks = {
+      onEvent: () => undefined, onPendingRequest: () => undefined,
+      onState: (state, update) => { if (state === 'failed' && update?.error) errors.push(update.error); }
+    };
+    await programmaticBackend(vibe).start(limited, callbacks);
+    await waitFor(() => errors, (value) => value.length > 0);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ code: 'VSUP_OUTPUT_LIMIT' });
+  });
+});

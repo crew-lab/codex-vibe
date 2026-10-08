@@ -60,6 +60,7 @@ async function handle(message) {
       const stepFile = process.env.FAKE_BUDGET_STEPS;
       const steps = (existsSync(stepFile) ? Number(readFileSync(stepFile, 'utf8')) : 0) + 1;
       writeFileSync(stepFile, String(steps));
+      if (process.env.FAKE_BUDGET_HANG_AT && steps === Number(process.env.FAKE_BUDGET_HANG_AT)) { await new Promise(() => {}); }
       if (steps >= budgetLimit) { reply(message.id, { stopReason: 'max_turn_requests' }); return; }
       chunk(`budget-reply-${steps}`);
       reply(message.id, { stopReason: 'end_turn' });
