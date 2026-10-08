@@ -34,7 +34,7 @@ const USAGE = `Usage: node scripts/soak.mjs --workspace <repo> [options]
   --diagnostics             Record bounded private launcher diagnostics for programmatic workers
   --total-timeout N          Overall seconds, at least 61; reserve final 60 seconds for cleanup
   --stop-on-fail            Stop after the first failed run; a truncated run is not a failure
-  --max-truncated-percent N Largest share of completed runs allowed to end truncated, 0 to 100 (default 10)
+  --max-truncated-percent N Largest share of completed runs allowed to end truncated, overall and per kind and backend, 0 to 100 (default 10)
   --yes                     Start the hosted runs; without it only the plan is printed
 
 Built-in tasks are bounded: each names its files, caps the reads and searches, and requires a final answer
@@ -376,7 +376,7 @@ function newRecord(job, index, total) {
     permissionRequests: 0, permissionRejected: 0, requests: [], timeToFirstEventMs: null, timeToSettledMs: null,
     finalState: null, stopReason: null, errorCode: null, warnings: [], integrity: null, usage: null, changedFilesTotal: null,
     turns: [], closeState: null, worktreeRemoved: null, worktreeRetainedReason: null, restart: null, closeMid: null,
-    serverLost: false, truncated: false, failures: [], ok: true,
+    serverLost: false, truncated: false, continuation: null, failures: [], ok: true,
   };
 }
 
@@ -593,6 +593,7 @@ async function scenario(ctx) {
   const good = judge(ctx, await awaitSettled(ctx, first));
   if (!good) return;
   if (job.scenario === 'continue') {
+    if (ctx.turn.truncated === true) { ctx.rec.continuation = { skipped: 'first_turn_truncated' }; return; }
     const second = await continueTurn(ctx, job.followup);
     judge(ctx, second);
     return;
@@ -641,13 +642,13 @@ function finalizeRecord(ctx) {
   const rec = ctx.rec;
   rec.turns = rec.turns.map((turn) => { const copy = { ...turn }; delete copy.began; return copy; });
   const firstTurn = rec.turns[0];
-  const lastTurn = rec.turns.at(-1);
   rec.timeToFirstEventMs = firstTurn?.firstEventMs ?? null;
   rec.timeToSettledMs = firstTurn?.settledMs ?? null;
-  rec.finalState = lastTurn?.state ?? null;
-  rec.stopReason = lastTurn?.stopReason ?? null;
+  const settledTurn = [...rec.turns].reverse().find((turn) => turn.state !== null);
+  rec.finalState = settledTurn?.state ?? null;
+  rec.stopReason = settledTurn?.stopReason ?? null;
   rec.errorCode = [...rec.turns].reverse().find((turn) => turn.errorCode)?.errorCode ?? null;
-  rec.integrity = lastTurn?.integrity ?? null;
+  rec.integrity = settledTurn?.integrity ?? null;
   rec.usage = [...rec.turns].reverse().find((turn) => turn.usage)?.usage ?? null;
   rec.truncated = rec.turns.some((turn) => turn.truncated === true);
   rec.warnings = rec.turns.flatMap((turn) => turn.warnings).slice(0, 10);
@@ -782,9 +783,18 @@ function summarize({ records, o, plan, startedAt, reports, processes, registered
   const oversized = Object.values(reports).reduce((sum, report) => sum + report.oversized_runs.length, 0);
   const missing = Object.values(reports).reduce((sum, report) => sum + report.missing_runs.length, 0);
   const completedRuns = records.filter((rec) => rec.finalState === 'completed').length;
-  const truncatedRuns = records.filter((rec) => rec.truncated);
+  const truncatedRuns = records.filter((rec) => rec.truncated && rec.finalState === 'completed');
   const truncatedCount = (key) => truncatedRuns.reduce((table, rec) => { table[key(rec)] = (table[key(rec)] ?? 0) + 1; return table; }, {});
-  const truncatedPercent = completedRuns ? (truncatedRuns.length * 100) / completedRuns : 0;
+  const truncationBuckets = [{ name: 'overall', matches: () => true }];
+  for (const kind of [...new Set(records.map((rec) => rec.kind))].sort()) truncationBuckets.push({ name: `kind ${kind}`, matches: (rec) => rec.kind === kind });
+  for (const backend of [...new Set(records.map((rec) => rec.backend))].sort()) truncationBuckets.push({ name: `backend ${backend}`, matches: (rec) => rec.backend === backend });
+  const truncationShares = truncationBuckets.map((bucketSpec) => {
+    const completed = records.filter((rec) => rec.finalState === 'completed' && bucketSpec.matches(rec)).length;
+    const truncated = truncatedRuns.filter(bucketSpec.matches).length;
+    return { name: bucketSpec.name, completed, truncated, percent: completed ? (truncated * 100) / completed : 0 };
+  });
+  const truncatedPercent = truncationShares[0].percent;
+  const overLimit = truncationShares.filter((share) => share.percent > o.maxTruncatedPercent);
   const verdict = (pass) => (pass ? 'PASS' : 'FAIL');
   const criteria = [
     { id: 'zero_unexpected_failures', status: verdict(unexpected === 0 && !fatal), detail: `${unexpected} unexpected failures${fatal ? `; fatal: ${fatal}` : ''}` },
@@ -792,7 +802,7 @@ function summarize({ records, o, plan, startedAt, reports, processes, registered
     { id: 'no_leaked_processes_or_worktrees', status: verdict(leakedProcesses.length === 0 && leakedWorktrees === 0), detail: `${leakedProcesses.length} orphaned or descendant vibe processes, ${leakedWorktrees} leftover worktrees` },
     { id: 'bounded_artifacts', status: verdict(oversized === 0), detail: `${oversized} run directories above the per-run limit` },
     { id: 'retention_keeps_recent_runs', status: verdict(missing === 0), detail: `${missing} recorded runs missing from disk (retention.days ${retentionDays})` },
-    { id: 'truncated_within_threshold', status: verdict(truncatedPercent <= o.maxTruncatedPercent), detail: `${truncatedRuns.length} of ${completedRuns} completed runs ended truncated (${truncatedPercent.toFixed(1)}%, limit ${o.maxTruncatedPercent}%)` },
+    { id: 'truncated_within_threshold', status: verdict(overLimit.length === 0), detail: `${truncatedRuns.length} of ${completedRuns} completed runs ended truncated (${truncatedPercent.toFixed(1)}%, limit ${o.maxTruncatedPercent}% overall and per kind and backend)${overLimit.map((share) => `; ${share.name}: ${share.truncated} of ${share.completed} (${share.percent.toFixed(1)}%) exceeds the limit`).join('')}` },
   ];
   if (o.totalTimeout !== undefined) {
     criteria.push({ id: 'all_planned_runs', status: verdict(records.length === o.reviews + o.edits + o.acp), detail: `${records.length}/${o.reviews + o.edits + o.acp} runs attempted` });
@@ -848,7 +858,7 @@ function printPlan(o, plan, preflight, outDirectory) {
     `server command: ${o.serverCommand} ${o.serverArgs.join(' ')}`,
     `evidence directory: ${outDirectory}`,
     'tasks: bounded built-in tasks name their files, cap reads and searches and require a short final answer; review-long is intentionally unbounded and only feeds the mid-turn close and restart scenarios',
-    `truncation: a completed run stopped by max_turn_requests or max_tokens with the partial-result warning is counted as truncated, not failed; allowed up to ${o.maxTruncatedPercent}% of completed runs`,
+    `truncation: a completed run stopped by max_turn_requests or max_tokens with the partial-result warning is counted as truncated, not failed; allowed up to ${o.maxTruncatedPercent}% of completed runs overall and within each kind and backend; a continue scenario whose first turn is truncated skips its follow-up`,
     `seed: ${o.seed}; status wait ${o.waitSeconds}s; run timeout ${o.runTimeout}s; total timeout ${o.totalTimeout ?? "unset"}s; diagnostics ${o.diagnostics ? "on" : "off"}`,
     `preflight: workspace in the template allowlist: ${preflight.allowed ? 'yes' : 'NO'}; git repository: ${preflight.git ? 'yes' : 'NO'}; template config: ${preflight.templatePath}`,
     'COST WARNING: every run sends the repository and the tasks to Mistral and is billed. Earlier hosted edits cost about $0.02 each; the real total depends on the tasks and the account. Run it only with the owner authorization.',

@@ -55,6 +55,8 @@ interface Runtime {
   deferredResponses: BackendRespondInput[];
   idleTimer?: NodeJS.Timeout;
   progressTimer?: NodeJS.Timeout;
+  progressArmedAt?: number;
+  lastActivity?: { at: number; kind: string };
   transcriptOverflow: boolean;
   requestedOutcome?: RequestedOutcome;
   storageDegraded?: { code: string; directory: string };
@@ -558,6 +560,7 @@ export class RunManager {
   private async closeRun(runtime: Runtime, cleanupWanted: boolean): Promise<Record<string, unknown>> {
     const record = runtime.record;
     if (record.state === "closed") return this.closeOutcome(runtime, cleanupWanted ? await this.cleanupWorktree(runtime) : { removed: false });
+    this.clearProgress(runtime);
     if (!isTerminal(record.state)) await this.cancel({ run_id: record.runId });
     if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
     await this.setState(runtime, "closing");
@@ -834,17 +837,19 @@ export class RunManager {
     return {
       onEvent: (event) => {
         if (this.stopping) return undefined;
-        if (event.source === "vibe") this.watchProgress(runtime);
+        if (event.source === "vibe") this.noteActivity(runtime, `vibe:${String(event.type).slice(0, 64)}`);
         return this.serial(runtime, async () => this.appendEvent(runtime, event)).catch((error: unknown) => this.noteEventFailure(runtime, error));
       },
+      onActivity: (kind) => { this.noteActivity(runtime, kind); },
       onPendingRequest: (pending) => {
         if (this.stopping) return undefined;
-        this.watchProgress(runtime);
+        this.noteActivity(runtime, "permission_request");
         return this.receivePending(runtime, pending);
       },
       onState: (state, update) => {
         if (this.stopping) return undefined;
-        this.watchProgress(runtime);
+        if (state === "running") this.noteActivity(runtime, `state:${state}`);
+        else this.clearProgress(runtime);
         return this.serial(runtime, async () => this.applyBackendState(runtime, state, update)).catch((error: unknown) => this.recordIgnoredTransition(runtime, state, error));
       }
     };
@@ -979,6 +984,7 @@ export class RunManager {
   private requestOutcome(runtime: Runtime, outcome: RequestedOutcome): RequestedOutcome {
     runtime.cancelRequested = true;
     runtime.requestedOutcome ??= outcome;
+    this.clearProgress(runtime);
     return runtime.requestedOutcome;
   }
 
@@ -1205,22 +1211,36 @@ export class RunManager {
     return "cancelled";
   }
 
-  private watchProgress(runtime: Runtime): void {
+  private noteActivity(runtime: Runtime, kind: string): void {
+    if (this.stopping) return;
+    runtime.lastActivity = { at: Date.now(), kind };
+    this.watchProgress(runtime);
+  }
+
+  private clearProgress(runtime: Runtime): void {
     if (runtime.progressTimer) clearTimeout(runtime.progressTimer);
     delete runtime.progressTimer;
+  }
+
+  private watchProgress(runtime: Runtime): void {
+    this.clearProgress(runtime);
     const seconds = this.config.limits.workerProgressTimeoutSeconds;
     if (this.stopping || !(seconds > 0) || runtime.record.state !== "running" || runtime.requestedOutcome) return;
+    runtime.progressArmedAt = Date.now();
     runtime.progressTimer = setTimeout(() => { this.noProgress(runtime, seconds).catch((error: unknown) => this.reportBackground(runtime, "progress-watchdog", error)); }, seconds * 1000);
     runtime.progressTimer.unref?.();
   }
 
   private async noProgress(runtime: Runtime, seconds: number): Promise<void> {
     delete runtime.progressTimer;
-    if (runtime.record.state !== "running") return;
+    if (this.stopping || runtime.requestedOutcome || runtime.record.state !== "running") return;
+    const since = runtime.lastActivity?.at ?? runtime.progressArmedAt ?? Date.now() - seconds * 1000;
+    const silence = Math.max(1, Math.round((Date.now() - since) / 1000));
+    const lastKind = runtime.lastActivity?.kind ?? "none";
     this.requestOutcome(runtime, { state: "failed", error: supervisorError("VSUP_NO_PROGRESS", `The worker produced no output for ${seconds} seconds.`) });
     await this.serial(runtime, async () => {
       if (runtime.record.state !== "running") return;
-      await this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "warning", data: { reason: "no_progress", silence_seconds: seconds, message: `The worker produced no output for ${seconds} seconds.` } }).catch(() => undefined);
+      await this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "warning", data: { reason: "no_progress", silence_seconds: silence, last_activity_kind: lastKind, message: `The worker produced no output for ${seconds} seconds.` } }).catch(() => undefined);
     });
     await this.cancelBackendSession(runtime);
     await this.serial(runtime, async () => {
@@ -1257,6 +1277,7 @@ export class RunManager {
     if (update?.startedAt) runtime.record.startedAt = update.startedAt;
     if (update?.finishedAt) runtime.record.finishedAt = update.finishedAt;
     if ((isTerminal(state) || state === "completed") && runtime.timer) clearTimeout(runtime.timer);
+    if (state === "running") delete runtime.lastActivity;
     this.watchProgress(runtime);
     try { await this.persist(runtime); }
     catch (error) { if (!this.degrade(runtime, error)) throw error; }

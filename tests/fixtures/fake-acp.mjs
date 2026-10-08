@@ -119,6 +119,19 @@ async function handle(message) {
     if (mode === 'slow-chunks') {
       for (let index = 0; index < 3; index += 1) { await new Promise((resolve) => setTimeout(resolve, 1000)); chunk(`slow-${index}\n`); }
     }
+    if (mode === 'tools-only') {
+      for (let index = 0; index < 4; index += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        notification('session/update', { sessionId, update: { sessionUpdate: 'tool_call', toolCallId: `tool-${index}`, title: 'Read source', kind: 'read', rawInput: { path: '/tmp/source.txt' }, locations: [{ path: '/tmp/source.txt' }] } });
+        notification('session/update', { sessionId, update: { sessionUpdate: 'usage_update', used: index, size: 100 } });
+      }
+    }
+    if (mode === 'thoughts-only') {
+      for (let index = 0; index < 4; index += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        notification('session/update', { sessionId, update: { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'PRIVATE_THOUGHT_MUST_NOT_ESCAPE' } } });
+      }
+    }
     if (mode === 'partial-wait') {
       chunk('first complete line\n');
       chunk('partial line without newline');

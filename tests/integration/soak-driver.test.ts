@@ -40,6 +40,7 @@ interface RunRecord {
   permissionRequests: number; requests: { responded: string | null }[]; timeToFirstEventMs: number | null; timeToSettledMs: number | null;
   finalState: string | null; stopReason: string | null; integrity: string | null; closeState: string | null; worktreeRemoved: boolean | null;
   restart: { outcome?: string; exercised: boolean } | null; closeMid: { exercised: boolean } | null; usage: unknown;
+  continuation?: { skipped?: string } | null;
   turns: { label: string; state: string | null }[]; failures: { code: string }[]; ok: boolean;
 }
 
@@ -348,6 +349,36 @@ describe('soak driver', () => {
     expect(summary.truncated.runs).toBe(0);
     expect(criterion(summary, 'zero_unexpected_failures')).toBe('FAIL');
   }, 90_000);
+
+  it('skips the continue follow-up after a truncated first turn instead of failing it', async () => {
+    const box = await sandbox();
+    const outcome = await soak(box, real(box, { reviews: 0, edits: 0, acp: 1 }, ['--max-truncated-percent', '100']), { FAKE_MODE_ACP: 'truncated', FAKE_ONLY_NTH: '1' });
+    expect(outcome.code).toBe(0);
+    const summary = await readSummary(box);
+    expect(summary.failures_by_code).toEqual({});
+    expect(summary.truncated).toEqual({ runs: 1, by_kind: { acp: 1 }, by_backend: { acp: 1 } });
+    expect(criterion(summary, 'zero_unexpected_failures')).toBe('PASS');
+    const [run] = await readRuns(box);
+    expect(run?.scenario).toBe('continue');
+    expect(run?.ok).toBe(true);
+    expect(run?.finalState).toBe('completed');
+    expect(run?.turns.map((turn) => turn.label)).toEqual(['start']);
+    expect(run?.continuation).toEqual({ skipped: 'first_turn_truncated' });
+  }, 90_000);
+
+  it('fails the criterion when one kind or backend bucket exceeds the threshold although the overall share is within it', async () => {
+    const box = await sandbox();
+    const outcome = await soak(box, real(box, { reviews: 18, edits: 0, acp: 2 }), { FAKE_MODE_ACP: 'truncated', FAKE_ONLY_NTH: '1' });
+    expect(outcome.code).toBe(1);
+    const summary = await readSummary(box);
+    expect(summary.truncated.runs).toBe(1);
+    expect(criterion(summary, 'zero_unexpected_failures')).toBe('PASS');
+    expect(criterion(summary, 'truncated_within_threshold')).toBe('FAIL');
+    const detail = summary.criteria.find((item) => item.id === 'truncated_within_threshold')?.detail ?? '';
+    expect(detail).toContain('acp');
+    const relaxed = await sandbox();
+    expect((await soak(relaxed, real(relaxed, { reviews: 18, edits: 0, acp: 2 }, ['--max-truncated-percent', '100']), { FAKE_MODE_ACP: 'truncated', FAKE_ONLY_NTH: '1' })).code).toBe(0);
+  }, 120_000);
 
   it('does not stop on truncation with --stop-on-fail', async () => {
     const box = await sandbox();

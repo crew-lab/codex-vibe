@@ -227,7 +227,7 @@ export class AcpBackend implements SupervisorBackend {
     const child = spawnManaged(launch.command, launch.args, {
       cwd: input.workerWorkspace, env: launch.env, forwardEnv: Object.keys(launch.env), stdio: ['pipe', 'pipe', 'pipe'], maxStdoutBytes: input.limits.maxTranscriptBytes, maxStderrBytes: input.limits.maxEventBytes,
       onLimit: () => { outputLimited = true; outputLimitReported = true; Promise.resolve(callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', 'Vibe ACP output exceeded the configured limit.') })).catch(reportFailure('acp-output-limit')); },
-      onStderr: (text) => { const safe = stderrRedactor.push(text); if (safe) stderrChain = stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: safe } })).then(() => undefined).catch(() => undefined); }
+      onStderr: (text) => { callbacks.onActivity?.('stderr'); const safe = stderrRedactor.push(text); if (safe) stderrChain = stderrChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: safe } })).then(() => undefined).catch(() => undefined); }
     });
     try { await spawned(child); }
     catch (error) { child.done.catch(() => undefined); throw await classifyStartFailure('acp', this.executable(), error); }
@@ -284,10 +284,13 @@ export class AcpBackend implements SupervisorBackend {
   private async connect(state: AcpState, secret?: string): Promise<void> {
     const app = client({ name: 'vibe-supervisor' })
       .onNotification('session/update', async (context) => {
+        const updateKind = (context.params.update as unknown as { sessionUpdate?: unknown } | undefined)?.sessionUpdate;
+        state.callbacks.onActivity?.(`acp:${typeof updateKind === 'string' ? updateKind.slice(0, 64) : 'update'}`);
         if (state.suppressReplay) return;
         await this.onUpdate(state, context.params.update as unknown as Record<string, unknown>, secret, expectedAgent(state.input.mode));
       })
       .onRequest('session/request_permission', async (context) => {
+        state.callbacks.onActivity?.('acp:request_permission');
         const toolCallId = context.params.toolCall.toolCallId;
         const known = state.toolCalls.get(toolCallId);
         const id = String(context.requestId);
@@ -306,6 +309,7 @@ export class AcpBackend implements SupervisorBackend {
         return response;
       })
       .onRequest('elicitation/create', async (context) => {
+        state.callbacks.onActivity?.('acp:elicitation');
         const req = context.params;
         if (req.mode !== 'form' || state.request || !isSafeFormSchema(req.requestedSchema)) return { action: 'decline' };
         const id = String(context.requestId);
@@ -514,7 +518,7 @@ export class AcpBackend implements SupervisorBackend {
     const process = spawnManaged(launch.command, launch.args, {
       cwd: record.workerWorkspace, env: launch.env, forwardEnv: Object.keys(launch.env), stdio: ['pipe', 'pipe', 'pipe'],
       maxStdoutBytes: record.limits.maxTranscriptBytes, maxStderrBytes: record.limits.maxEventBytes,
-      onStderr: (chunk) => { stderrTail = `${stderrTail}${chunk}`.slice(-RECOVER_STDERR_CHARS); const safe = redactor.push(chunk); if (safe) eventChain = eventChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: safe } })).then(() => undefined); }
+      onStderr: (chunk) => { callbacks.onActivity?.('stderr'); stderrTail = `${stderrTail}${chunk}`.slice(-RECOVER_STDERR_CHARS); const safe = redactor.push(chunk); if (safe) eventChain = eventChain.then(() => callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: safe } })).then(() => undefined); }
     });
     const state: AcpState = { process, home: profile.home, vibeHome: profile.vibeHome, ready: deferred<BackendStartResult>(), commands: makeQueue(), connected: Promise.resolve(), closed: false, exited: false, readySettled: false, sessionReady: false, failureReported: false, released: false, toolCalls: new Map(), callbacks, input, sessionId: acp.sessionId, recovering: true, suppressReplay: true, turnActive: false };
     state.connected = this.connect(state, launch.env.MISTRAL_API_KEY);

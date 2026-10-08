@@ -4,14 +4,28 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { afterEach, describe, expect, it } from "vitest";
+import { chmod } from "node:fs/promises";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, PendingRequest, RunRecord, StartRunInput, SupervisorBackend, SupervisorConfig } from "../../src/contracts.js";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
 import { validateConfig } from "../../src/config/validation.js";
 import { RunManager } from "../../src/core/run-manager.js";
 import { AcpBackend } from "../../src/backends/acp.js";
+import { ProgrammaticBackend } from "../../src/backends/programmatic.js";
 import type { VibeChildProfile } from "../../src/backends/profile.js";
 import type { VibeLaunch } from "../../src/backends/launcher.js";
+
+const childScript = vi.hoisted(() => ({ path: "" }));
+vi.mock("../../src/backends/launcher.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../src/backends/launcher.js")>();
+  return {
+    ...original,
+    buildVibeLaunch: async (...args: Parameters<typeof original.buildVibeLaunch>) => {
+      const launch = await original.buildVibeLaunch(...args);
+      return childScript.path ? { ...launch, command: process.execPath, args: [childScript.path] } : launch;
+    }
+  };
+});
 
 const exec = promisify(execFile);
 const fixture = fileURLToPath(new URL("../fixtures/fake-acp.mjs", import.meta.url));
@@ -33,6 +47,7 @@ class ScriptedBackend implements SupervisorBackend {
   callbacks = new Map<string, BackendCallbacks>();
   cancelled: string[] = [];
   closed: string[] = [];
+  cancelDelayMs = 0;
   async probe() { return { available: true, backend: this.kind, supportsContinue: true, supportsPermissionResponse: true }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     this.callbacks.set(input.runId, callbacks);
@@ -40,7 +55,7 @@ class ScriptedBackend implements SupervisorBackend {
   }
   async continue() {}
   async respond() {}
-  async cancel(handle: BackendRunHandle) { this.cancelled.push(handle.runId); await this.callbacks.get(handle.runId)?.onState("cancelled"); }
+  async cancel(handle: BackendRunHandle) { this.cancelled.push(handle.runId); if (this.cancelDelayMs) await new Promise((resolve) => setTimeout(resolve, this.cancelDelayMs)); await this.callbacks.get(handle.runId)?.onState("cancelled"); }
   async close(handle: BackendRunHandle) { this.closed.push(handle.runId); }
   async recover(_record: RunRecord, _callbacks: BackendCallbacks) { return undefined; }
 }
@@ -66,6 +81,7 @@ async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean, t
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const activeSlots = (manager: RunManager) => (manager as unknown as { activeSlots: number }).activeSlots;
 const stateOf = (manager: RunManager, runId: string) => manager.status({ run_id: runId }).then((value) => value.state as string);
+const runtimeOf = (manager: RunManager, runId: string) => (manager as unknown as { runs: Map<string, { progressTimer?: unknown; serial: Promise<unknown> }> }).runs.get(runId)!;
 const exists = (file: string) => access(file).then(() => true, () => false);
 
 async function setup(progressSeconds: number, options: { git?: boolean; backend?: (data: string, source: string, pidDir: string) => SupervisorBackend; config?: Partial<SupervisorConfig> } = {}) {
@@ -158,17 +174,30 @@ describe("worker progress watchdog", () => {
     } finally { await context.manager.shutdown(); }
   });
 
-  it("is disabled by 0", async () => {
+  it("is disabled by 0: no timer is armed, while a sibling with a tiny window trips", async () => {
     const context = await setup(0);
     try {
+      const backend = context.backend as ScriptedBackend;
       const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
       await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
+      expect(runtimeOf(context.manager, started.run_id).progressTimer).toBeUndefined();
+      await backend.callbacks.get(started.run_id)!.onEvent({ source: "vibe", type: "message", severity: "info", data: { text: "hello\n" } });
+      await backend.callbacks.get(started.run_id)!.onActivity?.("stdout");
+      expect(runtimeOf(context.manager, started.run_id).progressTimer).toBeUndefined();
       await sleep(1500);
       expect(await stateOf(context.manager, started.run_id)).toBe("running");
     } finally { await context.manager.shutdown(); }
+    const sibling = await setup(1);
+    try {
+      const started = await sibling.manager.reviewStart({ task: "review", cwd: sibling.source });
+      await waitFor(() => stateOf(sibling.manager, started.run_id), (value) => value === "running");
+      expect(runtimeOf(sibling.manager, started.run_id).progressTimer).toBeDefined();
+      const status = await waitFor(() => sibling.manager.status({ run_id: started.run_id }), (value) => value.state === "failed");
+      expect(status.error).toMatchObject({ code: "VSUP_NO_PROGRESS" });
+    } finally { await sibling.manager.shutdown(); }
   });
 
-  it("ignores queued runs and idle completed sessions", async () => {
+  it("does not watch a run that stays queued longer than the window, then watches it once it runs", async () => {
     const context = await setup(1, { config: { maxConcurrentRuns: 1 } });
     try {
       const backend = context.backend as ScriptedBackend;
@@ -176,7 +205,11 @@ describe("worker progress watchdog", () => {
       await waitFor(() => stateOf(context.manager, first.run_id), (value) => value === "running");
       const queued = await context.manager.reviewStart({ task: "queued", cwd: context.source });
       expect(await stateOf(context.manager, queued.run_id)).toBe("queued");
-      await backend.callbacks.get(first.run_id)!.onState("completed", { result: { summary: "done" } });
+      const firstCallbacks = backend.callbacks.get(first.run_id)!;
+      for (let index = 0; index < 5; index += 1) { await sleep(500); await firstCallbacks.onEvent({ source: "vibe", type: "message", severity: "info", data: { text: `tick ${index}\n` } }); }
+      expect(await stateOf(context.manager, queued.run_id)).toBe("queued");
+      expect(runtimeOf(context.manager, queued.run_id).progressTimer).toBeUndefined();
+      await firstCallbacks.onState("completed", { result: { summary: "done" } });
       await waitFor(() => stateOf(context.manager, queued.run_id), (value) => value === "running");
       await backend.callbacks.get(queued.run_id)!.onState("completed", { result: { summary: "done" } });
       await sleep(2300);
@@ -239,6 +272,132 @@ describe("worker progress watchdog", () => {
       const status = await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "failed");
       expect(status.error).toMatchObject({ code: "VSUP_NO_PROGRESS" });
     } finally { await manager.shutdown(); }
+  });
+});
+
+describe("worker activity and settle races", () => {
+  it("counts ACP tool calls and usage updates as activity", async () => {
+    const context = await setup(2, { backend: (data, source) => new FakeAcpBackend("tools-only", data, [source]) });
+    try {
+      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      const status = await waitFor(() => context.manager.status({ run_id: started.run_id }), (value) => value.state === "completed" || value.state === "failed", 15_000);
+      expect(status.state).toBe("completed");
+    } finally { await context.manager.shutdown(); }
+  });
+
+  it("counts dropped ACP thought chunks as activity without persisting thought content", async () => {
+    const context = await setup(2, { backend: (data, source) => new FakeAcpBackend("thoughts-only", data, [source]) });
+    try {
+      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      const status = await waitFor(() => context.manager.status({ run_id: started.run_id }), (value) => value.state === "completed" || value.state === "failed", 15_000);
+      expect(status.state).toBe("completed");
+      const raw = await readFile(path.join(context.data, "runs", started.run_id, "events.ndjson"), "utf8").catch(() => "");
+      expect(raw).not.toContain("PRIVATE_THOUGHT_MUST_NOT_ESCAPE");
+    } finally { await context.manager.shutdown(); }
+  });
+
+  it("counts programmatic stdout lines that carry no assistant text and stderr output as activity", async () => {
+    const parent = await mkdtemp(path.join(canonicalTmp, "vsup-progress-")); roots.push(parent);
+    const dir = path.join(parent, "fake-vibe"); await mkdir(dir);
+    const vibe = path.join(dir, "vibe");
+    await writeFile(vibe, ["#!/usr/bin/env python3", "print(\"vibe 2.25.8\")", ""].join("\n")); await chmod(vibe, 0o755);
+    const child = path.join(dir, "child.mjs");
+    await writeFile(child, [
+      "const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));",
+      "for (let index = 0; index < 4; index += 1) {",
+      "  await wait(1000);",
+      "  if (index % 2) process.stderr.write('working\\n');",
+      "  else process.stdout.write(JSON.stringify({ role: 'tool', content: [{ type: 'tool_result', text: 'ok' }] }) + '\\n');",
+      "}",
+      "process.stdout.write(JSON.stringify({ role: 'assistant', text: 'done' }) + '\\n');",
+      ""
+    ].join("\n"));
+    childScript.path = child;
+    const context = await setup(2, { backend: () => new ProgrammaticBackend({ ...DEFAULT_CONFIG, backend: "programmatic", paths: { vibe } }), config: { backend: "programmatic" } });
+    try {
+      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      const status = await waitFor(() => context.manager.status({ run_id: started.run_id }), (value) => value.state === "completed" || value.state === "failed", 20_000);
+      expect(status.state).toBe("completed");
+    } finally { childScript.path = ""; await context.manager.shutdown(); }
+  });
+
+  it("records the last activity kind and the silence in the no_progress diagnostic", async () => {
+    const context = await setup(1);
+    try {
+      const backend = context.backend as ScriptedBackend;
+      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
+      await backend.callbacks.get(started.run_id)!.onActivity?.("acp:tool_call");
+      await waitFor(() => context.manager.status({ run_id: started.run_id }), (value) => value.state === "failed");
+      const events = await readEvents(context.data, started.run_id);
+      expect(events.find((event) => event.data.reason === "no_progress")?.data).toMatchObject({ last_activity_kind: "acp:tool_call", silence_seconds: 1 });
+    } finally { await context.manager.shutdown(); }
+    const silent = await setup(1);
+    try {
+      const started = await silent.manager.reviewStart({ task: "review", cwd: silent.source });
+      await waitFor(() => silent.manager.status({ run_id: started.run_id }), (value) => value.state === "failed");
+      const events = await readEvents(silent.data, started.run_id);
+      expect(events.find((event) => event.data.reason === "no_progress")?.data).toMatchObject({ last_activity_kind: "none" });
+    } finally { await silent.manager.shutdown(); }
+  });
+
+  it("does not add a no_progress diagnostic to a run being cancelled", async () => {
+    const context = await setup(1);
+    try {
+      const backend = context.backend as ScriptedBackend;
+      backend.cancelDelayMs = 2000;
+      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
+      await context.manager.cancel({ run_id: started.run_id });
+      await sleep(300);
+      const status = await context.manager.status({ run_id: started.run_id });
+      expect(status.state).toBe("cancelled");
+      expect((await readEvents(context.data, started.run_id)).some((event) => event.data.reason === "no_progress")).toBe(false);
+    } finally { await context.manager.shutdown(); }
+  });
+
+  it("does not add a no_progress diagnostic to a run whose deadline fired", async () => {
+    const context = await setup(1);
+    try {
+      const backend = context.backend as ScriptedBackend;
+      backend.cancelDelayMs = 2000;
+      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
+      const runtime = runtimeOf(context.manager, started.run_id);
+      await (context.manager as unknown as { deadline(runtime: unknown): Promise<void> }).deadline(runtime);
+      const status = await context.manager.status({ run_id: started.run_id });
+      expect(status.error).toMatchObject({ code: "VSUP_TIMEOUT" });
+      expect((await readEvents(context.data, started.run_id)).some((event) => event.data.reason === "no_progress")).toBe(false);
+    } finally { await context.manager.shutdown(); }
+  });
+
+  it("does not cancel a completed run whose settling outlasts the window", async () => {
+    const context = await setup(1);
+    try {
+      const backend = context.backend as ScriptedBackend;
+      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
+      const runtime = runtimeOf(context.manager, started.run_id);
+      runtime.serial = runtime.serial.then(() => sleep(1800));
+      const done = backend.callbacks.get(started.run_id)!.onState("completed", { result: { summary: "done" } });
+      await done;
+      expect(await stateOf(context.manager, started.run_id)).toBe("completed");
+      expect(backend.cancelled).toEqual([]);
+    } finally { await context.manager.shutdown(); }
+  });
+
+  it("leaves a running run recoverable when shutdown outlasts the window", async () => {
+    const context = await setup(1);
+    const backend = context.backend as ScriptedBackend;
+    const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+    await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
+    const runtime = runtimeOf(context.manager, started.run_id);
+    runtime.serial = runtime.serial.then(() => sleep(1800));
+    await context.manager.shutdown();
+    const meta = JSON.parse(await readFile(path.join(context.data, "runs", started.run_id, "meta.json"), "utf8")) as { state: string };
+    expect(meta.state).toBe("recoverable");
+    expect((await readEvents(context.data, started.run_id)).some((event) => event.data.reason === "no_progress")).toBe(false);
+    expect(backend.callbacks.has(started.run_id)).toBe(true);
   });
 });
 
