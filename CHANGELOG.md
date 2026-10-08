@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `vibe_continue` takes an optional `max_turns` (1 to 50, no default). Vibe counts turns cumulatively per session, so a run whose last turn ended with `max_turn_requests` could never make progress; such a continuation is now rejected with the new `VSUP_TURN_LIMIT_REACHED` before anything reaches Vibe unless `max_turns` exceeds the run's current limit. The new limit is saved on the run and sent to the ACP session before the prompt, on a live session and after a lazy load. The turn-limit summary and `next_action` no longer suggest a plain continue.
 - A programmatic run that reaches Vibe's turn limit is reported as `completed` with `stop_reason: max_turn_requests` and a partial-result warning instead of `VSUP_BACKEND_CRASHED`. It is recognized only when Vibe exits 1 and its final message, its stderr marker and the configured turn count all agree.
 - A saved `result.json` now carries the run's structured `error` for failed and cancelled runs, the same as the MCP reply.
 - The default `limits.max_turns_review` is 20 instead of 12. A broad hosted review used up 12 turns in about 15 to 27 seconds on the target machine; edits already defaulted to 20. A config file that sets the key keeps its value.

@@ -57,7 +57,7 @@ interface AcpState {
   home: string;
   vibeHome: string;
   ready: Deferred<BackendStartResult>;
-  commands: Queue<{ kind: 'prompt'; message: string } | { kind: 'close' }>;
+  commands: Queue<{ kind: 'prompt'; message: string; maxTurns?: number } | { kind: 'close' }>;
   request?: { requestId: string; kind: 'permission' | 'elicitation'; resolve: (response: unknown) => void; cancelled: unknown; options: Array<{ optionId: string; kind?: string }> };
   sessionId?: string;
   connected: Promise<void>;
@@ -352,6 +352,7 @@ export class AcpBackend implements SupervisorBackend {
       for (;;) {
         const task = await dequeue(state.commands);
         if (!task || task.kind === 'close' || state.closed) break;
+        if (task.maxTurns !== undefined) { state.input.limits.maxTurns = task.maxTurns; await cx.request('session/set_config_option', { sessionId, configId: 'max_turns', value: String(task.maxTurns) }); }
         state.turnActive = true;
         await this.updateWorkerDeadline(state, turnDeadlineSeconds(state.input.limits.timeoutSeconds));
         await state.callbacks.onState('running', { ...(result.acp ? { acp: result.acp } : {}) });
@@ -399,10 +400,10 @@ export class AcpBackend implements SupervisorBackend {
     }
   }
 
-  async continue(handle: BackendRunHandle, message: string): Promise<void> {
+  async continue(handle: BackendRunHandle, message: string, options?: { maxTurns?: number }): Promise<void> {
     const state = (handle as AcpHandle).opaque;
     if (state.closed || state.exited || !state.sessionId) throw supervisorError('VSUP_SESSION_NOT_RESUMABLE', 'ACP session is no longer connected');
-    enqueue(state.commands, { kind: 'prompt', message });
+    enqueue(state.commands, { kind: 'prompt', message, ...(options?.maxTurns === undefined ? {} : { maxTurns: options.maxTurns }) });
   }
   async respond(handle: BackendRunHandle, response: BackendRespondInput): Promise<void> {
     const state = (handle as AcpHandle).opaque;

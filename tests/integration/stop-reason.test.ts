@@ -24,7 +24,7 @@ afterEach(async () => {
 });
 
 const COMPLETED = "Vibe completed the delegated task.";
-const TURN_LIMIT = "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; continue the run or raise max_turns if more work is needed.";
+const TURN_LIMIT = "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so continue with vibe_continue only with a larger max_turns, or start a new run.";
 const CHANGED_PLAIN = "The source workspace changed during this read-only review. The changes may be your own edits or a read-only boundary violation; inspect the changed paths before trusting the review.";
 
 class StdioClientHarness implements Transport {
@@ -203,7 +203,7 @@ describe("stop reason reporting", () => {
     try {
       const runId = await runningReview(manager, source);
       await backend.callbacks?.onState("completed", { result: { stopReason: "max_turn_requests", summary: "First turn partial" } });
-      await manager.continue({ run_id: runId, message: "keep going" });
+      await manager.continue({ run_id: runId, message: "keep going", max_turns: 25 });
       await backend.callbacks?.onState("completed", { result: { stopReason: "end_turn", summary: "Second turn final" } });
       const compact = await manager.result({ run_id: runId });
       expect(compact.stop_reason).toBe("end_turn");
@@ -226,7 +226,7 @@ describe("stop reason reporting", () => {
       const second = await manager.result({ run_id: runId });
       expect(second.summary).toBe(TURN_LIMIT);
       expect(second.warnings).toEqual([CHANGED_PLAIN, expect.stringContaining("max_turn_requests")]);
-      await manager.continue({ run_id: runId, message: "finish" });
+      await manager.continue({ run_id: runId, message: "finish", max_turns: 30 });
       await backend.callbacks?.onState("completed", { result: { stopReason: "end_turn" } });
       const third = await manager.result({ run_id: runId });
       expect(third.summary).toBe(COMPLETED);

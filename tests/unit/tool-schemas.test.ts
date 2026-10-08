@@ -27,6 +27,9 @@ describe("MCP tool input schemas", () => {
     expect(() => toolSchemas.vibe_edit_start.parse({ task: "x", cwd: "/repo", isolation: "same-working-tree" })).toThrow();
     expect(() => toolSchemas.vibe_review_start.parse({ task: "x", cwd: "/repo", context_files: Array(51).fill("x") })).toThrow();
     expect(() => toolSchemas.vibe_continue.parse({ run_id: runId, message: "" })).toThrow();
+    expect(toolSchemas.vibe_continue.parse({ run_id: runId, message: "go" })).not.toHaveProperty("max_turns");
+    expect(toolSchemas.vibe_continue.parse({ run_id: runId, message: "go", max_turns: 50 }).max_turns).toBe(50);
+    for (const bad of [0, 51, 1.5]) expect(() => toolSchemas.vibe_continue.parse({ run_id: runId, message: "go", max_turns: bad })).toThrow();
     expect(() => toolSchemas.vibe_review_start.parse({ task: "x", cwd: "/repo", max_turns: 51 })).toThrow();
     expect(() => toolSchemas.vibe_edit_start.parse({ task: "x", cwd: "/repo", timeout_seconds: 29 })).toThrow();
   });

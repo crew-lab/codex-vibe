@@ -103,7 +103,7 @@ export type SupervisorErrorCode =
   | "VSUP_RATE_LIMITED" | "VSUP_CANCELLED" | "VSUP_OUTPUT_LIMIT"
   | "VSUP_ARTIFACT_ERROR" | "VSUP_INVALID_ARGUMENT" | "VSUP_NOT_FOUND"
   | "VSUP_BACKEND_ERROR" | "VSUP_LIMIT_EXCEEDED" | "VSUP_PERMISSION_DENIED"
-  | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR" | "VSUP_RECOVERY_ERROR" | "VSUP_INTERNAL";
+  | "VSUP_TURN_LIMIT_REACHED" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR" | "VSUP_RECOVERY_ERROR" | "VSUP_INTERNAL";
 
 export interface RunRecord {
   schemaVersion: typeof SCHEMA_VERSION;
@@ -221,7 +221,7 @@ export interface SupervisorBackend {
   readonly supportsContinue?: boolean;
   probe(): Promise<BackendCapabilities>;
   start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult>;
-  continue(handle: BackendRunHandle, message: string): Promise<void>;
+  continue(handle: BackendRunHandle, message: string, options?: { maxTurns?: number }): Promise<void>;
   respond(handle: BackendRunHandle, response: BackendRespondInput): Promise<void>;
   cancel(handle: BackendRunHandle): Promise<void>;
   close(handle: BackendRunHandle): Promise<void>;
@@ -241,7 +241,7 @@ export interface EditStartToolInput extends StartToolInput {
 }
 export interface StatusToolInput { run_id: string; after_seq?: number; max_events?: number; wait_seconds?: number }
 export interface WaitOptions { signal?: AbortSignal }
-export interface ContinueToolInput { run_id: string; message: string }
+export interface ContinueToolInput { run_id: string; message: string; max_turns?: number }
 export type RespondToolInput =
   | { run_id: string; request_id: string; kind: "permission"; option_id: string }
   | { run_id: string; request_id: string; kind: "elicitation"; action: "accept" | "decline" | "cancel"; content?: Record<string, unknown> };
@@ -277,6 +277,7 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_BACKEND_ERROR: "Inspect backend diagnostics and retry if the problem is transient.",
   VSUP_LIMIT_EXCEEDED: "Wait for capacity or increase the configured limit.",
   VSUP_PERMISSION_DENIED: "Review the requested action and grant only if appropriate.",
+  VSUP_TURN_LIMIT_REACHED: "Vibe counts turns cumulatively per session: pass max_turns greater than the current limit to continue, or start a new run from a deliberate base; the task is never replayed.",
   VSUP_INVALID_STATE: "Check the run status and use an action valid for its current state.",
   VSUP_STORAGE_ERROR: "Check the supervisor data directory permissions and disk space.",
   VSUP_RECOVERY_ERROR: "Inspect recovery diagnostics and start a new run if needed.",

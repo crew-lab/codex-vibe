@@ -1,10 +1,11 @@
 import { createInterface } from 'node:readline';
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const mode = process.env.FAKE_ACP_CASE ?? 'normal';
 let sessionId = 'fake-session-1';
 let promptCount = 0;
+let budgetLimit = Number.POSITIVE_INFINITY;
 let exited = false;
 const pending = new Map();
 
@@ -34,19 +35,36 @@ async function handle(message) {
   }
   if (message.method === 'session/new') {
     if (mode === 'wrong-mode') { reply(message.id, { sessionId, modes: { currentModeId: 'accept-edits' }, _meta: { workspace_trust: { status: 'untrusted' } } }); return; }
-    reply(message.id, { sessionId, modes: { currentModeId: 'plan' }, _meta: { workspace_trust: { status: 'untrusted' } } });
+    reply(message.id, { sessionId, modes: { currentModeId: process.env.FAKE_ACP_MODE ?? 'plan' }, _meta: { workspace_trust: { status: 'untrusted' } } });
     return;
   }
   if (message.method === 'session/load') {
     if (mode === 'load-hang') return;
-    reply(message.id, { modes: { currentModeId: 'plan' }, _meta: { workspace_trust: { status: 'untrusted' } } });
+    reply(message.id, { modes: { currentModeId: process.env.FAKE_ACP_MODE ?? 'plan' }, _meta: { workspace_trust: { status: 'untrusted' } } });
     return;
   }
-  if (message.method === 'session/set_config_option') { reply(message.id, {}); return; }
+  if (message.method === 'session/set_config_option') {
+    if (message.params?.configId === 'max_turns') {
+      budgetLimit = Number(message.params.value);
+      if (process.env.FAKE_BUDGET_LOG) appendFileSync(process.env.FAKE_BUDGET_LOG, `set_config_option max_turns ${message.params.value}\n`);
+    }
+    reply(message.id, {});
+    return;
+  }
   if (message.method === 'session/close') { reply(message.id, {}); return; }
   if (message.method === 'session/cancel') { return; }
   if (message.method === 'session/prompt') {
     promptCount += 1;
+    if (mode === 'budget') {
+      if (process.env.FAKE_BUDGET_LOG) appendFileSync(process.env.FAKE_BUDGET_LOG, 'session/prompt\n');
+      const stepFile = process.env.FAKE_BUDGET_STEPS;
+      const steps = (existsSync(stepFile) ? Number(readFileSync(stepFile, 'utf8')) : 0) + 1;
+      writeFileSync(stepFile, String(steps));
+      if (steps >= budgetLimit) { reply(message.id, { stopReason: 'max_turn_requests' }); return; }
+      chunk(`budget-reply-${steps}`);
+      reply(message.id, { stopReason: 'end_turn' });
+      return;
+    }
     if (mode === 'mid-turn-error') { send({ jsonrpc: '2.0', id: message.id, error: { code: -32000, message: 'upstream exploded' } }); return; }
     if (mode === 'mid-turn-401') { send({ jsonrpc: '2.0', id: message.id, error: { code: -32000, message: 'Unauthorized (401): session expired' } }); return; }
     if (mode === 'mid-turn-401-ratelimit') { send({ jsonrpc: '2.0', id: message.id, error: { code: -32000, message: 'Unauthorized (401): x-ratelimit-limit: 100, retrying after rate limit' } }); return; }
