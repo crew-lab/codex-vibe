@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A run whose worker produces no event for `limits.worker_progress_timeout_seconds` (default 600, 0 disables) while running now fails with the new `VSUP_NO_PROGRESS` and a diagnostic event, instead of waiting for its full deadline. Waiting for a permission or input answer, queued runs and idle completed ACP sessions are not watched. Prompted by a real edit that stayed silent for 15 minutes in the rc.8 soak.
+- The soak driver's built-in tasks are bounded (named file, capped reads and searches, a final answer in a few lines); a truthfully reported `max_turn_requests` or `max_tokens` run with its partial warning counts as truncated, not as a failure, under a new `truncated_within_threshold` criterion (`--max-truncated-percent`, default 10).
+
 - Add opt-in bounded programmatic worker stage/frame diagnostics and an overall hosted-soak budget with reserved cleanup time.
 
 - Bound initial hosted-soak worker deadlines below the driver budget so silent workers can record supervisor timeouts before cleanup; preserve shorter configured limits.

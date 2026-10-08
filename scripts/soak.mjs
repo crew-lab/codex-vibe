@@ -15,6 +15,7 @@ const MAX_RUNS = 500;
 const SETTLED_STATES = new Set(['completed', 'failed', 'cancelled', 'closed', 'recoverable']);
 const SCENARIO_CYCLE = ['continue', 'close_mid', 'restart_completed'];
 const PERMISSION_FAILURE = 'driver:permission_request';
+const TRUNCATION_STOP_REASONS = new Set(['max_turn_requests', 'max_tokens']);
 
 const USAGE = `Usage: node scripts/soak.mjs --workspace <repo> [options]
 
@@ -32,8 +33,19 @@ const USAGE = `Usage: node scripts/soak.mjs --workspace <repo> [options]
   --run-timeout N           Driver limit in seconds (default 900); initial worker deadline is at most N-30 for N >= 60
   --diagnostics             Record bounded private launcher diagnostics for programmatic workers
   --total-timeout N          Overall seconds, at least 61; reserve final 60 seconds for cleanup
-  --stop-on-fail            Stop after the first failed run
+  --stop-on-fail            Stop after the first failed run; a truncated run is not a failure
+  --max-truncated-percent N Largest share of completed runs allowed to end truncated, 0 to 100 (default 10)
   --yes                     Start the hosted runs; without it only the plan is printed
+
+Built-in tasks are bounded: each names its files, caps the reads and searches, and requires a final answer
+in a few lines, so the soak tests supervisor reliability and not whether the model can finish an open-ended
+task. The review-long task is the exception: it is meant to run long and only feeds the mid-turn close and
+in-progress restart scenarios, which never wait for it to finish.
+
+A run that completes with stop_reason max_turn_requests or max_tokens and carries the supervisor's partial-result
+warning is reported as truncated: it is counted per kind and backend in summary.json and checked by the
+truncated_within_threshold criterion, not counted as an unexpected failure. Any other stop reason, a missing
+warning, a failed state, a timeout, a lost run or a leaked process or worktree is still a failure.
 
 The backend comes from configuration only: the driver copies the template config (VIBE_SUPERVISOR_HOME or the
 default config home) into two private homes under --out with the backend overridden. It never approves a
@@ -46,7 +58,7 @@ class Usage extends Error {}
 function parseCommandLine(argv) {
   const o = {
     workspace: undefined, reviews: 60, edits: 30, acp: 10, seed: 'soak', tasks: undefined, out: undefined,
-    serverCommand: undefined, serverArgs: [], waitSeconds: 180, startWait: 5, runTimeout: 900, stopOnFail: false, diagnostics: false, totalTimeout: undefined, yes: false, help: false,
+    serverCommand: undefined, serverArgs: [], waitSeconds: 180, startWait: 5, runTimeout: 900, stopOnFail: false, maxTruncatedPercent: 10, diagnostics: false, totalTimeout: undefined, yes: false, help: false,
   };
   const integer = (name, value, min, max) => {
     if (!/^\d+$/.test(value ?? '')) throw new Usage(`${name} needs a non-negative integer.`);
@@ -66,6 +78,7 @@ function parseCommandLine(argv) {
     else if (flag === '--diagnostics') o.diagnostics = true;
     else if (flag === '--total-timeout') o.totalTimeout = integer(flag, take(), 61, 86_400);
     else if (flag === '--stop-on-fail') o.stopOnFail = true;
+    else if (flag === '--max-truncated-percent') o.maxTruncatedPercent = integer(flag, take(), 0, 100);
     else if (flag === '--workspace') o.workspace = take();
     else if (flag === '--reviews') o.reviews = integer(flag, take(), 0, MAX_RUNS);
     else if (flag === '--edits') o.edits = integer(flag, take(), 0, MAX_RUNS);
@@ -128,24 +141,23 @@ function shuffle(items, random) {
   return copy;
 }
 
+const REVIEW_TASKS = [
+  { id: 'review-file', task: 'Read only the file {file} and at most two files it imports. Use at most 3 searches. Do not modify anything and do not use a shell. Then stop reading and answer in at most 5 lines: the most important correctness problems or unclear code in {file}, each with a line reference. If you find none, say so.' },
+  { id: 'review-bug-class', task: 'Look for missing error handling, unchecked inputs and resource leaks only in the file {file}. Read only that file and at most one file it imports. Use at most 2 searches. Do not modify anything and do not use a shell. Then stop reading and answer in at most 5 lines: up to three findings with line references, or say that there are none.' },
+];
+
 const BUILT_IN_TASKS = {
-  review: [
-    { id: 'review-file', task: 'Review the file {file} for correctness problems and unclear code. Use only the file read and search tools; there is no shell. Read at most three files. Do not modify anything. Reply with a short list of findings.' },
-    { id: 'review-bug-class', task: 'Look for missing error handling, resource leaks and unchecked inputs, starting with the file {file}. Use only the file read and search tools; there is no shell. Read at most five files. Do not modify anything. Report at most five findings with file names.' },
-  ],
+  review: REVIEW_TASKS,
   edit: [
-    { id: 'edit-add-file', task: 'Create one new file named soak-note-{n}.txt in the repository root containing a single sentence describing this repository. Do not change any other file.' },
-    { id: 'edit-one-line', task: 'In the file {file}, change exactly one line to fix a typo or improve a name. Do not change any other line or file. If nothing needs changing, append one short neutral line to the end of that file instead.' },
+    { id: 'edit-add-file', task: 'Create exactly one new file named soak-note-{n}.txt in the repository root containing a single sentence describing this repository. Read at most two files to write that sentence and use no searches. Do not change any other file. Then stop and answer in one line with the file name.' },
+    { id: 'edit-one-line', task: 'In the file {file}, change exactly one line to fix a typo or improve a name. Read only that file and use no searches. Do not change any other line or file. If nothing needs changing, append one short neutral line to the end of that file instead. Then stop and answer in one line saying which line you changed.' },
   ],
-  acp: [
-    { id: 'review-file', task: 'Review the file {file} for correctness problems and unclear code. Use only the file read and search tools; there is no shell. Read at most three files. Do not modify anything. Reply with a short list of findings.' },
-    { id: 'review-bug-class', task: 'Look for missing error handling, resource leaks and unchecked inputs, starting with the file {file}. Use only the file read and search tools; there is no shell. Read at most five files. Do not modify anything. Report at most five findings with file names.' },
-  ],
+  acp: REVIEW_TASKS,
   long: [
     { id: 'review-long', task: 'Read every source file in this repository one at a time and write a detailed review of each, file by file. Only read files; do not modify anything.' },
   ],
   followup: [
-    { id: 'followup-summary', task: 'In two sentences, summarize the most important finding of your review.' },
+    { id: 'followup-summary', task: 'The previous task is finished; this is a new, separate request. Do not read or search anything further. In two sentences, summarize the most important finding of your previous answer.' },
   ],
 };
 
@@ -364,7 +376,7 @@ function newRecord(job, index, total) {
     permissionRequests: 0, permissionRejected: 0, requests: [], timeToFirstEventMs: null, timeToSettledMs: null,
     finalState: null, stopReason: null, errorCode: null, warnings: [], integrity: null, usage: null, changedFilesTotal: null,
     turns: [], closeState: null, worktreeRemoved: null, worktreeRetainedReason: null, restart: null, closeMid: null,
-    serverLost: false, failures: [], ok: true,
+    serverLost: false, truncated: false, failures: [], ok: true,
   };
 }
 
@@ -491,13 +503,16 @@ function judge(ctx, outcome, expectation = 'completed') {
   turn.errorCode = result.error?.code ?? reply.error?.code ?? null;
   turn.integrity = result.integrity?.status ?? null;
   turn.usage = result.usage ?? null;
-  turn.warnings = Array.isArray(result.warnings) ? result.warnings.map((warning) => String(warning).slice(0, 200)).slice(0, 5) : [];
+  const allWarnings = Array.isArray(result.warnings) ? result.warnings.map(String) : [];
+  turn.warnings = allWarnings.map((warning) => warning.slice(0, 200)).slice(0, 5);
+  const partialWarning = allWarnings.some((warning) => TRUNCATION_STOP_REASONS.has(turn.stopReason) && warning.includes(`stop reason ${turn.stopReason}`) && /incomplete/i.test(warning));
   if (typeof result.changed_files_total === 'number') ctx.rec.changedFilesTotal = result.changed_files_total;
   else if (Array.isArray(result.changed_files)) ctx.rec.changedFilesTotal = result.changed_files.length;
   if (expectation === 'any') return true;
   if (reply.state !== 'completed') { failRun(ctx, turn.errorCode ?? `driver:state_${reply.state}`, `run ended ${reply.state}`); return false; }
   let good = true;
-  if (turn.stopReason !== 'end_turn') { failRun(ctx, `driver:stop_reason_${turn.stopReason ?? 'missing'}`, 'stop_reason is not end_turn'); good = false; }
+  if (TRUNCATION_STOP_REASONS.has(turn.stopReason) && partialWarning) turn.truncated = true;
+  else if (turn.stopReason !== 'end_turn') { failRun(ctx, `driver:stop_reason_${turn.stopReason ?? 'missing'}`, 'stop_reason is not end_turn'); good = false; }
   if (ctx.job.kind !== 'edit' && turn.integrity !== 'verified') { failRun(ctx, `driver:integrity_${turn.integrity ?? 'missing'}`, 'review integrity is not verified'); good = false; }
   return good;
 }
@@ -634,6 +649,7 @@ function finalizeRecord(ctx) {
   rec.errorCode = [...rec.turns].reverse().find((turn) => turn.errorCode)?.errorCode ?? null;
   rec.integrity = lastTurn?.integrity ?? null;
   rec.usage = [...rec.turns].reverse().find((turn) => turn.usage)?.usage ?? null;
+  rec.truncated = rec.turns.some((turn) => turn.truncated === true);
   rec.warnings = rec.turns.flatMap((turn) => turn.warnings).slice(0, 10);
   rec.ok = rec.failures.length === 0;
   rec.durationMs = Math.round(performance.now() - ctx.began);
@@ -765,6 +781,10 @@ function summarize({ records, o, plan, startedAt, reports, processes, registered
   const leakedWorktrees = Object.values(reports).reduce((sum, report) => sum + report.leftover_worktrees.length, 0) + registered.length;
   const oversized = Object.values(reports).reduce((sum, report) => sum + report.oversized_runs.length, 0);
   const missing = Object.values(reports).reduce((sum, report) => sum + report.missing_runs.length, 0);
+  const completedRuns = records.filter((rec) => rec.finalState === 'completed').length;
+  const truncatedRuns = records.filter((rec) => rec.truncated);
+  const truncatedCount = (key) => truncatedRuns.reduce((table, rec) => { table[key(rec)] = (table[key(rec)] ?? 0) + 1; return table; }, {});
+  const truncatedPercent = completedRuns ? (truncatedRuns.length * 100) / completedRuns : 0;
   const verdict = (pass) => (pass ? 'PASS' : 'FAIL');
   const criteria = [
     { id: 'zero_unexpected_failures', status: verdict(unexpected === 0 && !fatal), detail: `${unexpected} unexpected failures${fatal ? `; fatal: ${fatal}` : ''}` },
@@ -772,6 +792,7 @@ function summarize({ records, o, plan, startedAt, reports, processes, registered
     { id: 'no_leaked_processes_or_worktrees', status: verdict(leakedProcesses.length === 0 && leakedWorktrees === 0), detail: `${leakedProcesses.length} orphaned or descendant vibe processes, ${leakedWorktrees} leftover worktrees` },
     { id: 'bounded_artifacts', status: verdict(oversized === 0), detail: `${oversized} run directories above the per-run limit` },
     { id: 'retention_keeps_recent_runs', status: verdict(missing === 0), detail: `${missing} recorded runs missing from disk (retention.days ${retentionDays})` },
+    { id: 'truncated_within_threshold', status: verdict(truncatedPercent <= o.maxTruncatedPercent), detail: `${truncatedRuns.length} of ${completedRuns} completed runs ended truncated (${truncatedPercent.toFixed(1)}%, limit ${o.maxTruncatedPercent}%)` },
   ];
   if (o.totalTimeout !== undefined) {
     criteria.push({ id: 'all_planned_runs', status: verdict(records.length === o.reviews + o.edits + o.acp), detail: `${records.length}/${o.reviews + o.edits + o.acp} runs attempted` });
@@ -795,6 +816,7 @@ function summarize({ records, o, plan, startedAt, reports, processes, registered
     by_kind: by((rec) => rec.kind),
     by_backend: by((rec) => rec.backend),
     by_scenario: by((rec) => rec.scenario ?? rec.kind),
+    truncated: { runs: truncatedRuns.length, by_kind: truncatedCount((rec) => rec.kind), by_backend: truncatedCount((rec) => rec.backend) },
     latency_ms: {
       time_to_first_event: latency(timed.map((rec) => rec.timeToFirstEventMs).filter((value) => value !== null)),
       time_to_settled: latency(timed.map((rec) => rec.timeToSettledMs).filter((value) => value !== null)),
@@ -825,6 +847,8 @@ function printPlan(o, plan, preflight, outDirectory) {
     `backends: programmatic ${plan.programmatic.length} runs, acp ${plan.acp.length} runs (continue, mid-turn close and restart scenarios)`,
     `server command: ${o.serverCommand} ${o.serverArgs.join(' ')}`,
     `evidence directory: ${outDirectory}`,
+    'tasks: bounded built-in tasks name their files, cap reads and searches and require a short final answer; review-long is intentionally unbounded and only feeds the mid-turn close and restart scenarios',
+    `truncation: a completed run stopped by max_turn_requests or max_tokens with the partial-result warning is counted as truncated, not failed; allowed up to ${o.maxTruncatedPercent}% of completed runs`,
     `seed: ${o.seed}; status wait ${o.waitSeconds}s; run timeout ${o.runTimeout}s; total timeout ${o.totalTimeout ?? "unset"}s; diagnostics ${o.diagnostics ? "on" : "off"}`,
     `preflight: workspace in the template allowlist: ${preflight.allowed ? 'yes' : 'NO'}; git repository: ${preflight.git ? 'yes' : 'NO'}; template config: ${preflight.templatePath}`,
     'COST WARNING: every run sends the repository and the tasks to Mistral and is billed. Earlier hosted edits cost about $0.02 each; the real total depends on the tasks and the account. Run it only with the owner authorization.',

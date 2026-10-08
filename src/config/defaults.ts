@@ -16,6 +16,7 @@ export const DEFAULT_CONFIG: SupervisorConfig = {
     maxEventBytes: 52_428_800,
     maxTranscriptBytes: 10_485_760,
     maxArtifactBytes: 104_857_600,
+    workerProgressTimeoutSeconds: 600,
     maxMcpResultChars: 8000,
     mcpResultFormat: "text"
   }

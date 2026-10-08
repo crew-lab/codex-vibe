@@ -54,6 +54,7 @@ interface Runtime {
   baseRef?: string;
   deferredResponses: BackendRespondInput[];
   idleTimer?: NodeJS.Timeout;
+  progressTimer?: NodeJS.Timeout;
   transcriptOverflow: boolean;
   requestedOutcome?: RequestedOutcome;
   storageDegraded?: { code: string; directory: string };
@@ -670,6 +671,7 @@ export class RunManager {
       if (runtime.record.state === "queued") await this.serial(runtime, () => this.settle(runtime, { state: "cancelled", error: supervisorError("VSUP_CANCELLED", "Queued task was not submitted before shutdown.") })).catch(() => undefined);
       else if (!isTerminal(runtime.record.state) && runtime.record.state !== "completed") await this.serial(runtime, () => this.settle(runtime, { state: "recoverable" })).catch(() => undefined);
       if (runtime.timer) clearTimeout(runtime.timer);
+      if (runtime.progressTimer) clearTimeout(runtime.progressTimer);
       if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
       this.releaseSlot(runtime);
     }));
@@ -830,9 +832,21 @@ export class RunManager {
 
   private callbacks(runtime: Runtime): BackendCallbacks {
     return {
-      onEvent: (event) => this.stopping ? undefined : this.serial(runtime, async () => this.appendEvent(runtime, event)).catch((error: unknown) => this.noteEventFailure(runtime, error)),
-      onPendingRequest: (pending) => this.stopping ? undefined : this.receivePending(runtime, pending),
-      onState: (state, update) => this.stopping ? undefined : this.serial(runtime, async () => this.applyBackendState(runtime, state, update)).catch((error: unknown) => this.recordIgnoredTransition(runtime, state, error))
+      onEvent: (event) => {
+        if (this.stopping) return undefined;
+        if (event.source === "vibe") this.watchProgress(runtime);
+        return this.serial(runtime, async () => this.appendEvent(runtime, event)).catch((error: unknown) => this.noteEventFailure(runtime, error));
+      },
+      onPendingRequest: (pending) => {
+        if (this.stopping) return undefined;
+        this.watchProgress(runtime);
+        return this.receivePending(runtime, pending);
+      },
+      onState: (state, update) => {
+        if (this.stopping) return undefined;
+        this.watchProgress(runtime);
+        return this.serial(runtime, async () => this.applyBackendState(runtime, state, update)).catch((error: unknown) => this.recordIgnoredTransition(runtime, state, error));
+      }
     };
   }
 
@@ -1191,6 +1205,30 @@ export class RunManager {
     return "cancelled";
   }
 
+  private watchProgress(runtime: Runtime): void {
+    if (runtime.progressTimer) clearTimeout(runtime.progressTimer);
+    delete runtime.progressTimer;
+    const seconds = this.config.limits.workerProgressTimeoutSeconds;
+    if (this.stopping || !(seconds > 0) || runtime.record.state !== "running" || runtime.requestedOutcome) return;
+    runtime.progressTimer = setTimeout(() => { this.noProgress(runtime, seconds).catch((error: unknown) => this.reportBackground(runtime, "progress-watchdog", error)); }, seconds * 1000);
+    runtime.progressTimer.unref?.();
+  }
+
+  private async noProgress(runtime: Runtime, seconds: number): Promise<void> {
+    delete runtime.progressTimer;
+    if (runtime.record.state !== "running") return;
+    this.requestOutcome(runtime, { state: "failed", error: supervisorError("VSUP_NO_PROGRESS", `The worker produced no output for ${seconds} seconds.`) });
+    await this.serial(runtime, async () => {
+      if (runtime.record.state !== "running") return;
+      await this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "warning", data: { reason: "no_progress", silence_seconds: seconds, message: `The worker produced no output for ${seconds} seconds.` } }).catch(() => undefined);
+    });
+    await this.cancelBackendSession(runtime);
+    await this.serial(runtime, async () => {
+      if (runtime.record.state !== "running") return;
+      await this.settle(runtime, runtime.requestedOutcome ?? { state: "failed", error: supervisorError("VSUP_NO_PROGRESS", `The worker produced no output for ${seconds} seconds.`) });
+    });
+  }
+
   private async deadline(runtime: Runtime): Promise<void> {
     if (isTerminal(runtime.record.state) || runtime.record.state === "completed") return;
     const outcome = this.requestOutcome(runtime, { state: "failed", error: supervisorError("VSUP_TIMEOUT", "The run exceeded its configured timeout.") });
@@ -1219,6 +1257,7 @@ export class RunManager {
     if (update?.startedAt) runtime.record.startedAt = update.startedAt;
     if (update?.finishedAt) runtime.record.finishedAt = update.finishedAt;
     if ((isTerminal(state) || state === "completed") && runtime.timer) clearTimeout(runtime.timer);
+    this.watchProgress(runtime);
     try { await this.persist(runtime); }
     catch (error) { if (!this.degrade(runtime, error)) throw error; }
     if (isTerminal(state)) this.persisted.set(runtime.record.runId, runtime.record);
@@ -1244,6 +1283,8 @@ export class RunManager {
   private releaseSlot(runtime: Runtime): void {
     if (runtime.slot) { runtime.slot = false; this.activeSlots = Math.max(0, this.activeSlots - 1); }
     if (runtime.timer) clearTimeout(runtime.timer);
+    if (runtime.progressTimer) clearTimeout(runtime.progressTimer);
+    delete runtime.progressTimer;
     this.pumpQueue();
   }
 
