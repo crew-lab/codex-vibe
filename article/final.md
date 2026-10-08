@@ -41,13 +41,15 @@ Vibe runs in two modes. One-shot: the supervisor sends a task, Vibe answers once
 
 **The continuation that could never work.** The second came from a real deployment task on an earlier candidate in ACP mode. A run used up its turns without producing a patch, and every correction sent to that session came back exhausted. Vibe 2.25.8's source explained why: it counts turns per session, not per prompt, and keeps the count across `session/load`, so once the budget is spent every further prompt ends with `max_turn_requests` and does nothing.
 
-The supervisor now refuses a plain `vibe_continue` on such a run with `VSUP_TURN_LIMIT_REACHED`, before anything reaches Vibe, and asks for a `max_turns` above the run's current limit (the new value is the session's total ceiling, so raising a spent 12 to 20 buys roughly eight more turns); at 50, the supervisor's maximum, you start a new run. This gate is new in rc.8 and tested only against fake backends that model Vibe's counting; confirming it on a real run is still open before 1.0.
+The supervisor now refuses a plain `vibe_continue` on such a run with `VSUP_TURN_LIMIT_REACHED`, before anything reaches Vibe, and asks for a `max_turns` above the run's current limit (the new value is the session's total ceiling, so raising a spent 12 to 20 buys roughly eight more turns); at 50, the supervisor's maximum, you start a new run.
 
-Find out how your worker signals "I stopped at a limit", then test that your coordinator treats that signal as neither success nor failure. Mine did not, twice.
+On real Vibe on 2026-10-08 the three refusals held, and nothing reached Vibe: the event log stayed at exactly 12,545 bytes. The first raised continuation still failed. I had capped a session at 3 turns inside a nine-file chain of reads, then raised it to 10 and asked for something different. The new message and the new ceiling both arrived; Vibe simply went back to the old chain and ran out again. Three controlled runs then passed, one of them after a restart: a correction that said explicitly that the old task was cancelled, and a four-file chain continued with the same objective, all ending in `end_turn` with the expected file written. The lesson is about prompts as much as code. A session keeps its earlier objective in context, so a correction that changes direction has to say the old one is over.
+
+Find out how your worker signals "I stopped at a limit", then test that your coordinator treats that signal as neither success nor failure. Mine did not, twice. On rc.8 the one-shot case now passes on real Vibe: a review capped at 2 turns came back `completed` with `max_turn_requests`, the partial warning and a matching saved result.
 
 ## 5. A run has to survive a restart
 
-Codex quits, the laptop sleeps, the server restarts. Every run is recorded on disk, and after a restart the supervisor only reads those records; a run that was still going becomes `recoverable`, and a continuation reloads its session on demand. The original task is never resubmitted, because replaying an uncertain task is worse than asking. In the real runs on 2026-10-07, restarts after a completed run and during a running one both recovered, with the supervisor up in 98 ms. Those restarts were graceful, as when Codex quits; a `kill -9` mid-run is still untested on real Vibe.
+Codex quits, the laptop sleeps, the server restarts. Every run is recorded on disk, and after a restart the supervisor only reads those records; a run that was still going becomes `recoverable`, and a continuation reloads its session on demand. The original task is never resubmitted, because replaying an uncertain task is worse than asking. In the real runs on 2026-10-07, restarts after a completed run and during a running one both recovered, with the supervisor up in 98 ms. Those restarts were graceful, as when Codex quits; a `kill -9` mid-run is still untested on real Vibe. On 2026-10-08, disconnecting the official MCP client while a review was running left it `recoverable` after a restart, disconnecting with an idle session removed its worker, and servers whose runs were closed exited 3 to 5 ms after the client did.
 
 Takeaway: if a restart loses the run, the coordinator will start it again, and you pay for the work twice.
 
@@ -123,7 +125,9 @@ Real-run numbers from the rc.7 session on 2026-10-07 (macOS arm64, Vibe 2.25.8 w
 | Review of a nested file, cold / warm | 8.9 s / 3.8 s |
 | Edit producing an eleven-file patch | 12.1 s |
 
-Earlier real edits cost about $0.02 each as Vibe reported them (rc.2, 2026-10-05), which is Vibe's figure, not billing data. The 100-run soak reruns on rc.8 before 1.0, and I will publish its numbers whether they are good or not.
+On rc.8 (2026-10-08, same setup) two more edits took 23.2 s for an exact single-file write and 10.8 s for adding a file. Vibe reported about $0.02 per edit on rc.2 and $0.035 for one 20-turn review on rc.8; those are Vibe's own figures, not billing data.
+
+The 100-run soak has still not passed, and the latest two attempts added two more lessons. In the first, 19 runs passed and the 20th, an edit, produced no event at all for 15 minutes: the worker held an open HTTPS connection and wrote nothing. The driver closed it, exported an empty patch and removed the worktree; the cause is still unknown and it has not recurred. In the second, the first review spent its 20 turns on 16 `grep` calls and 4 file reads and never wrote an answer. The supervisor reported that truthfully, and the soak correctly refused to count it. A review task without an explicit "stop searching and answer" is not a fair test of anything, so the next attempt uses a bounded task. I will publish its numbers whether they are good or not.
 
 ## What this is not
 
@@ -133,7 +137,7 @@ It is not an operating-system sandbox. It is an application-level policy: it val
 
 It is macOS only, and you need Node.js 20.19 or newer, Git, and Mistral Vibe with access through a Mistral plan. It refuses any Vibe except 2.25.8 (2.26.0 stays refused until I rerun the real tests on it). If that rules you out, the honest baseline is Vibe in a second terminal; codex-subagents-mcp, mcp-delegate and the agent bridges offer delegation with fewer guardrails.
 
-These are the README steps; I have run them on my own machine but not yet on a fresh macOS account:
+These are the README steps; I have run them on my own machine but not yet on a fresh macOS account. One honest note: until a fix on 2026-10-08, the `vibe-supervisor` command installed through `npm link` printed nothing at all, because the check for "am I the main module" compared a resolved path with the unresolved link. My smoke test started the server through Node directly and missed it. Use the current main branch:
 
 ```sh
 uv tool install mistral-vibe==2.25.8
@@ -152,7 +156,7 @@ vibe-supervisor setup --workspace /absolute/path/to/your/repo
 
 `setup` adds the workspace to the allowlist, runs a health check, and shows the Codex configuration change before writing it. Restart Codex and try the review prompt from check 6.
 
-Verified on real Vibe: reviews, edits, continuation, restart recovery and idle timeout through the official MCP client, and Codex desktop registration on an earlier build. Not yet: the 100-run soak, the turn-budget gate on a real run, a full pass inside the Codex desktop app, and a clean-account install. The repository's compatibility notes keep that list. This is an independent project, not affiliated with OpenAI or Mistral AI.
+Verified on real Vibe through the official MCP client: reviews, edits, the one-shot turn limit, raised continuation live and after a restart, restart recovery, idle timeout, disconnect cleanup, and a continued session ending by the supervisor's own deadline (`VSUP_TIMEOUT` after 61.3 s) instead of being killed by the launcher; Codex desktop registration on an earlier build. Not yet: the 100-run soak, a full pass inside the Codex desktop app, permission callbacks, and a clean-account install. The repository's compatibility notes keep that list. This is an independent project, not affiliated with OpenAI or Mistral AI.
 
 {% embed https://github.com/crew-lab/codex-vibe %}
 

@@ -57,3 +57,22 @@ Still missing for the article: the 100-run hosted soak (failures by code, p50 an
 ## Never write
 
 "Sandbox" or "sandboxed"; "secure" without saying against what; "production-ready" before 1.0; "saves tokens" or "saves money"; "the first" or "the only"; Linux or Windows support; support for MCP clients other than Codex; soak figures before Phase D.
+
+## rc.8 real runs (2026-10-08)
+
+Target machine, macOS arm64, Vibe 2.25.8 browser login, official MCP client, synthetic repository; reports in `docs/history/reviews/rc8-*`.
+
+| Claim | Evidence |
+|---|---|
+| Turn-budget refusals (plain, equal, lower) send nothing to Vibe | Run `c20da652`: three refusals, `events.ndjson` unchanged at 12,545 bytes ([rc8-target-test](../docs/history/reviews/rc8-target-test-2026-10-08/Read.md)) |
+| First raised continuation (3 to 10) failed; message and ceiling delivered; worker resumed the old nine-file chain | Same report; diagnosis in [rc8-continuation-followup](../docs/history/reviews/rc8-continuation-followup-2026-10-08/Read.md) |
+| Raised continuation works live and after a restart when the objective fits or is explicitly cancelled | Runs `84d450f0`, `7eaac95c`, `ce82c536`: `end_turn`, expected file written |
+| One-shot turn limit reported as `completed` / `max_turn_requests` with matching saved result (D24) | Run `dee12e6e`, `max_turns: 2` |
+| Continued ACP session ends by the supervisor's deadline, not the launcher (D23) | Run `89b1295d`: `VSUP_TIMEOUT` after 61,268 ms |
+| Disconnect while running leaves `recoverable`; idle session's worker removed; closed sessions' servers exit in 3 to 5 ms (D22, official client only) | rc8-target-test and rc8-continuation-followup |
+| Edits: exact single-file write 23.223 s, add-file 10.782 s (60 s supervisor deadline) | [rc8-finding-fixes](../docs/history/reviews/rc8-finding-fixes-2026-10-08/Read.md) |
+| Soak attempt 3: 19 passed, run 20 (edit) silent for the 900 s driver deadline; cause unknown, not recurred | rc8-continuation-followup |
+| Soak attempt 4: run 1 review, 16 `grep` and 4 `read_file` calls, `max_turn_requests` at 20 turns after 21.4 s; native cost $0.03486 (non-authoritative) | [rc8-stall-diagnostics](../docs/history/reviews/rc8-stall-diagnostics-2026-10-08/Read.md) |
+| Installed `npm link` command printed nothing until the realpath fix; smoke test missed it by starting Node directly | [rc8-cli-entry-fix](../docs/history/reviews/rc8-cli-entry-fix-2026-10-08/Read.md) |
+
+Still open: the 100-run soak, Codex desktop, permission callbacks, clean account, Intel.
