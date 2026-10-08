@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import atexit
 import inspect
+import json
+import sysconfig
 import math
 import os
 import re
@@ -421,10 +423,138 @@ def _start_parent_watchdog() -> None:
     threading.Thread(target=monitor, name="vibe-supervisor-parent-watchdog", daemon=True).start()
 
 
+DIAGNOSTICS_ENV = "VIBE_SUPERVISOR_DIAGNOSTICS"
+DIAGNOSTICS_FILE = "worker-diagnostics.json"
+MAX_DIAGNOSTICS_BYTES = 64 * 1024
+DIAGNOSTIC_STAGES = ("launch", "import", "prompt_consumption", "persistence_setup", "credential_resolution_complete", "entrypoint_invocation")
+
+
+class WorkerDiagnostics:
+    """Optional metadata only; no frame locals, arguments or source lines."""
+    def __init__(self, directory: str, clock: Callable[[], float] = time.monotonic,
+                 frames: Callable[[], Any] = sys._current_frames) -> None:
+        self.directory = directory
+        self.clock = clock
+        self.frames = frames
+        self.started = clock()
+        self.stages: list[dict[str, Any]] = []
+        self.snapshots: list[dict[str, Any]] = []
+        self.next_snapshot = 0
+        self.disabled = False
+        self.descriptor: Optional[int] = None
+        self.lock = threading.Lock()
+        self.roots = sorted(set(os.path.realpath(sysconfig.get_path(key)) for key in ("stdlib", "purelib")), key=len, reverse=True)
+
+    def stage(self, name: str) -> None:
+        if name not in DIAGNOSTIC_STAGES or self.disabled:
+            return
+        with self.lock:
+            if any(item["stage"] == name for item in self.stages):
+                return
+            self.stages.append({"stage": name, "elapsed_ms": max(0, int((self.clock() - self.started) * 1000))})
+
+    def snapshot(self, elapsed: float) -> dict[str, Any]:
+        threads = []
+        for frame in list(self.frames().values())[:8]:
+            entries = []
+            for _ in range(12):
+                if frame is None:
+                    break
+                filename = os.path.realpath(frame.f_code.co_filename)
+                relative = "<external>"
+                if filename == os.path.realpath(__file__):
+                    relative = "runtime/vibe_supervisor_launcher.py"
+                else:
+                    for root in self.roots:
+                        if filename.startswith(root + os.sep):
+                            relative = os.path.relpath(filename, root)
+                            break
+                function = frame.f_code.co_name if relative != "<external>" else "<external>"
+                if not re.fullmatch(r"[A-Za-z0-9_./<>-]{1,160}", relative):
+                    relative = "<external>"
+                if not re.fullmatch(r"[A-Za-z0-9_.<>-]{1,96}", function):
+                    function = "<unknown>"
+                entry = _redact({"file": relative, "function": function, "line": max(0, frame.f_lineno)})
+                if entry["file"] != relative:
+                    entry["file"] = "<redacted>"
+                if entry["function"] != function:
+                    entry["function"] = "<redacted>"
+                entries.append(entry)
+                frame = frame.f_back
+            threads.append(entries)
+        result = {"elapsed_ms": max(0, int(elapsed * 1000)), "threads": threads}
+        while len(json.dumps(result).encode("utf-8")) > 16 * 1024 and threads:
+            threads.pop()
+        return result
+
+    def tick(self) -> None:
+        if self.disabled:
+            return
+        try:
+            if self.descriptor is None:
+                if not os.path.isabs(self.directory) or self.directory != os.path.realpath(self.directory):
+                    raise ValueError("noncanonical diagnostic directory")
+                info = os.lstat(self.directory)
+                if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+                    raise ValueError("unsafe diagnostic directory")
+                self.descriptor = os.open(os.path.join(self.directory, DIAGNOSTICS_FILE), os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0), 0o600)
+            elapsed = self.clock() - self.started
+            if self.next_snapshot < 3 and elapsed >= (60, 180, 600)[self.next_snapshot]:
+                self.snapshots.append(self.snapshot(elapsed))
+                self.next_snapshot += 1
+            with self.lock:
+                stages = list(self.stages)
+            data = json.dumps({"schema_version": 1, "stages": stages, "snapshots": self.snapshots}, separators=(",", ":")).encode("utf-8")
+            if len(data) > MAX_DIAGNOSTICS_BYTES:
+                raise ValueError("diagnostic size limit")
+            info = os.fstat(self.descriptor)
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_nlink != 1:
+                raise ValueError("unsafe diagnostic file")
+            os.lseek(self.descriptor, 0, os.SEEK_SET)
+            offset = 0
+            while offset < len(data):
+                written = os.write(self.descriptor, data[offset:])
+                if written <= 0:
+                    raise OSError("diagnostic write failed")
+                offset += written
+            os.ftruncate(self.descriptor, len(data))
+        except Exception:
+            self.disabled = True
+            self.close()
+
+    def close(self) -> None:
+        if self.descriptor is not None:
+            try:
+                os.close(self.descriptor)
+            except OSError:
+                pass
+            self.descriptor = None
+
+
+def _start_diagnostics() -> Optional[WorkerDiagnostics]:
+    enabled = os.environ.pop(DIAGNOSTICS_ENV, None) == "1"
+    if not enabled or os.environ.get("VIBE_SUPERVISOR_ENTRYPOINT") != "programmatic":
+        return None
+    try:
+        recorder = WorkerDiagnostics(os.path.dirname(os.path.realpath(__file__)))
+        recorder.stage("launch")
+        def monitor() -> None:
+            while not recorder.disabled:
+                recorder.tick()
+                time.sleep(1)
+        threading.Thread(target=monitor, name="vibe-supervisor-diagnostics", daemon=True).start()
+        return recorder
+    except Exception:
+        return None
+
+
 def main() -> None:
     original_home = os.environ.pop(ORIGINAL_HOME_ENV, None)
     _start_parent_watchdog()
+    diagnostics = _start_diagnostics()
     import vibe
+    if diagnostics:
+        diagnostics.stage("import")
 
     if vibe.__version__ != EXPECTED_VERSION:
         raise SystemExit(f"Vibe privacy shim supports exactly {EXPECTED_VERSION}; found {vibe.__version__}")
@@ -436,8 +566,14 @@ def main() -> None:
         sys.argv = consume_prompt_file(os.environ, sys.argv, os.path.dirname(os.path.realpath(__file__)))
     elif os.environ.pop(PROMPT_FILE_ENV, None) is not None:
         raise SystemExit("A prompt file is only valid for the programmatic entrypoint")
+    if diagnostics:
+        diagnostics.stage("prompt_consumption")
     _patch_session_logger()
+    if diagnostics:
+        diagnostics.stage("persistence_setup")
     status = resolve_credential(os.environ, original_home)
+    if diagnostics:
+        diagnostics.stage("credential_resolution_complete")
     if status == "keychain":
         _install_stderr_redaction(os.environ[CREDENTIAL_ENV])
     elif status not in ("environment", "skipped-platform"):
@@ -448,6 +584,8 @@ def main() -> None:
     if "--legacy-harness" not in sys.argv:
         sys.argv.append("--legacy-harness")
     module = __import__(module_name, fromlist=["main"])
+    if diagnostics:
+        diagnostics.stage("entrypoint_invocation")
     module.main()
 
 

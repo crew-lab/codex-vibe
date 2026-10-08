@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -69,6 +69,11 @@ class FakeBackend {
       const leaked = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', 'vibe-fake-leaked-child'], { detached: true, stdio: 'ignore' });
       leaked.unref();
       writeFileSync(process.env.FAKE_LEAK_PID_FILE, String(leaked.pid));
+    }
+    if (process.env.VIBE_SUPERVISOR_DIAGNOSTICS === '1' && process.env.FAKE_DIAGNOSTICS_MODE) {
+      const file = path.join(input.runDirectory, 'worker-diagnostics.json');
+      if (process.env.FAKE_DIAGNOSTICS_MODE === 'symlink') symlinkSync(logFile, file);
+      else writeFileSync(file, JSON.stringify({ schema_version: 1, stages: [{ stage: 'launch', elapsed_ms: 1 }], snapshots: [], locals: 'PRIVATE-FIXTURE-CANARY' }), { mode: 0o600 });
     }
     const session = this.session(input.runId, callbacks, input, 0, mode);
     setTimeout(() => { void this.play(session); }, 10);
