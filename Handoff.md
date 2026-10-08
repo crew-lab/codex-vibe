@@ -1,8 +1,16 @@
 # Implementation handoff
 
+## Latest execution: bounded pilot gate failed (2026-10-08)
+
+Candidate b366c59 implements bounded correctness prompts, private native tool-count/final-answer acceptance audits and expected single-file edit-scope checks. Offline package verification/installed executable smoke passed (626 TypeScript tests; two optional profile cases supplemented by an eight-test installed-profile/new-audit run; 76 Python cases), final lint/typecheck passed. Archive SHA-256 987441497cd707cb0af0c688cee3614a99f2badd48c83a8463f0a000de238de9. Prior archives and failed reports remain preserved.
+
+The first of two planned pilots FAILED: review-bug-class completed end_turn with verified integrity in 21.502 seconds but made five read_file calls against the explicit three-read-call limit (two grep calls, zero unexpected tools). Its public final answer incorrectly claimed compliance. This is a read-call task-bound violation; it does not establish five distinct files. No second pilot or full 60/30/10 soak started, no automatic retry/limit increase/account rotation. Startup stages completed by 95 ms, no frame snapshot was due. Run closed, worker/owner locks absent, fixture clean, zero owned leaks. Earlier silent stall remains unresolved; no runtime/provider/quota cause demonstrated.
+
+Next focused investigation, not started: inspect the private failed-read sequence and self-count mismatch offline; evaluate explicit validated file lists and stop-after-read-error handling before a deliberate fresh pilot. Keep the conservative call budget until its meaning is explicitly decided. Native desktop/callback/clean-account/Intel gates and full-soak acceptance remain unverified. Private histories stay private. See [report, hashes and acceptance evidence](docs/history/reviews/rc8-bounded-pilots-2026-10-08/Read.md).
+
 ## Planned next work: bounded reviews and diagnostic soak (2026-10-08)
 
-**Plan saved, not implemented or executed.** Continue on `codex/rc8-stall-diagnostics`. Bounded-review/ACP evidence is preserved in commit `b7625e0`; previous failures remain visible. Latest user-reported account usage is EUR1.22 used of EUR8.50 (approximately EUR7.28 remaining at that observation), not EUR1.22 remaining. Do not probe balances or rotate accounts automatically.
+**Historical saved plan, now implemented; execution stopped at the first pilot failure above.** Continue on `codex/rc8-stall-diagnostics`. Bounded-review/ACP evidence is preserved in commit `b7625e0`; previous failures remain visible. Latest user-reported account usage is EUR1.22 used of EUR8.50 (approximately EUR7.28 remaining at that observation), not EUR1.22 remaining. Do not probe balances or rotate accounts automatically.
 
 ### Implementation
 
