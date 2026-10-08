@@ -34,6 +34,7 @@ export async function auditReview(home, runId, bounds) {
   for (const message of messages) {
     if (!message || !['user', 'assistant', 'tool', 'system'].includes(message.role)) throw new Error('Invalid message');
     if (message.tool_calls !== undefined && !Array.isArray(message.tool_calls)) throw new Error('Invalid calls');
+    if (message.role === 'user') finalAnswer = false;
     if (message.role !== 'assistant') continue;
     if (message.tool_calls?.length) {
       finalAnswer = false;
