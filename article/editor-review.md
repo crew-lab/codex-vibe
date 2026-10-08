@@ -232,3 +232,13 @@ Applied to `final.md`; should-fix and nice-to-have items were left alone.
 6. **Star ask.** Edit 22 applied; the closing AI-assistance sentence stays. The AI-Assisted label still has to be set in the DEV editor at publishing time.
 
 Length follow-up (2026-10-08): a further tightening pass on checks 1, 2, 5 and 6, the diagram note, the install and status paragraphs and the closing questions brought the prose to about 2,100 words; the JSON warning now uses the supervisor's real warning text.
+
+## Applied should-fix edits (2026-10-08)
+
+- 7: the JSON is the real saved result of the 15.2 s retry (run d9ce1a35), trimmed of IDs, paths and hashes and labelled as rc.7 with the fix; the summary is cut with "..." and the rc.8 rewording is mentioned.
+- 8: the "X, not Y" pattern is kept in the check 1 heading and in check 4 only; the TL;DR, check 1 body, check 2, the turn-ceiling note, check 5, the checklist and the redaction sentence were reworded.
+- 9: one-line takeaways added to checks 2, 5, 6 and 7.
+- 10: the policy-probe sentence in check 1 says the refusals were on the ACP backend.
+- 11: the example prompt moved into check 6; "Try it" points to it; the checklist card now follows check 7, before the diagram.
+- 12: title "7 checks before one coding agent delegates to another"; description leads with the run-1 story.
+- Edits 6 and 15 applied (second paragraph, check 4 closing). Prose is about 2,270 words after the additions.
