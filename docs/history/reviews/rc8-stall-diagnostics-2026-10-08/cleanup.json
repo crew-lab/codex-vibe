@@ -1,0 +1,10 @@
+{
+  "state": "closed",
+  "worker_pid": 55467,
+  "worker_absent": true,
+  "owner_locks_absent": true,
+  "worktrees_absent": true,
+  "synthetic_source_clean": true,
+  "owned_leaks": 0,
+  "unrelated_processes_touched": false
+}

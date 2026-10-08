@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "started_at": "2026-10-08T09:37:30.410Z",
+  "finished_at": "2026-10-08T09:56:46.715Z",
+  "seed": "soak",
+  "node": "v24.21.0",
+  "platform": "darwin-arm64",
+  "server_command": [
+    "node",
+    "/private/tmp/rc8-phase-d-6n1ney4v/install/node_modules/vibe-supervisor/dist/cli.js",
+    "serve",
+    "--stdio"
+  ],
+  "plan": {
+    "reviews": 60,
+    "edits": 30,
+    "acp": 10,
+    "hosted_turns": 107
+  },
+  "stopped_early": true,
+  "fatal": null,
+  "totals": {
+    "runs": 20,
+    "ok": 19,
+    "failed": 1
+  },
+  "by_kind": {
+    "review": {
+      "runs": 11,
+      "ok": 11,
+      "failed": 0
+    },
+    "edit": {
+      "runs": 9,
+      "ok": 8,
+      "failed": 1
+    }
+  },
+  "by_backend": {
+    "programmatic": {
+      "runs": 20,
+      "ok": 19,
+      "failed": 1
+    }
+  },
+  "by_scenario": {
+    "review": {
+      "runs": 11,
+      "ok": 11,
+      "failed": 0
+    },
+    "edit": {
+      "runs": 9,
+      "ok": 8,
+      "failed": 1
+    }
+  },
+  "latency_ms": {
+    "time_to_first_event": {
+      "count": 19,
+      "p50": 11066,
+      "p95": 37709
+    },
+    "time_to_settled": {
+      "count": 19,
+      "p50": 11448,
+      "p95": 37995
+    }
+  },
+  "failures_by_code": {
+    "driver:run_timeout": 1
+  },
+  "permission_requests": 0,
+  "restarts": {
+    "reloaded": 0,
+    "error": 0,
+    "other": 0,
+    "not_exercised": 0
+  },
+  "close_mid_turn": {
+    "exercised": 0,
+    "not_exercised": 0
+  },
+  "tool_calls": 102,
+  "events": 19,
+  "cost": {
+    "reported": 0,
+    "amount": 0,
+    "currency": null,
+    "authoritative": false
+  },
+  "leftovers": {
+    "processes": {
+      "baseline": 8,
+      "after": 10,
+      "new_unrelated": 2,
+      "leaked": []
+    },
+    "registered_worktrees": [],
+    "homes": {
+      "home-programmatic": {
+        "run_directories": 20,
+        "total_bytes": 1403997,
+        "runs_bytes": 1403786,
+        "max_run_bytes": 88380,
+        "per_run_limit_bytes": 167772160,
+        "oversized_runs": [],
+        "leftover_worktrees": [],
+        "missing_runs": []
+      },
+      "home-acp": {
+        "run_directories": 0,
+        "total_bytes": 202,
+        "runs_bytes": 0,
+        "max_run_bytes": 0,
+        "per_run_limit_bytes": 167772160,
+        "oversized_runs": [],
+        "leftover_worktrees": [],
+        "missing_runs": []
+      }
+    }
+  },
+  "servers": [
+    {
+      "backend": "programmatic",
+      "servers_started": 1,
+      "last_startup_ms": 140
+    }
+  ],
+  "criteria": [
+    {
+      "id": "zero_unexpected_failures",
+      "status": "FAIL",
+      "detail": "1 unexpected failures"
+    },
+    {
+      "id": "zero_permission_requests",
+      "status": "PASS",
+      "detail": "0 permission or input requests"
+    },
+    {
+      "id": "no_leaked_processes_or_worktrees",
+      "status": "PASS",
+      "detail": "0 orphaned or descendant vibe processes, 0 leftover worktrees"
+    },
+    {
+      "id": "bounded_artifacts",
+      "status": "PASS",
+      "detail": "0 run directories above the per-run limit"
+    },
+    {
+      "id": "retention_keeps_recent_runs",
+      "status": "PASS",
+      "detail": "0 recorded runs missing from disk (retention.days 7)"
+    }
+  ],
+  "result": "FAIL"
+}

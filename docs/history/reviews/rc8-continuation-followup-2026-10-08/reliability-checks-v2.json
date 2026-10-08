@@ -1,0 +1,531 @@
+[
+  {
+    "step": "tools-acp",
+    "time": "2026-10-08T09:33:50.407Z",
+    "tools": [
+      "vibe_review_start",
+      "vibe_edit_start",
+      "vibe_status",
+      "vibe_continue",
+      "vibe_respond",
+      "vibe_result",
+      "vibe_close"
+    ],
+    "server_pid": 39735,
+    "home": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2"
+  },
+  {
+    "step": "started-async",
+    "time": "2026-10-08T09:33:50.420Z",
+    "reply": {
+      "run_id": "48af38c9-b75f-47f0-9a76-0cc527c7dba4",
+      "state": "starting",
+      "backend": "acp",
+      "mode": "review",
+      "source_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "worker_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "created_at": "2026-10-08T09:33:50.411Z",
+      "next_action": "Call vibe_status with wait_seconds 120-300 until the run needs action."
+    }
+  },
+  {
+    "step": "D22-running-disconnect",
+    "time": "2026-10-08T09:34:02.440Z",
+    "server_pid": 39735,
+    "exit_ms": 4053,
+    "handles": []
+  },
+  {
+    "step": "tools-acp",
+    "time": "2026-10-08T09:34:02.599Z",
+    "tools": [
+      "vibe_review_start",
+      "vibe_edit_start",
+      "vibe_status",
+      "vibe_continue",
+      "vibe_respond",
+      "vibe_result",
+      "vibe_close"
+    ],
+    "server_pid": 39818,
+    "home": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2"
+  },
+  {
+    "step": "closed",
+    "time": "2026-10-08T09:34:02.646Z",
+    "run_id": "48af38c9-b75f-47f0-9a76-0cc527c7dba4",
+    "reply": {
+      "run_id": "48af38c9-b75f-47f0-9a76-0cc527c7dba4",
+      "state": "closed",
+      "next_action": "The run is closed; start a new run for more work.",
+      "worktree_removed": false
+    }
+  },
+  {
+    "step": "D22-running-PASS",
+    "time": "2026-10-08T09:34:02.646Z",
+    "run_id": "48af38c9-b75f-47f0-9a76-0cc527c7dba4",
+    "worker_pid": 39760,
+    "state_after_restart": "recoverable"
+  },
+  {
+    "step": "started",
+    "time": "2026-10-08T09:34:14.677Z",
+    "run_id": "051f05fb-0479-44b3-92b4-33d8fcf2a5eb",
+    "kind": "review",
+    "reply": {
+      "run_id": "051f05fb-0479-44b3-92b4-33d8fcf2a5eb",
+      "state": "completed",
+      "backend": "acp",
+      "mode": "review",
+      "source_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "worker_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "created_at": "2026-10-08T09:34:02.647Z",
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+      "result": {
+        "run_id": "051f05fb-0479-44b3-92b4-33d8fcf2a5eb",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "end_turn",
+        "summary": "Vibe completed the delegated task.",
+        "warnings": [],
+        "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+        "integrity": {
+          "status": "verified",
+          "write_tool_observed": true
+        },
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/051f05fb-0479-44b3-92b4-33d8fcf2a5eb/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/051f05fb-0479-44b3-92b4-33d8fcf2a5eb/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "settled",
+    "time": "2026-10-08T09:34:14.679Z",
+    "run_id": "051f05fb-0479-44b3-92b4-33d8fcf2a5eb",
+    "reply": {
+      "run_id": "051f05fb-0479-44b3-92b4-33d8fcf2a5eb",
+      "state": "completed",
+      "backend": "acp",
+      "last_seq": 20,
+      "next_after_seq": 20,
+      "events": [
+        {
+          "seq": 1,
+          "type": "usage"
+        },
+        {
+          "seq": 2,
+          "type": "usage"
+        },
+        {
+          "seq": 3,
+          "type": "user_message_chunk"
+        },
+        {
+          "seq": 4,
+          "type": "session_info_update",
+          "title": "Read only src/nested/arithmetic.py and in one sentence explain its bug. Available tools read_file and grep only. Do not run tests."
+        },
+        {
+          "seq": 5,
+          "type": "available_commands_update"
+        },
+        {
+          "seq": 6,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 7,
+          "type": "tool_call_update",
+          "title": "Reading src/nested/arithmetic.py",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 8,
+          "type": "usage"
+        },
+        {
+          "seq": 9,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 10,
+          "type": "tool_call",
+          "title": "write_file",
+          "kind": "other",
+          "status": "in_progress"
+        },
+        {
+          "seq": 11,
+          "type": "tool_call_update",
+          "kind": "other",
+          "status": "failed"
+        },
+        {
+          "seq": 12,
+          "type": "usage"
+        },
+        {
+          "seq": 13,
+          "type": "tool_call",
+          "title": "edit",
+          "kind": "other",
+          "status": "in_progress"
+        },
+        {
+          "seq": 14,
+          "type": "tool_call_update",
+          "kind": "other",
+          "status": "failed"
+        },
+        {
+          "seq": 15,
+          "type": "usage"
+        },
+        {
+          "seq": 16,
+          "type": "message"
+        },
+        {
+          "seq": 17,
+          "type": "usage"
+        },
+        {
+          "seq": 18,
+          "type": "usage"
+        },
+        {
+          "seq": 19,
+          "type": "message"
+        },
+        {
+          "seq": 20,
+          "type": "review_integrity",
+          "status": "verified"
+        }
+      ],
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+      "result": {
+        "run_id": "051f05fb-0479-44b3-92b4-33d8fcf2a5eb",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "end_turn",
+        "summary": "Vibe completed the delegated task.",
+        "warnings": [],
+        "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+        "integrity": {
+          "status": "verified",
+          "write_tool_observed": true
+        },
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/051f05fb-0479-44b3-92b4-33d8fcf2a5eb/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/051f05fb-0479-44b3-92b4-33d8fcf2a5eb/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "D22-idle-completed-disconnect",
+    "time": "2026-10-08T09:34:14.951Z",
+    "server_pid": 39818,
+    "exit_ms": 272,
+    "handles": [
+      "ChildProcess"
+    ]
+  },
+  {
+    "step": "tools-acp",
+    "time": "2026-10-08T09:34:15.060Z",
+    "tools": [
+      "vibe_review_start",
+      "vibe_edit_start",
+      "vibe_status",
+      "vibe_continue",
+      "vibe_respond",
+      "vibe_result",
+      "vibe_close"
+    ],
+    "server_pid": 39909,
+    "home": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2"
+  },
+  {
+    "step": "closed",
+    "time": "2026-10-08T09:34:15.079Z",
+    "run_id": "051f05fb-0479-44b3-92b4-33d8fcf2a5eb",
+    "reply": {
+      "run_id": "051f05fb-0479-44b3-92b4-33d8fcf2a5eb",
+      "state": "closed",
+      "next_action": "The run is closed; start a new run for more work.",
+      "worktree_removed": false
+    }
+  },
+  {
+    "step": "D22-idle-PASS",
+    "time": "2026-10-08T09:34:15.079Z",
+    "run_id": "051f05fb-0479-44b3-92b4-33d8fcf2a5eb"
+  },
+  {
+    "step": "started",
+    "time": "2026-10-08T09:34:18.609Z",
+    "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+    "kind": "review",
+    "reply": {
+      "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+      "state": "completed",
+      "backend": "acp",
+      "mode": "review",
+      "source_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "worker_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "created_at": "2026-10-08T09:34:15.081Z",
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+      "result": {
+        "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "end_turn",
+        "summary": "Vibe completed the delegated task.",
+        "warnings": [],
+        "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+        "integrity": {
+          "status": "verified",
+          "write_tool_observed": false
+        },
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/89b1295d-0151-48f2-aab9-824fdb611220/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/89b1295d-0151-48f2-aab9-824fdb611220/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "settled",
+    "time": "2026-10-08T09:34:18.612Z",
+    "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+    "reply": {
+      "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+      "state": "completed",
+      "backend": "acp",
+      "last_seq": 12,
+      "next_after_seq": 12,
+      "events": [
+        {
+          "seq": 1,
+          "type": "usage"
+        },
+        {
+          "seq": 2,
+          "type": "usage"
+        },
+        {
+          "seq": 3,
+          "type": "user_message_chunk"
+        },
+        {
+          "seq": 4,
+          "type": "session_info_update",
+          "title": "Read only src/nested/arithmetic.py and in one sentence explain its bug. Available tools read_file and grep only. Do not run tests."
+        },
+        {
+          "seq": 5,
+          "type": "available_commands_update"
+        },
+        {
+          "seq": 6,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 7,
+          "type": "tool_call_update",
+          "title": "Reading src/nested/arithmetic.py",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 8,
+          "type": "usage"
+        },
+        {
+          "seq": 9,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 10,
+          "type": "usage"
+        },
+        {
+          "seq": 11,
+          "type": "usage"
+        },
+        {
+          "seq": 12,
+          "type": "message"
+        }
+      ],
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+      "result": {
+        "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "end_turn",
+        "summary": "Vibe completed the delegated task.",
+        "warnings": [],
+        "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+        "integrity": {
+          "status": "verified",
+          "write_tool_observed": false
+        },
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/89b1295d-0151-48f2-aab9-824fdb611220/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/89b1295d-0151-48f2-aab9-824fdb611220/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "D23-waiting",
+    "time": "2026-10-08T09:34:18.612Z",
+    "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+    "wait_seconds": 90
+  },
+  {
+    "step": "settled-any",
+    "time": "2026-10-08T09:36:49.883Z",
+    "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+    "reply": {
+      "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+      "state": "failed",
+      "backend": "acp",
+      "last_seq": 19,
+      "next_after_seq": 19,
+      "events": [],
+      "next_action": "Read error and warnings; call vibe_close when done.",
+      "error": {
+        "code": "VSUP_TIMEOUT",
+        "message": "The run exceeded its configured timeout.",
+        "remediation": "Increase the timeout or simplify the task, then start a new run.",
+        "retryable": false
+      },
+      "result": {
+        "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+        "state": "failed",
+        "backend": "acp",
+        "summary": "Vibe run ended before normal completion.",
+        "warnings": [],
+        "next_action": "Read error and warnings; call vibe_close when done.",
+        "integrity": {
+          "status": "verified",
+          "write_tool_observed": false
+        },
+        "error": {
+          "code": "VSUP_TIMEOUT",
+          "message": "The run exceeded its configured timeout.",
+          "remediation": "Increase the timeout or simplify the task, then start a new run.",
+          "retryable": false
+        },
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/89b1295d-0151-48f2-aab9-824fdb611220/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/89b1295d-0151-48f2-aab9-824fdb611220/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "D23-PASS",
+    "time": "2026-10-08T09:36:49.884Z",
+    "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+    "continuation_ms": 61268,
+    "state": "failed",
+    "error": {
+      "code": "VSUP_TIMEOUT",
+      "message": "The run exceeded its configured timeout.",
+      "remediation": "Increase the timeout or simplify the task, then start a new run.",
+      "retryable": false
+    }
+  },
+  {
+    "step": "closed",
+    "time": "2026-10-08T09:36:49.900Z",
+    "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+    "reply": {
+      "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+      "state": "closed",
+      "next_action": "The run is closed; start a new run for more work.",
+      "worktree_removed": false
+    }
+  },
+  {
+    "step": "reliability-shutdown",
+    "time": "2026-10-08T09:36:49.909Z",
+    "server_pid": 39909,
+    "exit_ms": 9,
+    "handles": [
+      "ChildProcess"
+    ]
+  },
+  {
+    "step": "PASS",
+    "time": "2026-10-08T09:36:49.910Z",
+    "scope": "D24; official-client D22 running/idle; D23 long continuation"
+  },
+  {
+    "step": "final-reliability-shutdown",
+    "time": "2026-10-08T09:36:49.910Z",
+    "server_pid": null,
+    "exit_ms": 0,
+    "handles": []
+  }
+]

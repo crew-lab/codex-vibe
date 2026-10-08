@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+  "state": "completed",
+  "backend": "acp",
+  "stop_reason": "end_turn",
+  "summary": "Vibe completed the delegated task.",
+  "workspace": {
+    "source": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+    "worker": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/84d450f0-c99b-45fc-9c20-3bb84a5f7d65"
+  },
+  "artifacts": [
+    {
+      "name": "diff.patch",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/artifacts/diff.patch",
+      "sha256": "267e34ae097d38e57e50078ce14c7361e49fec843cfb2485cedbd37a2f275cf5",
+      "bytes": 180,
+      "media_type": "text/x-diff"
+    },
+    {
+      "name": "diff.stat",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/artifacts/diff.stat",
+      "sha256": "a6722f50f0689c02229e553b77e63877651340ba524dc94fd8c9d002bfc4a3d6",
+      "bytes": 59,
+      "media_type": "text/plain"
+    },
+    {
+      "name": "changed-files.json",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/artifacts/changed-files.json",
+      "sha256": "20d9b5a1675d947b6d8df80d6810ccbba79a18dccd1df3add42f5302a7ec33f0",
+      "bytes": 78,
+      "media_type": "application/json"
+    },
+    {
+      "name": "transcript.md",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/transcript.md",
+      "sha256": "362096e044578791d715cd07e5abf43b422ad62695fff0f7230dc1cc5a4a46b5",
+      "bytes": 131,
+      "media_type": "text/markdown"
+    },
+    {
+      "name": "events.ndjson",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/events.ndjson",
+      "sha256": "a2e19061c82b607890a7d90089833bab8904fe80f5f9f40e7123461598d29596",
+      "bytes": 17513,
+      "media_type": "application/x-ndjson"
+    }
+  ],
+  "changed_files": [
+    "override-result.txt"
+  ],
+  "warnings": []
+}

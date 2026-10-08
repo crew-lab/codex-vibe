@@ -1,0 +1,29 @@
+{
+  "base": "e71f9182eb37e728cc522881811ed9168cca331c",
+  "date": "2026-10-08",
+  "hosted_retries": [
+    {
+      "run_id": "854d4907-7247-4355-a958-6f93b6980bbe",
+      "result": "PASS",
+      "settled_ms": 23223,
+      "worker_timeout_seconds": 60,
+      "state": "closed",
+      "worker_absent": true,
+      "worktree_removed": true,
+      "patch_verified": true
+    },
+    {
+      "run_id": "0c2571e2-603f-4a6a-8509-65ba1fb0083a",
+      "result": "PASS",
+      "settled_ms": 10782,
+      "worker_timeout_seconds": 60,
+      "state": "closed",
+      "worker_absent": true,
+      "worktree_removed": true,
+      "patch_verified": true
+    }
+  ],
+  "original_stall": "UNRESOLVED; retries do not establish root cause",
+  "full_hosted_soak": "FAIL at 20/100 preserved; not rerun",
+  "commit_push": "not performed"
+}

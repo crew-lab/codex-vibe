@@ -1,0 +1,13 @@
+[
+  {
+    "run_id": "42e0f69e-bb62-4bac-a093-686039759809",
+    "pid": 42635,
+    "observed_running_at": 1791452450.918553,
+    "argv_nonempty": true,
+    "argv_contains_task_text": false,
+    "argv_contains_task_prompt_argument": false,
+    "task_prompt_file_exists": false,
+    "manifest_permissions": "0o600",
+    "run_directory_permissions": "0o700"
+  }
+]

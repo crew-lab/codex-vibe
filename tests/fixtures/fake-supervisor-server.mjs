@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -63,12 +63,17 @@ class FakeBackend {
     this.starts += 1;
     const start = this.starts;
     const mode = this.modeFor(start);
-    record('start', { runId: input.runId, mode: input.mode, behavior: mode, start });
+    record('start', { runId: input.runId, mode: input.mode, behavior: mode, start, timeoutSeconds: input.limits.timeoutSeconds });
     if (mode === 'exit') process.exit(3);
     if (mode === 'leak' && process.env.FAKE_LEAK_PID_FILE) {
       const leaked = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', 'vibe-fake-leaked-child'], { detached: true, stdio: 'ignore' });
       leaked.unref();
       writeFileSync(process.env.FAKE_LEAK_PID_FILE, String(leaked.pid));
+    }
+    if (process.env.VIBE_SUPERVISOR_DIAGNOSTICS === '1' && process.env.FAKE_DIAGNOSTICS_MODE) {
+      const file = path.join(input.runDirectory, 'worker-diagnostics.json');
+      if (process.env.FAKE_DIAGNOSTICS_MODE === 'symlink') symlinkSync(logFile, file);
+      else writeFileSync(file, JSON.stringify({ schema_version: 1, stages: [{ stage: 'launch', elapsed_ms: 1 }], snapshots: [], locals: 'PRIVATE-FIXTURE-CANARY' }), { mode: 0o600 });
     }
     const session = this.session(input.runId, callbacks, input, 0, mode);
     setTimeout(() => { void this.play(session); }, 10);
@@ -85,6 +90,7 @@ class FakeBackend {
     const { callbacks, mode } = session;
     const steps = mode === 'slow' ? 8 : 3;
     try {
+      if (mode === 'silent') return;
       for (let step = 1; step <= steps; step += 1) {
         await session.sleep(step === 1 ? 20 : this.delay());
         await callbacks.onEvent({ source: this.kind === 'acp' ? 'acp' : 'vibe', type: 'tool_call', severity: 'info', data: { title: `Read file ${step}`, kind: 'read', status: 'completed' } });

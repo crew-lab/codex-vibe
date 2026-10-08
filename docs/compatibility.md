@@ -105,3 +105,13 @@ The [dated evidence](history/reviews/rc7-target-test-2026-10-07/Read.md) records
 ### Locally patched rc.7 limit follow-up (2026-10-07)
 
 The [follow-up evidence](history/reviews/rc7-turn-limit-fix-2026-10-07/Read.md) confirms pinned turn-limit classification and saved-error corrections, full release verification and installed-package validation. The identical hosted soak still stops on its first review at the configured 12-turn cap, now accurately identified as max_turn_requests. A successful full soak remains unverified; no budget or permission boundary was broadened.
+
+### rc.8 target-machine follow-up (2026-10-08)
+
+The [dated report](history/reviews/rc8-target-test-2026-10-08/Read.md) records full local release verification and hosted cold/warm reviews, followed by D21 failure: the refused-budget gates worked, but an explicit increase from 3 to 10 resumed the original file chain and exhausted again with no patch. The new correction prompt and raised ceiling were confirmed locally. Restart, later hosted checks and the full soak were stopped; native desktop, callbacks and platform gates remain unverified.
+
+### Controlled rc.8 continuation follow-up (2026-10-08)
+
+[Controlled follow-up evidence](history/reviews/rc8-continuation-followup-2026-10-08/Read.md) establishes useful 3-to-10 continuation on a bounded fixture live and after reload, explicit task replacement, official-client running/idle shutdown, programmatic cap reporting and the expected supervisor timeout branch after the original launch lifetime. No runtime change was justified; the original failure is preserved. Native desktop/platform/callback gates and full hosted soak remain unverified pending separate evidence.
+
+The separate rc.8 scoped soak stopped at run 20/100 (19 passed) on driver:run_timeout, without an explicit auth/quota error or owned leaks. It does not pass the hosted-soak gate. Direct npm entry testing also corrected original D1 to FAIL: the installed executable symlink silently exited; a separate source fix is being verified.

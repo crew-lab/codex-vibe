@@ -1,0 +1,273 @@
+{
+  "recorded_sessions": [
+    {
+      "run_id": "1b66a0fb-8824-4a8d-97be-2f9a629d8a8e",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 6,
+        "session_prompt_tokens": 20243,
+        "session_completion_tokens": 467,
+        "session_cached_tokens": 12416,
+        "session_total_llm_tokens": 20710,
+        "tool_calls_succeeded": 4,
+        "tool_calls_failed": 0,
+        "session_cost": 0.0171054
+      }
+    },
+    {
+      "run_id": "c2b7c350-3122-4e9a-9528-2822f66ce122",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 8,
+        "session_prompt_tokens": 32601,
+        "session_completion_tokens": 1228,
+        "session_cached_tokens": 28672,
+        "session_total_llm_tokens": 33829,
+        "tool_calls_succeeded": 4,
+        "tool_calls_failed": 2,
+        "session_cost": 0.0194043
+      }
+    },
+    {
+      "run_id": "dd88ca3d-e081-4283-bfed-b02097a22338",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 4,
+        "session_prompt_tokens": 12402,
+        "session_completion_tokens": 456,
+        "session_cached_tokens": 10112,
+        "session_total_llm_tokens": 12858,
+        "tool_calls_succeeded": 2,
+        "tool_calls_failed": 0,
+        "session_cost": 0.008371799999999999
+      }
+    },
+    {
+      "run_id": "eec0f7f3-426e-4d00-bd48-484bc228991b",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 4,
+        "session_prompt_tokens": 12040,
+        "session_completion_tokens": 1052,
+        "session_cached_tokens": 9600,
+        "session_total_llm_tokens": 13092,
+        "tool_calls_succeeded": 2,
+        "tool_calls_failed": 0,
+        "session_cost": 0.01299
+      }
+    },
+    {
+      "run_id": "1b6e7276-4279-430e-b649-09a4e43119b5",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 3,
+        "session_prompt_tokens": 8627,
+        "session_completion_tokens": 926,
+        "session_cached_tokens": 5888,
+        "session_total_llm_tokens": 9553,
+        "tool_calls_succeeded": 1,
+        "tool_calls_failed": 0,
+        "session_cost": 0.011936700000000001
+      }
+    },
+    {
+      "run_id": "59fb3d36-00d9-462e-879c-2294e5b4c3db",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 6,
+        "session_prompt_tokens": 25906,
+        "session_completion_tokens": 2971,
+        "session_cached_tokens": 22016,
+        "session_total_llm_tokens": 28877,
+        "tool_calls_succeeded": 4,
+        "tool_calls_failed": 0,
+        "session_cost": 0.0314199
+      }
+    },
+    {
+      "run_id": "99708823-ce1c-477e-b178-482030df78ed",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 5,
+        "session_prompt_tokens": 16039,
+        "session_completion_tokens": 481,
+        "session_cached_tokens": 2048,
+        "session_total_llm_tokens": 16520,
+        "tool_calls_succeeded": 2,
+        "tool_calls_failed": 1,
+        "session_cost": 0.024901200000000002
+      }
+    },
+    {
+      "run_id": "f7159780-65c2-4b2d-b0ca-9af75800e5eb",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 6,
+        "session_prompt_tokens": 20411,
+        "session_completion_tokens": 1324,
+        "session_cached_tokens": 17920,
+        "session_total_llm_tokens": 21735,
+        "tool_calls_succeeded": 2,
+        "tool_calls_failed": 1,
+        "session_cost": 0.0163545
+      }
+    },
+    {
+      "run_id": "42e0f69e-bb62-4bac-a093-686039759809",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 6,
+        "session_prompt_tokens": 20550,
+        "session_completion_tokens": 750,
+        "session_cached_tokens": 7040,
+        "session_total_llm_tokens": 21300,
+        "tool_calls_succeeded": 3,
+        "tool_calls_failed": 1,
+        "session_cost": 0.026946
+      }
+    },
+    {
+      "run_id": "ec2f1eeb-8611-4a64-b6b7-3ac57263638a",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 5,
+        "session_prompt_tokens": 15848,
+        "session_completion_tokens": 524,
+        "session_cached_tokens": 11520,
+        "session_total_llm_tokens": 16372,
+        "tool_calls_succeeded": 3,
+        "tool_calls_failed": 0,
+        "session_cost": 0.01215
+      }
+    },
+    {
+      "run_id": "73ce56b5-a31f-4b37-b6ef-d17134b5b1d5",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 21,
+        "session_prompt_tokens": 109532,
+        "session_completion_tokens": 4250,
+        "session_cached_tokens": 101760,
+        "session_total_llm_tokens": 113782,
+        "tool_calls_succeeded": 17,
+        "tool_calls_failed": 2,
+        "session_cost": 0.058797
+      }
+    },
+    {
+      "run_id": "757f465d-0c7e-481c-a832-be7b2e7131e8",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 4,
+        "session_prompt_tokens": 12407,
+        "session_completion_tokens": 424,
+        "session_cached_tokens": 10624,
+        "session_total_llm_tokens": 12831,
+        "tool_calls_succeeded": 2,
+        "tool_calls_failed": 0,
+        "session_cost": 0.0074481
+      }
+    },
+    {
+      "run_id": "365e59b3-3214-4791-a1f5-8fd3c14c5b36",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 6,
+        "session_prompt_tokens": 20863,
+        "session_completion_tokens": 457,
+        "session_cached_tokens": 18816,
+        "session_total_llm_tokens": 21320,
+        "tool_calls_succeeded": 3,
+        "tool_calls_failed": 1,
+        "session_cost": 0.0093204
+      }
+    },
+    {
+      "run_id": "b5575c94-2148-4d55-86c7-014e2fd87e2b",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 4,
+        "session_prompt_tokens": 12392,
+        "session_completion_tokens": 359,
+        "session_cached_tokens": 7936,
+        "session_total_llm_tokens": 12751,
+        "tool_calls_succeeded": 2,
+        "tool_calls_failed": 0,
+        "session_cost": 0.010566899999999999
+      }
+    },
+    {
+      "run_id": "f58b9815-c95f-4546-9286-3a1b297c53e9",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 16,
+        "session_prompt_tokens": 74765,
+        "session_completion_tokens": 2508,
+        "session_cached_tokens": 68992,
+        "session_total_llm_tokens": 77273,
+        "tool_calls_succeeded": 11,
+        "tool_calls_failed": 2,
+        "session_cost": 0.037818300000000006
+      }
+    },
+    {
+      "run_id": "521a97ee-00eb-4588-a1dc-857b329f8773",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 7,
+        "session_prompt_tokens": 27058,
+        "session_completion_tokens": 1807,
+        "session_cached_tokens": 24320,
+        "session_total_llm_tokens": 28865,
+        "tool_calls_succeeded": 3,
+        "tool_calls_failed": 1,
+        "session_cost": 0.0213075
+      }
+    },
+    {
+      "run_id": "4240d707-ba6e-4776-be07-797915916911",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 2,
+        "session_prompt_tokens": 3853,
+        "session_completion_tokens": 470,
+        "session_cached_tokens": 0,
+        "session_total_llm_tokens": 4323,
+        "tool_calls_succeeded": 0,
+        "tool_calls_failed": 0,
+        "session_cost": 0.0093045
+      }
+    },
+    {
+      "run_id": "3972fa65-6382-4bd7-aa99-a327c4a99781",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 5,
+        "session_prompt_tokens": 15886,
+        "session_completion_tokens": 508,
+        "session_cached_tokens": 11520,
+        "session_total_llm_tokens": 16394,
+        "tool_calls_succeeded": 3,
+        "tool_calls_failed": 0,
+        "session_cost": 0.012087
+      }
+    },
+    {
+      "run_id": "11e4b6e2-3bd4-401f-90c2-4192543ddae4",
+      "model": "mistral-medium-3.5",
+      "stats": {
+        "steps": 4,
+        "session_prompt_tokens": 12239,
+        "session_completion_tokens": 276,
+        "session_cached_tokens": 7808,
+        "session_total_llm_tokens": 12515,
+        "tool_calls_succeeded": 2,
+        "tool_calls_failed": 0,
+        "session_cost": 0.009887700000000001
+      }
+    }
+  ],
+  "recorded_cost_usd": 0.358117,
+  "failed_run_usage": "UNAVAILABLE: no native session metadata written",
+  "note": "Provider estimates, not verified billing; no unique-token/time-savings claim"
+}

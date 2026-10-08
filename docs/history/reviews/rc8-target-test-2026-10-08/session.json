@@ -1,0 +1,36 @@
+{
+  "date": "2026-10-08",
+  "source": "e71f9182eb37e728cc522881811ed9168cca331c",
+  "version": "0.9.0-rc.8",
+  "tested_tarball_sha256": "9f0bf89da655679bbd3acf701bd774b01f77e40bf5cf2aec16cbfdc7742736b0",
+  "release": {
+    "status": "PASS",
+    "typescript_tests": 615,
+    "files": 55,
+    "installed_Vibe_profile_tests": "PASS",
+    "python_tests": 66,
+    "lint_typecheck_build": "PASS",
+    "offline_smoke_checksums": "PASS"
+  },
+  "D0": "PARTIAL: desktop version not recorded",
+  "D1": "FAIL corrected on follow-up: npm executable symlink printed nothing; direct Node CLI prints 0.9.0-rc.8",
+  "D2": "PARTIAL: project-scoped plan/write/idempotence and doctor passed; no user-global registration",
+  "D3": "PARTIAL: official client five/seven tools; no desktop restart",
+  "D4": "PARTIAL: compatibility automatic checks and real installed profile regressions passed; standalone manual resolver not repeated",
+  "D5": "PASS: hosted programmatic cold/warm, verified integrity, end_turn, closed",
+  "D21": {
+    "status": "FAIL",
+    "run_id": "c20da652-74e3-4eb9-9e66-5b5874a72991",
+    "initial_limit": 3,
+    "raised_limit": 10,
+    "plain_equal_lower_refusals": "PASS with unchanged events bytes",
+    "raised_outcome": "max_turn_requests, zero changed files",
+    "restart_case": "NOT RUN after failure",
+    "continuation_prompt_in_native_public_history": true
+  },
+  "D22": "PARTIAL: exercised official-client closed-run shutdown exited in 3-5 ms; running/idle/desktop variants not run",
+  "D18_D23_D24": "NOT RUN: stopped on D21 failure",
+  "remaining_gates": "UNVERIFIED",
+  "account_balance_identity": "not inspected",
+  "cleanup": "PASS"
+}
