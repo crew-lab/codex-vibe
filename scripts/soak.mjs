@@ -533,8 +533,6 @@ async function continueTurn(ctx, message) {
 async function startRun(ctx) {
   const { job, o } = ctx;
   beginTurn(ctx, 'start');
-  // Leave time for supervisor cancellation/export before the outer driver deadline.
-  // Very short driver-only fault probes cannot fit the MCP minimum (30 seconds).
   const configured = job.kind === 'edit' ? o.editTimeout : o.reviewTimeout;
   const timeoutSeconds = o.runTimeout >= 60 ? Math.min(configured, 7200, o.runTimeout - 30) : undefined;
   const started = await call(ctx, job.kind === 'edit' ? 'vibe_edit_start' : 'vibe_review_start', { task: job.task, cwd: o.workspace, wait_seconds: o.startWait, ...(timeoutSeconds === undefined ? {} : { timeout_seconds: timeoutSeconds }) }, o.startWait);

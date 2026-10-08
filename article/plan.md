@@ -1,6 +1,6 @@
 # dev.to article plan: vibe-supervisor
 
-First written 2026-10-07, updated 2026-10-08 after rc.8, after the fact-check in [review](review.md), and again for the DEV-reader revision (see [review, Revision for DEV readers](review.md#revision-for-dev-readers)). Rules from DEV are in [research](research.md); every claim and number is in [evidence](evidence.md); the current text is [final](final.md), with [draft](draft.md) kept as the 1.0 base.
+First written 2026-10-07, updated 2026-10-08 after rc.8, after the fact-check in [review](review.md), and again for the DEV-reader revision (see [review, Revision for DEV readers](review.md#revision-for-dev-readers-2026-10-08)). Rules from DEV are in [research](research.md); every claim and number is in [evidence](evidence.md); the current text is [final](final.md), with [draft](draft.md) kept as the 1.0 base.
 
 ## Goal and reader
 
