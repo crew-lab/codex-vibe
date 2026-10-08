@@ -4,7 +4,8 @@ const runId = z.string().uuid({ version: "v4" });
 const workspace = z.string().min(1).max(4096);
 const task = z.string().min(1).max(100_000);
 const waitSeconds = z.number().int().min(0).max(300).default(0);
-const maxTurns = z.number().int().min(1).max(50).optional();
+export const MAX_TURNS_LIMIT = 50;
+const maxTurns = z.number().int().min(1).max(MAX_TURNS_LIMIT).optional();
 const timeoutSeconds = z.number().int().min(30).max(7200).optional();
 
 export const reviewStartSchema = z.object({

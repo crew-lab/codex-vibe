@@ -8,7 +8,7 @@ import type {
   ReviewIntegrity, SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent
 } from "../contracts.js";
 import { SCHEMA_VERSION, supervisorError } from "../contracts.js";
-import { cancelSchema, closeSchema, continueSchema, editStartSchema, resultSchema, reviewStartSchema, respondSchema, statusSchema } from "../mcp/schemas.js";
+import { MAX_TURNS_LIMIT, cancelSchema, closeSchema, continueSchema, editStartSchema, resultSchema, reviewStartSchema, respondSchema, statusSchema } from "../mcp/schemas.js";
 import { atomicWriteJson, sanitizeForPersistence } from "../persistence/atomic.js";
 import { readNdjsonRecovering } from "../persistence/ndjson.js";
 import { EventLog } from "../persistence/event-log.js";
@@ -85,7 +85,6 @@ type StartResult = {
   result?: Record<string, unknown>;
 };
 
-const MAX_TURNS_CEILING = 50;
 const START_ENVELOPE_RESERVE_CHARS = 1500;
 const STATUS_RESULT_RESERVE_CHARS = 100;
 const MAX_META_BYTES = 1_048_576;
@@ -329,7 +328,7 @@ export class RunManager {
     const spent = record.result?.stopReason === "max_turn_requests";
     if (raised !== undefined && raised < record.limits.maxTurns) throw codedError("VSUP_INVALID_ARGUMENT", "max_turns on vibe_continue is the session's cumulative ceiling and cannot be lowered.");
     if (spent && (raised === undefined || raised <= record.limits.maxTurns)) {
-      throw codedError("VSUP_TURN_LIMIT_REACHED", record.limits.maxTurns >= MAX_TURNS_CEILING
+      throw codedError("VSUP_TURN_LIMIT_REACHED", record.limits.maxTurns >= MAX_TURNS_LIMIT
         ? `Vibe counts turns cumulatively per session and this run has used its limit of ${record.limits.maxTurns}, the maximum; the session cannot be extended, so start a new run from a deliberate base.`
         : `Vibe counts turns cumulatively per session and this run has used its limit of ${record.limits.maxTurns}; pass max_turns greater than ${record.limits.maxTurns} to continue.`);
     }
@@ -354,7 +353,7 @@ export class RunManager {
       }
       if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
       delete record.finishedAt; delete record.error;
-      if (record.result) { record.result = withoutIntegrity(record.result); delete record.result.stopReason; }
+      if (record.result) { record.result = { ...withoutIntegrity(record.result), summary: "" }; delete record.result.stopReason; }
       if (raised !== undefined) record.limits.maxTurns = raised;
       record.launchedAt = new Date().toISOString();
       await this.setState(runtime, "running", { startedAt: record.launchedAt });
@@ -1506,7 +1505,7 @@ function printableStopReason(reason: string): string {
 }
 
 function budgetAdvice(record: RunRecord): string {
-  return record.limits.maxTurns >= MAX_TURNS_CEILING
+  return record.limits.maxTurns >= MAX_TURNS_LIMIT
     ? "the session cannot be extended, so start a new run from a deliberate base"
     : "call vibe_continue with a larger max_turns or start a new run";
 }

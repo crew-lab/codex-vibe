@@ -107,6 +107,7 @@ describe("cumulative turn budget on continuation", () => {
       expect(status.state).toBe("recoverable");
       const interrupted = await restarted.result({ run_id: runId });
       expect(interrupted.stop_reason).toBeUndefined();
+      expect(String(interrupted.summary)).not.toMatch(/turn limit|larger max_turns/);
       expect(String(status.next_action)).not.toMatch(/larger max_turns/);
       await retryContinue(restarted, { run_id: runId, message: "again" });
       const third = await waitFor(() => restarted.result({ run_id: runId }), (value) => value.state === "completed" && value.stop_reason === "end_turn");
