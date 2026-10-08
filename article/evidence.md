@@ -44,6 +44,16 @@ Supervisor overhead on the preparing machine (macOS arm64, Node 24.19, fake back
 
 Still missing for the article: the 100-run hosted soak (failures by code, p50 and p95), native Codex desktop timings, a clean-account install.
 
+## Claims confirmed outside this file (editor review 2026-10-08)
+
+| Claim in the article | Source |
+|---|---|
+| The planted bug is an arithmetic bug: `src/nested/arithmetic.py` in the synthetic repository has an intentional subtraction bug | [rc.7 test record](../docs/history/reviews/rc7-target-test-2026-10-07/Read.md), "Environment" section and the D8 row |
+| The soak plan was 60 programmatic reviews, 30 programmatic edits and 10 ACP runs | Same file, soak section ("Its requested mix was 60 programmatic reviews, 30 programmatic edits and 10 ACP runs") |
+| 50 is the supervisor's `max_turns` bound, not a Vibe limit | `MAX_TURNS_LIMIT = 50` in `src/mcp/schemas.ts`; write "the supervisor's maximum", never "Vibe's maximum" |
+| Node.js 20.19 or newer | [README.md](../README.md) prerequisites |
+| Reasoning: the supervisor does not persist the model's reasoning and filters it from Vibe's own session history | [docs/security.md](../docs/security.md): persisted events and JSON are sanitized and reasoning/private thought fields are omitted; the launcher shim removes reasoning fields before Vibe's native history writes. Do not write "not stored at all" |
+
 ## Never write
 
 "Sandbox" or "sandboxed"; "secure" without saying against what; "production-ready" before 1.0; "saves tokens" or "saves money"; "the first" or "the only"; Linux or Windows support; support for MCP clients other than Codex; soak figures before Phase D.
