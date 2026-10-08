@@ -33,6 +33,7 @@ export const MEANINGS = {
   VSUP_BACKEND_ERROR: 'The backend reported a failure that has no more specific code.',
   VSUP_LIMIT_EXCEEDED: 'No run slot or queue capacity is free.',
   VSUP_PERMISSION_DENIED: 'A permission request was denied by policy or by the caller.',
+  VSUP_TURN_LIMIT_REACHED: "The run's last turn ended at Vibe's cumulative turn limit and the continuation did not raise it.",
   VSUP_INVALID_STATE: 'The action is not valid in the run state, or the data directory is owned by another supervisor.',
   VSUP_STORAGE_ERROR: 'A filesystem fault (disk full, permissions, read-only, I/O) hit the data directory.',
   VSUP_RECOVERY_ERROR: 'A saved run could not be recovered.',

@@ -30,12 +30,12 @@ On `waiting_permission` or `waiting_input`, read `pending_request` and answer wi
 1. Read the compact `result` and the full patch. Check `stop_reason` and `warnings` first.
 2. Run the relevant checks against the exact candidate in the worker worktree or a disposable checkout, and account for new files and the base. Use canonical private temporary paths; do not weaken a symlink check to fit a bad fixture.
 3. If checks fail, send a focused correction instead of reporting the first draft: the failing command with a short sanitized excerpt, the defect and expected behavior, the paths, and a regression criterion. Batch related findings; never send a vague "try again".
-4. Call `vibe_continue` with the same `run_id` and a `message`, only for a run in `completed`, `ready` or `recoverable` state. Do not close the run between rounds; a failed or cancelled run is not eligible, and the programmatic backend has no continuation.
+4. Call `vibe_continue` with the same `run_id` and a `message`, only for a run in `completed`, `ready` or `recoverable` state. After `stop_reason` `max_turn_requests` the session's turn budget is spent: continue only deliberately, with a larger `max_turns`, or start a new run. Do not close the run between rounds; a failed or cancelled run is not eligible, and the programmatic backend has no continuation.
 5. After each correction, fetch fresh artifacts and repeat the review and affected checks; earlier patches and results are stale.
 
 ## Recovery
 
-On `VSUP_INVALID_STATE`, `VSUP_SESSION_NOT_RESUMABLE`, `VSUP_REQUEST_EXPIRED` or a process failure, inspect the status and saved artifacts before choosing an action ([errors](../../docs/errors.md)). A `recoverable` run reloads its saved session on `vibe_continue` and needs a free run slot. Never replay an uncertain task, restore pending grants or use saved PIDs as kill authority. A new run needs a deliberate base and a plan to preserve reviewed changes, since restarting from `HEAD` loses the candidate. If no safe recovery exists, keep the artifacts and report the blocker.
+On `VSUP_TURN_LIMIT_REACHED`, pass a larger `max_turns` only if more work is worth it, otherwise start a new run from a deliberate base. On `VSUP_INVALID_STATE`, `VSUP_SESSION_NOT_RESUMABLE`, `VSUP_REQUEST_EXPIRED` or a process failure, inspect the status and saved artifacts before choosing an action ([errors](../../docs/errors.md)). A `recoverable` run reloads its saved session on `vibe_continue` and needs a free run slot. Never replay an uncertain task, restore pending grants or use saved PIDs as kill authority. A new run needs a deliberate base and a plan to preserve reviewed changes, since restarting from `HEAD` loses the candidate. If no safe recovery exists, keep the artifacts and report the blocker.
 
 ## Accept and close
 

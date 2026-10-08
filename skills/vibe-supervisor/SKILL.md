@@ -29,7 +29,7 @@ Every reply has `next_action`; follow it.
 
 ## Check before trusting a result
 
-- `stop_reason`: a `completed` run whose value is not `end_turn` (for example `max_turn_requests`) stopped early and may be partial.
+- `stop_reason`: a `completed` run whose value is not `end_turn` (for example `max_turn_requests`) stopped early and may be partial; for `max_turn_requests` the ACP session's turn budget is spent, so `vibe_continue` needs a larger `max_turns` (it fails with `VSUP_TURN_LIMIT_REACHED` otherwise).
 - For reviews, a style preference, an implementation plan or a request to switch to edit mode is not a correctness finding. `completed` with `end_turn` means the turn finished, not that the review is good.
 - `warnings`, and for reviews `integrity`: `changed` or `unverified` means the source workspace may have changed during the review, so inspect `changed_paths` first.
 - For edits, read the patch (inline, or at `patch_path`) and `changed_files`, not just the summary, then run the checks yourself: Vibe has no shell. The patch is never applied, committed or pushed for you; apply it only when the user authorized it.

@@ -32,7 +32,7 @@ export const statusSchema = z.object({
   wait_seconds: waitSeconds
 }).strict();
 
-export const continueSchema = z.object({ run_id: runId, message: task }).strict();
+export const continueSchema = z.object({ run_id: runId, message: task, max_turns: maxTurns }).strict();
 
 export const respondSchema = z.discriminatedUnion("kind", [
   z.object({ run_id: runId, request_id: z.string().min(1).max(512), kind: z.literal("permission"), option_id: z.string().min(1).max(512) }).strict(),

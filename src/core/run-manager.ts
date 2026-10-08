@@ -202,7 +202,7 @@ export class RunManager {
     const settled = SETTLED_RESULT_STATES.has(record.state);
     return {
       ...started, state: record.state, backend: record.backend, worker_workspace: record.workerWorkspace,
-      next_action: this.nextAction(record.backend, record.state),
+      next_action: this.nextAction(record, record.state),
       ...(record.pendingRequest ? { pending_request: pendingToWire(record.pendingRequest) } : {}),
       ...(record.error ? { error: record.error } : {}),
       ...(settled ? { result: await this.compactResult(runtime, false, START_ENVELOPE_RESERVE_CHARS) } : {})
@@ -277,7 +277,7 @@ export class RunManager {
     return {
       run_id: id, state: runtime.record.state, backend: runtime.record.backend, mode,
       source_workspace: source, worker_workspace: workerWorkspace, created_at: now,
-      next_action: this.nextAction(runtime.record.backend, runtime.record.state),
+      next_action: this.nextAction(runtime.record, runtime.record.state),
       ...(mode === "edit" ? { base_ref: options.baseRef ?? "HEAD" } : {})
     };
   }
@@ -300,7 +300,7 @@ export class RunManager {
     const body = {
       run_id: runtime.record.runId, state: runtime.record.state, backend: runtime.record.backend,
       last_seq: runtime.eventSeq, next_after_seq: nextAfterSeq, events,
-      next_action: this.nextAction(runtime.record.backend, runtime.record.state, nextAfterSeq),
+      next_action: this.nextAction(runtime.record, runtime.record.state, nextAfterSeq),
       ...(runtime.record.pendingRequest ? { pending_request: pendingToWire(runtime.record.pendingRequest) } : {}),
       ...(runtime.record.error ? { error: runtime.record.error } : {}),
       ...(runtime.storageDegraded ? { warnings: [`Run state could not be saved (${runtime.storageDegraded.code} in ${runtime.storageDegraded.directory}); progress recorded since may be lost if the supervisor restarts.`] } : {})
@@ -324,6 +324,10 @@ export class RunManager {
     if (!supportsContinue) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "The active backend does not support continuing this session.");
     if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
     if (record.pendingRequest || !CONTINUABLE_STATES.has(record.state)) throw codedError("VSUP_INVALID_STATE", "This run cannot accept a continuation in its current state.");
+    const raised = input.max_turns;
+    if (record.result?.stopReason === "max_turn_requests" && (raised === undefined || raised <= record.limits.maxTurns)) {
+      throw codedError("VSUP_TURN_LIMIT_REACHED", `Vibe counts turns cumulatively per session and this run has used its limit of ${record.limits.maxTurns}; pass max_turns greater than ${record.limits.maxTurns} to continue.`);
+    }
     const resumed = record.state !== "ready";
     if (resumed) {
       if (runtime.slot) throw codedError("VSUP_INVALID_STATE", "A continuation for this run is already starting.");
@@ -352,13 +356,15 @@ export class RunManager {
     }
     const live = runtime.handle;
     if (!live) throw codedError("VSUP_SESSION_NOT_RESUMABLE", NO_SESSION_MESSAGE);
-    try { await backend.continue(live, input.message); }
+    if (raised !== undefined && raised !== record.limits.maxTurns) { record.limits.maxTurns = raised; await this.persist(runtime); }
+    const continueOptions = raised === undefined ? undefined : { maxTurns: raised };
+    try { await backend.continue(live, input.message, continueOptions); }
     catch (error) {
       let failure = error;
       if (resumed && isSessionGone(error)) {
         const reattached = await this.reattach(runtime, backend, live);
         if (reattached.handle) {
-          try { await backend.continue(reattached.handle, input.message); return this.continueReply(runtime); }
+          try { await backend.continue(reattached.handle, input.message, continueOptions); return this.continueReply(runtime); }
           catch (second) { failure = second; }
         } else if (reattached.failure) failure = Object.assign(new Error(reattached.failure.message), reattached.failure);
         else if (reattached.reason) failure = codedError("VSUP_SESSION_NOT_RESUMABLE", reattached.reason);
@@ -370,7 +376,7 @@ export class RunManager {
   }
 
   private continueReply(runtime: Runtime): Record<string, unknown> {
-    return { run_id: runtime.record.runId, state: runtime.record.state, next_action: this.nextAction(runtime.record.backend, "running", runtime.eventSeq) };
+    return { run_id: runtime.record.runId, state: runtime.record.state, next_action: this.nextAction(runtime.record, "running", runtime.eventSeq) };
   }
 
   private async recoverHandle(runtime: Runtime, backend: SupervisorBackend): Promise<RecoverOutcome> {
@@ -438,7 +444,7 @@ export class RunManager {
     delete runtime.record.pendingRequest;
     await this.persist(runtime);
     await this.setState(runtime, "running");
-    return { run_id: runtime.record.runId, state: runtime.record.state, next_action: this.nextAction(runtime.record.backend, runtime.record.state) };
+    return { run_id: runtime.record.runId, state: runtime.record.state, next_action: this.nextAction(runtime.record, runtime.record.state) };
   }
 
   async result(value: ResultToolInput): Promise<Record<string, unknown>> {
@@ -448,7 +454,7 @@ export class RunManager {
     await this.flushQuietly(runtime);
     const result = record.result;
     if (input.detail === "compact") return this.compactResult(runtime, input.include_transcript);
-    const next_action = this.nextAction(record.backend, record.state);
+    const next_action = this.nextAction(record, record.state);
     if (!result) return { run_id: record.runId, state: record.state, backend: record.backend, summary: "Run has not produced a result yet.", artifacts: [], changed_files: [], warnings: [], ...(record.error ? { error: record.error } : {}), next_action };
     const output: Record<string, unknown> = {
       schema_version: 1, run_id: record.runId, state: record.state, backend: record.backend,
@@ -476,14 +482,14 @@ export class RunManager {
       output.summary = "Run has not produced a result yet.";
       output.warnings = [];
       if (record.error) output.error = record.error;
-      output.next_action = this.nextAction(record.backend, record.state);
+      output.next_action = this.nextAction(record, record.state);
       return output;
     }
     const artifacts = result.artifacts ?? []; const files = result.changedFiles ?? [];
     if (result.stopReason) output.stop_reason = result.stopReason;
     output.summary = result.summary ?? "";
     output.warnings = result.warnings ?? [];
-    output.next_action = this.nextAction(record.backend, record.state);
+    output.next_action = this.nextAction(record, record.state);
     if (result.integrity) output.integrity = integrityToWire(result.integrity);
     if (record.error) output.error = record.error;
     if (record.mode === "edit") output.worker = record.workerWorkspace;
@@ -524,12 +530,12 @@ export class RunManager {
 
   async cancel(value: CancelToolInput): Promise<Record<string, unknown>> {
     const input = parseInput(cancelSchema, value); const runtime = this.requireRun(input.run_id);
-    if (isTerminal(runtime.record.state) || runtime.record.state === "completed" || runtime.record.state === "closing") return { run_id: input.run_id, state: runtime.record.state, next_action: this.nextAction(runtime.record.backend, runtime.record.state) };
+    if (isTerminal(runtime.record.state) || runtime.record.state === "completed" || runtime.record.state === "closing") return { run_id: input.run_id, state: runtime.record.state, next_action: this.nextAction(runtime.record, runtime.record.state) };
     const outcome = this.requestOutcome(runtime, { state: "cancelled" });
     this.removeFromPending(runtime);
     await this.cancelBackendSession(runtime);
     await this.serial(runtime, () => this.settle(runtime, outcome));
-    return { run_id: input.run_id, state: runtime.record.state, next_action: this.nextAction(runtime.record.backend, runtime.record.state) };
+    return { run_id: input.run_id, state: runtime.record.state, next_action: this.nextAction(runtime.record, runtime.record.state) };
   }
 
   async close(value: CloseToolInput): Promise<Record<string, unknown>> {
@@ -567,7 +573,7 @@ export class RunManager {
   }
 
   private closeOutcome(runtime: Runtime, cleanup: WorktreeCleanup): Record<string, unknown> {
-    return { run_id: runtime.record.runId, state: runtime.record.state, next_action: this.nextAction(runtime.record.backend, runtime.record.state), worktree_removed: cleanup.removed, ...(cleanup.reason ? { worktree_retained_reason: cleanup.reason } : {}) };
+    return { run_id: runtime.record.runId, state: runtime.record.state, next_action: this.nextAction(runtime.record, runtime.record.state), worktree_removed: cleanup.removed, ...(cleanup.reason ? { worktree_retained_reason: cleanup.reason } : {}) };
   }
 
   async runsList(): Promise<Record<string, unknown>[]> {
@@ -1329,10 +1335,10 @@ export class RunManager {
     if (index >= 0) this.pending.splice(index, 1);
   }
 
-  private nextAction(backend: BackendKind, state: RunState, afterSeq?: number): string {
-    const canContinue = backend !== "programmatic";
+  private nextAction(record: RunRecord, state: RunState, afterSeq?: number): string {
+    const canContinue = record.backend !== "programmatic";
     switch (state) {
-      case "completed": return canContinue ? "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done." : "Check stop_reason and warnings before trusting the result; call vibe_close when done.";
+      case "completed": return canContinue && record.result?.stopReason === "max_turn_requests" ? "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns, start a new run, or call vibe_close when done." : canContinue ? "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done." : "Check stop_reason and warnings before trusting the result; call vibe_close when done.";
       case "failed":
       case "cancelled": return "Read error and warnings; call vibe_close when done.";
       case "waiting_permission":
@@ -1493,7 +1499,7 @@ function completedSummary(stopReason: string | undefined): string {
   switch (stopReason) {
     case undefined:
     case "end_turn": return "Vibe completed the delegated task.";
-    case "max_turn_requests": return "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; continue the run or raise max_turns if more work is needed.";
+    case "max_turn_requests": return "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so continue with vibe_continue only with a larger max_turns, or start a new run.";
     case "max_tokens": return "Vibe stopped at the token limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; continue the run if more work is needed.";
     case "refusal": return "Vibe declined the request. Inspect the artifacts and stop_reason before trusting the result.";
     case "cancelled": return "The Vibe turn was cancelled before it finished. Inspect the artifacts and stop_reason before trusting the result.";

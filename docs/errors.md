@@ -33,6 +33,7 @@ An error carries `code`, `message`, `remediation`, `retryable` and sometimes `de
 | `VSUP_BACKEND_ERROR` | The backend reported a failure that has no more specific code. | Inspect backend diagnostics and retry if the problem is transient. | no |
 | `VSUP_LIMIT_EXCEEDED` | No run slot or queue capacity is free. | Wait for capacity or increase the configured limit. | no |
 | `VSUP_PERMISSION_DENIED` | A permission request was denied by policy or by the caller. | Review the requested action and grant only if appropriate. | no |
+| `VSUP_TURN_LIMIT_REACHED` | The run's last turn ended at Vibe's cumulative turn limit and the continuation did not raise it. | Vibe counts turns cumulatively per session: pass max_turns greater than the current limit to continue, or start a new run from a deliberate base; the task is never replayed. | no |
 | `VSUP_INVALID_STATE` | The action is not valid in the run state, or the data directory is owned by another supervisor. | Check the run status and use an action valid for its current state. | no |
 | `VSUP_STORAGE_ERROR` | A filesystem fault (disk full, permissions, read-only, I/O) hit the data directory. | Check the supervisor data directory permissions and disk space. | no |
 | `VSUP_RECOVERY_ERROR` | A saved run could not be recovered. | Inspect recovery diagnostics and start a new run if needed. | no |
