@@ -1,0 +1,27 @@
+{
+  "candidate_commit": "8e5c963c798d973783e2022b23c20657cf7dca22",
+  "remote_base": "7d68f3d",
+  "archive_sha256": "6a67fcba46259b43e0acce4cbe0ae02220ba241f8c07a969d7c0d152ee8536c4",
+  "source_sha256": {
+    "scripts/soak.mjs": "dbc23f4ca84b043cac656320d57182257a3041804a5793ca7a916fa681087034",
+    "src/backends/runtime/vibe_supervisor_launcher.py": "7f0234e470a480e2c76d023bba31fd78f68ec0211ab0ad38593b8c6d59cb6b73",
+    "src/backends/profile.ts": "8df5d49ebbac24cb465ec59a76388491d667d3fcb67a31802ca8df00d9b70147",
+    "src/cli.ts": "3f1a13505a125e657b99952c22f575abebe3129c6f0fa3395d775ed3abe01333"
+  },
+  "fixture": "/private/tmp/rc8-phase-d-6n1ney4v/soak-workspace",
+  "fixture_commit": "2322d095e9495b517d79768e5921b4587a032402",
+  "root": "/private/tmp/rc8-diagnostic-soak-o3bq8bg_",
+  "planned": {
+    "reviews": 60,
+    "edits": 30,
+    "acp": 10,
+    "seed": "soak",
+    "run_timeout": 900,
+    "total_timeout": 7200,
+    "start_wait": 0,
+    "wait_seconds": 30,
+    "diagnostics": true,
+    "stop_on_fail": true
+  },
+  "account_policy": "current login only; no rotation or credit inspection"
+}

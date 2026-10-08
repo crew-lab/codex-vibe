@@ -1,0 +1,15 @@
+{
+  "candidate_commit": "8e5c963c798d973783e2022b23c20657cf7dca22",
+  "implementation": "PASS",
+  "release_verification": "PASS",
+  "typescript_tests": 623,
+  "python_tests": 76,
+  "hosted_soak": "FAIL",
+  "attempted_runs": 1,
+  "requested_runs": 100,
+  "failure": "driver:stop_reason_max_turn_requests",
+  "silent_stall": "UNRESOLVED; not reproduced",
+  "cleanup": "PASS",
+  "native_gates": "UNVERIFIED",
+  "retry": "NOT_RUN"
+}

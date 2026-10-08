@@ -1,5 +1,11 @@
 # Implementation handoff
 
+## Latest hosted outcome with diagnostics (2026-10-08)
+
+Candidate 8e5c963 on `codex/rc8-stall-diagnostics` passed offline package verification (623 TypeScript tests, 76 Python cases, installed profiles and npm executable/MCP smoke). The single authorized 60/30/10 soak stopped at 1/100: review-bug-class used four reads and sixteen searches, reached max_turn_requests at the 20-turn ceiling and produced no final answer. All startup stages completed within 99 ms; this was not the original silent stall, which remains unresolved. Edits and ACP soak scenarios were not reached. No retry or account rotation. Cleanup passed with zero owned leaks and a clean synthetic source.
+
+Next: inspect the retained review search sequence and design a bounded final-answer review task; establish a concrete defect before changing runtime or raising limits. A further hosted pass needs a deliberate revised test decision. Native/platform gates remain separate. See [exact candidate, diagnostics, results and limits](docs/history/reviews/rc8-stall-diagnostics-2026-10-08/Read.md).
+
 ## Diagnostic candidate (2026-10-08)
 
 The earlier CLI/deadline fixes are committed on `codex/rc8-stall-diagnostics`, with fetched article revision 7d68f3d incorporated. Opt-in bounded programmatic startup/frame diagnostics and a total soak budget are implemented without MCP-schema or normal-mode changes. Full offline package verification passed 623 TypeScript tests, Python/installed-Vibe checks and installed npm executable/MCP smoke. The single authorized 60/30/10 hosted pass uses the current account, original synthetic fixture and seed soak; it stops on the first failure and reserves one minute within its two-hour budget for cleanup. Previous failures remain recorded; no account rotation, automatic retry or native/platform certification is implied. See [candidate and forthcoming results](docs/history/reviews/rc8-stall-diagnostics-2026-10-08/Read.md).

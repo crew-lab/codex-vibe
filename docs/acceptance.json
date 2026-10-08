@@ -235,6 +235,25 @@
       "original_stall": "UNRESOLVED; did not reproduce",
       "full_hosted_soak": "FAIL previous 20/100 preserved; not rerun",
       "evidence": "history/reviews/rc8-finding-fixes-2026-10-08/session.json"
+    },
+    {
+      "date": "2026-10-08",
+      "version": "0.9.0-rc.8 locally patched",
+      "candidate_commit": "8e5c963c798d973783e2022b23c20657cf7dca22",
+      "name": "instrumented-bounded-soak",
+      "status": "FAIL",
+      "implementation": "PASS",
+      "release_verification": "PASS",
+      "typescript_tests": 623,
+      "python_tests": 76,
+      "requested_runs": 100,
+      "attempted_runs": 1,
+      "failure": "driver:stop_reason_max_turn_requests",
+      "startup_elapsed_ms": 99,
+      "silent_stall": "UNRESOLVED; not reproduced",
+      "owned_leaks": 0,
+      "acp_scenarios": "NOT_REACHED",
+      "evidence": "history/reviews/rc8-stall-diagnostics-2026-10-08/session.json"
     }
   ]
 }
