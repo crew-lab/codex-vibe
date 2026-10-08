@@ -1,0 +1,15 @@
+
+> vibe-supervisor@0.9.0-rc.8 test
+> vitest run tests/unit/profile.test.ts tests/unit/soak-review-audit.test.ts
+
+
+ RUN  v4.0.18 /Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe
+
+ ✓ tests/unit/soak-review-audit.test.ts (3 tests) 10ms
+ ✓ tests/unit/profile.test.ts (5 tests) 502ms
+
+ Test Files  2 passed (2)
+      Tests  8 passed (8)
+   Start at  13:29:47
+   Duration  1.63s (transform 32ms, setup 0ms, import 50ms, tests 512ms, environment 0ms)
+

@@ -1,0 +1,51 @@
+vibe-supervisor hosted soak plan
+workspace: /private/tmp/rc8-phase-d-6n1ney4v/soak-workspace
+runs: 2 (reviews 2, edits 0, acp 0); hosted model turns about 2
+backends: programmatic 2 runs, acp 0 runs (continue, mid-turn close and restart scenarios)
+server command: /private/tmp/rc8-bounded-candidate/install/node_modules/.bin/vibe-supervisor serve --stdio
+evidence directory: /private/tmp/rc8-bounded-candidate/pilots
+seed: soak; status wait 30s; run timeout 900s; total timeout 1860s; diagnostics on
+preflight: workspace in the template allowlist: yes; git repository: yes; template config: /private/tmp/rc8-phase-d-6n1ney4v/soak-template/config.toml
+COST WARNING: every run sends the repository and the tasks to Mistral and is billed. Earlier hosted edits cost about $0.02 each; the real total depends on the tasks and the account. Run it only with the owner authorization.
+[1/2] programmatic review review-bug-class FAILED driver:review_task_bounds 22s
+{
+  "result": "FAIL",
+  "totals": {
+    "runs": 1,
+    "ok": 0,
+    "failed": 1
+  },
+  "criteria": [
+    {
+      "id": "zero_unexpected_failures",
+      "status": "FAIL",
+      "detail": "1 unexpected failures"
+    },
+    {
+      "id": "zero_permission_requests",
+      "status": "PASS",
+      "detail": "0 permission or input requests"
+    },
+    {
+      "id": "no_leaked_processes_or_worktrees",
+      "status": "PASS",
+      "detail": "0 orphaned or descendant vibe processes, 0 leftover worktrees"
+    },
+    {
+      "id": "bounded_artifacts",
+      "status": "PASS",
+      "detail": "0 run directories above the per-run limit"
+    },
+    {
+      "id": "retention_keeps_recent_runs",
+      "status": "PASS",
+      "detail": "0 recorded runs missing from disk (retention.days 7)"
+    },
+    {
+      "id": "all_planned_runs",
+      "status": "FAIL",
+      "detail": "1/2 runs attempted"
+    }
+  ],
+  "evidence": "/private/tmp/rc8-bounded-candidate/pilots"
+}

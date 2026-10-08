@@ -115,3 +115,7 @@ The [dated report](history/reviews/rc8-target-test-2026-10-08/Read.md) records f
 [Controlled follow-up evidence](history/reviews/rc8-continuation-followup-2026-10-08/Read.md) establishes useful 3-to-10 continuation on a bounded fixture live and after reload, explicit task replacement, official-client running/idle shutdown, programmatic cap reporting and the expected supervisor timeout branch after the original launch lifetime. No runtime change was justified; the original failure is preserved. Native desktop/platform/callback gates and full hosted soak remain unverified pending separate evidence.
 
 The separate rc.8 scoped soak stopped at run 20/100 (19 passed) on driver:run_timeout, without an explicit auth/quota error or owned leaks. It does not pass the hosted-soak gate. Direct npm entry testing also corrected original D1 to FAIL: the installed executable symlink silently exited; a separate source fix is being verified.
+
+### rc.8 bounded-review pilot gate (2026-10-08)
+
+The [bounded pilot evidence](history/reviews/rc8-bounded-pilots-2026-10-08/Read.md) records verified installed candidate/package checks and a first-pilot task-bound failure: five reads against the explicit three-read-call acceptance limit, despite end_turn and verified integrity. Execution stopped before the second pilot and full soak; the earlier silent stall remains unresolved. This supplies no new ACP lifecycle, desktop, callback, clean-account or Intel certification.
