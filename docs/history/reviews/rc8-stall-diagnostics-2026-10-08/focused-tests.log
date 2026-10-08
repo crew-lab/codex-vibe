@@ -1,0 +1,22 @@
+
+ RUN  v4.0.18 /Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe
+
+ ✓ tests/integration/cli-entrypoint.test.ts (3 tests) 270ms
+ ✓ tests/integration/soak-driver.test.ts (12 tests) 66933ms
+     ✓ refuses more than 500 runs, unknown options and a workspace outside the template allowlist  308ms
+     ✓ runs a clean mixed soak, records every run and passes every criterion  6043ms
+     ✓ orders runs deterministically for a seed  5153ms
+     ✓ answers a permission request with the reject option, counts it, and fails the criterion  1878ms
+     ✓ fails the unexpected-failure criterion for a backend failure and stops early on request  3835ms
+     ✓ enforces the per-run timeout, closes the run and records it as failed  3559ms
+     ✓ lets the supervisor settle a silent worker before the driver deadline  31711ms
+     ✓ preserves a shorter configured worker deadline  1576ms
+     ✓ bounds the overall hosted budget and cleans up without starting another run  4368ms
+     ✓ survives a server that exits mid-soak, records the failure and carries on with a fresh server  1923ms
+     ✓ never touches processes it did not start and reports a leaked child without killing it  6411ms
+
+ Test Files  2 passed (2)
+      Tests  15 passed (15)
+   Start at  12:33:26
+   Duration  67.95s (transform 26ms, setup 0ms, import 40ms, tests 67.20s, environment 0ms)
+

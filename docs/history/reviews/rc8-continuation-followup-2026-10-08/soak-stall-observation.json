@@ -1,0 +1,12 @@
+{
+  "run_id": "600ab9fd-9b2b-43fa-8c19-14768567cc14",
+  "observation": "alive, no public event/native session metadata after more than 3 minutes",
+  "files": {
+    "events.ndjson": null,
+    "transcript.md": null,
+    "result.json": null,
+    "task-prompt.txt": null
+  },
+  "native_session_metadata_count": 0,
+  "log_bytes": 0
+}

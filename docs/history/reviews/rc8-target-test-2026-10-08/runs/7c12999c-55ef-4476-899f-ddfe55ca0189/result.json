@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "run_id": "7c12999c-55ef-4476-899f-ddfe55ca0189",
+  "state": "completed",
+  "backend": "acp",
+  "stop_reason": "end_turn",
+  "summary": "Vibe completed the delegated task.",
+  "workspace": {
+    "source": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+    "worker": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/worktrees/7c12999c-55ef-4476-899f-ddfe55ca0189"
+  },
+  "artifacts": [
+    {
+      "name": "diff.patch",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/runs/7c12999c-55ef-4476-899f-ddfe55ca0189/artifacts/diff.patch",
+      "sha256": "2e4ef13a227e6f1103950defaf492d113eb01a5b26eaa3483fadde5de33c1725",
+      "bytes": 201,
+      "media_type": "text/x-diff"
+    },
+    {
+      "name": "diff.stat",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/runs/7c12999c-55ef-4476-899f-ddfe55ca0189/artifacts/diff.stat",
+      "sha256": "c6de4ef37151330fec0126e950493ae55c19d84d88fb14c07d9baed46b81ec6a",
+      "bytes": 58,
+      "media_type": "text/plain"
+    },
+    {
+      "name": "changed-files.json",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/runs/7c12999c-55ef-4476-899f-ddfe55ca0189/artifacts/changed-files.json",
+      "sha256": "014e9cac4ce7daf1bf2a548e8a765755cd7f0f71ca0d77af9b4f90f95b149fd6",
+      "bytes": 77,
+      "media_type": "application/json"
+    },
+    {
+      "name": "transcript.md",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/runs/7c12999c-55ef-4476-899f-ddfe55ca0189/transcript.md",
+      "sha256": "2daab1bcb0130e5a4b8a795309e947890c185c36757fe1557d097a32778409ea",
+      "bytes": 153,
+      "media_type": "text/markdown"
+    },
+    {
+      "name": "events.ndjson",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/runs/7c12999c-55ef-4476-899f-ddfe55ca0189/events.ndjson",
+      "sha256": "6b95bf0d4a29ebacba9d626f3df9bf91b53c9eb624cb68648e84f00fc74d3466",
+      "bytes": 13817,
+      "media_type": "application/x-ndjson"
+    }
+  ],
+  "changed_files": [
+    "budget-initial.txt"
+  ],
+  "warnings": []
+}

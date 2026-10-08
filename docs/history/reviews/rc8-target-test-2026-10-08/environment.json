@@ -1,0 +1,15 @@
+{
+  "source_commit": "e71f9182eb37e728cc522881811ed9168cca331c",
+  "version": "0.9.0-rc.8",
+  "tarball_sha256": "9f0bf89da655679bbd3acf701bd774b01f77e40bf5cf2aec16cbfdc7742736b0",
+  "macos": "27.0.1",
+  "arch": "arm64",
+  "node": "v24.21.0",
+  "npm": "11.19.0",
+  "vibe_version": "2.25.8",
+  "vibe_python": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/python3",
+  "parent_MISTRAL_API_KEY_nonempty": false,
+  "account_identity_and_credit_balance": "not inspected",
+  "native_desktop_and_clean_OS_account": "unverified",
+  "fixture_base": "a0a970e9457439a3afd93a0932a4c25019a746f2"
+}

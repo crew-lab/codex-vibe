@@ -1,0 +1,87 @@
+{
+  "ok": true,
+  "generatedAt": "2026-10-08T09:23:06.365Z",
+  "checks": [
+    {
+      "name": "node",
+      "ok": true,
+      "version": "24.21.0",
+      "message": "Supported Node.js runtime."
+    },
+    {
+      "name": "platform",
+      "ok": true,
+      "version": "darwin arm64",
+      "message": "Detected darwin on arm64."
+    },
+    {
+      "name": "git",
+      "ok": true,
+      "version": "git version 2.54.0 (Apple Git-157)",
+      "message": "Git is available."
+    },
+    {
+      "name": "macos",
+      "ok": true,
+      "version": "27.0.1",
+      "message": "macOS version detected."
+    },
+    {
+      "name": "vibe",
+      "ok": true,
+      "status": "ok",
+      "version": "vibe 2.25.8",
+      "message": "Exact supported Vibe version 2.25.8 verified in an isolated temporary home."
+    },
+    {
+      "name": "vibe-acp",
+      "ok": true,
+      "version": "vibe-acp 2.25.8",
+      "message": "Vibe ACP is available."
+    },
+    {
+      "name": "acp-initialize",
+      "ok": true,
+      "message": "ACP initialization probe succeeded in the isolated temporary home."
+    },
+    {
+      "name": "codex",
+      "ok": true,
+      "version": "codex-cli 0.160.1",
+      "message": "Codex CLI is available."
+    },
+    {
+      "name": "workspace-roots",
+      "ok": true,
+      "message": "1/1 allowed workspace root(s) resolve to existing directories."
+    },
+    {
+      "name": "data-directory",
+      "ok": true,
+      "message": "Supervisor data directory is writable."
+    },
+    {
+      "name": "lock",
+      "ok": true,
+      "message": "No supervisor currently holds the data directory."
+    },
+    {
+      "name": "authentication",
+      "ok": true,
+      "status": "unverified",
+      "message": "Vibe authentication was not inspected; Vibe may use its existing local sign-in or operating-system credential store."
+    },
+    {
+      "name": "codex-registration",
+      "ok": true,
+      "status": "unverified",
+      "message": "Codex desktop visibility is not verified by doctor; run configure-codex and restart Codex after reviewing its changes."
+    },
+    {
+      "name": "mcp-server",
+      "ok": true,
+      "message": "The MCP SDK dependency is installed."
+    }
+  ],
+  "warnings": []
+}

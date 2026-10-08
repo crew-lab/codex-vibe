@@ -1,0 +1,61 @@
+
+> vibe-supervisor@0.9.0-rc.8 test
+> vitest run tests/integration/cli-entrypoint.test.ts
+
+
+ RUN  v4.0.18 /Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe
+
+ ❯ tests/integration/cli-entrypoint.test.ts (3 tests | 2 failed) 246ms
+     × prints the package version through an npm-style executable symlink 85ms
+     × executes command validation through the executable symlink 83ms
+     ✓ does not run the CLI when the module is imported 78ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/cli-entrypoint.test.ts > CLI executable entry point > prints the package version through an npm-style executable symlink
+AssertionError: expected '' to be '0.9.0-rc.8' // Object.is equality
+
+- Expected
++ Received
+
+- 0.9.0-rc.8
+
+ ❯ tests/integration/cli-entrypoint.test.ts:25:27
+     23|   it('prints the package version through an npm-style executable symli…
+     24|     const { stdout, stderr } = await exec(process.execPath, [await ins…
+     25|     expect(stdout.trim()).toBe(APP_VERSION);
+       |                           ^
+     26|     expect(stderr).toBe('');
+     27|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/integration/cli-entrypoint.test.ts > CLI executable entry point > executes command validation through the executable symlink
+AssertionError: promise resolved "{ stdout: '', stderr: '' }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "stderr": "",
++   "stdout": "",
+  }
+
+ ❯ tests/integration/cli-entrypoint.test.ts:30:85
+     28| 
+     29|   it('executes command validation through the executable symlink', asy…
+     30|     await expect(exec(process.execPath, [await installedCommand(), 'no…
+       |                                                                                     ^
+     31|   });
+     32| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  12:02:09
+   Duration  1.22s (transform 6ms, setup 0ms, import 12ms, tests 246ms, environment 0ms)
+

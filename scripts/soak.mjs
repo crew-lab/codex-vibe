@@ -1,5 +1,6 @@
-import { appendFile, chmod, lstat, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, lstat, mkdir, open, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
+import { constants } from 'node:fs';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -28,7 +29,9 @@ const USAGE = `Usage: node scripts/soak.mjs --workspace <repo> [options]
   --server-arg <arg>        Argument for the server command; repeatable (default serve --stdio)
   --wait-seconds N          wait_seconds for vibe_status polls, 1 to 300 (default 180)
   --start-wait N            wait_seconds for the start calls, 0 to 300 (default 5)
-  --run-timeout N           Per run limit in seconds (default 900)
+  --run-timeout N           Driver limit in seconds (default 900); initial worker deadline is at most N-30 for N >= 60
+  --diagnostics             Record bounded private launcher diagnostics for programmatic workers
+  --total-timeout N          Overall seconds, at least 61; reserve final 60 seconds for cleanup
   --stop-on-fail            Stop after the first failed run
   --yes                     Start the hosted runs; without it only the plan is printed
 
@@ -43,7 +46,7 @@ class Usage extends Error {}
 function parseCommandLine(argv) {
   const o = {
     workspace: undefined, reviews: 60, edits: 30, acp: 10, seed: 'soak', tasks: undefined, out: undefined,
-    serverCommand: undefined, serverArgs: [], waitSeconds: 180, startWait: 5, runTimeout: 900, stopOnFail: false, yes: false, help: false,
+    serverCommand: undefined, serverArgs: [], waitSeconds: 180, startWait: 5, runTimeout: 900, stopOnFail: false, diagnostics: false, totalTimeout: undefined, yes: false, help: false,
   };
   const integer = (name, value, min, max) => {
     if (!/^\d+$/.test(value ?? '')) throw new Usage(`${name} needs a non-negative integer.`);
@@ -60,6 +63,8 @@ function parseCommandLine(argv) {
     };
     if (flag === '--help' || flag === '-h') o.help = true;
     else if (flag === '--yes') o.yes = true;
+    else if (flag === '--diagnostics') o.diagnostics = true;
+    else if (flag === '--total-timeout') o.totalTimeout = integer(flag, take(), 61, 86_400);
     else if (flag === '--stop-on-fail') o.stopOnFail = true;
     else if (flag === '--workspace') o.workspace = take();
     else if (flag === '--reviews') o.reviews = integer(flag, take(), 0, MAX_RUNS);
@@ -311,7 +316,7 @@ function createHolder(backend, home, o, ui) {
     async begin() {
       this.serverCount += 1;
       const label = `${backend}-${this.serverCount}`;
-      const transport = new StdioClientTransport({ command: o.serverCommand, args: o.serverArgs, env: { ...process.env, VIBE_SUPERVISOR_HOME: home }, stderr: 'pipe' });
+      const transport = new StdioClientTransport({ command: o.serverCommand, args: o.serverArgs, env: { ...process.env, VIBE_SUPERVISOR_HOME: home, VIBE_SUPERVISOR_DIAGNOSTICS: o.diagnostics ? '1' : '0' }, stderr: 'pipe' });
       const client = new Client({ name: 'vibe-supervisor-soak', version: '1.0.0' });
       const stderr = [];
       let stderrBytes = 0;
@@ -376,19 +381,23 @@ function elapsed(turn) {
   return Math.round(performance.now() - turn.began);
 }
 
-async function call(ctx, name, args, waitSeconds = 0) {
+async function call(ctx, name, args, waitSeconds = 0, cleanup = false) {
   ctx.rec.toolCalls += 1;
   const server = ctx.holder.server;
+  const remaining = (cleanup ? ctx.o.totalDeadline : ctx.o.workDeadline) === undefined ? Infinity : (cleanup ? ctx.o.totalDeadline : ctx.o.workDeadline) - performance.now();
+  if (remaining <= 0) { ctx.o.totalExpired = true; return { ok: false, code: 'driver:total_timeout', message: 'Overall hosted time budget exhausted.' }; }
   try {
-    const result = await server.client.callTool({ name, arguments: args }, { timeout: (waitSeconds + 45) * 1000 });
+    const result = await server.client.callTool({ name, arguments: args }, { timeout: Math.max(1, Math.min((waitSeconds + 45) * 1000, cleanup ? 30_000 : Infinity, remaining)) });
     return parseReply(result);
   } catch (error) {
+    if (!cleanup && ctx.o.workDeadline !== undefined && performance.now() >= ctx.o.workDeadline) { ctx.o.totalExpired = true; return { ok: false, code: 'driver:total_timeout', message: 'Overall hosted time budget exhausted.' }; }
     return { ok: false, code: 'driver:transport_error', message: String(error?.message ?? error).slice(0, 300) };
   }
 }
 
 function ingest(ctx, reply) {
   const turn = ctx.turn;
+  ctx.lastPublic = { state: reply.state, last_seq: reply.last_seq, pending_request: Boolean(reply.pending_request) };
   const events = Array.isArray(reply.events) ? reply.events : [];
   let progressed = false;
   for (const event of events) {
@@ -445,7 +454,10 @@ async function awaitSettled(ctx, first, options = {}) {
   let stalled = 0;
   for (;;) {
     const remaining = ctx.deadline - performance.now();
-    if (remaining <= 0) return { timedOut: true };
+    if (remaining <= 0) {
+      if (ctx.o.workDeadline !== undefined && performance.now() >= ctx.o.workDeadline) { ctx.o.totalExpired = true; return { totalTimedOut: true }; }
+      return { timedOut: true };
+    }
     const wait = Math.max(1, Math.min(ctx.o.waitSeconds, Math.floor(remaining / 1000)));
     const polled = await call(ctx, 'vibe_status', { run_id: ctx.runId, after_seq: ctx.after, max_events: 100, wait_seconds: wait }, wait);
     if (!polled.ok) return { error: polled };
@@ -468,6 +480,7 @@ async function awaitSettled(ctx, first, options = {}) {
 
 function judge(ctx, outcome, expectation = 'completed') {
   const turn = ctx.turn;
+  if (outcome.totalTimedOut) { failRun(ctx, 'driver:total_timeout', 'Overall hosted time budget exhausted.'); return false; }
   if (outcome.timedOut) { failRun(ctx, 'driver:run_timeout', `no settled result within ${ctx.o.runTimeout} seconds`); return false; }
   if (outcome.error) { failRun(ctx, outcome.error.code, outcome.error.message); return false; }
   if (outcome.aborted) return false;
@@ -494,7 +507,7 @@ async function closeRun(ctx) {
   ctx.closed = true;
   if (!isAlive(ctx.holder.server?.pid)) return;
   const edit = ctx.job.kind === 'edit';
-  const reply = await call(ctx, 'vibe_close', { run_id: ctx.runId, cleanup_worktree: edit });
+  const reply = await call(ctx, 'vibe_close', { run_id: ctx.runId, cleanup_worktree: edit }, 0, true);
   if (!reply.ok) { failRun(ctx, reply.code, `close: ${reply.message}`); return; }
   ctx.rec.closeState = reply.data.state ?? null;
   ctx.rec.worktreeRemoved = reply.data.worktree_removed ?? null;
@@ -520,7 +533,11 @@ async function continueTurn(ctx, message) {
 async function startRun(ctx) {
   const { job, o } = ctx;
   beginTurn(ctx, 'start');
-  const started = await call(ctx, job.kind === 'edit' ? 'vibe_edit_start' : 'vibe_review_start', { task: job.task, cwd: o.workspace, wait_seconds: o.startWait }, o.startWait);
+  // Leave time for supervisor cancellation/export before the outer driver deadline.
+  // Very short driver-only fault probes cannot fit the MCP minimum (30 seconds).
+  const configured = job.kind === 'edit' ? o.editTimeout : o.reviewTimeout;
+  const timeoutSeconds = o.runTimeout >= 60 ? Math.min(configured, 7200, o.runTimeout - 30) : undefined;
+  const started = await call(ctx, job.kind === 'edit' ? 'vibe_edit_start' : 'vibe_review_start', { task: job.task, cwd: o.workspace, wait_seconds: o.startWait, ...(timeoutSeconds === undefined ? {} : { timeout_seconds: timeoutSeconds }) }, o.startWait);
   if (!started.ok) {
     if (started.code === 'VSUP_WORKSPACE_INVALID') throw new Fatal(`The server rejected the workspace ${o.workspace} (VSUP_WORKSPACE_INVALID). Add it to allowed_workspace_roots in the template config (vibe-supervisor allow <dir>) and run again.`);
     failRun(ctx, started.code, started.message);
@@ -626,7 +643,7 @@ function finalizeRecord(ctx) {
 
 async function executeJob(holder, job, o, index, total) {
   const rec = newRecord(job, index, total);
-  const ctx = { holder, job, o, rec, runId: null, after: 0, turn: null, seen: new Set(), closed: false, began: performance.now(), deadline: performance.now() + o.runTimeout * 1000 };
+  const ctx = { holder, job, o, rec, runId: null, after: 0, turn: null, seen: new Set(), closed: false, began: performance.now(), deadline: Math.min(performance.now() + o.runTimeout * 1000, o.workDeadline ?? Infinity) };
   try {
     await holder.ensure();
     await scenario(ctx);
@@ -635,10 +652,52 @@ async function executeJob(holder, job, o, index, total) {
     failRun(ctx, 'driver:exception', error?.message ?? error);
   }
   if (holder.server && !isAlive(holder.server.pid)) { rec.serverLost = true; failRun(ctx, 'driver:server_exited', 'the server process exited during this run'); }
+  if (o.workDeadline !== undefined && performance.now() >= o.workDeadline) o.totalExpired = true;
+  try { await preserveDiagnostics(ctx); } catch { rec.diagnostics = { status: 'unavailable' }; }
   try { await recordUsage(ctx); } catch {}
   try { await closeRun(ctx); } catch (error) { failRun(ctx, 'driver:exception', `close: ${error?.message ?? error}`); }
   finalizeRecord(ctx);
   return rec;
+}
+
+async function preserveDiagnostics(ctx) {
+  if (!ctx.o.diagnostics || !ctx.runId || !/^[a-f0-9-]{36}$/.test(ctx.runId)) return;
+  const directory = path.join(ctx.holder.home, 'runs', ctx.runId);
+  const file = path.join(directory, 'worker-diagnostics.json');
+  const info = await lstat(file).catch(() => null);
+  if (!info) { ctx.rec.diagnostics = { status: 'absent', public_status: ctx.lastPublic ?? null, events: ctx.rec.events }; return; }
+  if (!info.isFile() || info.isSymbolicLink() || info.mode & 0o077 || info.uid !== process.getuid?.() || info.nlink !== 1 || info.size > 65536 || await realpath(directory) !== directory) throw new Error('Unsafe diagnostics');
+  const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  let bytes;
+  try {
+    const opened = await handle.stat();
+    if (opened.ino !== info.ino || opened.dev !== info.dev || !opened.isFile() || opened.uid !== info.uid || opened.mode & 0o077 || opened.nlink !== 1 || opened.size > 65536) throw new Error('Changed diagnostics');
+    bytes = Buffer.alloc(65537);
+    const read = await handle.read(bytes, 0, bytes.length, 0);
+    if (read.bytesRead > 65536) throw new Error('Oversized diagnostics');
+    bytes = bytes.subarray(0, read.bytesRead);
+  } finally { await handle.close(); }
+  const data = JSON.parse(bytes.toString('utf8'));
+  if (data.schema_version !== 1 || !Array.isArray(data.stages) || !Array.isArray(data.snapshots) || data.stages.length > 6 || data.snapshots.length > 3) throw new Error('Invalid diagnostics');
+  const stages = new Set(['launch', 'import', 'prompt_consumption', 'persistence_setup', 'credential_resolution_complete', 'entrypoint_invocation']);
+  const elapsed = (value) => Number.isSafeInteger(value) && value >= 0;
+  const safe = { schema_version: 1, stages: data.stages.map((item) => {
+    if (!stages.has(item.stage) || !elapsed(item.elapsed_ms)) throw new Error('Invalid stage');
+    return { stage: item.stage, elapsed_ms: item.elapsed_ms };
+  }), snapshots: data.snapshots.map((item) => {
+    if (!elapsed(item.elapsed_ms) || !Array.isArray(item.threads) || item.threads.length > 8) throw new Error('Invalid snapshot');
+    return { elapsed_ms: item.elapsed_ms, threads: item.threads.map((frames) => {
+      if (!Array.isArray(frames) || frames.length > 12) throw new Error('Invalid frames');
+      return frames.map((frame) => {
+        if (typeof frame.file !== 'string' || !/^[A-Za-z0-9_./<>-]{1,160}$/.test(frame.file) || frame.file.startsWith('/') || frame.file.split('/').includes('..') || typeof frame.function !== 'string' || !/^[A-Za-z0-9_.<>-]{1,96}$/.test(frame.function) || !elapsed(frame.line)) throw new Error('Invalid frame');
+        return { file: frame.file, function: frame.function, line: frame.line };
+      });
+    }) };
+  }) };
+  const destination = path.join(ctx.o.evidenceDirectory, 'diagnostics');
+  await mkdir(destination, { recursive: true, mode: 0o700 });
+  await writeFile(path.join(destination, `${ctx.runId}.json`), JSON.stringify(safe) + '\n', { mode: 0o600 });
+  ctx.rec.diagnostics = { status: 'preserved', path: `diagnostics/${ctx.runId}.json`, stages: safe.stages, snapshots: safe.snapshots.length, public_status: ctx.lastPublic ?? null, events: ctx.rec.events };
 }
 
 function redactDeep(value, redact) {
@@ -716,8 +775,15 @@ function summarize({ records, o, plan, startedAt, reports, processes, registered
     { id: 'bounded_artifacts', status: verdict(oversized === 0), detail: `${oversized} run directories above the per-run limit` },
     { id: 'retention_keeps_recent_runs', status: verdict(missing === 0), detail: `${missing} recorded runs missing from disk (retention.days ${retentionDays})` },
   ];
+  if (o.totalTimeout !== undefined) {
+    criteria.push({ id: 'all_planned_runs', status: verdict(records.length === o.reviews + o.edits + o.acp), detail: `${records.length}/${o.reviews + o.edits + o.acp} runs attempted` });
+    if (o.acp >= 3) criteria.push({ id: 'acp_scenarios_exercised', status: verdict(restart.reloaded > 0 && records.some((rec) => rec.closeMid?.exercised) && records.some((rec) => rec.scenario === 'continue' && rec.ok && rec.turns.length > 1)), detail: 'Requires successful continuation, reload and exercised mid-turn close.' });
+  }
   return {
     schema_version: 1,
+    total_timeout_seconds: o.totalTimeout ?? null,
+    time_limit_reached: Boolean(o.totalExpired),
+    diagnostics_enabled: o.diagnostics,
     started_at: startedAt,
     finished_at: new Date().toISOString(),
     seed: o.seed,
@@ -749,7 +815,7 @@ function summarize({ records, o, plan, startedAt, reports, processes, registered
     },
     servers,
     criteria,
-    result: criteria.every((criterion) => criterion.status === 'PASS') ? 'PASS' : 'FAIL',
+    result: o.totalExpired ? 'INCOMPLETE' : criteria.every((criterion) => criterion.status === 'PASS') ? 'PASS' : 'FAIL',
   };
 }
 
@@ -761,7 +827,7 @@ function printPlan(o, plan, preflight, outDirectory) {
     `backends: programmatic ${plan.programmatic.length} runs, acp ${plan.acp.length} runs (continue, mid-turn close and restart scenarios)`,
     `server command: ${o.serverCommand} ${o.serverArgs.join(' ')}`,
     `evidence directory: ${outDirectory}`,
-    `seed: ${o.seed}; status wait ${o.waitSeconds}s; run timeout ${o.runTimeout}s`,
+    `seed: ${o.seed}; status wait ${o.waitSeconds}s; run timeout ${o.runTimeout}s; total timeout ${o.totalTimeout ?? "unset"}s; diagnostics ${o.diagnostics ? "on" : "off"}`,
     `preflight: workspace in the template allowlist: ${preflight.allowed ? 'yes' : 'NO'}; git repository: ${preflight.git ? 'yes' : 'NO'}; template config: ${preflight.templatePath}`,
     'COST WARNING: every run sends the repository and the tasks to Mistral and is billed. Earlier hosted edits cost about $0.02 each; the real total depends on the tasks and the account. Run it only with the owner authorization.',
   ];
@@ -785,6 +851,8 @@ async function main() {
   try { await dist.resolveCanonicalRoot(workspace, templateConfig.allowedWorkspaceRoots); } catch { allowed = false; }
   let git = true;
   try { await exec('git', ['-C', workspace, 'rev-parse', '--git-dir']); } catch { git = false; }
+  o.reviewTimeout = templateConfig.limits.reviewTimeoutSeconds;
+  o.editTimeout = templateConfig.limits.editTimeoutSeconds;
   const preflight = { workspace, allowed, git, templatePath };
   const tasks = await loadTasks(o.tasks);
   const plan = buildPlan({ ...o }, tasks, await candidateFiles(workspace), workspace);
@@ -806,6 +874,7 @@ async function main() {
   await chmod(outDirectory, 0o700);
   outDirectory = await realpath(outDirectory);
   o.workspace = workspace;
+  o.evidenceDirectory = outDirectory;
 
   let rawTemplate;
   try { rawTemplate = parse(await readFile(templatePath, 'utf8')); }
@@ -843,6 +912,8 @@ async function main() {
 
   const baseline = await scanProcesses();
   const startedAt = new Date().toISOString();
+  o.totalDeadline = o.totalTimeout === undefined ? undefined : performance.now() + o.totalTimeout * 1000;
+  o.workDeadline = o.totalDeadline === undefined ? undefined : o.totalDeadline - 60_000;
   const records = [];
   const servers = [];
   const total = plan.programmatic.length + plan.acp.length;
@@ -855,13 +926,14 @@ async function main() {
     try {
       for (const job of jobs) {
         if (stoppedEarly) break;
+        if (o.workDeadline !== undefined && performance.now() >= o.workDeadline) { o.totalExpired = true; stoppedEarly = true; break; }
         counter += 1;
         const record = await executeJob(holder, job, o, counter, total);
         const safe = redactDeep(record, redact);
         records.push(safe);
         await appendFile(runsFile, `${JSON.stringify(safe)}\n`);
         process.stderr.write(`[${counter}/${total}] ${backend} ${job.kind}${job.scenario ? `:${job.scenario}` : ''} ${job.taskId} ${record.ok ? 'ok' : `FAILED ${record.failures.map((failure) => failure.code).join(',')}`} ${Math.round(record.durationMs / 1000)}s\n`);
-        if (!record.ok && o.stopOnFail) stoppedEarly = true;
+        if ((!record.ok && o.stopOnFail) || o.totalExpired) stoppedEarly = true;
       }
     } catch (error) {
       if (error instanceof Fatal) {

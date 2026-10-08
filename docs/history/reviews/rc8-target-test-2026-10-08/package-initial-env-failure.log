@@ -1,0 +1,111 @@
+
+> vibe-supervisor@0.9.0-rc.8 package:rc
+> node scripts/package-rc.mjs
+
+file:///Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/scripts/package-rc.mjs:18
+  if (result.error || result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed: ${(result.stderr || result.error?.message || '').trim()}`);
+                                                 ^
+
+Error: npm run verify:release failed: vibe-supervisor: background failure in storage: VSUP_STORAGE_ERROR: The supervisor could not write to its data directory because the disk is full (ENOSPC).
+vibe-supervisor: background failure in storage: VSUP_STORAGE_ERROR: The supervisor could not write to its data directory because the disk is full (ENOSPC).
+vibe-supervisor: background failure in storage: VSUP_STORAGE_ERROR: The supervisor could not write to its data directory because the disk is full (ENOSPC).
+vibe-supervisor: background failure in storage: VSUP_STORAGE_ERROR: The supervisor could not write to its data directory because the disk is full (ENOSPC).
+vibe-supervisor: background failure in storage: VSUP_STORAGE_ERROR: The supervisor could not write to its data directory because the disk is full (ENOSPC).
+vibe-supervisor: background failure in storage: VSUP_STORAGE_ERROR: The supervisor could not write to its data directory because the disk is full (ENOSPC).
+vibe-supervisor: background failure in storage: VSUP_STORAGE_ERROR: The supervisor could not write to its data directory because the disk is full (ENOSPC).
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/cli.test.ts > CLI diagnostics for a failing ACP probe > doctor --json carries the captured stderr tail on the failed acp-initialize check
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/unit/cli.test.ts:107:23
+    105|     const report = JSON.parse(output.join('')) as { checks: Array<{ na…
+    106|     const check = report.checks.find((entry) => entry.name === 'acp-in…
+    107|     expect(check?.ok).toBe(false);
+       |                       ^
+    108|     expect(typeof check?.stderr_tail).toBe('string');
+    109|     expect(check?.stderr_tail?.length).toBeGreaterThan(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/unit/cli.test.ts > CLI diagnostics for a failing ACP probe > doctor prints the stderr tail under the failed check
+AssertionError: expected 'PASS node: Supported Node.js runtime.…' to match /CHECK acp-initialize: .*\n {2}Vibe AC…/
+
+- Expected: 
+/CHECK acp-initialize: .*\n {2}Vibe ACP stderr: .+/
+
++ Received: 
+"PASS node: Supported Node.js runtime. (24.21.0)
+PASS platform: Detected darwin on arm64. (darwin arm64)
+PASS git: Git is available. (git version 2.54.0 (Apple Git-157))
+PASS macos: macOS version detected. (27.0.1)
+PASS vibe: Exact supported Vibe version 2.25.8 verified in an isolated temporary home. (vibe 2.25.8)
+PASS vibe-acp: Vibe ACP is available. (vibe-acp 2.25.8)
+PASS acp-initialize: ACP initialization probe succeeded in the isolated temporary home.
+PASS codex: Codex CLI is available. (codex-cli 0.160.1)
+CHECK workspace-roots: 0/0 allowed workspace root(s) resolve to existing directories.
+PASS data-directory: Supervisor data directory is writable.
+PASS lock: No supervisor currently holds the data directory.
+UNVERIFIED authentication: Vibe authentication was not inspected; Vibe may use its existing local sign-in or operating-system credential store.
+UNVERIFIED codex-registration: Codex desktop visibility is not verified by doctor; run configure-codex and restart Codex after reviewing its changes.
+PASS mcp-server: The MCP SDK dependency is installed.
+"
+
+ ❯ tests/unit/cli.test.ts:116:29
+    114|     await failingInstall();
+    115|     await runCli(['doctor']);
+    116|     expect(output.join('')).toMatch(/CHECK acp-initialize: .*\n {2}Vib…
+       |                             ^
+    117|   }, 30_000);
+    118| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/unit/cli.test.ts > CLI diagnostics for a failing ACP probe > test-acp prints the stderr tail and exits non-zero when the probe fails
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/unit/cli.test.ts:123:30
+    121|     await runCli(['test-acp']);
+    122|     const report = JSON.parse(output.join('')) as { available: boolean…
+    123|     expect(report.available).toBe(false);
+       |                              ^
+    124|     expect(report.details?.stderr_tail?.length).toBeGreaterThan(0);
+    125|     expect(errors.join('')).toContain('vibe-acp stderr:');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/unit/setup.test.ts > doctor --config and command aliases > test-acp prints a pointer to doctor on stderr and keeps its exit code
+AssertionError: expected undefined to be 1 // Object.is equality
+
+- Expected: 
+1
+
++ Received: 
+undefined
+
+ ❯ tests/unit/setup.test.ts:360:30
+    358|     await runCli(['test-acp']);
+    359|     expect(errors.join('')).toMatch(/doctor/);
+    360|     expect(process.exitCode).toBe(1);
+       |                              ^
+    361|   }, 30_000);
+    362| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+    at run (file:///Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/scripts/package-rc.mjs:18:50)
+    at file:///Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/scripts/package-rc.mjs:24:1
+
+Node.js v24.21.0

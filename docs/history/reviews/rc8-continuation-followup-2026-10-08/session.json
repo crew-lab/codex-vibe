@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-08",
+  "source": "e71f918",
+  "tested_version": "0.9.0-rc.8",
+  "runtime_changes": false,
+  "original_D21_failure": "PRESERVED; no transport/ceiling defect established",
+  "D21_controlled_live_and_restart": "PASS: same 3-to-10 ceilings, four-file dependency chain, verified output, end_turn",
+  "explicit_task_replacement": "PASS: explicitly cancelled old objective, expected file, end_turn",
+  "D22_official_client": "PASS within review running/idle and closed edit scopes; full client processes exited",
+  "D22_native_desktop": "UNVERIFIED",
+  "D23": {
+    "status": "PASS",
+    "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+    "idle_wait_seconds": 90,
+    "continuation_ms": 61268,
+    "outcome": "VSUP_TIMEOUT at supervisor deadline; no launch-lifetime crash"
+  },
+  "D24": {
+    "status": "PASS",
+    "run_id": "dee12e6e-beda-4ee5-9205-7e0b6aad3000",
+    "stop_reason": "max_turn_requests",
+    "saved_reply_agreement": true
+  },
+  "D18": {
+    "status": "FAIL",
+    "requested": 100,
+    "attempted": 20,
+    "passed": 19,
+    "failed_run": "600ab9fd-9b2b-43fa-8c19-14768567cc14",
+    "failure": "driver:run_timeout",
+    "deadline_seconds": 900,
+    "permission_requests": 0,
+    "owned_process_or_worktree_leaks": 0,
+    "ACP_soak_scenarios": "NOT REACHED"
+  },
+  "cleanup_diagnostic_and_reliability": "PASS; completed soak cleanup also PASS",
+  "remaining_gates": [
+    "native desktop adoption/tool replies/long waits",
+    "callbacks/reject/input behavior",
+    "clean OS account",
+    "Intel",
+    "release workflow"
+  ],
+  "estimated_provider_cost_usd_diagnostic_reliability": 0.120143
+}

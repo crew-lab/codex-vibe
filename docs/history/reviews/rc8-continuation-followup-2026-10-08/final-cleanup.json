@@ -1,0 +1,214 @@
+{
+  "runs": [
+    {
+      "run_id": "f14af053-9ca7-4c21-be13-1cb25c0104aa",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "278dd1aa-a0bd-4bc9-8574-e924f351007d",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "7c12999c-55ef-4476-899f-ddfe55ca0189",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "201c41e0-f3ff-44bc-954c-0d584e485405",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "c20da652-74e3-4eb9-9e66-5b5874a72991",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "dee12e6e-beda-4ee5-9205-7e0b6aad3000",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "5e59d165-ca99-4669-992d-adc77c8734ac",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "051f05fb-0479-44b3-92b4-33d8fcf2a5eb",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "48af38c9-b75f-47f0-9a76-0cc527c7dba4",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "863c883e-11e7-462a-9fa7-e6efebc7e7a2",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "1b66a0fb-8824-4a8d-97be-2f9a629d8a8e",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "c2b7c350-3122-4e9a-9528-2822f66ce122",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "dd88ca3d-e081-4283-bfed-b02097a22338",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "eec0f7f3-426e-4d00-bd48-484bc228991b",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "1b6e7276-4279-430e-b649-09a4e43119b5",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "600ab9fd-9b2b-43fa-8c19-14768567cc14",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "59fb3d36-00d9-462e-879c-2294e5b4c3db",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "99708823-ce1c-477e-b178-482030df78ed",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "f7159780-65c2-4b2d-b0ca-9af75800e5eb",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "42e0f69e-bb62-4bac-a093-686039759809",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "ec2f1eeb-8611-4a64-b6b7-3ac57263638a",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "73ce56b5-a31f-4b37-b6ef-d17134b5b1d5",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "757f465d-0c7e-481c-a832-be7b2e7131e8",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "365e59b3-3214-4791-a1f5-8fd3c14c5b36",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "b5575c94-2148-4d55-86c7-014e2fd87e2b",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "f58b9815-c95f-4546-9286-3a1b297c53e9",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "521a97ee-00eb-4588-a1dc-857b329f8773",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "4240d707-ba6e-4776-be07-797915916911",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "3972fa65-6382-4bd7-aa99-a327c4a99781",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    },
+    {
+      "run_id": "11e4b6e2-3bd4-401f-90c2-4192543ddae4",
+      "state": "closed",
+      "pid_alive": false,
+      "edit_worktree_present": false
+    }
+  ],
+  "closed_runs": 34,
+  "locks": "none",
+  "owned_worker_processes": "none",
+  "edit_worktrees": "none",
+  "source_fixtures": "clean",
+  "unrelated_processes": "preserved"
+}

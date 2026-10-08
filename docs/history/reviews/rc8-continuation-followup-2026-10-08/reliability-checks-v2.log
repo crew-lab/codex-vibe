@@ -1,0 +1,21 @@
+tools-acp {"tools":["vibe_review_start","vibe_edit_start","vibe_status","vibe_continue","vibe_respond","vibe_result","vibe_close"],"server_pid":39735,"home":"/private/tmp/rc8-phase-d-6n1ney4
+started-async {"reply":{"run_id":"48af38c9-b75f-47f0-9a76-0cc527c7dba4","state":"starting","backend":"acp","mode":"review","source_workspace":"/private/tmp/rc8-phase-d-6n1ney4v/workspace","worke
+D22-running-disconnect {"server_pid":39735,"exit_ms":4053,"handles":[]}
+tools-acp {"tools":["vibe_review_start","vibe_edit_start","vibe_status","vibe_continue","vibe_respond","vibe_result","vibe_close"],"server_pid":39818,"home":"/private/tmp/rc8-phase-d-6n1ney4
+closed {"run_id":"48af38c9-b75f-47f0-9a76-0cc527c7dba4","reply":{"run_id":"48af38c9-b75f-47f0-9a76-0cc527c7dba4","state":"closed","next_action":"The run is closed; start a new run for mor
+D22-running-PASS {"run_id":"48af38c9-b75f-47f0-9a76-0cc527c7dba4","worker_pid":39760,"state_after_restart":"recoverable"}
+started {"run_id":"051f05fb-0479-44b3-92b4-33d8fcf2a5eb","kind":"review","reply":{"run_id":"051f05fb-0479-44b3-92b4-33d8fcf2a5eb","state":"completed","backend":"acp","mode":"review","sourc
+settled {"run_id":"051f05fb-0479-44b3-92b4-33d8fcf2a5eb","reply":{"run_id":"051f05fb-0479-44b3-92b4-33d8fcf2a5eb","state":"completed","backend":"acp","last_seq":20,"next_after_seq":20,"eve
+D22-idle-completed-disconnect {"server_pid":39818,"exit_ms":272,"handles":["ChildProcess"]}
+tools-acp {"tools":["vibe_review_start","vibe_edit_start","vibe_status","vibe_continue","vibe_respond","vibe_result","vibe_close"],"server_pid":39909,"home":"/private/tmp/rc8-phase-d-6n1ney4
+closed {"run_id":"051f05fb-0479-44b3-92b4-33d8fcf2a5eb","reply":{"run_id":"051f05fb-0479-44b3-92b4-33d8fcf2a5eb","state":"closed","next_action":"The run is closed; start a new run for mor
+D22-idle-PASS {"run_id":"051f05fb-0479-44b3-92b4-33d8fcf2a5eb"}
+started {"run_id":"89b1295d-0151-48f2-aab9-824fdb611220","kind":"review","reply":{"run_id":"89b1295d-0151-48f2-aab9-824fdb611220","state":"completed","backend":"acp","mode":"review","sourc
+settled {"run_id":"89b1295d-0151-48f2-aab9-824fdb611220","reply":{"run_id":"89b1295d-0151-48f2-aab9-824fdb611220","state":"completed","backend":"acp","last_seq":12,"next_after_seq":12,"eve
+D23-waiting {"run_id":"89b1295d-0151-48f2-aab9-824fdb611220","wait_seconds":90}
+settled-any {"run_id":"89b1295d-0151-48f2-aab9-824fdb611220","reply":{"run_id":"89b1295d-0151-48f2-aab9-824fdb611220","state":"failed","backend":"acp","last_seq":19,"next_after_seq":19,"events
+D23-PASS {"run_id":"89b1295d-0151-48f2-aab9-824fdb611220","continuation_ms":61268,"state":"failed","error":{"code":"VSUP_TIMEOUT","message":"The run exceeded its configured timeout.","remed
+closed {"run_id":"89b1295d-0151-48f2-aab9-824fdb611220","reply":{"run_id":"89b1295d-0151-48f2-aab9-824fdb611220","state":"closed","next_action":"The run is closed; start a new run for mor
+reliability-shutdown {"server_pid":39909,"exit_ms":9,"handles":["ChildProcess"]}
+PASS {"scope":"D24; official-client D22 running/idle; D23 long continuation"}
+final-reliability-shutdown {"server_pid":null,"exit_ms":0,"handles":[]}

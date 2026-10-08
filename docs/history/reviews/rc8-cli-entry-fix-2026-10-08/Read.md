@@ -1,0 +1,13 @@
+# Installed CLI entry-point correction — 2026-10-08
+
+Direct invocation of the original installed npm executable returned exit 0 with empty stdout for --version; Node plus the actual dist/cli.js printed 0.9.0-rc.8. The main-module guard compared canonical import.meta.url with argv[1] retaining its npm symlink path. This prevented the executable from running any command. The previous offline smoke also used Node plus the real file, so it missed the defect. Original D1 acceptance is explicitly corrected to FAIL; original prefix and tarball remain available.
+
+The CLI now resolves argv[1] through realpath before comparing the entry module. Missing/unresolvable entry paths remain inactive, and importing the module does not run the CLI. No tool/schema/worker-policy/pin change occurred. Offline package smoke now invokes the actual npm executable for version, help, init and main MCP startup; it retains direct Node coverage for concurrent isolated clients.
+
+Three subprocess regressions cover symlink entry version, invalid-command exit and inactive import. Two failed on the restored original guard (empty version; command returned success), then all three passed with the fix. The initial regression fixture attempted to directly execute generated dist/cli.js, which lacks npm-installed executable permissions; those initial EACCES logs are retained as a fixture issue. The corrected regression invokes Node with the symlink argv, and the package smoke independently exercises the installed executable directly.
+
+Full package:rc passed 618 TypeScript tests /56 files, both real installed-Vibe profile checks, the Python suite, lint/typecheck/build, acceptance, secret scan, SBOM, offline installed-package smoke and checksums. An independent offline installation into install-cli-fixed prints 0.9.0-rc.8 through node_modules/.bin/vibe-supervisor. Exact hashes and source digests are in verification.json. This locally patched rc.8 is not a new tagged release; the original tarball is archived under release/rc8-before-cli-entry-fix-2026-10-08/.
+
+The [hosted follow-up](../rc8-continuation-followup-2026-10-08/Read.md) separately records controlled ACP recovery/reliability passes and the failed 20/100 soak (19 passed, then a silent edit exceeded the driver deadline). That soak invoked the actual CLI file through Node, so the npm symlink guard does not explain its stall. No further hosted inference was run after the stop rule. Account quota, provider/network and startup/inference causes remain unproven.
+
+Source and documentation changes are uncommitted. No user-global config, account rotation, deployment, push or release publication was performed. Private test roots and reproducible packages are retained.

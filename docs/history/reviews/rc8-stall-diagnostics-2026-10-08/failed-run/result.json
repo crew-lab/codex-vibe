@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "run_id": "7115aa99-c1d6-4b82-b95d-41434feae1f0",
+  "state": "completed",
+  "backend": "programmatic",
+  "stop_reason": "max_turn_requests",
+  "summary": "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so start a new run with a larger max_turns.",
+  "workspace": {
+    "source": "/private/tmp/rc8-phase-d-6n1ney4v/soak-workspace",
+    "worker": "/private/tmp/rc8-phase-d-6n1ney4v/soak-workspace"
+  },
+  "artifacts": [
+    {
+      "name": "transcript.md",
+      "path": "/private/tmp/rc8-diagnostic-soak-o3bq8bg_/evidence/home-programmatic/runs/7115aa99-c1d6-4b82-b95d-41434feae1f0/transcript.md",
+      "sha256": "ea0f5cd681fd0a332a97bd4f4260434cfcbb5aee33b6f99a5dabfe9409bb9e5b",
+      "bytes": 60,
+      "media_type": "text/markdown"
+    },
+    {
+      "name": "events.ndjson",
+      "path": "/private/tmp/rc8-diagnostic-soak-o3bq8bg_/evidence/home-programmatic/runs/7115aa99-c1d6-4b82-b95d-41434feae1f0/events.ndjson",
+      "sha256": "70745c3df6649595f6e30bd6f0be644816947203442b2e78a07a9e3300034fdd",
+      "bytes": 556,
+      "media_type": "application/x-ndjson"
+    }
+  ],
+  "changed_files": [],
+  "warnings": [
+    "Vibe stopped with stop reason max_turn_requests instead of end_turn; the result may be incomplete."
+  ],
+  "integrity": {
+    "status": "verified",
+    "write_tool_observed": false
+  }
+}

@@ -1,0 +1,6 @@
+tools-acp {"tools":["vibe_review_start","vibe_edit_start","vibe_status","vibe_continue","vibe_respond","vibe_result","vibe_close"],"server_pid":36819,"home":"/private/tmp/rc8-phase-d-6n1ney4
+started {"run_id":"201c41e0-f3ff-44bc-954c-0d584e485405","kind":"edit","reply":{"run_id":"201c41e0-f3ff-44bc-954c-0d584e485405","state":"completed","backend":"acp","mode":"edit","source_wo
+settled {"run_id":"201c41e0-f3ff-44bc-954c-0d584e485405","reply":{"run_id":"201c41e0-f3ff-44bc-954c-0d584e485405","state":"completed","backend":"acp","last_seq":20,"next_after_seq":20,"eve
+FAIL {"message":"SyntaxError: Unexpected token 'V', \"VSUP_TURN_\"... is not valid JSON"}
+closed {"run_id":"201c41e0-f3ff-44bc-954c-0d584e485405","reply":{"run_id":"201c41e0-f3ff-44bc-954c-0d584e485405","state":"closed","next_action":"The run is closed; start a new run for mor
+final-client-shutdown {"server_pid":36819,"exit_ms":4,"handles":["ChildProcess"]}

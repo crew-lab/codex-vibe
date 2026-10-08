@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "started_at": "2026-10-08T10:14:37.761Z",
+  "finished_at": "2026-10-08T10:15:02.341Z",
+  "seed": "soak",
+  "node": "v24.21.0",
+  "platform": "darwin-arm64",
+  "server_command": [
+    "node",
+    "/Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/dist/cli.js",
+    "serve",
+    "--stdio"
+  ],
+  "plan": {
+    "reviews": 0,
+    "edits": 1,
+    "acp": 0,
+    "hosted_turns": 1
+  },
+  "stopped_early": false,
+  "fatal": null,
+  "totals": {
+    "runs": 1,
+    "ok": 1,
+    "failed": 0
+  },
+  "by_kind": {
+    "edit": {
+      "runs": 1,
+      "ok": 1,
+      "failed": 0
+    }
+  },
+  "by_backend": {
+    "programmatic": {
+      "runs": 1,
+      "ok": 1,
+      "failed": 0
+    }
+  },
+  "by_scenario": {
+    "edit": {
+      "runs": 1,
+      "ok": 1,
+      "failed": 0
+    }
+  },
+  "latency_ms": {
+    "time_to_first_event": {
+      "count": 1,
+      "p50": 22876,
+      "p95": 22876
+    },
+    "time_to_settled": {
+      "count": 1,
+      "p50": 23223,
+      "p95": 23223
+    }
+  },
+  "failures_by_code": {},
+  "permission_requests": 0,
+  "restarts": {
+    "reloaded": 0,
+    "error": 0,
+    "other": 0,
+    "not_exercised": 0
+  },
+  "close_mid_turn": {
+    "exercised": 0,
+    "not_exercised": 0
+  },
+  "tool_calls": 5,
+  "events": 1,
+  "cost": {
+    "reported": 0,
+    "amount": 0,
+    "currency": null,
+    "authoritative": false
+  },
+  "leftovers": {
+    "processes": {
+      "baseline": 12,
+      "after": 11,
+      "new_unrelated": 0,
+      "leaked": []
+    },
+    "registered_worktrees": [],
+    "homes": {
+      "home-programmatic": {
+        "run_directories": 1,
+        "total_bytes": 80924,
+        "runs_bytes": 80713,
+        "max_run_bytes": 80713,
+        "per_run_limit_bytes": 167772160,
+        "oversized_runs": [],
+        "leftover_worktrees": [],
+        "missing_runs": []
+      },
+      "home-acp": {
+        "run_directories": 0,
+        "total_bytes": 202,
+        "runs_bytes": 0,
+        "max_run_bytes": 0,
+        "per_run_limit_bytes": 167772160,
+        "oversized_runs": [],
+        "leftover_worktrees": [],
+        "missing_runs": []
+      }
+    }
+  },
+  "servers": [
+    {
+      "backend": "programmatic",
+      "servers_started": 1,
+      "last_startup_ms": 114
+    }
+  ],
+  "criteria": [
+    {
+      "id": "zero_unexpected_failures",
+      "status": "PASS",
+      "detail": "0 unexpected failures"
+    },
+    {
+      "id": "zero_permission_requests",
+      "status": "PASS",
+      "detail": "0 permission or input requests"
+    },
+    {
+      "id": "no_leaked_processes_or_worktrees",
+      "status": "PASS",
+      "detail": "0 orphaned or descendant vibe processes, 0 leftover worktrees"
+    },
+    {
+      "id": "bounded_artifacts",
+      "status": "PASS",
+      "detail": "0 run directories above the per-run limit"
+    },
+    {
+      "id": "retention_keeps_recent_runs",
+      "status": "PASS",
+      "detail": "0 recorded runs missing from disk (retention.days 7)"
+    }
+  ],
+  "result": "PASS"
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "run_id": "5e59d165-ca99-4669-992d-adc77c8734ac",
+  "state": "cancelled",
+  "backend": "acp",
+  "summary": "Vibe run ended before normal completion.",
+  "workspace": {
+    "source": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+    "worker": "/private/tmp/rc8-phase-d-6n1ney4v/workspace"
+  },
+  "artifacts": [
+    {
+      "name": "transcript.md",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp/runs/5e59d165-ca99-4669-992d-adc77c8734ac/transcript.md",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "media_type": "text/markdown"
+    },
+    {
+      "name": "events.ndjson",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp/runs/5e59d165-ca99-4669-992d-adc77c8734ac/events.ndjson",
+      "sha256": "84ba318130b9f76a11ad2cf44cac6e97419e0220be2704877e43e4c97cde6354",
+      "bytes": 765,
+      "media_type": "application/x-ndjson"
+    }
+  ],
+  "changed_files": [],
+  "warnings": [],
+  "integrity": {
+    "status": "verified",
+    "write_tool_observed": false
+  }
+}

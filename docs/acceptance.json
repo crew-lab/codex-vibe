@@ -197,5 +197,63 @@
       "failure": "driver:stop_reason_max_turn_requests",
       "evidence": "history/reviews/rc7-turn-limit-fix-2026-10-07/Read.md"
     }
+  ],
+  "target_machine_sessions": [
+    {
+      "date": "2026-10-08",
+      "version": "0.9.0-rc.8",
+      "source": "e71f918",
+      "status": "FAIL",
+      "failed_step": "D21",
+      "evidence": "history/reviews/rc8-target-test-2026-10-08/session.json",
+      "hosted_soak": "NOT_RUN",
+      "remaining_gates": "UNVERIFIED",
+      "D1": "FAIL: installed executable symlink silently exits"
+    },
+    {
+      "date": "2026-10-08",
+      "version": "0.9.0-rc.8",
+      "source": "e71f918",
+      "status": "PARTIAL",
+      "name": "controlled-continuation-reliability-followup",
+      "D21": "PASS controlled fixture live/restart; original failure preserved",
+      "D22": "PASS official-client scopes; native UNVERIFIED",
+      "D23": "PASS supervisor timeout branch",
+      "D24": "PASS",
+      "D18": "FAIL:19/20 passed, driver:run_timeout at 900 seconds, zero requests/owned leaks",
+      "evidence": "history/reviews/rc8-continuation-followup-2026-10-08/session.json"
+    },
+    {
+      "date": "2026-10-08",
+      "version": "0.9.0-rc.8 locally patched",
+      "source": "e71f918",
+      "name": "cli-and-soak-deadline-fixes",
+      "status": "PARTIAL",
+      "release_verification": "PASS",
+      "typescript_tests": 620,
+      "hosted_targeted_edits": "PASS 2/2, patches and cleanup verified",
+      "original_stall": "UNRESOLVED; did not reproduce",
+      "full_hosted_soak": "FAIL previous 20/100 preserved; not rerun",
+      "evidence": "history/reviews/rc8-finding-fixes-2026-10-08/session.json"
+    },
+    {
+      "date": "2026-10-08",
+      "version": "0.9.0-rc.8 locally patched",
+      "candidate_commit": "8e5c963c798d973783e2022b23c20657cf7dca22",
+      "name": "instrumented-bounded-soak",
+      "status": "FAIL",
+      "implementation": "PASS",
+      "release_verification": "PASS",
+      "typescript_tests": 623,
+      "python_tests": 76,
+      "requested_runs": 100,
+      "attempted_runs": 1,
+      "failure": "driver:stop_reason_max_turn_requests",
+      "startup_elapsed_ms": 99,
+      "silent_stall": "UNRESOLVED; not reproduced",
+      "owned_leaks": 0,
+      "acp_scenarios": "NOT_REACHED",
+      "evidence": "history/reviews/rc8-stall-diagnostics-2026-10-08/session.json"
+    }
   ]
 }

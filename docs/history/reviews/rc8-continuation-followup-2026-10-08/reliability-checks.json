@@ -1,0 +1,221 @@
+[
+  {
+    "step": "tools-programmatic",
+    "time": "2026-10-08T09:33:12.416Z",
+    "tools": [
+      "vibe_review_start",
+      "vibe_edit_start",
+      "vibe_status",
+      "vibe_result",
+      "vibe_close"
+    ],
+    "server_pid": 39634,
+    "home": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-programmatic"
+  },
+  {
+    "step": "started",
+    "time": "2026-10-08T09:33:15.776Z",
+    "run_id": "dee12e6e-beda-4ee5-9205-7e0b6aad3000",
+    "kind": "review",
+    "reply": {
+      "run_id": "dee12e6e-beda-4ee5-9205-7e0b6aad3000",
+      "state": "completed",
+      "backend": "programmatic",
+      "mode": "review",
+      "source_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "worker_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "created_at": "2026-10-08T09:33:12.419Z",
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done.",
+      "result": {
+        "run_id": "dee12e6e-beda-4ee5-9205-7e0b6aad3000",
+        "state": "completed",
+        "backend": "programmatic",
+        "stop_reason": "max_turn_requests",
+        "summary": "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so start a new run with a larger max_turns.",
+        "warnings": [
+          "Vibe stopped with stop reason max_turn_requests instead of end_turn; the result may be incomplete."
+        ],
+        "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done.",
+        "integrity": {
+          "status": "verified",
+          "write_tool_observed": false
+        },
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-programmatic/runs/dee12e6e-beda-4ee5-9205-7e0b6aad3000/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-programmatic/runs/dee12e6e-beda-4ee5-9205-7e0b6aad3000/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "settled",
+    "time": "2026-10-08T09:33:15.777Z",
+    "run_id": "dee12e6e-beda-4ee5-9205-7e0b6aad3000",
+    "reply": {
+      "run_id": "dee12e6e-beda-4ee5-9205-7e0b6aad3000",
+      "state": "completed",
+      "backend": "programmatic",
+      "last_seq": 2,
+      "next_after_seq": 2,
+      "events": [
+        {
+          "seq": 1,
+          "type": "message"
+        },
+        {
+          "seq": 2,
+          "type": "diagnostic",
+          "text": "<vibe_stop_event>Turn limit of 2 reached</vibe_stop_event>\n"
+        }
+      ],
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done.",
+      "result": {
+        "run_id": "dee12e6e-beda-4ee5-9205-7e0b6aad3000",
+        "state": "completed",
+        "backend": "programmatic",
+        "stop_reason": "max_turn_requests",
+        "summary": "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so start a new run with a larger max_turns.",
+        "warnings": [
+          "Vibe stopped with stop reason max_turn_requests instead of end_turn; the result may be incomplete."
+        ],
+        "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done.",
+        "integrity": {
+          "status": "verified",
+          "write_tool_observed": false
+        },
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-programmatic/runs/dee12e6e-beda-4ee5-9205-7e0b6aad3000/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-programmatic/runs/dee12e6e-beda-4ee5-9205-7e0b6aad3000/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "closed",
+    "time": "2026-10-08T09:33:15.792Z",
+    "run_id": "dee12e6e-beda-4ee5-9205-7e0b6aad3000",
+    "reply": {
+      "run_id": "dee12e6e-beda-4ee5-9205-7e0b6aad3000",
+      "state": "closed",
+      "next_action": "The run is closed; start a new run for more work.",
+      "worktree_removed": false
+    }
+  },
+  {
+    "step": "D24-PASS",
+    "time": "2026-10-08T09:33:15.792Z",
+    "run_id": "dee12e6e-beda-4ee5-9205-7e0b6aad3000",
+    "result": {
+      "run_id": "dee12e6e-beda-4ee5-9205-7e0b6aad3000",
+      "state": "completed",
+      "backend": "programmatic",
+      "stop_reason": "max_turn_requests",
+      "summary": "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so start a new run with a larger max_turns.",
+      "warnings": [
+        "Vibe stopped with stop reason max_turn_requests instead of end_turn; the result may be incomplete."
+      ],
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done.",
+      "integrity": {
+        "status": "verified",
+        "write_tool_observed": false
+      },
+      "changed_files": [],
+      "changed_files_total": 0,
+      "artifacts": [
+        {
+          "name": "transcript.md",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-programmatic/runs/dee12e6e-beda-4ee5-9205-7e0b6aad3000/transcript.md"
+        },
+        {
+          "name": "events.ndjson",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-programmatic/runs/dee12e6e-beda-4ee5-9205-7e0b6aad3000/events.ndjson"
+        }
+      ]
+    }
+  },
+  {
+    "step": "D24-shutdown",
+    "time": "2026-10-08T09:33:15.797Z",
+    "server_pid": 39634,
+    "exit_ms": 4,
+    "handles": [
+      "ChildProcess"
+    ]
+  },
+  {
+    "step": "tools-acp",
+    "time": "2026-10-08T09:33:15.901Z",
+    "tools": [
+      "vibe_review_start",
+      "vibe_edit_start",
+      "vibe_status",
+      "vibe_continue",
+      "vibe_respond",
+      "vibe_result",
+      "vibe_close"
+    ],
+    "server_pid": 39665,
+    "home": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp"
+  },
+  {
+    "step": "started-async",
+    "time": "2026-10-08T09:33:15.911Z",
+    "reply": {
+      "run_id": "5e59d165-ca99-4669-992d-adc77c8734ac",
+      "state": "starting",
+      "backend": "acp",
+      "mode": "review",
+      "source_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "worker_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "created_at": "2026-10-08T09:33:15.902Z",
+      "next_action": "Call vibe_status with wait_seconds 120-300 until the run needs action."
+    }
+  },
+  {
+    "step": "FAIL",
+    "time": "2026-10-08T09:33:16.887Z",
+    "message": "Error: No live event observed"
+  },
+  {
+    "step": "closed",
+    "time": "2026-10-08T09:33:17.069Z",
+    "run_id": "5e59d165-ca99-4669-992d-adc77c8734ac",
+    "reply": {
+      "run_id": "5e59d165-ca99-4669-992d-adc77c8734ac",
+      "state": "closed",
+      "next_action": "The run is closed; start a new run for more work.",
+      "worktree_removed": false
+    }
+  },
+  {
+    "step": "cleanup-error",
+    "time": "2026-10-08T09:33:17.069Z",
+    "run_id": "5e59d165-ca99-4669-992d-adc77c8734ac",
+    "message": "Error: Worktree not removed"
+  },
+  {
+    "step": "final-reliability-shutdown",
+    "time": "2026-10-08T09:33:17.073Z",
+    "server_pid": 39665,
+    "exit_ms": 4,
+    "handles": [
+      "ChildProcess"
+    ]
+  }
+]

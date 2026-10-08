@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Add opt-in bounded programmatic worker stage/frame diagnostics and an overall hosted-soak budget with reserved cleanup time.
+
+- Bound initial hosted-soak worker deadlines below the driver budget so silent workers can record supervisor timeouts before cleanup; preserve shorter configured limits.
+
+- Fix the npm-installed executable silently exiting when invoked through its symlink. The CLI now resolves the entry path before checking whether to run, and offline package smoke exercises the installed executable directly. Module imports remain inactive.
+
 ## 0.9.0-rc.8
 
 - `vibe_continue` takes an optional `max_turns` (1 to 50, no default). Vibe counts turns cumulatively per session, so a run whose last turn ended with `max_turn_requests` could never make progress; such a continuation is now rejected with the new `VSUP_TURN_LIMIT_REACHED` before anything reaches Vibe unless `max_turns` exceeds the run's current limit. The new limit is saved on the run and sent to the ACP session before the prompt, on a live session and after a lazy load. The turn-limit summary and `next_action` no longer suggest a plain continue, and a programmatic run is told to start a new run instead. `max_turns` on `vibe_continue` is the session's cumulative ceiling: a lower value is rejected with `VSUP_INVALID_ARGUMENT`, and at 50 the error says the session cannot be extended. An accepted continuation clears the previous stop reason so an interrupted one stays continuable, and a storage fault while saving the raised limit no longer leaves the run `running` with no prompt sent. A programmatic child whose stderr exceeds the event limit now fails the run instead of leaving it running until the deadline.

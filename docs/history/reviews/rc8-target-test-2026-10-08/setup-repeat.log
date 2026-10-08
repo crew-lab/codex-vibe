@@ -1,0 +1,8 @@
+Using config at /private/tmp/rc8-phase-d-6n1ney4v/home/config.toml
+Workspace already allowed: /private/tmp/rc8-phase-d-6n1ney4v/workspace
+vibe: keeping configured /Users/roman/.local/bin/vibe
+vibe-acp: keeping configured /Users/roman/.local/bin/vibe-acp
+Doctor (non-PASS checks only):
+UNVERIFIED authentication: Vibe authentication was not inspected; Vibe may use its existing local sign-in or operating-system credential store.
+UNVERIFIED codex-registration: Codex desktop visibility is not verified by doctor; run configure-codex and restart Codex after reviewing its changes.
+Codex config is already up to date: /private/tmp/rc8-phase-d-6n1ney4v/workspace/.codex/config.toml

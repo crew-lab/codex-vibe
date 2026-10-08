@@ -27,7 +27,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:python": "python3 -m unittest src/backends/runtime/test_prompt_file.py src/backends/runtime/test_keychain_credential.py src/backends/runtime/test_worker_watchdog.py",
+    "test:python": "python3 -m unittest src/backends/runtime/test_prompt_file.py src/backends/runtime/test_keychain_credential.py src/backends/runtime/test_worker_watchdog.py src/backends/runtime/test_worker_diagnostics.py",
     "test:integration": "vitest run tests/integration",
     "test:security": "vitest run tests/security",
     "build": "tsc && node scripts/copy-runtime-assets.mjs",

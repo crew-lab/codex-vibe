@@ -1,0 +1,10 @@
+tools-acp {"tools":["vibe_review_start","vibe_edit_start","vibe_status","vibe_continue","vibe_respond","vibe_result","vibe_close"],"server_pid":37138,"home":"/private/tmp/rc8-phase-d-6n1ney4
+started {"run_id":"c20da652-74e3-4eb9-9e66-5b5874a72991","kind":"edit","reply":{"run_id":"c20da652-74e3-4eb9-9e66-5b5874a72991","state":"completed","backend":"acp","mode":"edit","source_wo
+settled {"run_id":"c20da652-74e3-4eb9-9e66-5b5874a72991","reply":{"run_id":"c20da652-74e3-4eb9-9e66-5b5874a72991","state":"completed","backend":"acp","last_seq":20,"next_after_seq":20,"eve
+D21-refused {"run_id":"c20da652-74e3-4eb9-9e66-5b5874a72991","args":{},"expected":"VSUP_TURN_LIMIT_REACHED","reply":{"data":{"error":{"code":"VSUP_TURN_LIMIT_REACHED","message":"VSUP_TURN_LIMI
+D21-refused {"run_id":"c20da652-74e3-4eb9-9e66-5b5874a72991","args":{"max_turns":3},"expected":"VSUP_TURN_LIMIT_REACHED","reply":{"data":{"error":{"code":"VSUP_TURN_LIMIT_REACHED","message":"V
+D21-refused {"run_id":"c20da652-74e3-4eb9-9e66-5b5874a72991","args":{"max_turns":2},"expected":"VSUP_INVALID_ARGUMENT","reply":{"data":{"error":{"code":"VSUP_INVALID_ARGUMENT","message":"VSUP_
+settled {"run_id":"c20da652-74e3-4eb9-9e66-5b5874a72991","reply":{"run_id":"c20da652-74e3-4eb9-9e66-5b5874a72991","state":"completed","backend":"acp","last_seq":49,"next_after_seq":49,"eve
+FAIL {"message":"Error: Raised budget failed end_turn"}
+closed {"run_id":"c20da652-74e3-4eb9-9e66-5b5874a72991","reply":{"run_id":"c20da652-74e3-4eb9-9e66-5b5874a72991","state":"closed","next_action":"The run is closed; start a new run for mor
+final-client-shutdown {"server_pid":37138,"exit_ms":4,"handles":["ChildProcess"]}
