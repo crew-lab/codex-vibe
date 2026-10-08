@@ -1,6 +1,6 @@
 # Implementation handoff
 
-Status as of **2026-10-08**: implemented release candidate 0.9.0-rc.8, not a production 1.0 certification. rc.8 was tested on the target machine on 2026-10-08 (see [Phase D results](#phase-d-results)): D1, D21 and the D18 soak failed and were followed up, D22 to D24 passed through the official client; the remaining gates are the [Phase D test plan](#phase-d-test-plan). Sections superseded by later work, including the rc.2 target-machine results, the 2026-10-05 cold review, the B1 to B3 blockers and the original field plan, are in [handoff history](docs/history/handoff-2026-10-05.md). Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.8`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
+Status as of **2026-10-08**: implemented release candidate 0.9.0-rc.9, not a production 1.0 certification. rc.8 was tested on the target machine on 2026-10-08 (see [Phase D results](#phase-d-results)): D1, D21 and the D18 soak failed and were followed up, D22 to D24 passed through the official client; the remaining gates are the [Phase D test plan](#phase-d-test-plan). Sections superseded by later work, including the rc.2 target-machine results, the 2026-10-05 cold review, the B1 to B3 blockers and the original field plan, are in [handoff history](docs/history/handoff-2026-10-05.md). Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.9`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
 
 ## User intent and delivery history
 
@@ -72,7 +72,7 @@ These are local evidence, not portable defaults. `scripts/package-rc.mjs` and `s
 
 Historical: the last full implementation release verification passed **49 tests across 7 files**, lint, typecheck, build, deterministic acceptance, secret-pattern scan, and SPDX inventory. Counts: tool schemas 4; config 7; MCP integration 2; CLI 3; core 8; security 14; ACP integration 11. This is a historical result, not a substitute for checking later changes.
 
-Current suite after the rc.8 follow-ups (2026-10-08): 641 tests in 57 files (`npx vitest run`), of which the 2 installed-resolver profile tests (review and edit) skip when Vibe is not installed. Plus 76 Vibe-free Python tests (`npm run test:python`, also part of `verify:release`). Nothing in the suite runs a real Vibe on the preparing machine.
+Current suite at rc.9 (2026-10-08): 651 tests in 57 files (`npx vitest run`), of which the 2 installed-resolver profile tests (review and edit) skip when Vibe is not installed. Plus 76 Vibe-free Python tests (`npm run test:python`, also part of `verify:release`). Nothing in the suite runs a real Vibe on the preparing machine.
 
 ACP fake-subprocess coverage includes 100 independently initialized prompt runs, unknown notifications and thought filtering, correlated permissions and expired IDs, form responses, live continuation, loading without original-task replay, malformed JSON, early exit, wrong protocol/mode, and cancellation. It verifies local protocol/lifecycle behavior rather than hosted inference.
 
@@ -90,18 +90,18 @@ Documentation additions were checked for local link targets and whitespace. They
 
 ## Release artifacts and reproduction
 
-`release/` is ignored by Git. The current candidate is **0.9.0-rc.8**, built on 2026-10-08 on the preparing machine (Node 24.19.0, npm 11.17.0, macOS arm64) from the `Cut 0.9.0-rc.8` commit. It adds to rc.7 the turn-limit report and saved errors from the target-machine session, the review turn default of 20, the scoped soak tasks, the `vibe_continue` turn-budget gate with its review fixes, the programmatic stderr-overflow fix and the ported skill guidance. The release workflow is not in it; it waits on `claude/release-workflow`.
+`release/` is ignored by Git. The current candidate is **0.9.0-rc.9**, built on 2026-10-08 on the preparing machine (Node 24.19.0, npm 11.17.0, macOS arm64) from the `Cut 0.9.0-rc.9` commit. It adds to rc.8 the npm-link CLI entry fix with an installed-executable smoke, the soak driver's deadline fix, opt-in worker diagnostics and overall soak budget, the progress watchdog (`VSUP_NO_PROGRESS`, counting any worker output as activity), the bounded soak tasks with a per-bucket truncation threshold, and the fixes from their cold review. The release workflow is not in it; it waits on `claude/release-workflow`.
 
 ```text
-vibe-supervisor-0.9.0-rc.8.tgz  sha256 88643e601b15c085e448df54675581258c78cfae9d3d786e5b18005d1f19e399
-sbom.spdx.json                  sha256 1c3f438c54fedb807511e3696c0056d13eb8896cdd9b7a6eda58134b7c6c82b7
-acceptance.json                 sha256 646a1766c844c211c053bae806718e882f7323d76fa487f042f294ddfacb68dd; 7 deterministic checks PASS; hosted, soak and platform gates listed UNVERIFIED
+vibe-supervisor-0.9.0-rc.9.tgz  sha256 6c1c91fd746bd238a4bec1702951badf612b49a6a7003ce3f74bfe4bf30728a4
+sbom.spdx.json                  sha256 2ff29a63c7e7a38646f224026ff8f14b277fe5edd7a6e8fff03a355373eaddc1
+acceptance.json                 sha256 9ad0d2ae40fded79939ab55bb575896c6cdb406786a85b271f8fa920ea10dabf; 7 deterministic checks PASS; hosted, soak and platform gates listed UNVERIFIED
 SHA256SUMS
 ```
 
-`package:rc` passed end to end, including the offline installed-package smoke test (MCP initialize, the backend-dependent tool listing, EOF shutdown, and two concurrent `--isolated` clients from the installed tarball). The tarball has no `docs/history/`, `.mcp.json` or `.codex-plugin/`. Earlier candidates (rc.1 to rc.7) are superseded. Never edit archive contents manually; rebuild instead.
+`package:rc` passed end to end, including the offline installed-package smoke test (MCP initialize, the backend-dependent tool listing, EOF shutdown, and two concurrent `--isolated` clients from the installed tarball). The tarball has no `docs/history/`, `.mcp.json` or `.codex-plugin/`. Earlier candidates (rc.1 to rc.8) are superseded. Never edit archive contents manually; rebuild instead.
 
-The delivered copy of these four files is kept on the preparing machine at `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.8/` (older candidates are next to it), Git-ignored; verify it with `shasum -a 256 -c SHA256SUMS` in that folder before installing on the target machine. What to check there first: `vibe-supervisor setup --workspace <repo>` end to end including the Codex registration; that Codex lists five tools (programmatic) or seven (`acp`/`auto`); the Phase B measurements P1 to P4; hosted ACP cancellation, restart and lazy reload, and idle expiry (D10 to D12); and that `--isolated` reuses its session directory across Codex restarts. npm 11 warns that the dev dependencies `esbuild` and `fsevents` have install scripts outside `allowScripts`; the project's own `prepare` build still runs.
+The delivered copy of these four files is kept on the preparing machine at `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.9/` (older candidates are next to it), Git-ignored; verify it with `shasum -a 256 -c SHA256SUMS` in that folder before installing on the target machine. What to check there first: `vibe-supervisor setup --workspace <repo>` end to end including the Codex registration; that Codex lists five tools (programmatic) or seven (`acp`/`auto`); the Phase B measurements P1 to P4; hosted ACP cancellation, restart and lazy reload, and idle expiry (D10 to D12); and that `--isolated` reuses its session directory across Codex restarts. npm 11 warns that the dev dependencies `esbuild` and `fsevents` have install scripts outside `allowScripts`; the project's own `prepare` build still runs.
 
 Populating the offline cache needs two steps. `npm ci --cache /abs/cache` stores package tarballs but not the registry metadata the offline tarball install needs, so the first `package:rc` run fails with `ENOTCACHED`. Warm the metadata once by packing the tarball and installing it online with `--ignore-scripts` into a throwaway prefix using the same cache, then run `package:rc`. The smoke install uses `--ignore-scripts`, so it does not exercise the `prepare` script; a fresh `npm ci` (Phase D, D18 setup) covers that.
 
@@ -126,7 +126,7 @@ Use the Python interpreter from the installed Vibe tool environment (on the orig
 
 The unverified gates are listed once, in [docs/compatibility.md](docs/compatibility.md#unverified-gates), and stay UNVERIFIED until their evidence is recorded: the hosted ACP lifecycle (cancellation, permission and input callbacks, restart and load recovery, idle expiry), the 100-run hosted soak, the effective tool inventory and hosted runs for the current build, macOS Intel and a clean OS account. The [Phase D test plan](#phase-d-test-plan) covers all of them; plugin installation is out of scope for 1.0.
 
-Next work: cut rc.9 with the CLI entry fix, the progress watchdog and the bounded soak; on the target machine rerun D1, D21 with the four-file fixture, the D18 soak as a new attempt, and the Codex desktop steps (D2, D3, D14, D16, D22); decide D20 (Intel, or arm64 only for 1.0) and whether permission callbacks stay a gate; in parallel, push the release workflow (blocked on the push token's `workflow` scope) and decide on Vibe 2.26.0; cut 1.0 after the gates pass. Results so far are in [Phase D results](#phase-d-results).
+Next work: rc.9 is built (see [release artifacts](#release-artifacts-and-reproduction)); on the target machine rerun D1, D21 with the four-file fixture, the D18 soak as a new attempt, and the Codex desktop steps (D2, D3, D14, D16, D22); decide D20 (Intel, or arm64 only for 1.0) and whether permission callbacks stay a gate; in parallel, push the release workflow (blocked on the push token's `workflow` scope) and decide on Vibe 2.26.0; cut 1.0 after the gates pass. Results so far are in [Phase D results](#phase-d-results).
 
 ### ACP field lessons (2026-10-08)
 
@@ -272,7 +272,7 @@ Status: implemented on 2026-10-07 against fake backends. A cold review of `6397e
 
 ### Phase D, target machine and release
 
-See [Phase D test plan](#phase-d-test-plan). Cut rc.8 or 1.0 after it.
+See [Phase D test plan](#phase-d-test-plan). Cut rc.10 or 1.0 after it.
 
 Open decisions: whether to support Vibe 2.26.0 (released 2026-10-06) in 1.0, which needs the revalidation in [docs/compatibility.md](docs/compatibility.md) and a check that it still has the legacy harness; until then 2.26.0 is refused and the README's exact install command stays the only supported path. Whether the Keychain key may live in supervisor memory (dropped from Phase B because measurement showed no gain, kept open only if P3 shows a slow lookup). Settled: R3 (user, 2026-10-07): 1.0 supports the legacy harness only and the unified harness is validated before supporting a Vibe release that removes the legacy harness; hybrid snapshot (Phase B), ACP ships alongside programmatic (Phase C), GitHub Releases with `private: true` (Phase C).
 
@@ -311,7 +311,7 @@ This plan replaces the 2026-10-05 field plan (now in the [handoff history](docs/
 
 Ground rules:
 
-- **Machine:** the target Mac with Vibe 2.25.8 installed (`uv tool install mistral-vibe==2.25.8`) and browser login done once with `vibe`. Install rc.8 (or later) from `release/0.9.0-rc.8/` after `shasum -a 256 -c SHA256SUMS`. Vibe 2.26.0 is already out: before the session confirm `vibe --version` prints 2.25.8 and reinstall with the pinned command if it changed; a newer Vibe makes every run fail with `VSUP_VIBE_VERSION_UNSUPPORTED`.
+- **Machine:** the target Mac with Vibe 2.25.8 installed (`uv tool install mistral-vibe==2.25.8`) and browser login done once with `vibe`. Install rc.9 (or later) from `release/0.9.0-rc.9/` after `shasum -a 256 -c SHA256SUMS`. Vibe 2.26.0 is already out: before the session confirm `vibe --version` prints 2.25.8 and reinstall with the pinned command if it changed; a newer Vibe makes every run fail with `VSUP_VIBE_VERSION_UNSUPPORTED`.
 - **Workspace:** a throwaway Git repository with no secrets, containing nested source files, a root `.env` with a fake value, an ignored `node_modules/` (any size; a large one also serves D7), and one file outside the repository to try to read.
 - **Cost and consent:** hosted steps send that repository and the tasks to Mistral and are billed; run them only with the owner's authorization. Earlier hosted edits cost about $0.02 each, so the soak (D18) is the only step with noticeable cost.
 - **Stop rule:** stop at the first failing step, record it, and never work around it by weakening policy (no `always` fallback, no shell, no network, no project trust, no editing the generated agent profiles).
@@ -321,11 +321,11 @@ Ground rules:
 
 | ID | Step | Expected | Covers |
 |---|---|---|---|
-| D0 | Record macOS version and arch, Node, npm, Git, `vibe --version`, the Vibe Python path, Codex CLI and desktop versions, the rc.8 tarball sha256. | All recorded. | Baseline |
-| D1 | `npm install -g ./vibe-supervisor-0.9.0-rc.8.tgz` (or `--prefix` into a private prefix); `vibe-supervisor --version`. | Installs offline-capable files only; prints `0.9.0-rc.8`. | Release install |
+| D0 | Record macOS version and arch, Node, npm, Git, `vibe --version`, the Vibe Python path, Codex CLI and desktop versions, the rc.9 tarball sha256. | All recorded. | Baseline |
+| D1 | `npm install -g ./vibe-supervisor-0.9.0-rc.9.tgz` (or `--prefix` into a private prefix); run the installed `vibe-supervisor --version` directly, not through `node`. | Installs offline-capable files only; prints `0.9.0-rc.9` from the installed executable. | Release install |
 | D2 | `vibe-supervisor setup --workspace <repo>` without `--yes`, then again with `--yes`; then `vibe-supervisor doctor --json`. | First run prints the planned Codex change and writes nothing to `~/.codex`; second run writes it, keeps a `.bak` of an existing supervisor config, prints the restart note; `[paths]` holds absolute `vibe`/`vibe-acp`; doctor has no required failure and no ignored-key warning. Running `setup` a third time changes nothing. | C3 setup, plan-then-write |
 | D3 | Restart Codex desktop; open a new chat; list the supervisor tools. Then set `backend = "acp"`, restart, list again. | Five tools for programmatic; seven for `acp` (adds `vibe_continue`, `vibe_respond`); no `vibe_cancel`; the descriptions mention `wait_seconds`, `stop_reason` and closing. | C2 surface, registration |
-| D4 | From a source checkout of the `Cut 0.9.0-rc.8` commit: `npm run compat:probe -- --out <file>`; repeat the manual `tool_path_resolver` check for a nested file, root `.env`, an outside path and a symlink to outside, in review and edit mode. | Probe checks PASS; nested in-root files ALWAYS, the others NEVER, in both modes. | Pin, B1 regression |
+| D4 | From a source checkout of the `Cut 0.9.0-rc.9` commit: `npm run compat:probe -- --out <file>`; repeat the manual `tool_path_resolver` check for a nested file, root `.env`, an outside path and a symlink to outside, in review and edit mode. | Probe checks PASS; nested in-root files ALWAYS, the others NEVER, in both modes. | Pin, B1 regression |
 
 ### Hosted programmatic runs (backend `programmatic`)
 
@@ -369,7 +369,7 @@ Ground rules:
 
 Exit criteria for 1.0: D0 to D18 and D21 to D24 pass; D20 passes at least on a clean account; D19 is optional because 1.0 supports the legacy harness only; the release workflow is pushed and its first tagged run produces the release assets. The workflow is ready on the local branch `claude/release-workflow` but cannot be pushed until the push token has the `workflow` scope, so this criterion is blocked independently of the target machine. The plugin scaffold is no longer packaged and stays out of scope for 1.0.
 
-Before the session: rc.8 is built and the soak tasks are scoped (review default 20 turns). After it: fix what failed, cut rc.9 or 1.0 accordingly.
+Before the session: rc.9 is built with the bounded soak tasks, the truncation threshold and the progress watchdog. After it: fix what failed, cut rc.10 or 1.0 accordingly.
 
 Fixed after the hosted ACP continuation (2026-10-06): a turn that stopped with `max_turn_requests` used to be reported with the generic summary "Vibe completed the delegated task." The default summary now follows the stop reason (`end_turn`, `max_tokens`, `max_turn_requests`, `refusal`, `cancelled`, or an unknown reason), any non-`end_turn` stop adds a warning naming it, and each continuation's result replaces the previous turn's summary and stop-reason warning while keeping unrelated warnings. The run state stays `completed`; the skills tell the coordinator to check `stop_reason` and warnings, not the summary.
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0-rc.9
 
 - A run whose worker shows no activity for `limits.worker_progress_timeout_seconds` (default 600, 0 disables) while running now fails with the new `VSUP_NO_PROGRESS` and a diagnostic event, instead of waiting for its full deadline. Waiting for a permission or input answer, queued runs and idle completed ACP sessions are not watched. Activity is any ACP notification or request (tool calls, usage updates, thought chunks that are otherwise dropped, permission requests), any complete programmatic stdout line and any stderr output; the `no_progress` diagnostic records the seconds since the last activity and its kind. The timer is disarmed when a deadline, cancel, close, settling state or shutdown begins, so it cannot mislabel or cancel a run that is already ending. Prompted by a real edit that stayed silent for 15 minutes in the rc.8 soak.
 - The soak driver's built-in tasks are bounded (named file, capped reads and searches, a final answer in a few lines); a truthfully reported `max_turn_requests` or `max_tokens` run with its partial warning counts as truncated, not as a failure, under a new `truncated_within_threshold` criterion (`--max-truncated-percent`, default 10), applied overall and to every kind and backend separately. A `continue` scenario with a truncated first turn skips its follow-up instead of failing it, and a run's final state comes from its last settled turn.
