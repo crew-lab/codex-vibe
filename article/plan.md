@@ -1,14 +1,15 @@
 # dev.to article plan: vibe-supervisor
 
-First written 2026-10-07, updated 2026-10-08 after rc.8 and again after the fact-check in [review](review.md). Rules from DEV are in [research](research.md); every claim and number is in [evidence](evidence.md); the current text is [draft](draft.md).
+First written 2026-10-07, updated 2026-10-08 after rc.8, after the fact-check in [review](review.md), and again for the DEV-reader revision (see [review, Revision for DEV readers](review.md#revision-for-dev-readers)). Rules from DEV are in [research](research.md); every claim and number is in [evidence](evidence.md); the current text is [final](final.md), with [draft](draft.md) kept as the 1.0 base.
 
 ## Goal and reader
 
-- **Goal:** Codex users install vibe-supervisor, try one review and one edit, and open issues. Secondary: credibility for the engineering.
-- **Primary reader:** a macOS developer who uses Codex (CLI or desktop app) daily, knows Git, has heard of MCP, and wants a second reviewer or a helper for edits. May never have used Mistral Vibe. Note for the text: only Codex desktop (patched rc.2, 2026-10-05) and the official MCP client (rc.7, 2026-10-07) were exercised; Codex CLI was not, so the post must not claim it was tested.
-- **Secondary reader:** someone building MCP servers or multi-agent setups, reading for the safety and recovery design.
-- **Promise in one sentence:** Codex can hand reviews and edits to Mistral Vibe through one MCP server, and nothing the second agent writes reaches your checkout until you apply the patch yourself.
-- **Post type:** a #showdev launch post with an engineering core (problem, how it works, trade-offs, how to try it, limitations). The deep engineering story becomes Part 2.
+- **Goal:** build interest among DEV readers, most of whom will never install the tool: they leave with a checklist they can apply to their own agent setup and a reason to star or comment. Secondary: the few who use Codex on macOS with Vibe access install it, try one review and one edit, and open issues.
+- **Primary reader:** a DEV reader who uses Claude Code, Cursor, Copilot or Codex, may build MCP servers, and is curious or worried about letting one agent call another. Almost none have Vibe. The post has to pay them back in transferable patterns, not in features.
+- **Secondary reader:** a macOS developer who uses Codex daily and wants a second reviewer. Note for the text: only Codex desktop (patched rc.2, 2026-10-05) and the official MCP client (rc.7, 2026-10-07) were exercised; Codex CLI was not, so the post must not claim it was tested.
+- **Angle:** seven things that have to be true before one coding agent hands work to another (read-only that is checked, edits as patches in a throwaway worktree, no shell, honest stop reasons, runs that survive restarts, replies that name the next call, waiting inside the tool call), each shown with vibe-supervisor as the worked and tested example. The product is the evidence, not the pitch; this also keeps the post inside DEV's AI-assisted rule against promoting your own program.
+- **Promise in one sentence:** here is what I had to make true before I trusted one agent to drive another, how I checked it, and the test that showed one check was a lie.
+- **Post type:** a #showdev post whose core is a reusable checklist with a real failure story. The deep engineering story becomes Part 2.
 
 ## The story that carries it
 
@@ -19,19 +20,28 @@ Two real failures from the target-machine sessions make the post more than a fea
 
 ## Title, tags, cover
 
-Title options, under about 70 characters:
+Title options for the DEV revision, under about 70 characters, each a specific claim, story or payoff rather than an announcement:
 
-1. **Codex + Mistral Vibe over MCP: read-only reviews, edits as patches** (recommended: says what and how, and carries the search terms)
-2. I gave Codex a second code reviewer with read-only access to my repo
-3. What I built before letting one coding agent drive another
+1. **7 things to check before one coding agent hands work to another** (chosen, 64 characters: a payoff every reader can use, a number DEV readers scan for, and it matches the seven numbered sections)
+2. My 100-run agent soak died on run 1. The bug was a lie about a limit (the story hook; strongest for #ai readers, but it hides what the post teaches)
+3. Codex calling Mistral Vibe over MCP: read-only that is actually checked (carries the search terms, but reads as a product post to the majority who have neither)
 
-Description for the social card: "An MIT-licensed MCP server that lets Codex hand reviews and edits to Mistral Vibe. Reviews are read-only; edits come back as patches."
+The search terms (Codex, Mistral Vibe, MCP) live in the description and in the first three paragraphs instead of the title. Earlier options, kept for the 1.0 post: "Codex + Mistral Vibe over MCP: read-only reviews, edits as patches"; "I gave Codex a second code reviewer with read-only access to my repo".
 
-Tags: `showdev, mcp, ai, opensource`. Swap `opensource` for `security` if the guardrails section ends up the strongest part.
+Description for the social card: "Lessons from an MCP server that lets Codex delegate reviews and edits to Mistral Vibe: read-only that is checked, edits as patches, honest stop reasons, and the soak test that died on run 1."
+
+Tags: `showdev, mcp, ai, security`.
+
+- `showdev`: the home tag for a project post; its guidelines ask for community-minded rather than salesy, which the checklist angle satisfies.
+- `mcp`: the smallest tag but the most precise audience; people building MCP servers are the ones who can steal the reply-shape and wait-inside-the-call patterns.
+- `ai`: the reach tag for readers who run agents without building servers.
+- `security` replaces `opensource`: the transferable core is a boundary checklist (verified read-only, no shell, filtered environment, honest failure reporting), which is what the #security readership reads for; `opensource` adds no reader the embed card does not already tell, and `programming` is too broad to earn a place on its tag page. The honesty paragraph (application-level policy, not an OS sandbox) keeps the tag defensible.
 
 Cover, 1000 × 420: the flow Codex → vibe-supervisor → Mistral Vibe ending in a patch file. No OpenAI or Mistral logos; the project is independent and the post says so.
 
 ## Outline
+
+The outline below is draft 2's, kept as the base for the 1.0 post. The DEV revision in [final](final.md) reorders it around the seven checks: TL;DR card; the soak hook; one H2 per check with the vibe-supervisor evidence and its conditions (check 4 holds both turn-limit failures); the architecture diagram; a "Steal this checklist" card; costs; what this is not; try it with rc.8 status; a closing that asks a question of readers who will never install it and announces Part 2.
 
 About 2,300 words (roughly a 9-minute read) with a table of contents. `[author]` marks text only the author can write.
 
