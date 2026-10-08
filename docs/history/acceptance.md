@@ -67,3 +67,7 @@ Original D1 failed for the npm executable symlink despite successful direct Node
 ### rc.8 deadline follow-up
 
 The installed CLI entry fix remains verified. The initial soak worker deadline now fits below the driver budget. Full offline packaging passed 620 TypeScript tests and Python/installed-profile checks. Two hosted edits passed; patches and cleanup were verified. The original silent stall remains unresolved and the full soak failure is preserved. See [follow-up evidence](reviews/rc8-finding-fixes-2026-10-08/Read.md).
+
+### rc.8 instrumented bounded soak
+
+Candidate 8e5c963 passed offline release checks (623 TypeScript tests, 76 Python cases, installed profiles and executable/MCP smoke). The single 60/30/10 pass stopped at 1/100 on max_turn_requests; startup finished within 99 ms and the original silent stall did not reproduce. Cleanup passed. Full hosted soak remains FAIL, ACP scenarios were not reached, and native/platform gates remain separate. [Report](reviews/rc8-stall-diagnostics-2026-10-08/Read.md).
