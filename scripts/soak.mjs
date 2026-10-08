@@ -8,6 +8,8 @@ import { parse, stringify } from 'smol-toml';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 
+import { auditReview } from './soak-review-audit.mjs';
+
 const exec = promisify(execFile);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distRoot = process.env.VIBE_SUPERVISOR_DIST_DIR ? path.resolve(process.env.VIBE_SUPERVISOR_DIST_DIR) : path.join(root, 'dist');
@@ -130,19 +132,19 @@ function shuffle(items, random) {
 
 const BUILT_IN_TASKS = {
   review: [
-    { id: 'review-file', task: 'Review the file {file} for correctness problems and unclear code. Use only the file read and search tools; there is no shell. Read at most three files. Do not modify anything. Reply with a short list of findings.' },
-    { id: 'review-bug-class', task: 'Look for missing error handling, resource leaks and unchecked inputs, starting with the file {file}. Use only the file read and search tools; there is no shell. Read at most five files. Do not modify anything. Report at most five findings with file names.' },
+    { id: 'review-file', task: 'Review {file} for correctness only. Read at most three files using at most three separate read_file calls, and make at most two grep/search calls total. Do not modify files. Stop exploration within these bounds and give a final answer in this same turn: supported findings with file/location and a concrete trigger, or explicitly say no defect found and describe the limited scope reviewed.' },
+    { id: 'review-bug-class', task: 'Check for correctness defects in error handling, resource cleanup and input validation, starting with {file}. Read at most three files using at most three separate read_file calls, and make at most two grep/search calls total. Do not modify files. Stop exploration within these bounds and give a final answer in this same turn: supported findings with file/location and a concrete trigger, or explicitly say no defect found and describe the limited scope reviewed.' },
   ],
   edit: [
     { id: 'edit-add-file', task: 'Create one new file named soak-note-{n}.txt in the repository root containing a single sentence describing this repository. Do not change any other file.' },
     { id: 'edit-one-line', task: 'In the file {file}, change exactly one line to fix a typo or improve a name. Do not change any other line or file. If nothing needs changing, append one short neutral line to the end of that file instead.' },
   ],
   acp: [
-    { id: 'review-file', task: 'Review the file {file} for correctness problems and unclear code. Use only the file read and search tools; there is no shell. Read at most three files. Do not modify anything. Reply with a short list of findings.' },
-    { id: 'review-bug-class', task: 'Look for missing error handling, resource leaks and unchecked inputs, starting with the file {file}. Use only the file read and search tools; there is no shell. Read at most five files. Do not modify anything. Report at most five findings with file names.' },
+    { id: 'review-file', task: 'Review {file} for correctness only. Read at most three files using at most three separate read_file calls, and make at most two grep/search calls total. Do not modify files. Stop exploration within these bounds and give a final answer in this same turn: supported findings with file/location and a concrete trigger, or explicitly say no defect found and describe the limited scope reviewed.' },
+    { id: 'review-bug-class', task: 'Check for correctness defects in error handling, resource cleanup and input validation, starting with {file}. Read at most three files using at most three separate read_file calls, and make at most two grep/search calls total. Do not modify files. Stop exploration within these bounds and give a final answer in this same turn: supported findings with file/location and a concrete trigger, or explicitly say no defect found and describe the limited scope reviewed.' },
   ],
   long: [
-    { id: 'review-long', task: 'Read every source file in this repository one at a time and write a detailed review of each, file by file. Only read files; do not modify anything.' },
+    { id: 'review-long', task: 'Review correctness in at most five source files. Use separate read_file calls, at most five reads total, and no searches. Do not modify files. Then give a final answer in this same turn with supported findings, locations and triggers, or explicitly no defect found with scope limits.' },
   ],
   followup: [
     { id: 'followup-summary', task: 'In two sentences, summarize the most important finding of your review.' },
@@ -520,7 +522,16 @@ async function closeRun(ctx) {
 async function recordUsage(ctx) {
   if (!ctx.runId || ctx.closed || !isAlive(ctx.holder.server?.pid)) return;
   const reply = await call(ctx, 'vibe_result', { run_id: ctx.runId, detail: 'full' });
-  if (reply.ok && reply.data.usage && ctx.turn) ctx.turn.usage = reply.data.usage;
+  if (reply.ok && ctx.turn) {
+    if (reply.data.usage) ctx.turn.usage = reply.data.usage;
+    ctx.publicFinal = typeof reply.data.summary === 'string' && Boolean(reply.data.summary.trim()) && !reply.data.summary.includes('<vibe_stop_event>');
+    if (ctx.job.kind === 'edit' && ctx.turn.stopReason === 'end_turn') {
+      const files = reply.data.changed_files;
+      const expected = ctx.job.taskId === 'edit-add-file' ? ctx.job.task.match(/named (soak-note-[0-9]+\.txt)/)?.[1] : ctx.job.taskId === 'edit-one-line' ? ctx.job.task.match(/In the file ([^,]+),/)?.[1] : undefined;
+      if (!Array.isArray(files) || files.length !== 1 || (expected && files[0] !== expected)) failRun(ctx, 'driver:edit_export_scope', 'Expected exactly the requested single-file edit export.');
+      ctx.rec.editExport = { valid_scope: Array.isArray(files) && files.length === 1 && (!expected || files[0] === expected) };
+    }
+  }
 }
 
 async function continueTurn(ctx, message) {
@@ -579,6 +590,7 @@ async function scenario(ctx) {
   if (job.scenario === 'restart_in_progress') return restartScenario(ctx, first, true);
   const good = judge(ctx, await awaitSettled(ctx, first));
   if (!good) return;
+  if (!(await auditRun(ctx))) return;
   if (job.scenario === 'continue') {
     const second = await continueTurn(ctx, job.followup);
     judge(ctx, second);
@@ -655,9 +667,32 @@ async function executeJob(holder, job, o, index, total) {
   if (o.workDeadline !== undefined && performance.now() >= o.workDeadline) o.totalExpired = true;
   try { await preserveDiagnostics(ctx); } catch { rec.diagnostics = { status: 'unavailable' }; }
   try { await recordUsage(ctx); } catch {}
+  if (ctx.job.kind !== 'edit') await auditRun(ctx);
   try { await closeRun(ctx); } catch (error) { failRun(ctx, 'driver:exception', `close: ${error?.message ?? error}`); }
   finalizeRecord(ctx);
   return rec;
+}
+
+async function auditRun(ctx) {
+  if (!ctx.runId) return false;
+  try {
+    const lifecycle = ['close_mid', 'restart_in_progress'].includes(ctx.job.scenario);
+    await recordUsage(ctx);
+    const counts = await auditReview(ctx.holder.home, ctx.runId, {
+      reads: lifecycle ? 5 : 3, searches: lifecycle ? 0 : 2,
+      requireFinal: !ctx.rec.closeMid?.exercised && ctx.turn?.stopReason === 'end_turn',
+    });
+    if (!ctx.rec.closeMid?.exercised && ctx.turn?.stopReason === 'end_turn' && !ctx.publicFinal && !counts.failures.includes('driver:review_final_answer_missing')) counts.failures.push('driver:review_final_answer_missing');
+    ctx.rec.reviewAudit = counts;
+    for (const code of counts.failures) {
+      if (!ctx.rec.failures.some((item) => item.code === code)) failRun(ctx, code, 'Review acceptance audit failed.');
+    }
+    return counts.failures.length === 0;
+  } catch {
+    ctx.rec.reviewAudit = { status: 'unavailable' };
+    if (!ctx.rec.failures.some((item) => item.code === 'driver:review_audit_unavailable')) failRun(ctx, 'driver:review_audit_unavailable', 'Native review records unavailable or unsafe.');
+    return false;
+  }
 }
 
 async function preserveDiagnostics(ctx) {
