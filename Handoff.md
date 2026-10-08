@@ -143,7 +143,7 @@ Use narrow worker contracts: objective, owned files, acceptance criteria, availa
 
 ### Verify on the target machine, not here (user rule, 2026-10-08)
 
-Nothing is run against a real Vibe on the preparing machine: no hosted runs, no `compat:probe`, no `VIBE_SUPERVISOR_TEST_VIBE_PYTHON`. Work here uses fake backends and reads published Vibe source only (wheels from PyPI unpacked and diffed, hashes checked, never executed). Every behaviour below was derived that way and must be confirmed on the target machine before 1.0:
+Nothing is run against a real Vibe on the preparing machine: no hosted runs, no `compat:probe`, no `VIBE_SUPERVISOR_TEST_VIBE_PYTHON`. Work here uses fake backends and reads published Vibe source only (wheels from PyPI unpacked and diffed, hashes checked, never executed). Every behaviour below was derived that way and must be confirmed on the target machine before 1.0; the full list is in [Vibe interactions under test](#vibe-interactions-under-test):
 
 - **Cumulative ACP turn budget (2.25.8 source reading):** Vibe counts turns per session, not per prompt, keeps the count across `session/load`, and answers every further prompt of an exhausted session with `max_turn_requests` without doing work; only `session/set_config_option max_turns` with a larger value lets it continue. On the target machine: run an ACP edit with a small `max_turns` until `max_turn_requests`; confirm a plain `vibe_continue` is refused with `VSUP_TURN_LIMIT_REACHED` and sends no prompt; confirm `vibe_continue` with a larger `max_turns` resumes useful work; repeat after a supervisor restart (lazy `session/load`).
 - **Raising `max_turns` on a live session:** confirm Vibe accepts `session/set_config_option max_turns` with values from 2 to 50 on a session that already hit its limit. If Vibe rejects it, the run currently ends `failed` with a generic `VSUP_ACP_PROTOCOL_ERROR`; a specific invalid-argument error would be the follow-up. Known limit: if saving the raised limit fails (storage degraded, warned) and the supervisor then restarts, the saved limit is the old one, so a later small raise can be below the turns Vibe has already used and end at once with `max_turn_requests`.
@@ -156,6 +156,72 @@ Nothing is run against a real Vibe on the preparing machine: no hosted runs, no 
 - Timeout: `timeout_seconds` counts from launch, not from submission; time spent queued does not consume it.
 - Gate 3 is redefined: the profile is designed so in-root reads and writes resolve to ALWAYS and everything else to NEVER (see [docs/compatibility.md](docs/compatibility.md)), so real Vibe should not issue permission callbacks. The soak asserts zero permission requests in normal runs plus one deliberate out-of-root read that is refused, rather than exercising callbacks. Nested in-root files resolve to ALWAYS since the B1 fix of 2026-10-05 (see the [handoff history](docs/history/handoff-2026-10-05.md)).
 - Plugin scaffold: `.mcp.json` and `.codex-plugin/` are not packaged and are out of scope for 1.0. `.mcp.json` points at `./dist/cli.js`, which `npm ci` builds through `prepare`; Claude Code also loads it as a project MCP server and ignores the Codex-only `enabled` field.
+
+## Vibe interactions under test
+
+Every point where the supervisor depends on how Vibe 2.25.8 behaves, and the test on the target machine that proves it. None of these can be shown on the preparing machine: there, the fake programmatic and ACP fixtures model each behaviour and the published wheel was only read. A row passes only on evidence from a real Vibe run recorded in the dated evidence folder; a fixture result or a source reading never closes a row. The test IDs refer to the [Phase D test plan](#phase-d-test-plan).
+
+### Launch and environment (both backends)
+
+| Interaction | Why it matters | Required test | Passes when |
+|---|---|---|---|
+| Version and pin check by the launcher shim | Any other Vibe must be refused before a run starts | D4 `compat:probe`; D0 `vibe --version` | Probe checks PASS on 2.25.8; a different version gives `VSUP_VIBE_VERSION_UNSUPPORTED` |
+| `SessionLogger` signatures the shim patches to redact native history | Reasoning and credentials must not reach Vibe's own session files | D4 launcher logger fixture; D6 inspection of the private session records | Fixture exits 0; no reasoning text or key in native history |
+| `--legacy-harness` forced on every launch | 1.0 supports the legacy runtime only | D4, D5, D9 (all runs) | Runs start; the private session metadata shows the legacy runtime |
+| Private `HOME`/`VIBE_HOME`, filtered environment, supervisor agent files for Plan and Accept Edits | No user or project tools, hooks, MCP servers or trust records are inherited | D6; session inventory in D5 and D8 | Inventory lists only the profile's tools; no user configuration appears |
+| Browser-login credential resolved by the shim from the Keychain | Hosted runs must authenticate without a key in the environment or in task text | D5 without `MISTRAL_API_KEY` in the parent; D17 lookup time | Runs authenticate; no key in argv, events, transcripts or logs |
+| Task handed over through a private prompt file (programmatic) | The task must not be visible in `ps` | D6 | No task text in any argv; `task-prompt.txt` is gone once Vibe starts |
+| Model used by a fresh private home | The supervisor pins no model | D5 (record from session metadata) | Model name recorded |
+
+### Tools and permissions
+
+| Interaction | Why it matters | Required test | Passes when |
+|---|---|---|---|
+| Effective tool inventory: `read_file` and `grep` for reviews, plus `write_file` and `edit` for edits | Reviews stay read-only; no shell or network tool exists | Session inventory in D5 and D8 | Exactly those tools; no `bash`, network or MCP tools |
+| Recursive workspace grant and path resolver | Nested in-root files readable; everything else refused | D4 manual resolver check; D13 | Nested in-root ALWAYS; outside path, root `.env` and symlink to outside NEVER, in both modes |
+| Permission requests from Vibe | The profile is designed so normal runs ask nothing | D13; every D18 run | Zero permission requests in normal runs |
+| Vibe's behaviour after a selected reject option, and elicitation forms | Correlated answers must not stall or loop a turn | Only if a request is observed during D13 or D18; record the turn's outcome | Turn continues or ends cleanly after the reject; still unverified if no request occurs |
+
+### Programmatic runs
+
+| Interaction | Why it matters | Required test | Passes when |
+|---|---|---|---|
+| `--output streaming` events become events, transcript and summary | The coordinator reads results from these | D5; D6 event count (P4) | Events in order; summary matches the final answer; no reasoning text |
+| Turn limit: exit 1 with `<vibe_stop_event>Turn limit of N reached</vibe_stop_event>` as the last message and on stderr | Reported as `completed` with `max_turn_requests`, not as a crash | D24 | `completed`, `stop_reason: max_turn_requests`, the partial-result warning, saved `result.json` agrees |
+| Other exits: authentication failure, HTTP 429, missing executable | Each needs its own error code and remedy | D15 for the missing executable; record any auth or 429 failure seen during D18 | `VSUP_VIBE_NOT_FOUND`; observed failures carry `VSUP_AUTH_REQUIRED` or `VSUP_RATE_LIMITED` |
+| Edits produce files in the detached worktree | The patch is the deliverable | D8 | Patch applies to the base; source untouched; `worktree_removed: true` after close |
+
+### ACP runs
+
+| Interaction | Why it matters | Required test | Passes when |
+|---|---|---|---|
+| `initialize`: protocol 1, exact agent version, `loadSession` advertised | Recovery depends on it | D4 | All three as expected |
+| `session/new` in Plan or Accept Edits mode with untrusted project state | Mode decides the tool profile | D9 | Mode and trust verified; tools as in the inventory |
+| `session/set_config_option max_turns` at session start | The turn limit reaches Vibe | D9; D21 | Turn ends at the configured limit |
+| Cumulative turn budget across prompts and across `session/load` | Continuing a spent session does nothing unless the limit is raised | D21 | Plain continue refused with no prompt sent; raised continue does useful work and ends `end_turn`, also after restart |
+| Raising `max_turns` on a spent session | Only supported way to continue it | D21 | Vibe accepts every value used; any rejection recorded with its error |
+| Streaming updates: message chunks, tool calls, thought filtering | Events and transcript stay accurate and private | D9 | Events in order; no thought text persisted |
+| Stop reasons `end_turn`, `max_turn_requests`, `cancelled` | The coordinator trusts a result only on `end_turn` | D9, D10, D21 | Each reported as Vibe sent it |
+| `session/cancel` during a turn | `vibe_close` must stop work promptly | D10 | `cancelled` then `closed`; never `failed`; no Vibe process left |
+| `session/load` after a supervisor restart | Completed and interrupted runs continue without replaying the task | D11 | Lazy reload; the original task is never resent |
+| Idle expiry of a completed session | Bounded resources | D12 | `idle_expired` event; continuation reloads |
+| Worker deadline file re-read by the launcher watchdog | A continued session must not be killed mid-turn by the launch lifetime | D23 | The continuation finishes or times out by the supervisor's own deadline (`VSUP_TIMEOUT`), never `VSUP_BACKEND_CRASHED` |
+
+### Shutdown and clients
+
+| Interaction | Why it matters | Required test | Passes when |
+|---|---|---|---|
+| Client disconnect or quit with idle, running and closed runs | The field report saw a client that did not exit | D22, in the Codex desktop app and the official client | Client and server exit within seconds; no Vibe process, owner lock or worktree left |
+| Two Codex clients with `--isolated` | Separate private directories, adopted after restart | D14 | Both work; `adopted` on restart; earlier run reachable by ID |
+| What the coordinator model sees in a tool reply, and long waits | Result shaping and timeouts assume this | D16 | R1 answered; a 300 s wait returns before the 600 s tool timeout in both clients |
+
+### Volume and platforms
+
+| Interaction | Why it matters | Required test | Passes when |
+|---|---|---|---|
+| 100 mixed runs with the scoped tasks and the 20-turn review default | Stability over volume | D18 | Every soak criterion PASS: no unexpected failure, zero permission requests, no leaks, bounded artifacts, retention keeps recent runs |
+| Clean macOS account, Intel Mac | Installation without leftovers from development | D20 | Same results as D0 to D5 |
+| Vibe 2.26.0 (only if it is to be supported) | It makes the unified harness the default | D4, D5, D8, D9, D13 and the turn-limit run on 2.26.0, after changing the pin | All as above on 2.26.0 |
 
 ## Plan for 1.0 (2026-10-06)
 
@@ -297,8 +363,10 @@ Ground rules:
 | D20 | Repeat D0 to D5 on an Intel Mac and on a clean macOS account. | Same results. | Gate 6 |
 | D21 | ACP turn budget: an ACP edit with `max_turns: 3` driven to `max_turn_requests`; `vibe_continue` without `max_turns`, then with `max_turns` equal to and below the limit; then with `max_turns: 10`; repeat the last step after a supervisor restart. | The first three are refused (`VSUP_TURN_LIMIT_REACHED`, `VSUP_INVALID_ARGUMENT`) and send no prompt (no new Vibe activity); the raised continuation does useful work and ends `end_turn`, also after restart. Record whether Vibe accepted every `set_config_option` value. | Field lesson 1 |
 | D22 | Client shutdown in the Codex desktop app and the official client: quit or disconnect after start, continue and close; while a run is running; with an idle completed ACP session. | The client and the server exit within seconds; no Vibe process (`pgrep -fl vibe`), owner lock or worktree remains. Attribute any residue to its owner before acting. | Field lesson 2 |
+| D23 | ACP worker lifetime: start an ACP review with `timeout_seconds: 60`, let it complete, wait 90 s (inside `worker_idle_ttl_seconds`), then `vibe_continue` with a task that runs longer than a minute. | The continuation finishes, or ends by the supervisor's own deadline as `VSUP_TIMEOUT`; never `VSUP_BACKEND_CRASHED` from the launcher killing the worker. | rc.7 W14 fix |
+| D24 | Programmatic turn limit: a programmatic review of the whole repository with `max_turns: 2`. | `completed` with `stop_reason: max_turn_requests` and the partial-result warning; the saved `result.json` matches the reply; no crash code. | Turn-limit report |
 
-Exit criteria for 1.0: D0 to D18, D21 and D22 pass; D20 passes at least on a clean account; D19 is optional because 1.0 supports the legacy harness only; the release workflow is pushed and its first tagged run produces the release assets. The workflow is ready on the local branch `claude/release-workflow` but cannot be pushed until the push token has the `workflow` scope, so this criterion is blocked independently of the target machine. The plugin scaffold is no longer packaged and stays out of scope for 1.0.
+Exit criteria for 1.0: D0 to D18 and D21 to D24 pass; D20 passes at least on a clean account; D19 is optional because 1.0 supports the legacy harness only; the release workflow is pushed and its first tagged run produces the release assets. The workflow is ready on the local branch `claude/release-workflow` but cannot be pushed until the push token has the `workflow` scope, so this criterion is blocked independently of the target machine. The plugin scaffold is no longer packaged and stays out of scope for 1.0.
 
 Before the session: rc.8 is built and the soak tasks are scoped (review default 20 turns). After it: fix what failed, cut rc.9 or 1.0 accordingly.
 
