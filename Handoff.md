@@ -2,6 +2,29 @@
 
 Status as of **2026-10-08**: implemented release candidate 0.9.0-rc.9, not a production 1.0 certification. rc.8 was tested on the target machine on 2026-10-08 (see [Phase D results](#phase-d-results)): D1, D21 and the D18 soak failed and were followed up, D22 to D24 passed through the official client; the remaining gates are the [Phase D test plan](#phase-d-test-plan). Sections superseded by later work, including the rc.2 target-machine results, the 2026-10-05 cold review, the B1 to B3 blockers and the original field plan, are in [handoff history](docs/history/handoff-2026-10-05.md). Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.9`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
 
+## Where the project stands and what comes next (2026-10-08)
+
+**State.** Release candidate 0.9.0-rc.9 is built (`b74322c`); main (`bcaae53`) adds only soak-driver and documentation changes, which are not in the npm package (`scripts/` is not shipped). The supervisor itself has held up on every real run: no wrong state, leak, lost run or broken boundary has been observed on the target machine. Every Phase D failure so far was either a supervisor reporting bug that is now fixed (turn limit reported as a crash in rc.7, the npm-linked command printing nothing in rc.8), a test-driver problem (deadline below the worker's, tasks too broad for the budget) or model behaviour (searching instead of answering, exceeding instructed read counts, resuming an old objective). One real-run event is unexplained: a worker that stayed silent for 15 minutes; rc.9's progress watchdog now ends such a run with `VSUP_NO_PROGRESS` and records what it last saw.
+
+**What 1.0 still needs, in order** (P0 blocks 1.0):
+
+| # | Priority | Item | Where | Effort |
+|---|---|---|---|---|
+| 1 | P0 | D18 soak on rc.9 from main: two pilot reviews, then the full 60/30/10 pass. Passing means the supervisor criteria; truncation within threshold; task compliance is reported, not gated | Target machine | About 2 hours of runs, roughly USD 2 to 4 of inference at the rates seen so far |
+| 2 | P0 | D21 recorded under the four-file fixture (already passed three times in controlled runs) and D23, D24 repeated on rc.9 | Target machine | Under 30 minutes |
+| 3 | P0 | Codex desktop steps: D2 (user-scope setup), D3 (tool list after restart), D14 (two windows with `--isolated`), D16 (what the model sees, 300 s wait), D22 (quit with running and idle runs) | Target machine, a person at the keyboard | About 30 minutes |
+| 4 | P0 | D20 install on a clean macOS user account | Target machine | About 20 minutes |
+| 5 | P0 | Push the release workflow (needs the token's `workflow` scope), tag `v1.0.0` on main, check the GitHub Release assets | User | Minutes once the token allows |
+| 6 | P1, decision | Intel: test on an Intel Mac or state that 1.0 supports Apple silicon only | User | Decision |
+| 7 | P1, decision | Permission and elicitation callbacks: the profile makes Vibe ask nothing, so they cannot be triggered naturally; keep as a gate or document as a known limit of 1.0 | User | Decision |
+| 8 | P1, decision | Vibe 2.26.0: recommended to stay on 2.25.8 for 1.0 and revalidate in a follow-up ([source comparison](docs/history/reviews/vibe-2.26.0-source-diff-2026-10-08.md)) | User | Decision |
+| 9 | P2 | Article: publish after 1.0 with the soak numbers; fix the GitHub repository description first ([article](article/README.md)) | Author | After 1.0 |
+| 10 | P2 | Part 2 article, Vibe 2.26.0 and unified-harness validation, Linux | Later | After 1.0 |
+
+**How to work on it.** One line of work per file: the target-machine agent bases its branch on main, changes only evidence and the handoff there, and leaves `scripts/soak.mjs` and runtime code to main (the soak driver was edited in parallel on two branches on 2026-10-08 and had to be reconciled). Never run a real Vibe on the preparing machine. Record every soak attempt as a new attempt and keep earlier failures. Do not raise limits, rotate accounts or retry automatically; the user reported EUR 1.20 used of EUR 8.50 on the current account.
+
+**Risks.** The silent stall's cause is unknown (now bounded by the watchdog, not explained). Vibe 2.26.0 calls the legacy harness that 1.0 forces a temporary escape hatch, so a later Vibe will need the unified harness validated (R3). Model behaviour varies run to run, so the soak's truncation and compliance figures will move between attempts.
+
 ## User intent and delivery history
 
 The user authorized implementation of the approved Vibe Supervisor plan using GPT-6 Luna agents, then requested migration into this existing Git repository. Three Luna implementation agents worked on contracts/core tests, backend compatibility/runtime profiles, and security/MCP/CLI/release work. The coordinating agent reviewed integration and ran independent checks.
@@ -126,7 +149,7 @@ Use the Python interpreter from the installed Vibe tool environment (on the orig
 
 The unverified gates are listed once, in [docs/compatibility.md](docs/compatibility.md#unverified-gates), and stay UNVERIFIED until their evidence is recorded: the hosted ACP lifecycle (cancellation, permission and input callbacks, restart and load recovery, idle expiry), the 100-run hosted soak, the effective tool inventory and hosted runs for the current build, macOS Intel and a clean OS account. The [Phase D test plan](#phase-d-test-plan) covers all of them; plugin installation is out of scope for 1.0.
 
-Next work: rc.9 is built (see [release artifacts](#release-artifacts-and-reproduction)); on the target machine rerun D1, D21 with the four-file fixture, the D18 soak as a new attempt, and the Codex desktop steps (D2, D3, D14, D16, D22); decide D20 (Intel, or arm64 only for 1.0) and whether permission callbacks stay a gate; in parallel, push the release workflow (blocked on the push token's `workflow` scope) and decide on Vibe 2.26.0; cut 1.0 after the gates pass. Results so far are in [Phase D results](#phase-d-results).
+Next work: see [where the project stands and what comes next](#where-the-project-stands-and-what-comes-next-2026-10-08). Results so far are in [Phase D results](#phase-d-results).
 
 ### ACP field lessons (2026-10-08)
 
