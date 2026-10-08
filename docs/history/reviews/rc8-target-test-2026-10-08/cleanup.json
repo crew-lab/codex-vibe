@@ -1,0 +1,69 @@
+{
+  "runs": [
+    {
+      "run_id": "f14af053-9ca7-4c21-be13-1cb25c0104aa",
+      "home": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-programmatic",
+      "state": "closed",
+      "pid": 35100,
+      "pid_alive": false,
+      "worker_worktree_present": false,
+      "event_count": 1,
+      "permission_or_input_requests": 0,
+      "stop_reason": "end_turn"
+    },
+    {
+      "run_id": "278dd1aa-a0bd-4bc9-8574-e924f351007d",
+      "home": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-programmatic",
+      "state": "closed",
+      "pid": 34867,
+      "pid_alive": false,
+      "worker_worktree_present": false,
+      "event_count": 1,
+      "permission_or_input_requests": 0,
+      "stop_reason": "end_turn"
+    },
+    {
+      "run_id": "7c12999c-55ef-4476-899f-ddfe55ca0189",
+      "home": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp",
+      "state": "closed",
+      "pid": 35172,
+      "pid_alive": false,
+      "worker_worktree_present": false,
+      "event_count": 22,
+      "permission_or_input_requests": 0,
+      "stop_reason": "end_turn"
+    },
+    {
+      "run_id": "201c41e0-f3ff-44bc-954c-0d584e485405",
+      "home": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp",
+      "state": "closed",
+      "pid": 36869,
+      "pid_alive": false,
+      "worker_worktree_present": false,
+      "event_count": 20,
+      "permission_or_input_requests": 0,
+      "stop_reason": "max_turn_requests"
+    },
+    {
+      "run_id": "c20da652-74e3-4eb9-9e66-5b5874a72991",
+      "home": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp-v2",
+      "state": "closed",
+      "pid": 37188,
+      "pid_alive": false,
+      "worker_worktree_present": false,
+      "event_count": 49,
+      "permission_or_input_requests": 0,
+      "stop_reason": "max_turn_requests"
+    }
+  ],
+  "source_git_status": "",
+  "worktree_list": "worktree /private/tmp/rc8-phase-d-6n1ney4v/workspace\nHEAD 92a7355cc6e64b0821973686af4cc9eb0aace94f\nbranch refs/heads/main\n\n",
+  "owner_locks": [],
+  "owned_server_pids": [
+    34841,
+    35122,
+    36819,
+    37138
+  ],
+  "server_alive": []
+}

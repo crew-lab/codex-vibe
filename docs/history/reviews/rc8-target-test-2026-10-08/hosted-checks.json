@@ -1,0 +1,495 @@
+[
+  {
+    "step": "tools-programmatic",
+    "time": "2026-10-08T09:23:06.979Z",
+    "tools": [
+      "vibe_review_start",
+      "vibe_edit_start",
+      "vibe_status",
+      "vibe_result",
+      "vibe_close"
+    ],
+    "server_pid": 34841,
+    "home": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-programmatic"
+  },
+  {
+    "step": "started",
+    "time": "2026-10-08T09:23:24.867Z",
+    "run_id": "278dd1aa-a0bd-4bc9-8574-e924f351007d",
+    "kind": "review",
+    "reply": {
+      "run_id": "278dd1aa-a0bd-4bc9-8574-e924f351007d",
+      "state": "completed",
+      "backend": "programmatic",
+      "mode": "review",
+      "source_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "worker_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "created_at": "2026-10-08T09:23:06.982Z",
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done.",
+      "result": {
+        "run_id": "278dd1aa-a0bd-4bc9-8574-e924f351007d",
+        "state": "completed",
+        "backend": "programmatic",
+        "stop_reason": "end_turn",
+        "summary": "No, add does not compute a sum.",
+        "warnings": [],
+        "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done.",
+        "integrity": {
+          "status": "verified",
+          "write_tool_observed": false
+        },
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-programmatic/runs/278dd1aa-a0bd-4bc9-8574-e924f351007d/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-programmatic/runs/278dd1aa-a0bd-4bc9-8574-e924f351007d/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "settled",
+    "time": "2026-10-08T09:23:24.869Z",
+    "run_id": "278dd1aa-a0bd-4bc9-8574-e924f351007d",
+    "reply": {
+      "run_id": "278dd1aa-a0bd-4bc9-8574-e924f351007d",
+      "state": "completed",
+      "backend": "programmatic",
+      "last_seq": 1,
+      "next_after_seq": 1,
+      "events": [
+        {
+          "seq": 1,
+          "type": "message"
+        }
+      ],
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done.",
+      "result": {
+        "run_id": "278dd1aa-a0bd-4bc9-8574-e924f351007d",
+        "state": "completed",
+        "backend": "programmatic",
+        "stop_reason": "end_turn",
+        "summary": "No, add does not compute a sum.",
+        "warnings": [],
+        "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done.",
+        "integrity": {
+          "status": "verified",
+          "write_tool_observed": false
+        },
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-programmatic/runs/278dd1aa-a0bd-4bc9-8574-e924f351007d/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-programmatic/runs/278dd1aa-a0bd-4bc9-8574-e924f351007d/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "closed",
+    "time": "2026-10-08T09:23:24.884Z",
+    "run_id": "278dd1aa-a0bd-4bc9-8574-e924f351007d",
+    "reply": {
+      "run_id": "278dd1aa-a0bd-4bc9-8574-e924f351007d",
+      "state": "closed",
+      "next_action": "The run is closed; start a new run for more work.",
+      "worktree_removed": false
+    }
+  },
+  {
+    "step": "D5-cold-PASS",
+    "time": "2026-10-08T09:23:24.885Z",
+    "run_id": "278dd1aa-a0bd-4bc9-8574-e924f351007d"
+  },
+  {
+    "step": "started",
+    "time": "2026-10-08T09:23:29.918Z",
+    "run_id": "f14af053-9ca7-4c21-be13-1cb25c0104aa",
+    "kind": "review",
+    "reply": {
+      "run_id": "f14af053-9ca7-4c21-be13-1cb25c0104aa",
+      "state": "completed",
+      "backend": "programmatic",
+      "mode": "review",
+      "source_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "worker_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "created_at": "2026-10-08T09:23:24.885Z",
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done.",
+      "result": {
+        "run_id": "f14af053-9ca7-4c21-be13-1cb25c0104aa",
+        "state": "completed",
+        "backend": "programmatic",
+        "stop_reason": "end_turn",
+        "summary": "No, add does not compute a sum; it returns the difference of its arguments.",
+        "warnings": [],
+        "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done.",
+        "integrity": {
+          "status": "verified",
+          "write_tool_observed": false
+        },
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-programmatic/runs/f14af053-9ca7-4c21-be13-1cb25c0104aa/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-programmatic/runs/f14af053-9ca7-4c21-be13-1cb25c0104aa/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "settled",
+    "time": "2026-10-08T09:23:29.919Z",
+    "run_id": "f14af053-9ca7-4c21-be13-1cb25c0104aa",
+    "reply": {
+      "run_id": "f14af053-9ca7-4c21-be13-1cb25c0104aa",
+      "state": "completed",
+      "backend": "programmatic",
+      "last_seq": 1,
+      "next_after_seq": 1,
+      "events": [
+        {
+          "seq": 1,
+          "type": "message"
+        }
+      ],
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done.",
+      "result": {
+        "run_id": "f14af053-9ca7-4c21-be13-1cb25c0104aa",
+        "state": "completed",
+        "backend": "programmatic",
+        "stop_reason": "end_turn",
+        "summary": "No, add does not compute a sum; it returns the difference of its arguments.",
+        "warnings": [],
+        "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done.",
+        "integrity": {
+          "status": "verified",
+          "write_tool_observed": false
+        },
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-programmatic/runs/f14af053-9ca7-4c21-be13-1cb25c0104aa/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-programmatic/runs/f14af053-9ca7-4c21-be13-1cb25c0104aa/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "closed",
+    "time": "2026-10-08T09:23:29.935Z",
+    "run_id": "f14af053-9ca7-4c21-be13-1cb25c0104aa",
+    "reply": {
+      "run_id": "f14af053-9ca7-4c21-be13-1cb25c0104aa",
+      "state": "closed",
+      "next_action": "The run is closed; start a new run for more work.",
+      "worktree_removed": false
+    }
+  },
+  {
+    "step": "D5-warm-PASS",
+    "time": "2026-10-08T09:23:29.936Z",
+    "run_id": "f14af053-9ca7-4c21-be13-1cb25c0104aa"
+  },
+  {
+    "step": "programmatic-shutdown",
+    "time": "2026-10-08T09:23:29.941Z",
+    "server_pid": 34841,
+    "exit_ms": 5,
+    "handles": [
+      "ChildProcess"
+    ]
+  },
+  {
+    "step": "tools-acp",
+    "time": "2026-10-08T09:23:30.050Z",
+    "tools": [
+      "vibe_review_start",
+      "vibe_edit_start",
+      "vibe_status",
+      "vibe_continue",
+      "vibe_respond",
+      "vibe_result",
+      "vibe_close"
+    ],
+    "server_pid": 35122,
+    "home": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp"
+  },
+  {
+    "step": "started",
+    "time": "2026-10-08T09:23:35.067Z",
+    "run_id": "7c12999c-55ef-4476-899f-ddfe55ca0189",
+    "kind": "edit",
+    "reply": {
+      "run_id": "7c12999c-55ef-4476-899f-ddfe55ca0189",
+      "state": "completed",
+      "backend": "acp",
+      "mode": "edit",
+      "source_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "worker_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/worktrees/7c12999c-55ef-4476-899f-ddfe55ca0189",
+      "created_at": "2026-10-08T09:23:30.052Z",
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+      "base_ref": "HEAD",
+      "result": {
+        "run_id": "7c12999c-55ef-4476-899f-ddfe55ca0189",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "end_turn",
+        "summary": "Vibe completed the delegated task.",
+        "warnings": [],
+        "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/worktrees/7c12999c-55ef-4476-899f-ddfe55ca0189",
+        "changed_files": [
+          "budget-initial.txt"
+        ],
+        "changed_files_total": 1,
+        "diff_stat": " budget-initial.txt | 1 +\n 1 file changed, 1 insertion(+)\n",
+        "artifacts": [
+          {
+            "name": "diff.patch",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/runs/7c12999c-55ef-4476-899f-ddfe55ca0189/artifacts/diff.patch"
+          },
+          {
+            "name": "diff.stat",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/runs/7c12999c-55ef-4476-899f-ddfe55ca0189/artifacts/diff.stat"
+          },
+          {
+            "name": "changed-files.json",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/runs/7c12999c-55ef-4476-899f-ddfe55ca0189/artifacts/changed-files.json"
+          },
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/runs/7c12999c-55ef-4476-899f-ddfe55ca0189/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/runs/7c12999c-55ef-4476-899f-ddfe55ca0189/events.ndjson"
+          }
+        ],
+        "patch": "diff --git a/budget-initial.txt b/budget-initial.txt\nnew file mode 100644\nindex 0000000..a80cd70\n--- /dev/null\n+++ b/budget-initial.txt\n@@ -0,0 +1 @@\n+synthetic budget test\n\\ No newline at end of file\n"
+      }
+    }
+  },
+  {
+    "step": "settled",
+    "time": "2026-10-08T09:23:35.069Z",
+    "run_id": "7c12999c-55ef-4476-899f-ddfe55ca0189",
+    "reply": {
+      "run_id": "7c12999c-55ef-4476-899f-ddfe55ca0189",
+      "state": "completed",
+      "backend": "acp",
+      "last_seq": 22,
+      "next_after_seq": 22,
+      "events": [
+        {
+          "seq": 1,
+          "type": "usage"
+        },
+        {
+          "seq": 2,
+          "type": "usage"
+        },
+        {
+          "seq": 3,
+          "type": "user_message_chunk"
+        },
+        {
+          "seq": 4,
+          "type": "session_info_update",
+          "title": "This is a synthetic turn-budget test. Use only file tools. Read src/nested/arithmetic.py, README.md and .gitignore with three separate read_file calls, then cre"
+        },
+        {
+          "seq": 5,
+          "type": "available_commands_update"
+        },
+        {
+          "seq": 6,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 7,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 8,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 9,
+          "type": "tool_call_update",
+          "title": "Reading src/nested/arithmetic.py",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 10,
+          "type": "usage"
+        },
+        {
+          "seq": 11,
+          "type": "tool_call_update",
+          "title": "Reading README.md",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 12,
+          "type": "tool_call_update",
+          "title": "Reading .gitignore",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 13,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 14,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 15,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 16,
+          "type": "tool_call",
+          "title": "write_file",
+          "kind": "edit",
+          "status": "in_progress"
+        },
+        {
+          "seq": 17,
+          "type": "tool_call_update",
+          "title": "Writing budget-initial.txt",
+          "kind": "edit",
+          "status": "in_progress"
+        },
+        {
+          "seq": 18,
+          "type": "usage"
+        },
+        {
+          "seq": 19,
+          "type": "tool_call_update",
+          "kind": "edit",
+          "status": "completed"
+        },
+        {
+          "seq": 20,
+          "type": "usage"
+        },
+        {
+          "seq": 21,
+          "type": "usage"
+        },
+        {
+          "seq": 22,
+          "type": "message"
+        }
+      ],
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+      "result": {
+        "run_id": "7c12999c-55ef-4476-899f-ddfe55ca0189",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "end_turn",
+        "summary": "Vibe completed the delegated task.",
+        "warnings": [],
+        "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/worktrees/7c12999c-55ef-4476-899f-ddfe55ca0189",
+        "changed_files": [
+          "budget-initial.txt"
+        ],
+        "changed_files_total": 1,
+        "diff_stat": " budget-initial.txt | 1 +\n 1 file changed, 1 insertion(+)\n",
+        "artifacts": [
+          {
+            "name": "diff.patch",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/runs/7c12999c-55ef-4476-899f-ddfe55ca0189/artifacts/diff.patch"
+          },
+          {
+            "name": "diff.stat",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/runs/7c12999c-55ef-4476-899f-ddfe55ca0189/artifacts/diff.stat"
+          },
+          {
+            "name": "changed-files.json",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/runs/7c12999c-55ef-4476-899f-ddfe55ca0189/artifacts/changed-files.json"
+          },
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/runs/7c12999c-55ef-4476-899f-ddfe55ca0189/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-acp/runs/7c12999c-55ef-4476-899f-ddfe55ca0189/events.ndjson"
+          }
+        ],
+        "patch": "diff --git a/budget-initial.txt b/budget-initial.txt\nnew file mode 100644\nindex 0000000..a80cd70\n--- /dev/null\n+++ b/budget-initial.txt\n@@ -0,0 +1 @@\n+synthetic budget test\n\\ No newline at end of file\n"
+      }
+    }
+  },
+  {
+    "step": "FAIL",
+    "time": "2026-10-08T09:23:35.069Z",
+    "message": "Error: D21 fixture did not reach cap"
+  },
+  {
+    "step": "closed",
+    "time": "2026-10-08T09:23:35.377Z",
+    "run_id": "7c12999c-55ef-4476-899f-ddfe55ca0189",
+    "reply": {
+      "run_id": "7c12999c-55ef-4476-899f-ddfe55ca0189",
+      "state": "closed",
+      "next_action": "The run is closed; start a new run for more work.",
+      "worktree_removed": true
+    }
+  },
+  {
+    "step": "final-client-shutdown",
+    "time": "2026-10-08T09:23:35.381Z",
+    "server_pid": 35122,
+    "exit_ms": 3,
+    "handles": [
+      "ChildProcess"
+    ]
+  }
+]

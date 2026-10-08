@@ -1,0 +1,82 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index e0c307b..c9a25ae 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,9 @@
+ # Changelog
+ 
++## Unreleased
++
++- Fix the npm-installed executable silently exiting when invoked through its symlink. The CLI now resolves the entry path before checking whether to run, and offline package smoke exercises the installed executable directly. Module imports remain inactive.
++
+ ## 0.9.0-rc.8
+ 
+ - `vibe_continue` takes an optional `max_turns` (1 to 50, no default). Vibe counts turns cumulatively per session, so a run whose last turn ended with `max_turn_requests` could never make progress; such a continuation is now rejected with the new `VSUP_TURN_LIMIT_REACHED` before anything reaches Vibe unless `max_turns` exceeds the run's current limit. The new limit is saved on the run and sent to the ACP session before the prompt, on a live session and after a lazy load. The turn-limit summary and `next_action` no longer suggest a plain continue, and a programmatic run is told to start a new run instead. `max_turns` on `vibe_continue` is the session's cumulative ceiling: a lower value is rejected with `VSUP_INVALID_ARGUMENT`, and at 50 the error says the session cannot be extended. An accepted continuation clears the previous stop reason so an interrupted one stays continuable, and a storage fault while saving the raised limit no longer leaves the run `running` with no prompt sent. A programmatic child whose stderr exceeds the event limit now fails the run instead of leaving it running until the deadline.
+diff --git a/docs/functionality.md b/docs/functionality.md
+index 4854ee7..797e6d2 100644
+--- a/docs/functionality.md
++++ b/docs/functionality.md
+@@ -128,3 +128,7 @@ For pinned Vibe 2.25.8, a programmatic turn-limit stop exits with code 1 rather
+ For an ACP run, Vibe counts turns cumulatively per session: the budget is never reset by a new `session/prompt` and survives `session/load`, so once a turn ends with `max_turn_requests` every further prompt in that session ends the same way without doing work. `vibe_continue` therefore rejects such a run with `VSUP_TURN_LIMIT_REACHED`, before sending anything to Vibe, unless it passes `max_turns` greater than the run's current limit; the supervisor stores the new limit in the run record and sends `session/set_config_option max_turns` before the prompt, on a live session and after a lazy `session/load`. The value is the session's cumulative ceiling, not an increment, so a value below the current limit is rejected with `VSUP_INVALID_ARGUMENT`; an equal value is accepted only when the last stop was not `max_turn_requests`. At a limit of 50 the session cannot be extended and the caller must start a new run. Accepting a continuation clears the previous turn's stop reason, so a continuation interrupted by a restart leaves the run plainly continuable. A `max_turns` on any other continuation is applied the same way, and a storage fault while saving it degrades like any other state save instead of stalling the run. A programmatic run never offers `vibe_continue`; its guidance is a new run with a larger `max_turns`. A programmatic child whose stderr exceeds the event limit fails the run with `VSUP_OUTPUT_LIMIT`, as stdout overflow does. `next_action` for such a run offers a larger `max_turns` or a new run, never a plain continue.
+ 
+ Saved `result.json` includes the same structured `error` as the run record when settlement fails or is cancelled, including errors discovered during artifact finalization. Its error fields are filtered by the existing persistence sanitizer. Successful results omit `error`.
++
++## CLI executable entry point
++
++The npm-installed `vibe-supervisor` executable and `node /absolute/path/to/dist/cli.js` both run the CLI. The executable resolves its npm symlink before deciding whether it is the entry module; importing the CLI module does not execute a command or start a server. Offline installed-package smoke checks the actual npm executable's version, help, initialization and MCP startup.
+diff --git a/scripts/smoke-install.mjs b/scripts/smoke-install.mjs
+index d299955..3480444 100644
+--- a/scripts/smoke-install.mjs
++++ b/scripts/smoke-install.mjs
+@@ -25,19 +25,20 @@ try {
+   run('npm', ['--cache', cache, 'install', '--ignore-scripts', '--offline', '--prefix', prefix, tarball], { cwd: prefix });
+   const installedRoot = path.join(prefix, 'node_modules', 'vibe-supervisor');
+   const cli = path.join(installedRoot, 'dist', 'cli.js');
++  const executable = path.join(prefix, 'node_modules', '.bin', 'vibe-supervisor');
+   const manifest = JSON.parse(await readFile(path.join(installedRoot, 'package.json'), 'utf8'));
+-  const version = run(process.execPath, [cli, '--version']).trim();
++  const version = run(executable, ['--version']).trim();
+   if (version !== manifest.version) throw new Error('Installed CLI version check failed.');
+   await access(path.join(installedRoot, 'dist', 'backends', 'runtime', 'vibe_supervisor_launcher.py'));
+-  if (!run(process.execPath, [cli, '--help']).includes('serve --stdio')) throw new Error('Installed CLI help check failed.');
++  if (!run(executable, ['--help']).includes('serve --stdio')) throw new Error('Installed CLI help check failed.');
+ 
+   // Exercise the installed stdio process and official client without starting a backend run.
+-  run(process.execPath, [cli, 'init']);
++  run(executable, ['init']);
+   const configuredBackend = (await readFile(path.join(env.VIBE_SUPERVISOR_HOME, 'config.toml'), 'utf8')).match(/^backend\s*=\s*"(\w+)"/m)?.[1] ?? 'programmatic';
+   const expectedTools = configuredBackend === 'programmatic' ? 5 : 7;
+   const { Client } = await import('@modelcontextprotocol/client');
+   const { StdioClientTransport } = await import('@modelcontextprotocol/client/stdio');
+-  const transport = new StdioClientTransport({ command: process.execPath, args: [cli, 'serve', '--stdio'], env, stderr: 'pipe' });
++  const transport = new StdioClientTransport({ command: executable, args: ['serve', '--stdio'], env, stderr: 'pipe' });
+   const client = new Client({ name: 'vibe-supervisor-release-smoke', version: manifest.version });
+   try {
+     await client.connect(transport);
+@@ -63,5 +64,5 @@ try {
+   } finally {
+     await client.close();
+   }
+-  process.stdout.write(JSON.stringify({ status: 'PASS', package: manifest.name, version: manifest.version, isolatedHome: true, runtimeShim: 'present', installedMcpInitializeAndListTools: 'PASS', eofShutdown: 'PASS', concurrentIsolatedMcp: 'PASS' }) + '\n');
++  process.stdout.write(JSON.stringify({ status: 'PASS', package: manifest.name, version: manifest.version, isolatedHome: true, installedCliExecutable: 'PASS', runtimeShim: 'present', installedMcpInitializeAndListTools: 'PASS', eofShutdown: 'PASS', concurrentIsolatedMcp: 'PASS' }) + '\n');
+ } finally { await rm(tmpRoot, { recursive: true, force: true }); }
+diff --git a/src/cli.ts b/src/cli.ts
+index 330c5b2..2daef3f 100644
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env node
+-import { lstat, open, readFile, readdir } from 'node:fs/promises';
++import { lstat, open, readFile, readdir, realpath } from 'node:fs/promises';
+ import path from 'node:path';
+ import { pathToFileURL } from 'node:url';
+ import { constants as fsConstants } from 'node:fs';
+@@ -186,6 +186,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
+   }
+ }
+ 
+-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
++const entryPath = process.argv[1] ? await realpath(path.resolve(process.argv[1])).catch(() => undefined) : undefined;
++if (entryPath && import.meta.url === pathToFileURL(entryPath).href) {
+   void runCli();
+ }

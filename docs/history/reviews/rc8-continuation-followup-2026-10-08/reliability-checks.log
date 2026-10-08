@@ -1,0 +1,12 @@
+tools-programmatic {"tools":["vibe_review_start","vibe_edit_start","vibe_status","vibe_result","vibe_close"],"server_pid":39634,"home":"/private/tmp/rc8-phase-d-6n1ney4v/reliability-programmatic"}
+started {"run_id":"dee12e6e-beda-4ee5-9205-7e0b6aad3000","kind":"review","reply":{"run_id":"dee12e6e-beda-4ee5-9205-7e0b6aad3000","state":"completed","backend":"programmatic","mode":"revie
+settled {"run_id":"dee12e6e-beda-4ee5-9205-7e0b6aad3000","reply":{"run_id":"dee12e6e-beda-4ee5-9205-7e0b6aad3000","state":"completed","backend":"programmatic","last_seq":2,"next_after_seq"
+closed {"run_id":"dee12e6e-beda-4ee5-9205-7e0b6aad3000","reply":{"run_id":"dee12e6e-beda-4ee5-9205-7e0b6aad3000","state":"closed","next_action":"The run is closed; start a new run for mor
+D24-PASS {"run_id":"dee12e6e-beda-4ee5-9205-7e0b6aad3000","result":{"run_id":"dee12e6e-beda-4ee5-9205-7e0b6aad3000","state":"completed","backend":"programmatic","stop_reason":"max_turn_requ
+D24-shutdown {"server_pid":39634,"exit_ms":4,"handles":["ChildProcess"]}
+tools-acp {"tools":["vibe_review_start","vibe_edit_start","vibe_status","vibe_continue","vibe_respond","vibe_result","vibe_close"],"server_pid":39665,"home":"/private/tmp/rc8-phase-d-6n1ney4
+started-async {"reply":{"run_id":"5e59d165-ca99-4669-992d-adc77c8734ac","state":"starting","backend":"acp","mode":"review","source_workspace":"/private/tmp/rc8-phase-d-6n1ney4v/workspace","worke
+FAIL {"message":"Error: No live event observed"}
+closed {"run_id":"5e59d165-ca99-4669-992d-adc77c8734ac","reply":{"run_id":"5e59d165-ca99-4669-992d-adc77c8734ac","state":"closed","next_action":"The run is closed; start a new run for mor
+cleanup-error {"run_id":"5e59d165-ca99-4669-992d-adc77c8734ac","message":"Error: Worktree not removed"}
+final-reliability-shutdown {"server_pid":39665,"exit_ms":4,"handles":["ChildProcess"]}

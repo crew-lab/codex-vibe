@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+  "state": "failed",
+  "backend": "acp",
+  "summary": "Vibe run ended before normal completion.",
+  "workspace": {
+    "source": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+    "worker": "/private/tmp/rc8-phase-d-6n1ney4v/workspace"
+  },
+  "artifacts": [
+    {
+      "name": "transcript.md",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/89b1295d-0151-48f2-aab9-824fdb611220/transcript.md",
+      "sha256": "126840bd32eef6c3b630e9bec9150b5da78b60b7001603235fc1f3a50a285c7d",
+      "bytes": 58,
+      "media_type": "text/markdown"
+    },
+    {
+      "name": "events.ndjson",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/89b1295d-0151-48f2-aab9-824fdb611220/events.ndjson",
+      "sha256": "d7e14a2989dac82cd7a8a4564cf163bb5528e6b531c4af19119e6e604091f123",
+      "bytes": 10939,
+      "media_type": "application/x-ndjson"
+    }
+  ],
+  "changed_files": [],
+  "error": {
+    "code": "VSUP_TIMEOUT",
+    "message": "The run exceeded its configured timeout.",
+    "remediation": "Increase the timeout or simplify the task, then start a new run.",
+    "retryable": false
+  },
+  "warnings": [],
+  "integrity": {
+    "status": "verified",
+    "write_tool_observed": false
+  }
+}

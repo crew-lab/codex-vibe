@@ -1,0 +1,1063 @@
+[
+  {
+    "step": "tools-acp",
+    "time": "2026-10-08T09:31:12.055Z",
+    "tools": [
+      "vibe_review_start",
+      "vibe_edit_start",
+      "vibe_status",
+      "vibe_continue",
+      "vibe_respond",
+      "vibe_result",
+      "vibe_close"
+    ],
+    "server_pid": 38328,
+    "home": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic"
+  },
+  {
+    "step": "started",
+    "time": "2026-10-08T09:31:18.643Z",
+    "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+    "kind": "edit",
+    "reply": {
+      "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+      "state": "completed",
+      "backend": "acp",
+      "mode": "edit",
+      "source_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "worker_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+      "created_at": "2026-10-08T09:31:12.058Z",
+      "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+      "base_ref": "HEAD",
+      "result": {
+        "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "max_turn_requests",
+        "summary": "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so continue with vibe_continue only with a larger max_turns, or start a new run.",
+        "warnings": [
+          "Vibe stopped with stop reason max_turn_requests instead of end_turn; the result may be incomplete."
+        ],
+        "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "diff.patch",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/artifacts/diff.patch"
+          },
+          {
+            "name": "diff.stat",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/artifacts/diff.stat"
+          },
+          {
+            "name": "changed-files.json",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/artifacts/changed-files.json"
+          },
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "settled",
+    "time": "2026-10-08T09:31:18.644Z",
+    "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+    "reply": {
+      "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+      "state": "completed",
+      "backend": "acp",
+      "last_seq": 20,
+      "next_after_seq": 20,
+      "events": [
+        {
+          "seq": 1,
+          "type": "usage"
+        },
+        {
+          "seq": 2,
+          "type": "usage"
+        },
+        {
+          "seq": 3,
+          "type": "user_message_chunk"
+        },
+        {
+          "seq": 4,
+          "type": "session_info_update",
+          "title": "Synthetic budget test. Read budget-chain/start.txt with read_file and follow each Next file pointer with a separate read_file call learned from the preceding re"
+        },
+        {
+          "seq": 5,
+          "type": "available_commands_update"
+        },
+        {
+          "seq": 6,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 7,
+          "type": "tool_call_update",
+          "title": "Reading budget-chain/start.txt",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 8,
+          "type": "usage"
+        },
+        {
+          "seq": 9,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 10,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 11,
+          "type": "tool_call_update",
+          "title": "Reading budget-chain/648385e5d4.txt",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 12,
+          "type": "usage"
+        },
+        {
+          "seq": 13,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 14,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 15,
+          "type": "tool_call_update",
+          "title": "Reading budget-chain/8659cda711.txt",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 16,
+          "type": "usage"
+        },
+        {
+          "seq": 17,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 18,
+          "type": "usage"
+        },
+        {
+          "seq": 19,
+          "type": "message"
+        },
+        {
+          "seq": 20,
+          "type": "usage"
+        }
+      ],
+      "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+      "result": {
+        "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "max_turn_requests",
+        "summary": "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so continue with vibe_continue only with a larger max_turns, or start a new run.",
+        "warnings": [
+          "Vibe stopped with stop reason max_turn_requests instead of end_turn; the result may be incomplete."
+        ],
+        "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "diff.patch",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/artifacts/diff.patch"
+          },
+          {
+            "name": "diff.stat",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/artifacts/diff.stat"
+          },
+          {
+            "name": "changed-files.json",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/artifacts/changed-files.json"
+          },
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "settled",
+    "time": "2026-10-08T09:31:20.522Z",
+    "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+    "reply": {
+      "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+      "state": "completed",
+      "backend": "acp",
+      "last_seq": 29,
+      "next_after_seq": 29,
+      "events": [],
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+      "result": {
+        "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "end_turn",
+        "summary": "Vibe completed the delegated task.",
+        "warnings": [],
+        "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+        "changed_files": [
+          "override-result.txt"
+        ],
+        "changed_files_total": 1,
+        "diff_stat": " override-result.txt | 1 +\n 1 file changed, 1 insertion(+)\n",
+        "artifacts": [
+          {
+            "name": "diff.patch",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/artifacts/diff.patch"
+          },
+          {
+            "name": "diff.stat",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/artifacts/diff.stat"
+          },
+          {
+            "name": "changed-files.json",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/artifacts/changed-files.json"
+          },
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/events.ndjson"
+          }
+        ],
+        "patch": "diff --git a/override-result.txt b/override-result.txt\nnew file mode 100644\nindex 0000000..abc5a36\n--- /dev/null\n+++ b/override-result.txt\n@@ -0,0 +1 @@\n+replacement task complete\n"
+      }
+    }
+  },
+  {
+    "step": "explicit-replacement",
+    "time": "2026-10-08T09:31:20.523Z",
+    "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+    "restart": false,
+    "stop_reason": "end_turn",
+    "files": {
+      "override-result.txt": "replacement task complete\n"
+    },
+    "result": {
+      "schema_version": 1,
+      "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+      "state": "completed",
+      "backend": "acp",
+      "stop_reason": "end_turn",
+      "summary": "Vibe completed the delegated task.",
+      "workspace": {
+        "source": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/84d450f0-c99b-45fc-9c20-3bb84a5f7d65"
+      },
+      "artifacts": [
+        {
+          "name": "diff.patch",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/artifacts/diff.patch",
+          "sha256": "267e34ae097d38e57e50078ce14c7361e49fec843cfb2485cedbd37a2f275cf5",
+          "bytes": 180,
+          "media_type": "text/x-diff"
+        },
+        {
+          "name": "diff.stat",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/artifacts/diff.stat",
+          "sha256": "a6722f50f0689c02229e553b77e63877651340ba524dc94fd8c9d002bfc4a3d6",
+          "bytes": 59,
+          "media_type": "text/plain"
+        },
+        {
+          "name": "changed-files.json",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/artifacts/changed-files.json",
+          "sha256": "20d9b5a1675d947b6d8df80d6810ccbba79a18dccd1df3add42f5302a7ec33f0",
+          "bytes": 78,
+          "media_type": "application/json"
+        },
+        {
+          "name": "transcript.md",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/transcript.md",
+          "sha256": "362096e044578791d715cd07e5abf43b422ad62695fff0f7230dc1cc5a4a46b5",
+          "bytes": 131,
+          "media_type": "text/markdown"
+        },
+        {
+          "name": "events.ndjson",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/84d450f0-c99b-45fc-9c20-3bb84a5f7d65/events.ndjson",
+          "sha256": "a2e19061c82b607890a7d90089833bab8904fe80f5f9f40e7123461598d29596",
+          "bytes": 17513,
+          "media_type": "application/x-ndjson"
+        }
+      ],
+      "changed_files": [
+        "override-result.txt"
+      ],
+      "warnings": [],
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done."
+    }
+  },
+  {
+    "step": "closed",
+    "time": "2026-10-08T09:31:20.801Z",
+    "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+    "reply": {
+      "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+      "state": "closed",
+      "next_action": "The run is closed; start a new run for more work.",
+      "worktree_removed": true
+    }
+  },
+  {
+    "step": "started",
+    "time": "2026-10-08T09:31:27.422Z",
+    "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+    "kind": "edit",
+    "reply": {
+      "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+      "state": "completed",
+      "backend": "acp",
+      "mode": "edit",
+      "source_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "worker_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+      "created_at": "2026-10-08T09:31:20.801Z",
+      "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+      "base_ref": "HEAD",
+      "result": {
+        "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "max_turn_requests",
+        "summary": "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so continue with vibe_continue only with a larger max_turns, or start a new run.",
+        "warnings": [
+          "Vibe stopped with stop reason max_turn_requests instead of end_turn; the result may be incomplete."
+        ],
+        "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "diff.patch",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/artifacts/diff.patch"
+          },
+          {
+            "name": "diff.stat",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/artifacts/diff.stat"
+          },
+          {
+            "name": "changed-files.json",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/artifacts/changed-files.json"
+          },
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "settled",
+    "time": "2026-10-08T09:31:27.423Z",
+    "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+    "reply": {
+      "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+      "state": "completed",
+      "backend": "acp",
+      "last_seq": 20,
+      "next_after_seq": 20,
+      "events": [
+        {
+          "seq": 1,
+          "type": "usage"
+        },
+        {
+          "seq": 2,
+          "type": "usage"
+        },
+        {
+          "seq": 3,
+          "type": "user_message_chunk"
+        },
+        {
+          "seq": 4,
+          "type": "session_info_update",
+          "title": "Synthetic budget test. Read short-chain/start.txt with read_file and follow each Next file pointer with a separate read_file call learned from the preceding res"
+        },
+        {
+          "seq": 5,
+          "type": "available_commands_update"
+        },
+        {
+          "seq": 6,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 7,
+          "type": "tool_call_update",
+          "title": "Reading short-chain/start.txt",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 8,
+          "type": "usage"
+        },
+        {
+          "seq": 9,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 10,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 11,
+          "type": "tool_call_update",
+          "title": "Reading short-chain/c9c5f61189.txt",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 12,
+          "type": "usage"
+        },
+        {
+          "seq": 13,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 14,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 15,
+          "type": "tool_call_update",
+          "title": "Reading short-chain/e29ee7f648.txt",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 16,
+          "type": "usage"
+        },
+        {
+          "seq": 17,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 18,
+          "type": "usage"
+        },
+        {
+          "seq": 19,
+          "type": "message"
+        },
+        {
+          "seq": 20,
+          "type": "usage"
+        }
+      ],
+      "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+      "result": {
+        "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "max_turn_requests",
+        "summary": "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so continue with vibe_continue only with a larger max_turns, or start a new run.",
+        "warnings": [
+          "Vibe stopped with stop reason max_turn_requests instead of end_turn; the result may be incomplete."
+        ],
+        "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "diff.patch",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/artifacts/diff.patch"
+          },
+          {
+            "name": "diff.stat",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/artifacts/diff.stat"
+          },
+          {
+            "name": "changed-files.json",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/artifacts/changed-files.json"
+          },
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "settled",
+    "time": "2026-10-08T09:31:32.949Z",
+    "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+    "reply": {
+      "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+      "state": "completed",
+      "backend": "acp",
+      "last_seq": 33,
+      "next_after_seq": 33,
+      "events": [],
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+      "result": {
+        "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "end_turn",
+        "summary": "Vibe completed the delegated task.",
+        "warnings": [],
+        "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+        "changed_files": [
+          "short-result.txt"
+        ],
+        "changed_files_total": 1,
+        "diff_stat": " short-result.txt | 1 +\n 1 file changed, 1 insertion(+)\n",
+        "artifacts": [
+          {
+            "name": "diff.patch",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/artifacts/diff.patch"
+          },
+          {
+            "name": "diff.stat",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/artifacts/diff.stat"
+          },
+          {
+            "name": "changed-files.json",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/artifacts/changed-files.json"
+          },
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/events.ndjson"
+          }
+        ],
+        "patch": "diff --git a/short-result.txt b/short-result.txt\nnew file mode 100644\nindex 0000000..693c5e1\n--- /dev/null\n+++ b/short-result.txt\n@@ -0,0 +1 @@\n+resumed task complete\n"
+      }
+    }
+  },
+  {
+    "step": "minimal-same-objective-live",
+    "time": "2026-10-08T09:31:32.950Z",
+    "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+    "restart": false,
+    "stop_reason": "end_turn",
+    "files": {
+      "short-result.txt": "resumed task complete\n"
+    },
+    "result": {
+      "schema_version": 1,
+      "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+      "state": "completed",
+      "backend": "acp",
+      "stop_reason": "end_turn",
+      "summary": "Vibe completed the delegated task.",
+      "workspace": {
+        "source": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/7eaac95c-8027-46a0-aae4-fb0f759ddbcf"
+      },
+      "artifacts": [
+        {
+          "name": "diff.patch",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/artifacts/diff.patch",
+          "sha256": "727a3d5b75802ea56bf8eb911a3e12366da7f2803ac901f1ee2e45f3c227b05a",
+          "bytes": 167,
+          "media_type": "text/x-diff"
+        },
+        {
+          "name": "diff.stat",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/artifacts/diff.stat",
+          "sha256": "f2a5130a289070176b662e55207ef9be31cc284d86c218f85bfb57cddaca9776",
+          "bytes": 56,
+          "media_type": "text/plain"
+        },
+        {
+          "name": "changed-files.json",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/artifacts/changed-files.json",
+          "sha256": "48f5f63c270788dcea8d3ad8280f1af0e5088b6f176a7e073490130b2d74d520",
+          "bytes": 75,
+          "media_type": "application/json"
+        },
+        {
+          "name": "transcript.md",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/transcript.md",
+          "sha256": "de657c431e72b2bc30b71f7f50523b024d0e80d3c2019a6fc60f7334631ce34e",
+          "bytes": 81,
+          "media_type": "text/markdown"
+        },
+        {
+          "name": "events.ndjson",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/events.ndjson",
+          "sha256": "dc3e9ea8786b29005c7cebc8b7bbedd6391631952979092c96714c5e6fa697d3",
+          "bytes": 20398,
+          "media_type": "application/x-ndjson"
+        }
+      ],
+      "changed_files": [
+        "short-result.txt"
+      ],
+      "warnings": [],
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done."
+    }
+  },
+  {
+    "step": "closed",
+    "time": "2026-10-08T09:31:33.228Z",
+    "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+    "reply": {
+      "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+      "state": "closed",
+      "next_action": "The run is closed; start a new run for more work.",
+      "worktree_removed": true
+    }
+  },
+  {
+    "step": "started",
+    "time": "2026-10-08T09:31:38.202Z",
+    "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+    "kind": "edit",
+    "reply": {
+      "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+      "state": "completed",
+      "backend": "acp",
+      "mode": "edit",
+      "source_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "worker_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+      "created_at": "2026-10-08T09:31:33.228Z",
+      "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+      "base_ref": "HEAD",
+      "result": {
+        "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "max_turn_requests",
+        "summary": "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so continue with vibe_continue only with a larger max_turns, or start a new run.",
+        "warnings": [
+          "Vibe stopped with stop reason max_turn_requests instead of end_turn; the result may be incomplete."
+        ],
+        "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "diff.patch",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/artifacts/diff.patch"
+          },
+          {
+            "name": "diff.stat",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/artifacts/diff.stat"
+          },
+          {
+            "name": "changed-files.json",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/artifacts/changed-files.json"
+          },
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "settled",
+    "time": "2026-10-08T09:31:38.203Z",
+    "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+    "reply": {
+      "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+      "state": "completed",
+      "backend": "acp",
+      "last_seq": 20,
+      "next_after_seq": 20,
+      "events": [
+        {
+          "seq": 1,
+          "type": "usage"
+        },
+        {
+          "seq": 2,
+          "type": "usage"
+        },
+        {
+          "seq": 3,
+          "type": "user_message_chunk"
+        },
+        {
+          "seq": 4,
+          "type": "session_info_update",
+          "title": "Synthetic budget test. Read short-chain/start.txt with read_file and follow each Next file pointer with a separate read_file call learned from the preceding res"
+        },
+        {
+          "seq": 5,
+          "type": "available_commands_update"
+        },
+        {
+          "seq": 6,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 7,
+          "type": "tool_call_update",
+          "title": "Reading short-chain/start.txt",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 8,
+          "type": "usage"
+        },
+        {
+          "seq": 9,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 10,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 11,
+          "type": "tool_call_update",
+          "title": "Reading short-chain/c9c5f61189.txt",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 12,
+          "type": "usage"
+        },
+        {
+          "seq": 13,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 14,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 15,
+          "type": "tool_call_update",
+          "title": "Reading short-chain/e29ee7f648.txt",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 16,
+          "type": "usage"
+        },
+        {
+          "seq": 17,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 18,
+          "type": "usage"
+        },
+        {
+          "seq": 19,
+          "type": "message"
+        },
+        {
+          "seq": 20,
+          "type": "usage"
+        }
+      ],
+      "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+      "result": {
+        "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "max_turn_requests",
+        "summary": "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so continue with vibe_continue only with a larger max_turns, or start a new run.",
+        "warnings": [
+          "Vibe stopped with stop reason max_turn_requests instead of end_turn; the result may be incomplete."
+        ],
+        "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "diff.patch",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/artifacts/diff.patch"
+          },
+          {
+            "name": "diff.stat",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/artifacts/diff.stat"
+          },
+          {
+            "name": "changed-files.json",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/artifacts/changed-files.json"
+          },
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "minimal-same-objective-restart-before-restart",
+    "time": "2026-10-08T09:31:38.351Z",
+    "server_pid": 38328,
+    "exit_ms": 148,
+    "handles": [
+      "ChildProcess"
+    ]
+  },
+  {
+    "step": "tools-acp",
+    "time": "2026-10-08T09:31:38.467Z",
+    "tools": [
+      "vibe_review_start",
+      "vibe_edit_start",
+      "vibe_status",
+      "vibe_continue",
+      "vibe_respond",
+      "vibe_result",
+      "vibe_close"
+    ],
+    "server_pid": 39320,
+    "home": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic"
+  },
+  {
+    "step": "settled",
+    "time": "2026-10-08T09:31:42.762Z",
+    "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+    "reply": {
+      "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+      "state": "completed",
+      "backend": "acp",
+      "last_seq": 34,
+      "next_after_seq": 34,
+      "events": [],
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+      "result": {
+        "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "end_turn",
+        "summary": "Vibe completed the delegated task.",
+        "warnings": [],
+        "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done.",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+        "changed_files": [
+          "short-result.txt"
+        ],
+        "changed_files_total": 1,
+        "diff_stat": " short-result.txt | 1 +\n 1 file changed, 1 insertion(+)\n",
+        "artifacts": [
+          {
+            "name": "diff.patch",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/artifacts/diff.patch"
+          },
+          {
+            "name": "diff.stat",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/artifacts/diff.stat"
+          },
+          {
+            "name": "changed-files.json",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/artifacts/changed-files.json"
+          },
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/events.ndjson"
+          }
+        ],
+        "patch": "diff --git a/short-result.txt b/short-result.txt\nnew file mode 100644\nindex 0000000..693c5e1\n--- /dev/null\n+++ b/short-result.txt\n@@ -0,0 +1 @@\n+resumed task complete\n"
+      }
+    }
+  },
+  {
+    "step": "minimal-same-objective-restart",
+    "time": "2026-10-08T09:31:42.763Z",
+    "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+    "restart": true,
+    "stop_reason": "end_turn",
+    "files": {
+      "short-result.txt": "resumed task complete\n"
+    },
+    "result": {
+      "schema_version": 1,
+      "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+      "state": "completed",
+      "backend": "acp",
+      "stop_reason": "end_turn",
+      "summary": "Vibe completed the delegated task.",
+      "workspace": {
+        "source": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/ce82c536-b897-4dd6-b24a-4c5d01156c2e"
+      },
+      "artifacts": [
+        {
+          "name": "diff.patch",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/artifacts/diff.patch",
+          "sha256": "727a3d5b75802ea56bf8eb911a3e12366da7f2803ac901f1ee2e45f3c227b05a",
+          "bytes": 167,
+          "media_type": "text/x-diff"
+        },
+        {
+          "name": "diff.stat",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/artifacts/diff.stat",
+          "sha256": "f2a5130a289070176b662e55207ef9be31cc284d86c218f85bfb57cddaca9776",
+          "bytes": 56,
+          "media_type": "text/plain"
+        },
+        {
+          "name": "changed-files.json",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/artifacts/changed-files.json",
+          "sha256": "48f5f63c270788dcea8d3ad8280f1af0e5088b6f176a7e073490130b2d74d520",
+          "bytes": 75,
+          "media_type": "application/json"
+        },
+        {
+          "name": "transcript.md",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/transcript.md",
+          "sha256": "2c7a01f0d4d4069e5348b450a9eada66d24b4675f1eaef5b016b5485d9bb3c60",
+          "bytes": 159,
+          "media_type": "text/markdown"
+        },
+        {
+          "name": "events.ndjson",
+          "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/events.ndjson",
+          "sha256": "c8c455d7d60ed5d86feecae7dd3bccb6bfb2de5797c570111168f5a7f96e3138",
+          "bytes": 21692,
+          "media_type": "application/x-ndjson"
+        }
+      ],
+      "changed_files": [
+        "short-result.txt"
+      ],
+      "warnings": [],
+      "next_action": "Check stop_reason and warnings before trusting the result; call vibe_continue for a follow-up or vibe_close when done."
+    }
+  },
+  {
+    "step": "closed",
+    "time": "2026-10-08T09:31:43.053Z",
+    "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+    "reply": {
+      "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+      "state": "closed",
+      "next_action": "The run is closed; start a new run for more work.",
+      "worktree_removed": true
+    }
+  },
+  {
+    "step": "PASS",
+    "time": "2026-10-08T09:31:43.053Z",
+    "scope": "deliberate minimal same-objective D21 live and restart; replacement separately observed"
+  },
+  {
+    "step": "diagnostic-client-shutdown",
+    "time": "2026-10-08T09:31:43.057Z",
+    "server_pid": 39320,
+    "exit_ms": 4,
+    "handles": [
+      "ChildProcess"
+    ]
+  }
+]

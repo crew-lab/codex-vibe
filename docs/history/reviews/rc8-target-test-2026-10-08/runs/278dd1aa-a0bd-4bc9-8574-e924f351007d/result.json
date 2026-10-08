@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "run_id": "278dd1aa-a0bd-4bc9-8574-e924f351007d",
+  "state": "completed",
+  "backend": "programmatic",
+  "stop_reason": "end_turn",
+  "summary": "No, add does not compute a sum.",
+  "workspace": {
+    "source": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+    "worker": "/private/tmp/rc8-phase-d-6n1ney4v/workspace"
+  },
+  "artifacts": [
+    {
+      "name": "transcript.md",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-programmatic/runs/278dd1aa-a0bd-4bc9-8574-e924f351007d/transcript.md",
+      "sha256": "8ffd8f9832e242dcc60f3b6c96c6fec9d606407ddd8228ca0cddc6f2da924ca5",
+      "bytes": 32,
+      "media_type": "text/markdown"
+    },
+    {
+      "name": "events.ndjson",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-programmatic/runs/278dd1aa-a0bd-4bc9-8574-e924f351007d/events.ndjson",
+      "sha256": "33f265b01049a6bca268ae0fe9d3e717b5e07022f73ae8c08adfbabfde8860c9",
+      "bytes": 244,
+      "media_type": "application/x-ndjson"
+    }
+  ],
+  "changed_files": [],
+  "warnings": [],
+  "integrity": {
+    "status": "verified",
+    "write_tool_observed": false
+  }
+}

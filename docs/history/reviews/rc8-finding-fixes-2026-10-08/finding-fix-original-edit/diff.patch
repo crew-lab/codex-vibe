@@ -1,0 +1,8 @@
+diff --git a/soak-note-20.txt b/soak-note-20.txt
+new file mode 100644
+index 0000000..f82f5be
+--- /dev/null
++++ b/soak-note-20.txt
+@@ -0,0 +1 @@
++Synthetic arithmetic fixture repository for testing.
+\ No newline at end of file

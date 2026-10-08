@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+  "state": "completed",
+  "backend": "acp",
+  "stop_reason": "end_turn",
+  "summary": "Vibe completed the delegated task.",
+  "workspace": {
+    "source": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+    "worker": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/7eaac95c-8027-46a0-aae4-fb0f759ddbcf"
+  },
+  "artifacts": [
+    {
+      "name": "diff.patch",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/artifacts/diff.patch",
+      "sha256": "727a3d5b75802ea56bf8eb911a3e12366da7f2803ac901f1ee2e45f3c227b05a",
+      "bytes": 167,
+      "media_type": "text/x-diff"
+    },
+    {
+      "name": "diff.stat",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/artifacts/diff.stat",
+      "sha256": "f2a5130a289070176b662e55207ef9be31cc284d86c218f85bfb57cddaca9776",
+      "bytes": 56,
+      "media_type": "text/plain"
+    },
+    {
+      "name": "changed-files.json",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/artifacts/changed-files.json",
+      "sha256": "48f5f63c270788dcea8d3ad8280f1af0e5088b6f176a7e073490130b2d74d520",
+      "bytes": 75,
+      "media_type": "application/json"
+    },
+    {
+      "name": "transcript.md",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/transcript.md",
+      "sha256": "de657c431e72b2bc30b71f7f50523b024d0e80d3c2019a6fc60f7334631ce34e",
+      "bytes": 81,
+      "media_type": "text/markdown"
+    },
+    {
+      "name": "events.ndjson",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/7eaac95c-8027-46a0-aae4-fb0f759ddbcf/events.ndjson",
+      "sha256": "dc3e9ea8786b29005c7cebc8b7bbedd6391631952979092c96714c5e6fa697d3",
+      "bytes": 20398,
+      "media_type": "application/x-ndjson"
+    }
+  ],
+  "changed_files": [
+    "short-result.txt"
+  ],
+  "warnings": []
+}

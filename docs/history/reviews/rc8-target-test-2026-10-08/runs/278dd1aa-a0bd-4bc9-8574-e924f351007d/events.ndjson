@@ -1,0 +1,1 @@
+{"schema_version":1,"seq":1,"timestamp":"2026-10-08T09:23:24.645Z","run_id":"278dd1aa-a0bd-4bc9-8574-e924f351007d","backend":"programmatic","source":"vibe","type":"message","severity":"info","data":{"text":"No, add does not compute a sum.\n"}}

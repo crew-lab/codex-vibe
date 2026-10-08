@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { lstat, open, readFile, readdir } from 'node:fs/promises';
+import { lstat, open, readFile, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { constants as fsConstants } from 'node:fs';
@@ -186,6 +186,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+const entryPath = process.argv[1] ? await realpath(path.resolve(process.argv[1])).catch(() => undefined) : undefined;
+if (entryPath && import.meta.url === pathToFileURL(entryPath).href) {
   void runCli();
 }

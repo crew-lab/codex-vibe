@@ -28,7 +28,7 @@ const USAGE = `Usage: node scripts/soak.mjs --workspace <repo> [options]
   --server-arg <arg>        Argument for the server command; repeatable (default serve --stdio)
   --wait-seconds N          wait_seconds for vibe_status polls, 1 to 300 (default 180)
   --start-wait N            wait_seconds for the start calls, 0 to 300 (default 5)
-  --run-timeout N           Per run limit in seconds (default 900)
+  --run-timeout N           Driver limit in seconds (default 900); initial worker deadline is at most N-30 for N >= 60
   --stop-on-fail            Stop after the first failed run
   --yes                     Start the hosted runs; without it only the plan is printed
 
@@ -520,7 +520,11 @@ async function continueTurn(ctx, message) {
 async function startRun(ctx) {
   const { job, o } = ctx;
   beginTurn(ctx, 'start');
-  const started = await call(ctx, job.kind === 'edit' ? 'vibe_edit_start' : 'vibe_review_start', { task: job.task, cwd: o.workspace, wait_seconds: o.startWait }, o.startWait);
+  // Leave time for supervisor cancellation/export before the outer driver deadline.
+  // Very short driver-only fault probes cannot fit the MCP minimum (30 seconds).
+  const configured = job.kind === 'edit' ? o.editTimeout : o.reviewTimeout;
+  const timeoutSeconds = o.runTimeout >= 60 ? Math.min(configured, 7200, o.runTimeout - 30) : undefined;
+  const started = await call(ctx, job.kind === 'edit' ? 'vibe_edit_start' : 'vibe_review_start', { task: job.task, cwd: o.workspace, wait_seconds: o.startWait, ...(timeoutSeconds === undefined ? {} : { timeout_seconds: timeoutSeconds }) }, o.startWait);
   if (!started.ok) {
     if (started.code === 'VSUP_WORKSPACE_INVALID') throw new Fatal(`The server rejected the workspace ${o.workspace} (VSUP_WORKSPACE_INVALID). Add it to allowed_workspace_roots in the template config (vibe-supervisor allow <dir>) and run again.`);
     failRun(ctx, started.code, started.message);
@@ -785,6 +789,8 @@ async function main() {
   try { await dist.resolveCanonicalRoot(workspace, templateConfig.allowedWorkspaceRoots); } catch { allowed = false; }
   let git = true;
   try { await exec('git', ['-C', workspace, 'rev-parse', '--git-dir']); } catch { git = false; }
+  o.reviewTimeout = templateConfig.limits.reviewTimeoutSeconds;
+  o.editTimeout = templateConfig.limits.editTimeoutSeconds;
   const preflight = { workspace, allowed, git, templatePath };
   const tasks = await loadTasks(o.tasks);
   const plan = buildPlan({ ...o }, tasks, await candidateFiles(workspace), workspace);

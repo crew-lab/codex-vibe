@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+  "state": "completed",
+  "backend": "acp",
+  "stop_reason": "end_turn",
+  "summary": "Vibe completed the delegated task.",
+  "workspace": {
+    "source": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+    "worker": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/worktrees/ce82c536-b897-4dd6-b24a-4c5d01156c2e"
+  },
+  "artifacts": [
+    {
+      "name": "diff.patch",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/artifacts/diff.patch",
+      "sha256": "727a3d5b75802ea56bf8eb911a3e12366da7f2803ac901f1ee2e45f3c227b05a",
+      "bytes": 167,
+      "media_type": "text/x-diff"
+    },
+    {
+      "name": "diff.stat",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/artifacts/diff.stat",
+      "sha256": "f2a5130a289070176b662e55207ef9be31cc284d86c218f85bfb57cddaca9776",
+      "bytes": 56,
+      "media_type": "text/plain"
+    },
+    {
+      "name": "changed-files.json",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/artifacts/changed-files.json",
+      "sha256": "48f5f63c270788dcea8d3ad8280f1af0e5088b6f176a7e073490130b2d74d520",
+      "bytes": 75,
+      "media_type": "application/json"
+    },
+    {
+      "name": "transcript.md",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/transcript.md",
+      "sha256": "2c7a01f0d4d4069e5348b450a9eada66d24b4675f1eaef5b016b5485d9bb3c60",
+      "bytes": 159,
+      "media_type": "text/markdown"
+    },
+    {
+      "name": "events.ndjson",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/continuation-diagnostic/runs/ce82c536-b897-4dd6-b24a-4c5d01156c2e/events.ndjson",
+      "sha256": "c8c455d7d60ed5d86feecae7dd3bccb6bfb2de5797c570111168f5a7f96e3138",
+      "bytes": 21692,
+      "media_type": "application/x-ndjson"
+    }
+  ],
+  "changed_files": [
+    "short-result.txt"
+  ],
+  "warnings": []
+}

@@ -1,0 +1,16 @@
+tools-programmatic {"tools":["vibe_review_start","vibe_edit_start","vibe_status","vibe_result","vibe_close"],"server_pid":34841,"home":"/private/tmp/rc8-phase-d-6n1ney4v/hosted-programmatic"}
+started {"run_id":"278dd1aa-a0bd-4bc9-8574-e924f351007d","kind":"review","reply":{"run_id":"278dd1aa-a0bd-4bc9-8574-e924f351007d","state":"completed","backend":"programmatic","mode":"revie
+settled {"run_id":"278dd1aa-a0bd-4bc9-8574-e924f351007d","reply":{"run_id":"278dd1aa-a0bd-4bc9-8574-e924f351007d","state":"completed","backend":"programmatic","last_seq":1,"next_after_seq"
+closed {"run_id":"278dd1aa-a0bd-4bc9-8574-e924f351007d","reply":{"run_id":"278dd1aa-a0bd-4bc9-8574-e924f351007d","state":"closed","next_action":"The run is closed; start a new run for mor
+D5-cold-PASS {"run_id":"278dd1aa-a0bd-4bc9-8574-e924f351007d"}
+started {"run_id":"f14af053-9ca7-4c21-be13-1cb25c0104aa","kind":"review","reply":{"run_id":"f14af053-9ca7-4c21-be13-1cb25c0104aa","state":"completed","backend":"programmatic","mode":"revie
+settled {"run_id":"f14af053-9ca7-4c21-be13-1cb25c0104aa","reply":{"run_id":"f14af053-9ca7-4c21-be13-1cb25c0104aa","state":"completed","backend":"programmatic","last_seq":1,"next_after_seq"
+closed {"run_id":"f14af053-9ca7-4c21-be13-1cb25c0104aa","reply":{"run_id":"f14af053-9ca7-4c21-be13-1cb25c0104aa","state":"closed","next_action":"The run is closed; start a new run for mor
+D5-warm-PASS {"run_id":"f14af053-9ca7-4c21-be13-1cb25c0104aa"}
+programmatic-shutdown {"server_pid":34841,"exit_ms":5,"handles":["ChildProcess"]}
+tools-acp {"tools":["vibe_review_start","vibe_edit_start","vibe_status","vibe_continue","vibe_respond","vibe_result","vibe_close"],"server_pid":35122,"home":"/private/tmp/rc8-phase-d-6n1ney4
+started {"run_id":"7c12999c-55ef-4476-899f-ddfe55ca0189","kind":"edit","reply":{"run_id":"7c12999c-55ef-4476-899f-ddfe55ca0189","state":"completed","backend":"acp","mode":"edit","source_wo
+settled {"run_id":"7c12999c-55ef-4476-899f-ddfe55ca0189","reply":{"run_id":"7c12999c-55ef-4476-899f-ddfe55ca0189","state":"completed","backend":"acp","last_seq":22,"next_after_seq":22,"eve
+FAIL {"message":"Error: D21 fixture did not reach cap"}
+closed {"run_id":"7c12999c-55ef-4476-899f-ddfe55ca0189","reply":{"run_id":"7c12999c-55ef-4476-899f-ddfe55ca0189","state":"closed","next_action":"The run is closed; start a new run for mor
+final-client-shutdown {"server_pid":35122,"exit_ms":3,"handles":["ChildProcess"]}
