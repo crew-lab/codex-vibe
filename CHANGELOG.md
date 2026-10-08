@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0-rc.8
 
 - `vibe_continue` takes an optional `max_turns` (1 to 50, no default). Vibe counts turns cumulatively per session, so a run whose last turn ended with `max_turn_requests` could never make progress; such a continuation is now rejected with the new `VSUP_TURN_LIMIT_REACHED` before anything reaches Vibe unless `max_turns` exceeds the run's current limit. The new limit is saved on the run and sent to the ACP session before the prompt, on a live session and after a lazy load. The turn-limit summary and `next_action` no longer suggest a plain continue, and a programmatic run is told to start a new run instead. `max_turns` on `vibe_continue` is the session's cumulative ceiling: a lower value is rejected with `VSUP_INVALID_ARGUMENT`, and at 50 the error says the session cannot be extended. An accepted continuation clears the previous stop reason so an interrupted one stays continuable, and a storage fault while saving the raised limit no longer leaves the run `running` with no prompt sent. A programmatic child whose stderr exceeds the event limit now fails the run instead of leaving it running until the deadline.
 - A programmatic run that reaches Vibe's turn limit is reported as `completed` with `stop_reason: max_turn_requests` and a partial-result warning instead of `VSUP_BACKEND_CRASHED`. It is recognized only when Vibe exits 1 and its final message, its stderr marker and the configured turn count all agree.
