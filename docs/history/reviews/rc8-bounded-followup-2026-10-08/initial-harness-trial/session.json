@@ -1,0 +1,88 @@
+{
+  "server": "/private/tmp/rc8-diagnostic-soak-o3bq8bg_/install/node_modules/.bin/vibe-supervisor",
+  "workspace": "/private/tmp/rc8-phase-d-6n1ney4v/soak-workspace",
+  "elapsed_ms": 11707,
+  "records": [
+    {
+      "step": "tools-programmatic",
+      "tools": [
+        "vibe_review_start",
+        "vibe_edit_start",
+        "vibe_status",
+        "vibe_result",
+        "vibe_close"
+      ],
+      "home": "/private/tmp/rc8-bounded-followup-HQ3rRS/programmatic",
+      "server_pid": 61654
+    },
+    {
+      "step": "start",
+      "run_id": "397bfb73-eb77-4262-b5f1-5c63da276d44",
+      "kind": "review",
+      "max_turns": 8
+    },
+    {
+      "step": "settled",
+      "run_id": "397bfb73-eb77-4262-b5f1-5c63da276d44",
+      "state": "completed",
+      "stop_reason": "end_turn"
+    },
+    {
+      "step": "review-verification",
+      "run_id": "397bfb73-eb77-4262-b5f1-5c63da276d44",
+      "counts": {
+        "read_file": 2,
+        "grep": 0
+      },
+      "integrity": {
+        "status": "verified",
+        "write_tool_observed": false
+      },
+      "transcript": "src/nested/arithmetic.py:2: add() subtracts (a - b) instead of adding.\n"
+    },
+    {
+      "step": "closed",
+      "run_id": "397bfb73-eb77-4262-b5f1-5c63da276d44",
+      "state": "closed",
+      "worktree_removed": false
+    },
+    {
+      "step": "server-exited",
+      "pid": 61654
+    },
+    {
+      "step": "tools-acp",
+      "tools": [
+        "vibe_review_start",
+        "vibe_edit_start",
+        "vibe_status",
+        "vibe_continue",
+        "vibe_respond",
+        "vibe_result",
+        "vibe_close"
+      ],
+      "home": "/private/tmp/rc8-bounded-followup-HQ3rRS/acp",
+      "server_pid": 61744
+    },
+    {
+      "step": "start",
+      "run_id": "e048a0da-8f9e-4f4a-8210-af9cc3735ff0",
+      "kind": "edit",
+      "max_turns": 12
+    },
+    {
+      "step": "FAIL",
+      "message": "Error: No settled result"
+    },
+    {
+      "step": "closed",
+      "run_id": "e048a0da-8f9e-4f4a-8210-af9cc3735ff0",
+      "state": "closed",
+      "worktree_removed": true
+    },
+    {
+      "step": "server-exited",
+      "pid": 61744
+    }
+  ]
+}

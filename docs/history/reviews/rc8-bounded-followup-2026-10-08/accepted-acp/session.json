@@ -1,0 +1,74 @@
+{
+  "server": "/private/tmp/rc8-diagnostic-soak-o3bq8bg_/install/node_modules/.bin/vibe-supervisor",
+  "workspace": "/private/tmp/rc8-phase-d-6n1ney4v/soak-workspace",
+  "elapsed_ms": 10597,
+  "records": [
+    {
+      "step": "accepted-review-retained",
+      "root": "/private/tmp/rc8-bounded-followup-HQ3rRS",
+      "reason": "review already passed; not repeated"
+    },
+    {
+      "step": "tools-acp",
+      "tools": [
+        "vibe_review_start",
+        "vibe_edit_start",
+        "vibe_status",
+        "vibe_continue",
+        "vibe_respond",
+        "vibe_result",
+        "vibe_close"
+      ],
+      "home": "/private/tmp/rc8-bounded-followup-P9jFLN/acp",
+      "server_pid": 62992
+    },
+    {
+      "step": "start",
+      "run_id": "1810c5b3-12e7-424b-9c13-a0ff1fd3c046",
+      "kind": "edit",
+      "max_turns": 12
+    },
+    {
+      "step": "settled",
+      "run_id": "1810c5b3-12e7-424b-9c13-a0ff1fd3c046",
+      "state": "completed",
+      "stop_reason": "end_turn"
+    },
+    {
+      "step": "initial-verification",
+      "run_id": "1810c5b3-12e7-424b-9c13-a0ff1fd3c046",
+      "result": "PASS: scope AST and four numeric cases"
+    },
+    {
+      "step": "settled",
+      "run_id": "1810c5b3-12e7-424b-9c13-a0ff1fd3c046",
+      "state": "completed",
+      "stop_reason": "end_turn"
+    },
+    {
+      "step": "correction-verification",
+      "run_id": "1810c5b3-12e7-424b-9c13-a0ff1fd3c046",
+      "result": "PASS: scope AST and four numeric cases"
+    },
+    {
+      "step": "settled",
+      "run_id": "1810c5b3-12e7-424b-9c13-a0ff1fd3c046",
+      "state": "completed",
+      "stop_reason": "end_turn"
+    },
+    {
+      "step": "closed",
+      "run_id": "1810c5b3-12e7-424b-9c13-a0ff1fd3c046",
+      "state": "closed",
+      "worktree_removed": true
+    },
+    {
+      "step": "server-exited",
+      "pid": 62992
+    },
+    {
+      "step": "PASS",
+      "scope": "bounded review; ACP edit and one correction; inventory and verified closure; no source integration"
+    }
+  ]
+}

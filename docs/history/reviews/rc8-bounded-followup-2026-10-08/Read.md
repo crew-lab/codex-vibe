@@ -1,0 +1,13 @@
+# Bounded Vibe follow-up, 2026-10-08
+
+The explicitly capped review passed: two file reads, zero grep calls, end_turn, verified read-only integrity and a correct final finding that arithmetic.py subtracts instead of adding. The earlier failed review made sixteen distinct grep argument sets; no identical tool-call replay was found. This supports testing tighter final-answer/search instructions, not blaming transport or claiming a universal fix.
+
+A synthetic ACP edit and one same-session correction passed. The worker fixed return a-b to return a+b, then added the requested docstring. Both candidates passed an independent restrictive AST/scope check and four numeric cases (positive, mixed-sign, zero and fractional inputs). Only src/nested/arithmetic.py changed. The final patch was unchanged after the cleanup-inventory turn; the worker reported no scratch files. Its worktree was removed through supervisor close. No patch was applied to the source or real application.
+
+Two preliminary ACP trials encountered coordinator harness errors: a fixed polling-count cutoff expired while events arrived, and a successful edit was wrongly rejected because changed_files filenames were treated as objects. These were corrected and the interrupted trials preserved; neither is recorded as a Vibe product failure. The accepted review was not repeated. The final ACP run completed all three turns (edit, correction, inventory) with end_turn. No turn ceilings were increased: review 8, ACP cumulative 12; each task deadline 90 seconds.
+
+The no-inference diagnostic and watchdog suites passed 25 tests, including snapshot timing, size/privacy limits and parent/deadline handling. This is fixture evidence; no real hosted stall snapshot was exercised.
+
+All four owned runs are closed, workers/owner locks absent and worktrees removed. The synthetic source remains clean. Private runtime homes are retained; no credentials or native histories are copied here. [Verification and cleanup](verification.json) includes whitelisted native cost figures, which are non-authoritative USD values and not the EUR account balance. The user's clarified allowance was EUR1.20 used of EUR8.50; no live balance or account identity was queried and no account rotation occurred.
+
+The full soak remains unpassed and the earlier silent stall remains unresolved. Next: deliberately harden review-task instructions with a search cap/final-answer requirement before deciding on a new soak. These small successes do not certify native desktop, callbacks, clean-account or Intel gates. The test evidence and handoff are preserved on the dedicated branch. No application patch was integrated and no release was cut.
