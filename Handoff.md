@@ -126,9 +126,22 @@ Use the Python interpreter from the installed Vibe tool environment (on the orig
 
 The unverified gates are listed once, in [docs/compatibility.md](docs/compatibility.md#unverified-gates), and stay UNVERIFIED until their evidence is recorded: the hosted ACP lifecycle (cancellation, permission and input callbacks, restart and load recovery, idle expiry), the 100-run hosted soak, the effective tool inventory and hosted runs for the current build, macOS Intel and a clean OS account. The [Phase D test plan](#phase-d-test-plan) covers all of them; plugin installation is out of scope for 1.0.
 
-Next work, in order: cut rc.8 with the turn-limit fix and the review budget of 20, rerun the full D18 soak and the unexercised native-client steps (D2, D3, D14, D16 in the Codex app, D20), push the release workflow (blocked on the push token's `workflow` scope), decide on Vibe 2.26.0, then cut 1.0. Results so far are in [Phase D results](#phase-d-results). A dev.to launch article is planned in [articles/devto/plan.md](articles/devto/plan.md); it is published only after a v1.0.0 GitHub Release exists and Phase D has supplied its numbers, and the GitHub repository description ("Codex ASP client for Mistral Vibe") must be corrected first.
+Next work: cut rc.8 with the turn-limit fix and the review budget of 20, then run the checks below on the target machine; in parallel, push the release workflow (blocked on the push token's `workflow` scope) and decide on Vibe 2.26.0; cut 1.0 after the gates pass. Results so far are in [Phase D results](#phase-d-results).
 
-Standing decisions:
+### ACP field lessons (2026-10-08)
+
+The user-provided deployment report used Supervisor rc.4 with pinned Vibe 2.25.8. It records successful isolated drafting, three correction rounds, patch export and worktree removal, but exhausted-budget continuation made no useful progress and the official client required explicit shutdown. These observations are hypotheses to reproduce on the patched rc.7 package, not proof of current supervisor defects. Independent review caught a denied-invalidation exit-status bug; worker execution claims were not accepted with shell disabled. Keep coordinator ownership of test execution and policy-sensitive acceptance. See [field observations and scope](docs/history/reviews/deployment-acp-lessons-2026-10-08.md).
+
+Run the next checks in this order:
+
+1. **ACP budget and continuation:** use an isolated synthetic fixture and explicit supported limits; reach the turn cap, then attempt one small correction in the same usable session. Record state, stop reason, per-turn/cumulative budget behavior, patch progress and whether continuation executes. Confirm the pinned Vibe contract before changing code. Do not replay an uncertain task, silently increase limits or enable shell/network.
+2. **Client shutdown:** exercise official MCP start/continue/close and connection shutdown with a bounded exit deadline. Record remaining client handles, owned supervisor/worker PIDs, locks and worktrees. Acceptance requires the client to exit and owned resources to settle; attribute any failure to its actual owner before fixing or terminating it. Do not terminate arbitrary saved PIDs.
+3. **Hosted soak:** define a separate task plan using known nested fixture paths and available file tools, then rerun all 60 reviews, 30 edits and 10 ACP scenarios with the 20-turn review default (raised from 12 on 2026-10-07 by user decision) and stop-on-failure. Preserve both earlier broad-task failures. Require normal end_turn finishes, verified integrity and cleanup; partial capped results do not pass.
+4. **Remaining release gates:** after the soak passes, complete native desktop adoption/tool-result visibility/long waits, callbacks/reject behavior, cancellation after generated output, clean-account installation and Intel evidence. Keep missing evidence unverified.
+
+Use narrow worker contracts: objective, owned files, acceptance criteria, available tools and coordinator-run checks. Validate fake executable interception and denied-command/nonzero-exit cases before executing worker-produced deployment-helper tests, with cloud credentials excluded. Existing skills already state the execution boundary; inspect the installed skill and actual prompt before adding duplicate guidance. Session wall time includes coordinator pauses; cached input totals and estimated provider cost do not establish time savings or contribution percentage. A dev.to launch article is planned in [articles/devto/plan.md](articles/devto/plan.md); it is published only after a v1.0.0 GitHub Release exists and Phase D has supplied its numbers, and the GitHub repository description ("Codex ASP client for Mistral Vibe") must be corrected first.
+
+### Standing decisions
 
 - Review integrity: when a review run's source workspace changes during the run, the run completes with a warning instead of failing, and artifacts (transcript, `result.json`) are always finalized first. The read/search tool profile is the actual control, and users legitimately edit during long reviews. Reviewing a snapshot worktree is a possible later option.
 - Timeout: `timeout_seconds` counts from launch, not from submission; time spent queued does not consume it.
@@ -301,6 +314,8 @@ The original 60/30/10 hosted soak was retried with unchanged tasks, seed, worksp
 ### Follow-up decisions (2026-10-07)
 
 The user chose both remedies for the soak blocker. The default review budget `limits.max_turns_review` is now 20, matching edits, because a broad hosted review exhausted 12 turns in 15 to 27 seconds. The soak driver's built-in review tasks now name a starting file, state that only the file read and search tools exist (the hosted transcripts show attempts to call `bash` and repeated filename greps) and cap the files read. The two failed attempts stay recorded as failures; the next soak runs with the new defaults and tasks against rc.8 and is reported as a new attempt, not a rerun of the original plan.
+
+**Delivery status:** the rc.7 fixes, handoff and dated test evidence were committed as `042f641` on `codex/rc7-testing-fixes` on 2026-10-07 and merged into main the same day; the field lessons followed as `b76f6b6` on 2026-10-08. Earlier “no commit/push” statements describe their original test sessions. No new package was published. This field-lessons update changes documentation only; no new runtime tests, hosted runs, configuration changes or deployment were performed.
 
 ## Design references
 
