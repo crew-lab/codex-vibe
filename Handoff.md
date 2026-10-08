@@ -1,5 +1,28 @@
 # Implementation handoff
 
+## Planned next work: bounded reviews and diagnostic soak (2026-10-08)
+
+**Plan saved, not implemented or executed.** Continue on `codex/rc8-stall-diagnostics`. Bounded-review/ACP evidence is preserved in commit `b7625e0`; previous failures remain visible. Latest user-reported account usage is EUR1.22 used of EUR8.50 (approximately EUR7.28 remaining at that observation), not EUR1.22 remaining. Do not probe balances or rotate accounts automatically.
+
+### Implementation
+
+- Update both normal review prompts in scripts/soak.mjs, for programmatic and ACP jobs: correctness only, at most three files and two searches, then a final answer in the same turn. Require supported findings with file/location and trigger, or an explicit no-defect answer with scope limits. Remove style-oriented or exploratory wording.
+- Bound ACP lifecycle reviews to five source files with separate read calls, no searches and a final answer. Retain enough workload to exercise mid-turn close and restart.
+- Keep the existing 20-turn ceiling, deadlines, permission policy, pinned Vibe 2.25.8 and MCP interfaces. These limits are task acceptance rules, not additional runtime tool permissions.
+- Before cleanup, audit validated native records for tool-name counts and a public final answer; preserve only whitelisted counts/status, never native histories or reasoning. Reject exceeded bounds, missing final answers or unsafe/unavailable audit records. Stop on the first failure and preserve its exports/diagnostics.
+
+### Verification and hosted execution
+
+Add meaningful driver regression coverage for exceeded bounds, missing final answers, unsafe/unavailable audit records, stop-on-failure and cleanup. Retain existing timeout/privacy/lifecycle checks. Run full offline release verification and installed-package smoke with the populated cache; record exact candidate and archive hashes.
+
+Run **two pilot reviews**, one for each revised normal review prompt, against the existing synthetic fixture. Both must end_turn with a valid final answer, verified read-only integrity and compliant tool counts. Only if both pass, run **one full 60-review / 30-edit / 10-ACP soak** with seed soak, fresh private homes, diagnostics enabled, zero initial wait, 30-second status waits, a 900-second driver deadline and a 7200-second total budget reserving the final minute for cleanup. Require all 100 runs, valid edit exports, exercised ACP continuation/reload/mid-turn close, no unexpected permission requests and no owned leaks. Current account only; no automatic retry or limit increase.
+
+### Outcomes and delivery
+
+Stop on the first failure. For a stall, preserve startup stages, available frame snapshots, public status/event counts and useful exports before cleanup. Classify only supported observations: task-bound violations, turn exhaustion, supervisor timeout, provider-reported errors or unexplained silence. Change runtime only after establishing a concrete defect and adding a targeted regression.
+
+Update Handoff and acceptance evidence, commit the results and push only the dedicated branch. Preserve prior reports and private diagnostic homes; no main-branch publication, release, version bump or global configuration change. A clean soak validates that candidate run; the earlier intermittent stall remains unresolved unless its demonstrated cause is fixed and verified. Native desktop, callbacks, clean-account and Intel gates remain separate. See [bounded test evidence](docs/history/reviews/rc8-bounded-followup-2026-10-08/Read.md).
+
 ## Bounded Vibe follow-up (2026-10-08)
 
 The capped review passed: two reads, zero searches and a correct final bug finding. A synthetic ACP sum fix plus one docstring correction passed scope/AST checks and four numeric cases per candidate; a cleanup-inventory turn preserved the exact final patch, and supervisor cleanup removed the worktree. No source patch was applied. All four runs (including two interrupted harness trials) are closed with no owned workers, locks or worktrees remaining. The two coordinator harness errors are preserved rather than labeled product failures. Offline diagnostic/watchdog checks passed 25 tests; no real hosted stall snapshot was exercised.
