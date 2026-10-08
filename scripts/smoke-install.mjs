@@ -25,19 +25,20 @@ try {
   run('npm', ['--cache', cache, 'install', '--ignore-scripts', '--offline', '--prefix', prefix, tarball], { cwd: prefix });
   const installedRoot = path.join(prefix, 'node_modules', 'vibe-supervisor');
   const cli = path.join(installedRoot, 'dist', 'cli.js');
+  const executable = path.join(prefix, 'node_modules', '.bin', 'vibe-supervisor');
   const manifest = JSON.parse(await readFile(path.join(installedRoot, 'package.json'), 'utf8'));
-  const version = run(process.execPath, [cli, '--version']).trim();
+  const version = run(executable, ['--version']).trim();
   if (version !== manifest.version) throw new Error('Installed CLI version check failed.');
   await access(path.join(installedRoot, 'dist', 'backends', 'runtime', 'vibe_supervisor_launcher.py'));
-  if (!run(process.execPath, [cli, '--help']).includes('serve --stdio')) throw new Error('Installed CLI help check failed.');
+  if (!run(executable, ['--help']).includes('serve --stdio')) throw new Error('Installed CLI help check failed.');
 
   // Exercise the installed stdio process and official client without starting a backend run.
-  run(process.execPath, [cli, 'init']);
+  run(executable, ['init']);
   const configuredBackend = (await readFile(path.join(env.VIBE_SUPERVISOR_HOME, 'config.toml'), 'utf8')).match(/^backend\s*=\s*"(\w+)"/m)?.[1] ?? 'programmatic';
   const expectedTools = configuredBackend === 'programmatic' ? 5 : 7;
   const { Client } = await import('@modelcontextprotocol/client');
   const { StdioClientTransport } = await import('@modelcontextprotocol/client/stdio');
-  const transport = new StdioClientTransport({ command: process.execPath, args: [cli, 'serve', '--stdio'], env, stderr: 'pipe' });
+  const transport = new StdioClientTransport({ command: executable, args: ['serve', '--stdio'], env, stderr: 'pipe' });
   const client = new Client({ name: 'vibe-supervisor-release-smoke', version: manifest.version });
   try {
     await client.connect(transport);
@@ -63,5 +64,5 @@ try {
   } finally {
     await client.close();
   }
-  process.stdout.write(JSON.stringify({ status: 'PASS', package: manifest.name, version: manifest.version, isolatedHome: true, runtimeShim: 'present', installedMcpInitializeAndListTools: 'PASS', eofShutdown: 'PASS', concurrentIsolatedMcp: 'PASS' }) + '\n');
+  process.stdout.write(JSON.stringify({ status: 'PASS', package: manifest.name, version: manifest.version, isolatedHome: true, installedCliExecutable: 'PASS', runtimeShim: 'present', installedMcpInitializeAndListTools: 'PASS', eofShutdown: 'PASS', concurrentIsolatedMcp: 'PASS' }) + '\n');
 } finally { await rm(tmpRoot, { recursive: true, force: true }); }

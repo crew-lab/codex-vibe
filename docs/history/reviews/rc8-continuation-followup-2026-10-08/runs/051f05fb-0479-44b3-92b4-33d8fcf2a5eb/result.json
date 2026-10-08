@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "run_id": "051f05fb-0479-44b3-92b4-33d8fcf2a5eb",
+  "state": "completed",
+  "backend": "acp",
+  "stop_reason": "end_turn",
+  "summary": "Vibe completed the delegated task.",
+  "workspace": {
+    "source": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+    "worker": "/private/tmp/rc8-phase-d-6n1ney4v/workspace"
+  },
+  "artifacts": [
+    {
+      "name": "transcript.md",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/051f05fb-0479-44b3-92b4-33d8fcf2a5eb/transcript.md",
+      "sha256": "caf2155733a82c1ab0efc662becc314afc73cd66d10eb875e00ba3a06be7e857",
+      "bytes": 169,
+      "media_type": "text/markdown"
+    },
+    {
+      "name": "events.ndjson",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/051f05fb-0479-44b3-92b4-33d8fcf2a5eb/events.ndjson",
+      "sha256": "7f9e886d09703f3c8b7943393936ad4dff47268261e033dbf728bbb37f691bcc",
+      "bytes": 10422,
+      "media_type": "application/x-ndjson"
+    }
+  ],
+  "changed_files": [],
+  "warnings": [],
+  "integrity": {
+    "status": "verified",
+    "write_tool_observed": true
+  }
+}

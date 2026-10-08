@@ -1,0 +1,11 @@
+{
+  "vibe_import": {
+    "wall_ms": 23.969,
+    "exit_code": 0,
+    "vibe_import_timing": "import time:       192 |       6453 | vibe"
+  },
+  "keychain_metadata_only": {
+    "wall_ms": 11.119,
+    "exit_code": 0
+  }
+}

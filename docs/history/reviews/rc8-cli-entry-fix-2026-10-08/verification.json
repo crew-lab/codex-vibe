@@ -1,0 +1,30 @@
+{
+  "base_commit": "e71f9182eb37e728cc522881811ed9168cca331c",
+  "version": "0.9.0-rc.8 locally patched, uncommitted",
+  "source_sha256": {
+    "src/cli.ts": "3f1a13505a125e657b99952c22f575abebe3129c6f0fa3395d775ed3abe01333",
+    "scripts/smoke-install.mjs": "fc42a9dad956b4cb51fd14e268b2e3d852bc8345f1b8bdc9c119c825618c744e",
+    "tests/integration/cli-entrypoint.test.ts": "75de8e935a46fd18de708981d6540f88bac51f39e7455024ee43e8150622bbce",
+    "docs/functionality.md": "344961f1364887ccd0ffc3251af0dd5a43caffa658bed3a989e0fc620bf9618d"
+  },
+  "regression_before": {
+    "failed": 2,
+    "passed": 1,
+    "failure": "empty version and missing command-validation exit"
+  },
+  "regression_after": {
+    "passed": 3
+  },
+  "release": {
+    "typescript_tests": 618,
+    "files": 56,
+    "python_suite": "PASS",
+    "installed_Vibe_profiles": "PASS",
+    "lint_typecheck_build": "PASS",
+    "offline_smoke_actual_executable": "PASS",
+    "checksums": "PASS"
+  },
+  "tarball_sha256": "a5e525ad77f797b2487437f4c7e52febaabd013d9fc19c85f1812e244e012dfb",
+  "installed_command_stdout": "0.9.0-rc.8",
+  "hosted_after_cli_fix": "NOT RUN; separate soak stopped on timeout, no causal linkage to CLI guard"
+}

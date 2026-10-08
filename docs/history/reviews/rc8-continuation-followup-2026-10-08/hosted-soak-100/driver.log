@@ -1,0 +1,65 @@
+vibe-supervisor hosted soak plan
+workspace: /private/tmp/rc8-phase-d-6n1ney4v/soak-workspace
+runs: 100 (reviews 60, edits 30, acp 10); hosted model turns about 107
+backends: programmatic 90 runs, acp 10 runs (continue, mid-turn close and restart scenarios)
+server command: node /private/tmp/rc8-phase-d-6n1ney4v/install/node_modules/vibe-supervisor/dist/cli.js serve --stdio
+evidence directory: /private/tmp/rc8-phase-d-6n1ney4v/hosted-soak-100
+seed: soak; status wait 180s; run timeout 900s
+preflight: workspace in the template allowlist: yes; git repository: yes; template config: /private/tmp/rc8-phase-d-6n1ney4v/soak-template/config.toml
+COST WARNING: every run sends the repository and the tasks to Mistral and is billed. Earlier hosted edits cost about $0.02 each; the real total depends on the tasks and the account. Run it only with the owner authorization.
+[1/100] programmatic review review-bug-class ok 38s
+[2/100] programmatic review review-bug-class ok 25s
+[3/100] programmatic edit edit-one-line ok 12s
+[4/100] programmatic review review-file ok 10s
+[5/100] programmatic edit edit-add-file ok 19s
+[6/100] programmatic edit edit-one-line ok 5s
+[7/100] programmatic review review-file ok 12s
+[8/100] programmatic edit edit-add-file ok 5s
+[9/100] programmatic review review-file ok 9s
+[10/100] programmatic review review-file ok 24s
+[11/100] programmatic review review-file ok 17s
+[12/100] programmatic review review-file ok 7s
+[13/100] programmatic review review-file ok 8s
+[14/100] programmatic review review-file ok 10s
+[15/100] programmatic review review-file ok 12s
+[16/100] programmatic edit edit-add-file ok 12s
+[17/100] programmatic edit edit-add-file ok 13s
+[18/100] programmatic edit edit-one-line ok 10s
+[19/100] programmatic edit edit-add-file ok 7s
+[20/100] programmatic edit edit-add-file FAILED driver:run_timeout 900s
+{
+  "result": "FAIL",
+  "totals": {
+    "runs": 20,
+    "ok": 19,
+    "failed": 1
+  },
+  "criteria": [
+    {
+      "id": "zero_unexpected_failures",
+      "status": "FAIL",
+      "detail": "1 unexpected failures"
+    },
+    {
+      "id": "zero_permission_requests",
+      "status": "PASS",
+      "detail": "0 permission or input requests"
+    },
+    {
+      "id": "no_leaked_processes_or_worktrees",
+      "status": "PASS",
+      "detail": "0 orphaned or descendant vibe processes, 0 leftover worktrees"
+    },
+    {
+      "id": "bounded_artifacts",
+      "status": "PASS",
+      "detail": "0 run directories above the per-run limit"
+    },
+    {
+      "id": "retention_keeps_recent_runs",
+      "status": "PASS",
+      "detail": "0 recorded runs missing from disk (retention.days 7)"
+    }
+  ],
+  "evidence": "/private/tmp/rc8-phase-d-6n1ney4v/hosted-soak-100"
+}

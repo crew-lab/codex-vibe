@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-08T09:23:07.311Z",
+  "node": "v24.21.0",
+  "platform": "darwin",
+  "os_release": "27.0.0",
+  "arch": "arm64",
+  "pinned": {
+    "vibe": "2.25.8",
+    "acp_protocol": 1,
+    "shim_expected_version": "2.25.8"
+  },
+  "executables": {
+    "vibe": "/Users/roman/.local/bin/vibe",
+    "vibe_acp": "/Users/roman/.local/bin/vibe-acp",
+    "python": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/python3",
+    "python_source": "from entrypoint shebang"
+  },
+  "checks": [
+    {
+      "name": "vibe_cli_version",
+      "status": "PASS",
+      "detail": "vibe --version reports 2.25.8"
+    },
+    {
+      "name": "acp_initialize",
+      "status": "PASS",
+      "detail": "ACP initialize under isolated HOME/VIBE_HOME through the pinned shim: Vibe 2.25.8, protocolVersion 1"
+    },
+    {
+      "name": "acp_load_session_advertised",
+      "status": "PASS",
+      "detail": "initialize advertised agentCapabilities.loadSession = true"
+    },
+    {
+      "name": "launcher_logger_fixture",
+      "status": "PASS",
+      "detail": "test_vibe_supervisor_launcher.py passed against the installed Vibe logger"
+    },
+    {
+      "name": "tool_path_resolver",
+      "status": "MANUAL",
+      "detail": "Run with the Vibe Python interpreter against the installed package (vibe/core/tools/builtins/read_file.py, grep.py, vibe/core/tools/utils.py): configure read_file and grep with permission never, allowlist [<root>, <root>/**] and denylist including <root>/.env, <root>/.env.*, <root>/**/.env; then invoke the stock path resolver for an in-root file (expect ALWAYS) and for an outside path, a symlink inside the root pointing outside, and <root>/.env (expect NEVER for each). Internal API is not documented precisely enough in docs/compatibility.md to automate without guessing."
+    },
+    {
+      "name": "effective_tool_inventory",
+      "status": "MANUAL",
+      "detail": "Needs an authenticated hosted Vibe session: start a review run on a throwaway repository and record the effective tool inventory (expect only read_file and grep), the active mode (plan), untrusted workspace trust, and the permission-request count. Roadmap Phase 3 in Handoff.md."
+    },
+    {
+      "name": "hosted_inference",
+      "status": "MANUAL",
+      "detail": "Needs authenticated hosted inference: run one hosted review and one hosted edit on a throwaway repository and record chunk shapes. Roadmap Phase 3 in Handoff.md."
+    },
+    {
+      "name": "shim_pin_consistent",
+      "status": "PASS",
+      "detail": "launcher shim EXPECTED_VERSION matches 2.25.8"
+    }
+  ]
+}

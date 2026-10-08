@@ -235,6 +235,27 @@ describe('soak driver', () => {
     expect(criterion(await readSummary(box), 'zero_unexpected_failures')).toBe('FAIL');
   }, 60_000);
 
+  it('lets the supervisor settle a silent worker before the driver deadline', async () => {
+    const box = await sandbox();
+    const outcome = await soak(box, real(box, { reviews: 0, edits: 1, acp: 0 }, ['--run-timeout', '60', '--wait-seconds', '1']), { FAKE_MODE_PROGRAMMATIC: 'silent' });
+    expect(outcome.code).toBe(1);
+    const [run] = await readRuns(box);
+    expect(run?.failures.map((failure) => failure.code)).toContain('VSUP_TIMEOUT');
+    expect(run?.failures.map((failure) => failure.code)).not.toContain('driver:run_timeout');
+    expect(run?.closeState).toBe('closed');
+    expect(run?.worktreeRemoved).toBe(true);
+    const starts = (await readFile(box.log, 'utf8')).trim().split('\n').map((line) => JSON.parse(line)).filter((entry) => entry.operation === 'start');
+    expect(starts[0].timeoutSeconds).toBe(30);
+  }, 60_000);
+
+  it('preserves a shorter configured worker deadline', async () => {
+    const box = await sandbox();
+    await writeFile(box.configPath, (await readFile(box.configPath, 'utf8')) + '\n[limits]\nreview_timeout_seconds = 45\n');
+    expect((await soak(box, real(box, { reviews: 1, edits: 0, acp: 0 }))).code).toBe(0);
+    const starts = (await readFile(box.log, 'utf8')).trim().split('\n').map((line) => JSON.parse(line)).filter((entry) => entry.operation === 'start');
+    expect(starts[0].timeoutSeconds).toBe(45);
+  });
+
   it('survives a server that exits mid-soak, records the failure and carries on with a fresh server', async () => {
     const box = await sandbox();
     const outcome = await soak(box, real(box, { reviews: 3, edits: 0, acp: 0 }), { FAKE_MODE_PROGRAMMATIC: 'exit', FAKE_ONLY_NTH: '2' });

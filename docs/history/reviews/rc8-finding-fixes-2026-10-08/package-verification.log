@@ -1,0 +1,384 @@
+
+> vibe-supervisor@0.9.0-rc.8 package:rc
+> node scripts/package-rc.mjs
+
+
+> vibe-supervisor@0.9.0-rc.8 verify:release
+> npm run lint && npm run typecheck && npm run build && npm test && npm run test:python && npm run acceptance && npm run secret-scan && npm run sbom
+
+
+> vibe-supervisor@0.9.0-rc.8 lint
+> eslint .
+
+
+> vibe-supervisor@0.9.0-rc.8 typecheck
+> tsc --noEmit
+
+
+> vibe-supervisor@0.9.0-rc.8 build
+> tsc && node scripts/copy-runtime-assets.mjs
+
+Copied the pinned Vibe launch shim into dist/backends/runtime.
+
+> vibe-supervisor@0.9.0-rc.8 test
+> vitest run
+
+
+ RUN  v4.0.18 /Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe
+
+ ✓ tests/integration/recovery.test.ts (8 tests) 6261ms
+     ✓ maps every non-terminal record without spawning, holding a slot or touching artifacts  719ms
+     ✓ continues a recovered ACP run lazily: loads the session on demand, runs, and completes  824ms
+     ✓ fails a continuation of a recoverable programmatic run with VSUP_SESSION_NOT_RESUMABLE and keeps it recoverable  316ms
+     ✓ records the failed lazy recovery on a recoverable ACP run that had no error before  302ms
+     ✓ rejects a continuation without a free slot before trying to recover  573ms
+     ✓ gives up on a session/load that never answers, leaves no process, and keeps the run recoverable  2226ms
+     ✓ reports and records the version rejection when a continuation meets an upgraded Vibe at initialize  692ms
+     ✓ maps the shim version message on stderr to the version code when a continuation reloads the session  607ms
+ ✓ tests/integration/token-shaping.test.ts (27 tests) 6978ms
+     ✓ returns immediately when an event past after_seq already exists  307ms
+     ✓ returns immediately when the run needs a permission decision  316ms
+     ✓ an edit start keeps the worker path and returns the compact patch  732ms
+     ✓ inlines a small patch and trims artifacts and workspace  588ms
+     ✓ references a patch larger than 4000 bytes by path instead of inlining it  694ms
+     ✓ caps changed_files at 50 and reports the total  983ms
+     ✓ caps the inline transcript in compact mode and points at the file  741ms
+ ✓ tests/integration/close-cleanup.test.ts (8 tests) 7665ms
+     ✓ keeps the worktree of a recoverable edit run after a restart  797ms
+     ✓ keeps the worktree of a completed run  897ms
+     ✓ removes the verified worktree of a cancelled run and of a closed run  1869ms
+     ✓ is exported and then removed by close with cleanup_worktree  875ms
+     ✓ still keeps a worktree that holds ignored files, exporting the patch first  1005ms
+     ✓ makes a second concurrent close wait for the first and then report the real outcome, retrying removal  1042ms
+     ✓ reaches closed and reports the error when the backend close throws  625ms
+     ✓ reaches closed and reports the error when the backend close rejects  551ms
+ ✓ tests/integration/acp-backend.test.ts (13 tests) 10259ms
+     ✓ completes 100 independent initialized prompt turns without leaking private reasoning  9017ms
+ ✓ tests/unit/workspace-snapshot.test.ts (10 tests) 10734ms
+     ✓ flags writes to tracked, untracked and ignored files  478ms
+     ✓ reports additions, removals and symlink retargets  342ms
+     ✓ treats a touch of a Git-visible file as unchanged but a touch of an ignored file as changed  444ms
+     ✓ treats a same-content rewrite of a tracked file as unchanged  427ms
+     ✓ snapshots 20,000 small ignored files quickly  8121ms
+     ✓ round-trips a manifest through its persisted form and rejects anything malformed  497ms
+ ✓ tests/integration/worktree-close.test.ts (17 tests) 11213ms
+     ✓ records the worktree only after git created it  927ms
+     ✓ fails a base_ref that does not exist with VSUP_WORKTREE_CREATE_FAILED, git's stderr, and no worktree record  447ms
+     ✓ reports VSUP_GIT_REQUIRED only when the git binary is missing  399ms
+     ✓ finalizes a queued edit run cancelled before launch with a clean result.json  676ms
+     ✓ removes a verified worktree and reports worktree_removed  964ms
+     ✓ reaches closed and keeps the worktree when ignored files remain, saying why  1031ms
+     ✓ removes a retained worktree when the closed run is closed again after the residue is gone  1275ms
+     ✓ reports worktree_removed false without a reason when cleanup was not requested  859ms
+     ✓ removes the worktree after a restart using the saved patch artifact  1172ms
+     ✓ still refuses after a restart when the saved patch was tampered with  714ms
+     ✓ refuses after a restart when the worktree changed since the export  866ms
+     ✓ does not let cancel touch a run that is already closing  699ms
+     ✓ settles a resumed run as recoverable and frees the slot when the backend rejects the message  675ms
+ ✓ tests/integration/settle.test.ts (18 tests) 11360ms
+     ✓ 'the launch fails'  692ms
+     ✓ 'the backend reports completed'  672ms
+     ✓ 'the backend reports failed'  686ms
+     ✓ 'the backend reports cancelled on its …'  779ms
+     ✓ 'the user cancels a running run'  703ms
+     ✓ 'the user cancels a running run (backe…'  556ms
+     ✓ 'the user cancels a queued run'  768ms
+     ✓ 'the deadline expires'  709ms
+     ✓ 'the deadline expires (backend cancel …'  615ms
+     ✓ 'the transcript limit is reached'  642ms
+     ✓ 'the transcript limit is reached (back…'  604ms
+     ✓ 'a permission request violates the pol…'  685ms
+     ✓ 'a permission request violates the pol…'  546ms
+     ✓ 'artifact finalization fails a complet…'  574ms
+     ✓ 'a failure is reported after the run a…'  571ms
+     ✓ 'the supervisor shuts down under a run…'  448ms
+     ✓ 'the supervisor shuts down under a que…'  529ms
+     ✓ a policy failure writes artifacts, records integrity and leaves no worker process  579ms
+ ✓ tests/integration/storage-faults.test.ts (12 tests) 5127ms
+     ✓ fails the run with VSUP_STORAGE_ERROR when the completion persist hits ENOSPC, and keeps the pipeline moving  740ms
+     ✓ keeps the in-memory outcome and reports a warning while the state cannot be saved  665ms
+     ✓ still sends the continuation when saving the raised turn limit hits a storage fault  451ms
+     ✓ lets the first persist of start() propagate VSUP_STORAGE_ERROR without creating a run  419ms
+     ✓ fails the run with EACCES when the run directory becomes unwritable mid-run  728ms
+     ✓ does not reject an ACP session when recording an event fails  743ms
+ ✓ tests/integration/phase-c-surface.test.ts (13 tests) 4394ms
+     ✓ uses the configured turn and timeout defaults when a call omits them  861ms
+     ✓ denies a fetch tool request in a review run despite the old allow keys  359ms
+     ✓ denies a execute tool request in a review run despite the old allow keys  310ms
+     ✓ denies a fetch tool request in a edit run despite the old allow keys  661ms
+     ✓ denies a execute tool request in a edit run despite the old allow keys  599ms
+     ✓ is present on start, status, continue, respond, result and close  427ms
+ ✓ tests/unit/setup.test.ts (34 tests) 4328ms
+     ✓ creates a private valid config with the canonical workspace and resolved paths and only previews Codex without --yes  694ms
+     ✓ writes the Codex config with --yes and is idempotent on a second run  522ms
+     ✓ adds --isolated to the Codex launch arguments  305ms
+     ✓ writes after an interactive confirmation and not after a refusal  505ms
+     ✓ never asks and never writes without a TTY and without --yes  332ms
+ ✓ tests/integration/turn-budget.test.ts (7 tests) 2139ms
+     ✓ sends the raised limit after a lazy session load following a supervisor restart  349ms
+     ✓ treats an interrupted raised continuation as plainly continuable, even at the maximum limit  535ms
+     ✓ rejects lowering the ceiling and accepts an equal ceiling only when the budget is not spent  435ms
+ ✓ tests/security/security-primitives.test.ts (14 tests) 3854ms
+     ✓ captures tracked staged and unstaged edits plus binary/newline filenames without mutating index  527ms
+     ✓ rejects configured clean filters before they can execute  308ms
+     ✓ refuses cleanup after post-export changes and retains the worktree  533ms
+     ✓ removes a cleanly verified worktree after export  546ms
+     ✓ rejects termination within a bound when group and direct-child signaling fail  1515ms
+ ✓ tests/integration/backend-fixes.test.ts (17 tests) 2846ms
+     ✓ emits the buffered partial line before cancel returns, exactly once  395ms
+     ✓ emits the buffered partial line before close returns, exactly once  371ms
+     ✓ lands the partial line in transcript.md when RunManager cancels mid-line  355ms
+     ✓ omits the original-HOME variable from the programmatic probe and keeps it for start  315ms
+ ✓ tests/integration/review-fixes.test.ts (17 tests) 2949ms
+     ✓ omits integrity for edit runs  592ms
+     ✓ compactResult gives a patch path when inlining would exceed the result cap  560ms
+     ✓ compactResult still inlines a patch that fits the cap  508ms
+ ✓ tests/integration/lazy-startup-retention.test.ts (11 tests) 4446ms
+     ✓ initializes 200 runs with 1 MiB event logs in under 300 ms without reading events, and loads them on demand  2492ms
+     ✓ keeps an otherwise eligible completed run that still holds its live session  411ms
+     ✓ never removes a fresh completed run when retention is set to zero days, but still removes old terminal ones  352ms
+ ✓ tests/integration/continuation.test.ts (6 tests) 3831ms
+     ✓ assesses the second turn that ends by cancel instead of keeping the first turn verdict  451ms
+     ✓ assesses the second turn that ends by deadline instead of keeping the first turn verdict  434ms
+     ✓ reconnects within the same continue call after the process exited and was already released  830ms
+     ✓ drops a handle that turns out dead during the call and reconnects instead of waiting for the timeout  668ms
+     ✓ fails fast with VSUP_SESSION_NOT_RESUMABLE and releases the slot when the session cannot be loaded (continue after exit: false)  848ms
+     ✓ fails fast with VSUP_SESSION_NOT_RESUMABLE and releases the slot when the session cannot be loaded (continue after exit: true)  598ms
+ ✓ tests/integration/event-log-failures.test.ts (4 tests) 3806ms
+     ✓ degrades with VSUP_STORAGE_ERROR when events.ndjson becomes a directory, without looping or a false output limit  1694ms
+     ✓ degrades with VSUP_STORAGE_ERROR when events.ndjson becomes a symlink, without looping or a false output limit  1681ms
+ ✓ tests/integration/run-manager-regressions.test.ts (20 tests) 16633ms
+     ✓ concatenates streamed ACP chunks into a transcript without inserting newlines between chunks  674ms
+     ✓ redacts a secret that is split across consecutive ACP message chunks  610ms
+     ✓ leaves no vibe-acp process alive after a restart recovers a completed run and its idle TTL elapses  660ms
+     ✓ lazily reloads a recovered completed ACP run on continue and runs a second prompt  902ms
+     ✓ turns a source workspace change during a review into a warning instead of failing the run  593ms
+     ✓ records a diagnostic event when a backend reports a state transition that is invalid for the run  634ms
+     ✓ starts the run timeout when the run launches rather than when it is queued  831ms
+     ✓ closing a completed ACP run reports closed without a failed transition  1220ms
+     ✓ idle expiry of a completed ACP run keeps it completed without a failed transition  3081ms
+     ✓ shutting down with a completed but unclosed ACP run produces no unhandled rejection  1104ms
+     ✓ bounds live idle ACP sessions to maxConcurrentRuns  1250ms
+     ✓ proceeds with a warning when the source workspace cannot be snapshotted  450ms
+     ✓ fails the run when saving the record right after a successful snapshot fails  408ms
+     ✓ hashWorkspace enforces the entry limit and bounds only the hashed bytes  453ms
+     ✓ releases the ACP worker process when artifact finalization fails a completed turn  827ms
+       ✓ when the backend reports failed while its process is still alive  611ms
+       ✓ when a completed run fails during artifact finalization  611ms
+       ✓ when a failure is reported after the run already completed  589ms
+       ✓ when the transcript limit fails the run  604ms
+       ✓ when the deadline expires  520ms
+ ✓ tests/integration/stop-reason.test.ts (11 tests) 2791ms
+     ✓ keeps review integrity warnings across a continuation while swapping the stop-reason warning  364ms
+     ✓ reflects the capped second ACP turn and drops the first turn's summary  558ms
+ ✓ tests/unit/core-run-manager.test.ts (10 tests) 2698ms
+     ✓ enforces active and queued limits, then drains queued work  355ms
+     ✓ exports an edit worktree patch and removes only the verified worktree  956ms
+ ✓ tests/integration/probe-and-reject.test.ts (23 tests) 2619ms
+     ✓ caches the programmatic version probe and honours executable changes and fresh  326ms
+     ✓ answers an out-of-root permission with the selected reject option and completes the run  422ms
+ ✓ tests/integration/client-shutdown.test.ts (3 tests) 2611ms
+     ✓ start, continue, close then client.close exits the server and settles every owned resource  1006ms
+     ✓ client.close while a run is still running exits the server, records the run as not live and releases the lock  581ms
+     ✓ client.close with a completed, idle edit session exits the server and removes the worker  1022ms
+ ✓ tests/integration/backend-labels.test.ts (13 tests) 2871ms
+     ✓ still reports a configured acp executable that does not exist as VSUP_VIBE_ACP_NOT_FOUND  325ms
+     ✓ labels a mid-turn-401 failure after the session is ready as VSUP_AUTH_REQUIRED  301ms
+     ✓ labels a mid-turn-429 failure after the session is ready as VSUP_RATE_LIMITED  365ms
+ ✓ tests/security/worktree-cleanup-order.test.ts (3 tests) 2492ms
+     ✓ accepts a patch saved with tracked files before untracked ones  924ms
+     ✓ still refuses a one-byte content change in the reordered patch comparison  848ms
+     ✓ still refuses a tampered saved artifact  719ms
+ ✓ tests/unit/profile.test.ts (5 tests) 795ms
+     ✓ checks real agent layering and path boundaries for review  301ms
+     ✓ checks real agent layering and path boundaries for edit  302ms
+ ✓ tests/integration/unreadable-event-log.test.ts (15 tests) 1343ms
+ ✓ tests/security/split-index.test.ts (2 tests) 1263ms
+     ✓ leaves everything under the real git dir except objects and logs untouched  744ms
+     ✓ leaves the common git dir untouched for a linked worktree of a split-index repository  518ms
+ ✓ tests/integration/stderr-secrets.test.ts (3 tests) 1293ms
+     ✓ redacts a bare 32-character key from the environment in the ACP probe, the run error, meta.json, events and doctor  666ms
+     ✓ redacts a key whose 1 KiB cut lands inside the Bearer token  437ms
+ ✓ tests/security/export-equivalence.test.ts (4 tests) 3781ms
+     ✓ produces a patch that rebuilds the same tree as the reference patch  1449ms
+     ✓ exports an untracked file with a leading dash as an applicable patch  1215ms
+     ✓ leaves the real index and the staged state untouched  622ms
+     ✓ exports 50 untracked files in constant time  495ms
+ ✓ tests/integration/event-durability.test.ts (5 tests) 1699ms
+     ✓ never persists a state change ahead of the events that preceded it  311ms
+     ✓ flushes on its own within the window  760ms
+ ✓ tests/integration/status-result.test.ts (5 tests) 1765ms
+     ✓ embeds the result for failed and cancelled runs and carries the error  373ms
+     ✓ keeps the protected fields when a large patch and many files exceed max_mcp_result_chars  717ms
+ ✓ tests/integration/review-manifest-restart.test.ts (5 tests) 2607ms
+     ✓ stays verified when a file is only touched while the run is recoverable  602ms
+     ✓ reports the changed path after a real change  554ms
+     ✓ keeps the manifest owner-only and free of file content  561ms
+     ✓ reports unverified, never changed, for a run saved without a manifest  371ms
+     ✓ reports unverified when the saved manifest no longer matches the recorded digest  518ms
+ ✓ tests/unit/isolated-home.test.ts (12 tests) 681ms
+ ✓ tests/unit/compat-probe.test.ts (3 tests) 724ms
+     ✓ fails closed when the ACP peer reports a different version  532ms
+ ✓ tests/integration/cli-entrypoint.test.ts (3 tests) 302ms
+ ✓ tests/integration/storage-degraded.test.ts (2 tests) 422ms
+ ✓ tests/integration/event-flush-faults.test.ts (2 tests) 494ms
+ ✓ tests/unit/event-log.test.ts (12 tests) 605ms
+     ✓ flushes on its own after the window  305ms
+ ✓ tests/integration/requested-outcome.test.ts (2 tests) 416ms
+ ✓ tests/unit/docs-links.test.ts (1 test) 49ms
+ ✓ tests/unit/cli.test.ts (7 tests) 908ms
+     ✓ doctor --json carries the captured stderr tail on the failed acp-initialize check  330ms
+ ✓ tests/unit/owner-lock.test.ts (43 tests) 69ms
+ ✓ tests/integration/worker-deadline.test.ts (9 tests) 861ms
+ ✓ tests/unit/original-home.test.ts (3 tests) 67ms
+ ✓ tests/unit/launcher.test.ts (20 tests) 215ms
+ ✓ tests/unit/redaction.test.ts (29 tests) 8ms
+ ✓ tests/unit/process-guards.test.ts (5 tests) 59ms
+ ✓ tests/unit/storage-error.test.ts (21 tests) 3ms
+ ✓ tests/integration/status-paging.test.ts (4 tests) 285ms
+ ✓ tests/unit/tool-schemas.test.ts (5 tests) 6ms
+ ✓ tests/unit/config.test.ts (13 tests) 32ms
+ ✓ tests/integration/mcp-tools.test.ts (7 tests) 39ms
+ ✓ tests/unit/errors-doc.test.ts (2 tests) 2ms
+ ✓ tests/unit/version.test.ts (4 tests) 15ms
+ ✓ tests/integration/failure-reporting.test.ts (37 tests) 25422ms
+     ✓ fails a run whose ACP process exits 0 mid-turn with VSUP_BACKEND_CRASHED  603ms
+     ✓ never reports completed to the backend callbacks when the process exits 0 mid-turn  302ms
+     ✓ applies the same rule to a recovered session  714ms
+     ✓ treats an empty or blank summary like a missing one when finalizing  579ms
+     ✓ adds the no-final-message warning when the programmatic Vibe produced nothing  608ms
+     ✓ adds no warning when the programmatic Vibe produced a message  541ms
+     ✓ 'matching pinned markers, including an…'  507ms
+     ✓ 'a marker mentioned only by the assist…'  513ms
+     ✓ 'a marker on stderr without a streamed…'  506ms
+     ✓ 'a marker for a different configured t…'  552ms
+     ✓ 'a genuine crash after a matching mark…'  516ms
+     ✓ 'an additional error after the marker'  479ms
+     ✓ 'a marker in ordinary successful assis…'  554ms
+     ✓ names the detected and the supported version when a probe saw the wrong one  335ms
+     ✓ reports a missing executable with the code of the backend that was asked for  563ms
+     ✓ lists every candidate reason when nothing else explains the failure  353ms
+     ✓ prefers the version mismatch over a missing sibling executable  329ms
+     ✓ puts detected_version in the real programmatic probe and fails the run with both versions  536ms
+     ✓ flags a missing programmatic executable in the real probe  387ms
+     ✓ puts detected_version in the real ACP probe and flags a missing ACP executable  417ms
+     ✓ starts an explicit ACP backend with a single spawn and continues without another  10533ms
+     ✓ does not run vibe --version before an explicit programmatic start  351ms
+     ✓ takes the backend from config when the tool says auto and the config names one  323ms
+     ✓ reports a wrong ACP version from the real initialize with both versions and a single spawn  329ms
+     ✓ maps the shim version message on stderr to the unsupported-version code for ACP  329ms
+     ✓ maps the shim version message on stderr to the unsupported-version code for programmatic  324ms
+     ✓ keeps other early programmatic failures as a crash  322ms
+     ✓ re-probes the ACP backend after a start that failed before the session was ready  356ms
+     ✓ spawns nothing but the session for runs that start fine  314ms
+     ✓ re-probes the programmatic backend after a start that failed before the session was ready  446ms
+ ✓ tests/integration/soak-driver.test.ts (11 tests) 68593ms
+     ✓ prints the plan and a cost warning and starts nothing without --yes  311ms
+     ✓ refuses more than 500 runs, unknown options and a workspace outside the template allowlist  732ms
+     ✓ runs a clean mixed soak, records every run and passes every criterion  8333ms
+     ✓ orders runs deterministically for a seed  6755ms
+     ✓ answers a permission request with the reject option, counts it, and fails the criterion  2375ms
+     ✓ fails the unexpected-failure criterion for a backend failure and stops early on request  4602ms
+     ✓ enforces the per-run timeout, closes the run and records it as failed  3578ms
+     ✓ lets the supervisor settle a silent worker before the driver deadline  31788ms
+     ✓ preserves a shorter configured worker deadline  1632ms
+     ✓ survives a server that exits mid-soak, records the failure and carries on with a fresh server  1989ms
+     ✓ never touches processes it did not start and reports a leaked child without killing it  6497ms
+
+ Test Files  56 passed (56)
+      Tests  620 passed (620)
+   Start at  12:15:39
+   Duration  69.68s (transform 1.87s, setup 0ms, import 4.95s, tests 249.73s, environment 4ms)
+
+
+> vibe-supervisor@0.9.0-rc.8 test:python
+> python3 -m unittest src/backends/runtime/test_prompt_file.py src/backends/runtime/test_keychain_credential.py src/backends/runtime/test_worker_watchdog.py
+
+
+> vibe-supervisor@0.9.0-rc.8 acceptance
+> node scripts/acceptance.mjs
+
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-08T10:16:50.833Z",
+  "deterministic_checks": [
+    {
+      "name": "private-package",
+      "status": "PASS",
+      "detail": "Package remains unpublished/private while the source is MIT licensed."
+    },
+    {
+      "name": "node-engine",
+      "status": "PASS",
+      "detail": "Node 24.21.0"
+    },
+    {
+      "name": "runtime-shim",
+      "status": "PASS",
+      "detail": "Pinned Python launcher exists in the compiled package tree."
+    },
+    {
+      "name": "cli-build",
+      "status": "PASS",
+      "detail": "Compiled CLI entrypoint exists."
+    },
+    {
+      "name": "cli-version",
+      "status": "PASS",
+      "detail": "0.9.0-rc.8"
+    },
+    {
+      "name": "test-fixture-excluded",
+      "status": "PASS",
+      "detail": "Test-only shim fixture is absent from dist."
+    }
+  ],
+  "unverified_release_gates": [
+    {
+      "name": "hosted-vibe-auth",
+      "status": "UNVERIFIED",
+      "reason": "No hosted model request was made."
+    },
+    {
+      "name": "codex-desktop-registration",
+      "status": "UNVERIFIED",
+      "reason": "No user Codex config was changed during packaging."
+    },
+    {
+      "name": "macos-intel",
+      "status": "UNVERIFIED",
+      "reason": "Only this host architecture can be tested here."
+    },
+    {
+      "name": "clean-account-install",
+      "status": "UNVERIFIED",
+      "reason": "A fresh OS account is not available in this workspace."
+    },
+    {
+      "name": "real-vibe-hosted-acp-soak",
+      "status": "UNVERIFIED",
+      "reason": "Fake-peer lifecycle coverage passed; a 100-run soak against hosted Vibe has not been performed."
+    }
+  ]
+}
+
+> vibe-supervisor@0.9.0-rc.8 secret-scan
+> node scripts/secret-scan.mjs
+
+Secret scan passed: no recognized credential formats found.
+
+> vibe-supervisor@0.9.0-rc.8 sbom
+> node scripts/sbom.mjs
+
+Wrote SPDX SBOM with 197 locked package entries to dist/sbom.spdx.json.
+
+> vibe-supervisor@0.9.0-rc.8 smoke:install
+> node scripts/smoke-install.mjs
+
+{"status":"PASS","package":"vibe-supervisor","version":"0.9.0-rc.8","isolatedHome":true,"installedCliExecutable":"PASS","runtimeShim":"present","installedMcpInitializeAndListTools":"PASS","eofShutdown":"PASS","concurrentIsolatedMcp":"PASS"}
+vibe-supervisor-0.9.0-rc.8.tgz
+
+RC package and reports written to /Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/release
+c4720e55b309554f7d9d66baabed4383f12b211987c17120408a20a28120b2c7  vibe-supervisor-0.9.0-rc.8.tgz
+dd1fcd28cb33fdea6b26fa2b8cb6172e47adc4ce1f24e9b698e3d1417c2d3e25  sbom.spdx.json
+4c3ef55b3cd18d6982fb1f88d9ef93a38466274fe18aff054800daf1d3b47fbd  acceptance.json

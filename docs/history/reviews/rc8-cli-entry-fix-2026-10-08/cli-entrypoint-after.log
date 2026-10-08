@@ -1,0 +1,49 @@
+
+> vibe-supervisor@0.9.0-rc.8 test
+> vitest run tests/integration/cli-entrypoint.test.ts
+
+
+ RUN  v4.0.18 /Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe
+
+ ❯ tests/integration/cli-entrypoint.test.ts (3 tests | 2 failed) 100ms
+     × prints the package version through an npm-style executable symlink 3ms
+     × executes command validation through the executable symlink 4ms
+     ✓ does not run the CLI when the module is imported 93ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/integration/cli-entrypoint.test.ts > CLI executable entry point > prints the package version through an npm-style executable symlink
+Error: spawn /private/var/folders/b_/h2gj2txn28b6c6h4w8x14dlc0000gn/T/vsup-cli-entry-hsLoR7/vibe-supervisor EACCES
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/integration/cli-entrypoint.test.ts > CLI executable entry point > executes command validation through the executable symlink
+AssertionError: expected Error: spawn /private/var/folders/b_/h2gj… { …(8) } to match object { Object (code, stderr) }
+(6 matching properties omitted from actual)
+
+- Expected
++ Received
+
+- {
+-   "code": 2,
+-   "stderr": StringContaining "Unknown command",
++ Error {
++   "code": "EACCES",
++   "stderr": "",
+  }
+
+ ❯ tests/integration/cli-entrypoint.test.ts:30:5
+     28| 
+     29|   it('executes command validation through the executable symlink', asy…
+     30|     await expect(exec(await installedCommand(), ['not-a-command'])).re…
+       |     ^
+     31|   });
+     32| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  11:58:52
+   Duration  1.11s (transform 8ms, setup 0ms, import 13ms, tests 100ms, environment 0ms)
+

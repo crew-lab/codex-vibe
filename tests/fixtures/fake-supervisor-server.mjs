@@ -63,7 +63,7 @@ class FakeBackend {
     this.starts += 1;
     const start = this.starts;
     const mode = this.modeFor(start);
-    record('start', { runId: input.runId, mode: input.mode, behavior: mode, start });
+    record('start', { runId: input.runId, mode: input.mode, behavior: mode, start, timeoutSeconds: input.limits.timeoutSeconds });
     if (mode === 'exit') process.exit(3);
     if (mode === 'leak' && process.env.FAKE_LEAK_PID_FILE) {
       const leaked = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', 'vibe-fake-leaked-child'], { detached: true, stdio: 'ignore' });
@@ -85,6 +85,7 @@ class FakeBackend {
     const { callbacks, mode } = session;
     const steps = mode === 'slow' ? 8 : 3;
     try {
+      if (mode === 'silent') return;
       for (let step = 1; step <= steps; step += 1) {
         await session.sleep(step === 1 ? 20 : this.delay());
         await callbacks.onEvent({ source: this.kind === 'acp' ? 'acp' : 'vibe', type: 'tool_call', severity: 'info', data: { title: `Read file ${step}`, kind: 'read', status: 'completed' } });

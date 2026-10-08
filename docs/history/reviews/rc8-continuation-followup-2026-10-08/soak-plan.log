@@ -1,0 +1,10 @@
+vibe-supervisor hosted soak plan
+workspace: /private/tmp/rc8-phase-d-6n1ney4v/soak-workspace
+runs: 100 (reviews 60, edits 30, acp 10); hosted model turns about 107
+backends: programmatic 90 runs, acp 10 runs (continue, mid-turn close and restart scenarios)
+server command: node /private/tmp/rc8-phase-d-6n1ney4v/install/node_modules/vibe-supervisor/dist/cli.js serve --stdio
+evidence directory: /private/tmp/rc8-phase-d-6n1ney4v/hosted-soak-100
+seed: soak; status wait 180s; run timeout 900s
+preflight: workspace in the template allowlist: yes; git repository: yes; template config: /private/tmp/rc8-phase-d-6n1ney4v/soak-template/config.toml
+COST WARNING: every run sends the repository and the tasks to Mistral and is billed. Earlier hosted edits cost about $0.02 each; the real total depends on the tasks and the account. Run it only with the owner authorization.
+Nothing was started. Re-run with --yes to start the hosted runs.

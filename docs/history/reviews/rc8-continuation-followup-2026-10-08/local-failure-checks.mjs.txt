@@ -1,0 +1,29 @@
+import { readFile,writeFile,mkdir } from 'node:fs/promises';
+import { Client } from '/Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/node_modules/@modelcontextprotocol/client/dist/index.mjs';
+import { StdioClientTransport } from '/Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/node_modules/@modelcontextprotocol/client/dist/stdio.mjs';
+const root='/private/tmp/rc8-phase-d-6n1ney4v';
+const cli=`${root}/install/node_modules/vibe-supervisor/dist/cli.js`;
+const connections=[];const rows=[];
+async function open(home){
+ const client=new Client({name:'phase-d-local-failure-checks',version:'1.0.0'});
+ const transport=new StdioClientTransport({command:process.execPath,args:[cli,'serve','--stdio'],env:{...process.env,VIBE_SUPERVISOR_HOME:home},stderr:'pipe'});
+ let stderr='';transport.stderr?.on('data',c=>stderr+=c.toString());connections.push(client);
+ try{await client.connect(transport);return {client,stderr:()=>stderr};}catch(e){return {error:String(e),stderr:()=>stderr};}
+}
+try{
+ const first=await open(`${root}/home`);if(first.error)throw Error(first.error);
+ const second=await open(`${root}/home`);await new Promise(r=>setTimeout(r,100));rows.push({step:'second-client-observation',error:second.error,stderr:second.stderr()});if(!second.error)throw Error('Second shared client unexpectedly connected');
+ if(!/lock|owner|owned/i.test(second.stderr()))throw Error('Second-client error did not identify owner lock');
+ rows.push({step:'D15-owner-lock',error:second.error,stderr:second.stderr()});await first.client.close();
+ const home=`${root}/missing-executable`;await mkdir(home,{recursive:true,mode:0o700});
+ const text=(await readFile(`${root}/home/config.toml`,'utf8')).replace('vibe = "/Users/roman/.local/bin/vibe"',`vibe = "${root}/does-not-exist"`);
+ await writeFile(`${home}/config.toml`,text,{mode:0o600});
+ const missing=await open(home);if(missing.error)throw Error(missing.error);
+ const raw=await missing.client.callTool({name:'vibe_review_start',arguments:{cwd:`${root}/workspace`,task:'Synthetic missing executable test',wait_seconds:30}},{timeout:60000});
+ const data=raw.structuredContent??JSON.parse(raw.content.find(c=>c.type==='text').text);
+ if(JSON.stringify(data).indexOf('VSUP_VIBE_NOT_FOUND')<0)throw Error(`Incorrect missing-executable label: ${JSON.stringify(data)}`);
+ const saved=JSON.parse(await readFile(`${home}/runs/${data.run_id}/result.json`,'utf8'));if(JSON.stringify(saved.error)!==JSON.stringify(data.result?.error??data.error))throw Error('Saved error mismatch');rows.push({step:'D15-missing-executable',reply:data,saved_error:saved.error});
+ if(data.run_id)await missing.client.callTool({name:'vibe_close',arguments:{run_id:data.run_id}},{timeout:60000});
+ console.log('Local failure checks passed');
+}catch(e){rows.push({step:'FAIL',message:String(e)});process.exitCode=1;console.error(e);}
+finally{for(const c of connections){try{await c.close();}catch{}}await writeFile(`${root}/local-failure-checks.json`,JSON.stringify(rows,null,2)+'\n',{mode:0o600});}

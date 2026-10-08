@@ -47,3 +47,23 @@ D18 FAIL: stopped at run 1/100 on the 12-turn limit; Vibe exited 1 and the super
 ## 2026-10-07 — locally patched rc.7 turn-limit follow-up
 
 Turn-limit classification and missing saved errors were corrected and verified (603 TypeScript tests, Python suite, installed-Vibe profile checks, lint/typecheck/build, offline package smoke and checksums). The unchanged original hosted soak stopped at run 1/100, now reporting max_turn_requests and driver:stop_reason_max_turn_requests. This confirms the classification correction but does not pass the hosted soak. See [implementation, hashes, commands and outcomes](reviews/rc7-turn-limit-fix-2026-10-07/Read.md). Source corrections remain uncommitted in the isolated checkout; no upstream release was cut.
+
+## 2026-10-08 — rc.8 target-machine stop at D21
+
+Full offline release verification passed 615 TypeScript and 66 Python tests, including installed-Vibe profiles. Hosted cold/warm reviews passed. D21 refusal gates passed with no event activity, but explicitly raising 3 to 10 resumed the unfinished file chain and reached max_turn_requests again with no patch. The correction prompt and raised limit were confirmed locally; root cause remains unresolved. Hosted testing stopped before restart/soak/later checks. Official-client closed-session shutdown and cleanup have scoped evidence only. See [report](reviews/rc8-target-test-2026-10-08/Read.md) and [results](reviews/rc8-target-test-2026-10-08/session.json). No credit balance, desktop adoption, callbacks, clean OS account or Intel acceptance is claimed.
+
+## 2026-10-08 — controlled rc.8 continuation and reliability follow-up
+
+The original D21 failure remains recorded. Explicit task replacement and a bounded four-file 3-to-10 continuation passed live and after lazy reload, with verified files and end_turn. Official-client running/idle/closed shutdown and D24 saved cap reporting passed. D23 exercised the expected supervisor timeout at 61.268 seconds after 90 seconds idle, without a launcher-lifetime crash. No runtime change; the separately scoped soak is pending. See [evidence](reviews/rc8-continuation-followup-2026-10-08/Read.md). Native/platform/callback gates remain unverified.
+
+### rc.8 scoped soak result and installation correction
+
+The new soak stopped at run 20/100: 19 passed (11 reviews, 8 edits), then edit-add-file emitted no event and exceeded the 900-second driver deadline. No explicit auth/quota error was observed. Zero requests/owned leaks; ACP soak scenarios not reached. All test runs closed and worktrees removed. Separately, D1 is corrected to FAIL for the original package: its npm symlink silently exits, while direct Node invocation works. A CLI entry fix and stronger offline smoke are under validation. The earlier acceptance evidence is preserved with this correction.
+
+## 2026-10-08 — locally patched rc.8 CLI entry correction
+
+Original D1 failed for the npm executable symlink despite successful direct Node calls. The corrected entry guard and stronger direct-executable package smoke passed 618 TypeScript tests /56 files, Python tests, installed-Vibe profiles, lint/typecheck/build and offline packaging/checksums. Independent npm executable installation prints rc.8. See [CLI evidence](reviews/rc8-cli-entry-fix-2026-10-08/Read.md). No new hosted inference or upstream release; the 20/100 soak failure and remaining gates are unchanged.
+
+### rc.8 deadline follow-up
+
+The installed CLI entry fix remains verified. The initial soak worker deadline now fits below the driver budget. Full offline packaging passed 620 TypeScript tests and Python/installed-profile checks. Two hosted edits passed; patches and cleanup were verified. The original silent stall remains unresolved and the full soak failure is preserved. See [follow-up evidence](reviews/rc8-finding-fixes-2026-10-08/Read.md).

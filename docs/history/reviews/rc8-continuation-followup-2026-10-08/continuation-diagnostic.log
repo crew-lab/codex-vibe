@@ -1,0 +1,20 @@
+tools-acp {"tools":["vibe_review_start","vibe_edit_start","vibe_status","vibe_continue","vibe_respond","vibe_result","vibe_close"],"server_pid":38328,"home":"/private/tmp/rc8-phase-d-6n1ney4
+started {"run_id":"84d450f0-c99b-45fc-9c20-3bb84a5f7d65","kind":"edit","reply":{"run_id":"84d450f0-c99b-45fc-9c20-3bb84a5f7d65","state":"completed","backend":"acp","mode":"edit","source_wo
+settled {"run_id":"84d450f0-c99b-45fc-9c20-3bb84a5f7d65","reply":{"run_id":"84d450f0-c99b-45fc-9c20-3bb84a5f7d65","state":"completed","backend":"acp","last_seq":20,"next_after_seq":20,"eve
+settled {"run_id":"84d450f0-c99b-45fc-9c20-3bb84a5f7d65","reply":{"run_id":"84d450f0-c99b-45fc-9c20-3bb84a5f7d65","state":"completed","backend":"acp","last_seq":29,"next_after_seq":29,"eve
+explicit-replacement {"run_id":"84d450f0-c99b-45fc-9c20-3bb84a5f7d65","restart":false,"stop_reason":"end_turn","files":{"override-result.txt":"replacement task complete\n"},"result":{"schema_version":1
+closed {"run_id":"84d450f0-c99b-45fc-9c20-3bb84a5f7d65","reply":{"run_id":"84d450f0-c99b-45fc-9c20-3bb84a5f7d65","state":"closed","next_action":"The run is closed; start a new run for mor
+started {"run_id":"7eaac95c-8027-46a0-aae4-fb0f759ddbcf","kind":"edit","reply":{"run_id":"7eaac95c-8027-46a0-aae4-fb0f759ddbcf","state":"completed","backend":"acp","mode":"edit","source_wo
+settled {"run_id":"7eaac95c-8027-46a0-aae4-fb0f759ddbcf","reply":{"run_id":"7eaac95c-8027-46a0-aae4-fb0f759ddbcf","state":"completed","backend":"acp","last_seq":20,"next_after_seq":20,"eve
+settled {"run_id":"7eaac95c-8027-46a0-aae4-fb0f759ddbcf","reply":{"run_id":"7eaac95c-8027-46a0-aae4-fb0f759ddbcf","state":"completed","backend":"acp","last_seq":33,"next_after_seq":33,"eve
+minimal-same-objective-live {"run_id":"7eaac95c-8027-46a0-aae4-fb0f759ddbcf","restart":false,"stop_reason":"end_turn","files":{"short-result.txt":"resumed task complete\n"},"result":{"schema_version":1,"run_i
+closed {"run_id":"7eaac95c-8027-46a0-aae4-fb0f759ddbcf","reply":{"run_id":"7eaac95c-8027-46a0-aae4-fb0f759ddbcf","state":"closed","next_action":"The run is closed; start a new run for mor
+started {"run_id":"ce82c536-b897-4dd6-b24a-4c5d01156c2e","kind":"edit","reply":{"run_id":"ce82c536-b897-4dd6-b24a-4c5d01156c2e","state":"completed","backend":"acp","mode":"edit","source_wo
+settled {"run_id":"ce82c536-b897-4dd6-b24a-4c5d01156c2e","reply":{"run_id":"ce82c536-b897-4dd6-b24a-4c5d01156c2e","state":"completed","backend":"acp","last_seq":20,"next_after_seq":20,"eve
+minimal-same-objective-restart-before-restart {"server_pid":38328,"exit_ms":148,"handles":["ChildProcess"]}
+tools-acp {"tools":["vibe_review_start","vibe_edit_start","vibe_status","vibe_continue","vibe_respond","vibe_result","vibe_close"],"server_pid":39320,"home":"/private/tmp/rc8-phase-d-6n1ney4
+settled {"run_id":"ce82c536-b897-4dd6-b24a-4c5d01156c2e","reply":{"run_id":"ce82c536-b897-4dd6-b24a-4c5d01156c2e","state":"completed","backend":"acp","last_seq":34,"next_after_seq":34,"eve
+minimal-same-objective-restart {"run_id":"ce82c536-b897-4dd6-b24a-4c5d01156c2e","restart":true,"stop_reason":"end_turn","files":{"short-result.txt":"resumed task complete\n"},"result":{"schema_version":1,"run_id
+closed {"run_id":"ce82c536-b897-4dd6-b24a-4c5d01156c2e","reply":{"run_id":"ce82c536-b897-4dd6-b24a-4c5d01156c2e","state":"closed","next_action":"The run is closed; start a new run for mor
+PASS {"scope":"deliberate minimal same-objective D21 live and restart; replacement separately observed"}
+diagnostic-client-shutdown {"server_pid":39320,"exit_ms":4,"handles":["ChildProcess"]}

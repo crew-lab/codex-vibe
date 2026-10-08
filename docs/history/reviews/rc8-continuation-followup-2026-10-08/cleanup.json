@@ -1,0 +1,92 @@
+{
+  "runs": [
+    {
+      "run_id": "7eaac95c-8027-46a0-aae4-fb0f759ddbcf",
+      "home": "continuation-diagnostic",
+      "state": "closed",
+      "pid": 38782,
+      "pid_alive": false,
+      "worktree_present": false,
+      "stop_reason": "end_turn",
+      "error": null
+    },
+    {
+      "run_id": "84d450f0-c99b-45fc-9c20-3bb84a5f7d65",
+      "home": "continuation-diagnostic",
+      "state": "closed",
+      "pid": 38378,
+      "pid_alive": false,
+      "worktree_present": false,
+      "stop_reason": "end_turn",
+      "error": null
+    },
+    {
+      "run_id": "ce82c536-b897-4dd6-b24a-4c5d01156c2e",
+      "home": "continuation-diagnostic",
+      "state": "closed",
+      "pid": 39214,
+      "pid_alive": false,
+      "worktree_present": false,
+      "stop_reason": "end_turn",
+      "error": null
+    },
+    {
+      "run_id": "dee12e6e-beda-4ee5-9205-7e0b6aad3000",
+      "home": "reliability-programmatic",
+      "state": "closed",
+      "pid": 39659,
+      "pid_alive": false,
+      "worktree_present": false,
+      "stop_reason": "max_turn_requests",
+      "error": null
+    },
+    {
+      "run_id": "5e59d165-ca99-4669-992d-adc77c8734ac",
+      "home": "reliability-acp",
+      "state": "closed",
+      "pid": 39690,
+      "pid_alive": false,
+      "worktree_present": false,
+      "stop_reason": null,
+      "error": null
+    },
+    {
+      "run_id": "051f05fb-0479-44b3-92b4-33d8fcf2a5eb",
+      "home": "reliability-acp-v2",
+      "state": "closed",
+      "pid": 39845,
+      "pid_alive": false,
+      "worktree_present": false,
+      "stop_reason": "end_turn",
+      "error": null
+    },
+    {
+      "run_id": "89b1295d-0151-48f2-aab9-824fdb611220",
+      "home": "reliability-acp-v2",
+      "state": "closed",
+      "pid": 39934,
+      "pid_alive": false,
+      "worktree_present": false,
+      "stop_reason": null,
+      "error": {
+        "code": "VSUP_TIMEOUT",
+        "message": "The run exceeded its configured timeout.",
+        "remediation": "Increase the timeout or simplify the task, then start a new run.",
+        "retryable": false
+      }
+    },
+    {
+      "run_id": "48af38c9-b75f-47f0-9a76-0cc527c7dba4",
+      "home": "reliability-acp-v2",
+      "state": "closed",
+      "pid": 39760,
+      "pid_alive": false,
+      "worktree_present": false,
+      "stop_reason": null,
+      "error": null
+    }
+  ],
+  "source_git_status": "",
+  "worktree_list": "worktree /private/tmp/rc8-phase-d-6n1ney4v/workspace\nHEAD 867557ba646bdf7fee60ba5005b12e55c39fed14\nbranch refs/heads/main\n\n",
+  "owner_locks": []
+}

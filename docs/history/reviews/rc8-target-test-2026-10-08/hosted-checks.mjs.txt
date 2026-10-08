@@ -1,0 +1,40 @@
+import {readFile,writeFile,mkdir,stat,readdir} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+import {Client} from '/Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/node_modules/@modelcontextprotocol/client/dist/index.mjs';
+import {StdioClientTransport} from '/Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/node_modules/@modelcontextprotocol/client/dist/stdio.mjs';
+const root=(await readFile('/private/tmp/rc8-phase-d-path.txt','utf8')).trim();
+const workspace=`${root}/workspace`,cli=`${root}/install/node_modules/vibe-supervisor/dist/cli.js`;
+const report=[],active=new Set();let client,transport,home;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const save=()=>writeFile(`${root}/hosted-checks.json`,JSON.stringify(report,null,2)+'\n',{mode:0o600});
+const record=async(step,data)=>{report.push({step,time:new Date().toISOString(),...data});await save();console.log(step,JSON.stringify(data).slice(0,180));};
+async function connect(backend,label){
+ home=`${root}/${label}`;await mkdir(home,{recursive:true,mode:0o700});
+ await writeFile(`${home}/config.toml`,(await readFile(`${root}/home/config.toml`,'utf8')).replace('backend = "programmatic"',`backend = "${backend}"`),{mode:0o600});
+ client=new Client({name:'rc8-phase-d',version:'1.0.0'});
+ transport=new StdioClientTransport({command:process.execPath,args:[cli,'serve','--stdio'],env:{...process.env,VIBE_SUPERVISOR_HOME:home},stderr:'pipe'});
+ transport.stderr?.on('data',()=>{});
+ await client.connect(transport);
+ await record(`tools-${backend}`,{tools:(await client.listTools()).tools.map(t=>t.name),server_pid:transport.pid,home});
+}
+async function raw(name,args){const t=performance.now();const reply=await client.callTool({name,arguments:args},{timeout:600000});const data=reply.structuredContent??JSON.parse(reply.content.find(c=>c.type==='text').text);return {data,isError:!!reply.isError,ms:Math.round(performance.now()-t)};}
+async function call(name,args){const r=await raw(name,args);if(r.isError)throw Error(`${name}: ${JSON.stringify(r.data)}`);return r.data;}
+async function settle(id){let after=0;for(let n=0;n<100;n++){const s=await call('vibe_status',{run_id:id,after_seq:after,wait_seconds:30,max_events:100});after=s.next_after_seq??after;if(s.pending_request)throw Error('Unexpected permission/input request');if(['completed','failed','cancelled','closed'].includes(s.state)){await record('settled',{run_id:id,reply:s});if(s.state!=='completed')throw Error(`Unexpected state ${s.state}: ${JSON.stringify(s.result??s)}`);return s;} }throw Error('No settled result');}
+async function start(kind,task,max_turns=20,timeout_seconds=180){const s=await call(`vibe_${kind}_start`,{cwd:workspace,task,max_turns,timeout_seconds,wait_seconds:30});active.add(s.run_id);await record('started',{run_id:s.run_id,kind,reply:s});return s.run_id;}
+async function close(id,cleanup=false){const s=await call('vibe_close',{run_id:id,cleanup_worktree:cleanup});await record('closed',{run_id:id,reply:s});if(s.error)throw Error(`Close failed ${JSON.stringify(s.error)}`);if(cleanup&&!s.worktree_removed)throw Error('Worktree not removed');active.delete(id);}
+async function disconnect(label){const pid=transport.pid,t=performance.now();let timer;try{await Promise.race([client.close(),new Promise((_,rej)=>{timer=setTimeout(()=>rej(Error('Client close timeout')),10000);})]);}finally{clearTimeout(timer);}for(let n=0;n<100;n++){try{process.kill(pid,0);}catch{await record(label,{server_pid:pid,exit_ms:Math.round(performance.now()-t),handles:process._getActiveHandles().map(x=>x.constructor.name)});return;}await sleep(50);}throw Error('Server survives client close');}
+const normal='Read only src/nested/arithmetic.py. In one sentence identify whether add computes a sum. Available tools are read_file and grep, no shell. Finish your answer in this turn.';
+const spent='This is a synthetic turn-budget test. Use only file tools. Read src/nested/arithmetic.py, README.md and .gitignore with three separate read_file calls, then create budget-initial.txt containing synthetic budget test. Do not combine calls or use shell. The coordinator verifies files; do not claim executed tests.';
+async function noPrompt(id,args,code){const before=(await stat(`${home}/runs/${id}/events.ndjson`)).size;const r=await raw('vibe_continue',{run_id:id,message:'Create no-prompt.txt containing forbidden.',...args});const after=(await stat(`${home}/runs/${id}/events.ndjson`)).size;await record('D21-refused',{run_id:id,args,expected:code,reply:r,events_bytes_before:before,events_bytes_after:after});if(!r.isError||r.data.error?.code!==code||before!==after)throw Error('Budget refusal/no-activity mismatch');}
+async function budget(restart){let id=await start('edit',spent,3);let s=await settle(id);if(s.result.stop_reason!=='max_turn_requests')throw Error('D21 fixture did not reach cap');await noPrompt(id,{},'VSUP_TURN_LIMIT_REACHED');await noPrompt(id,{max_turns:3},'VSUP_TURN_LIMIT_REACHED');await noPrompt(id,{max_turns:2},'VSUP_INVALID_ARGUMENT');if(restart){await disconnect('D21-restart-shutdown');await connect('acp','hosted-acp');}
+ await call('vibe_continue',{run_id:id,max_turns:10,message:'Use write_file now to create budget-raised.txt containing exactly raised budget works followed by a newline. Do not read any other file. No shell or tests. Finish this turn.'});s=await settle(id);if(s.result.stop_reason!=='end_turn')throw Error('Raised budget failed end_turn');const full=await call('vibe_result',{run_id:id,detail:'full'});const meta=JSON.parse(await readFile(`${home}/runs/${id}/meta.json`,'utf8'));const worktree=meta.worktree?.path??meta.worktreePath??meta.worktree;await record('D21-candidate',{run_id:id,restart,result:full,worktree});
+ const file=await readFile(`${worktree}/budget-raised.txt`,'utf8');if(file.trim()!=='raised budget works')throw Error('Raised continuation did not write expected file');await close(id,true);await record(restart?'D21-restart-PASS':'D21-live-PASS',{run_id:id});}
+try{
+ await connect('programmatic','hosted-programmatic');
+ for(const label of ['cold','warm']){const id=await start('review',normal);const s=await settle(id);if(s.result.stop_reason!=='end_turn'||s.result.integrity.status!=='verified')throw Error('Review did not pass');await close(id);await record(`D5-${label}-PASS`,{run_id:id});}
+ await disconnect('programmatic-shutdown');
+ await connect('acp','hosted-acp');await budget(false);await budget(true);
+ await disconnect('D22-closed-session-shutdown');
+ await record('PASS',{scope:'D5 hosted cold/warm; D21 live/restart budget; official-client closed-session exit'});
+}catch(error){await record('FAIL',{message:String(error)});process.exitCode=1;}
+finally{if(client){for(const id of active){try{await close(id,true);}catch(error){await record('cleanup-error',{run_id:id,message:String(error)});}}try{await disconnect('final-client-shutdown');}catch(error){await record('cleanup-error',{message:String(error)});}}}

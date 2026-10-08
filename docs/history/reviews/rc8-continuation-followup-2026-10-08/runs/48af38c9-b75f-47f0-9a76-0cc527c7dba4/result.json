@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "run_id": "48af38c9-b75f-47f0-9a76-0cc527c7dba4",
+  "state": "cancelled",
+  "backend": "acp",
+  "summary": "Vibe run ended before normal completion.",
+  "workspace": {
+    "source": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+    "worker": "/private/tmp/rc8-phase-d-6n1ney4v/workspace"
+  },
+  "artifacts": [
+    {
+      "name": "transcript.md",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/48af38c9-b75f-47f0-9a76-0cc527c7dba4/transcript.md",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "media_type": "text/markdown"
+    },
+    {
+      "name": "events.ndjson",
+      "path": "/private/tmp/rc8-phase-d-6n1ney4v/reliability-acp-v2/runs/48af38c9-b75f-47f0-9a76-0cc527c7dba4/events.ndjson",
+      "sha256": "9eca077563bd91a36899722f035c4f6a9a4f8673f4fd3a61009458b884d5747e",
+      "bytes": 5900,
+      "media_type": "application/x-ndjson"
+    }
+  ],
+  "changed_files": [],
+  "warnings": [
+    "The supervisor restarted before this run finished; artifacts were not re-exported and may be incomplete."
+  ],
+  "integrity": {
+    "status": "verified",
+    "write_tool_observed": false
+  }
+}

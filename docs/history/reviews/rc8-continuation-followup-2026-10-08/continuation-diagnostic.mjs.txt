@@ -1,0 +1,47 @@
+import {readFile,writeFile,mkdir,stat,readdir} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+import {Client} from '/Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/node_modules/@modelcontextprotocol/client/dist/index.mjs';
+import {StdioClientTransport} from '/Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/node_modules/@modelcontextprotocol/client/dist/stdio.mjs';
+const root=(await readFile('/private/tmp/rc8-phase-d-path.txt','utf8')).trim();
+const workspace=`${root}/workspace`,cli=`${root}/install/node_modules/vibe-supervisor/dist/cli.js`;
+const report=[],active=new Set();let client,transport,home;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const save=()=>writeFile(`${root}/continuation-diagnostic.json`,JSON.stringify(report,null,2)+'\n',{mode:0o600});
+const record=async(step,data)=>{report.push({step,time:new Date().toISOString(),...data});await save();console.log(step,JSON.stringify(data).slice(0,180));};
+async function connect(backend,label){
+ home=`${root}/${label}`;await mkdir(home,{recursive:true,mode:0o700});
+ await writeFile(`${home}/config.toml`,(await readFile(`${root}/home/config.toml`,'utf8')).replace('backend = "programmatic"',`backend = "${backend}"`),{mode:0o600});
+ client=new Client({name:'rc8-phase-d',version:'1.0.0'});
+ transport=new StdioClientTransport({command:process.execPath,args:[cli,'serve','--stdio'],env:{...process.env,VIBE_SUPERVISOR_HOME:home},stderr:'pipe'});
+ transport.stderr?.on('data',()=>{});
+ await client.connect(transport);
+ await record(`tools-${backend}`,{tools:(await client.listTools()).tools.map(t=>t.name),server_pid:transport.pid,home});
+}
+async function raw(name,args){const t=performance.now();const reply=await client.callTool({name,arguments:args},{timeout:600000});const text=reply.content.find(c=>c.type==='text')?.text??'{}';let data=reply.structuredContent;if(!data){try{data=JSON.parse(text);}catch{data={error:{code:text.match(/VSUP_[A-Z_]+/)?.[0],message:text}};}}return {data,isError:!!reply.isError,ms:Math.round(performance.now()-t)};}
+async function call(name,args){const r=await raw(name,args);if(r.isError)throw Error(`${name}: ${JSON.stringify(r.data)}`);return r.data;}
+async function settle(id){let after=0;for(let n=0;n<100;n++){const s=await call('vibe_status',{run_id:id,after_seq:after,wait_seconds:30,max_events:100});after=s.next_after_seq??after;if(s.pending_request)throw Error('Unexpected permission/input request');if(['completed','failed','cancelled','closed'].includes(s.state)){await record('settled',{run_id:id,reply:s});if(s.state!=='completed')throw Error(`Unexpected state ${s.state}: ${JSON.stringify(s.result??s)}`);return s;} }throw Error('No settled result');}
+async function start(kind,task,max_turns=20,timeout_seconds=180){const s=await call(`vibe_${kind}_start`,{cwd:workspace,task,max_turns,timeout_seconds,wait_seconds:30});active.add(s.run_id);await record('started',{run_id:s.run_id,kind,reply:s});return s.run_id;}
+async function close(id,cleanup=false){const s=await call('vibe_close',{run_id:id,cleanup_worktree:cleanup});await record('closed',{run_id:id,reply:s});if(s.error)throw Error(`Close failed ${JSON.stringify(s.error)}`);if(cleanup&&!s.worktree_removed)throw Error('Worktree not removed');active.delete(id);}
+async function disconnect(label){const pid=transport.pid,t=performance.now();let timer;try{await Promise.race([client.close(),new Promise((_,rej)=>{timer=setTimeout(()=>rej(Error('Client close timeout')),10000);})]);}finally{clearTimeout(timer);}for(let n=0;n<100;n++){try{process.kill(pid,0);}catch{await record(label,{server_pid:pid,exit_ms:Math.round(performance.now()-t),handles:process._getActiveHandles().map(x=>x.constructor.name)});return;}await sleep(50);}throw Error('Server survives client close');}
+
+const chain=path=>`Synthetic budget test. Read ${path}/start.txt with read_file and follow each Next file pointer with a separate read_file call learned from the preceding result, exactly one file per model response. Continue until END and create the result as instructed. No grep, shell or network. Coordinator executes tests.`;
+async function test(label,path,message,restart=false){
+ const id=await start('edit',chain(path),3);const first=await settle(id);
+ if(first.result.stop_reason!=='max_turn_requests')throw Error('Diagnostic precondition did not reach cap');
+ if(restart){await disconnect(`${label}-before-restart`);await connect('acp','continuation-diagnostic');}
+ await call('vibe_continue',{run_id:id,max_turns:10,message});const final=await settle(id);
+ const full=await call('vibe_result',{run_id:id,detail:'full'});
+ const files={};for(const name of ['override-result.txt','short-result.txt']){try{files[name]=await readFile(`${full.workspace.worker}/${name}`,'utf8');}catch{}}
+ await record(label,{run_id:id,restart,stop_reason:final.result.stop_reason,files,result:full});
+ await close(id,true);return {stop_reason:final.result.stop_reason,files};
+}
+try{
+ await connect('acp','continuation-diagnostic');
+ await test('explicit-replacement','budget-chain','CANCEL the previous pointer-chain objective. It is intentionally unfinished and must remain unfinished. Replace it entirely with this one action: use write_file to create override-result.txt containing exactly replacement task complete followed by a newline. Do not read any more files. Finish this turn. No shell or tests.');
+ const live=await test('minimal-same-objective-live','short-chain','Continue the original short-chain task from the next unread pointer. Complete its result file and give a final answer. Do not restart from start.txt. No tests or shell.');
+ if(live.stop_reason!=='end_turn'||live.files['short-result.txt']?.trim()!=='resumed task complete')throw Error('Minimal continuation did not complete');
+ const restart=await test('minimal-same-objective-restart','short-chain','Continue the original short-chain task from the next unread pointer. Complete its result file and give a final answer. Do not restart from start.txt. No tests or shell.',true);
+ if(restart.stop_reason!=='end_turn'||restart.files['short-result.txt']?.trim()!=='resumed task complete')throw Error('Reloaded minimal continuation did not complete');
+ await record('PASS',{scope:'deliberate minimal same-objective D21 live and restart; replacement separately observed'});
+}catch(error){await record('FAIL',{message:String(error)});process.exitCode=1;}
+finally{if(client){for(const id of active){try{await close(id,true);}catch(error){await record('cleanup-error',{run_id:id,message:String(error)});}}try{await disconnect('diagnostic-client-shutdown');}catch(error){await record('cleanup-error',{message:String(error)});}}}

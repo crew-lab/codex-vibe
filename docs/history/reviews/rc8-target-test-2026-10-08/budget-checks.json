@@ -1,0 +1,251 @@
+[
+  {
+    "step": "tools-acp",
+    "time": "2026-10-08T09:24:36.118Z",
+    "tools": [
+      "vibe_review_start",
+      "vibe_edit_start",
+      "vibe_status",
+      "vibe_continue",
+      "vibe_respond",
+      "vibe_result",
+      "vibe_close"
+    ],
+    "server_pid": 36819,
+    "home": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp"
+  },
+  {
+    "step": "started",
+    "time": "2026-10-08T09:24:41.569Z",
+    "run_id": "201c41e0-f3ff-44bc-954c-0d584e485405",
+    "kind": "edit",
+    "reply": {
+      "run_id": "201c41e0-f3ff-44bc-954c-0d584e485405",
+      "state": "completed",
+      "backend": "acp",
+      "mode": "edit",
+      "source_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/workspace",
+      "worker_workspace": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp/worktrees/201c41e0-f3ff-44bc-954c-0d584e485405",
+      "created_at": "2026-10-08T09:24:36.121Z",
+      "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+      "base_ref": "HEAD",
+      "result": {
+        "run_id": "201c41e0-f3ff-44bc-954c-0d584e485405",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "max_turn_requests",
+        "summary": "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so continue with vibe_continue only with a larger max_turns, or start a new run.",
+        "warnings": [
+          "Vibe stopped with stop reason max_turn_requests instead of end_turn; the result may be incomplete."
+        ],
+        "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp/worktrees/201c41e0-f3ff-44bc-954c-0d584e485405",
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "diff.patch",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp/runs/201c41e0-f3ff-44bc-954c-0d584e485405/artifacts/diff.patch"
+          },
+          {
+            "name": "diff.stat",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp/runs/201c41e0-f3ff-44bc-954c-0d584e485405/artifacts/diff.stat"
+          },
+          {
+            "name": "changed-files.json",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp/runs/201c41e0-f3ff-44bc-954c-0d584e485405/artifacts/changed-files.json"
+          },
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp/runs/201c41e0-f3ff-44bc-954c-0d584e485405/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp/runs/201c41e0-f3ff-44bc-954c-0d584e485405/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "settled",
+    "time": "2026-10-08T09:24:41.571Z",
+    "run_id": "201c41e0-f3ff-44bc-954c-0d584e485405",
+    "reply": {
+      "run_id": "201c41e0-f3ff-44bc-954c-0d584e485405",
+      "state": "completed",
+      "backend": "acp",
+      "last_seq": 20,
+      "next_after_seq": 20,
+      "events": [
+        {
+          "seq": 1,
+          "type": "usage"
+        },
+        {
+          "seq": 2,
+          "type": "usage"
+        },
+        {
+          "seq": 3,
+          "type": "user_message_chunk"
+        },
+        {
+          "seq": 4,
+          "type": "session_info_update",
+          "title": "Synthetic cumulative turn-budget test: read budget-chain/start.txt using read_file. Follow each Next file pointer with a new read_file call, using only the exac"
+        },
+        {
+          "seq": 5,
+          "type": "available_commands_update"
+        },
+        {
+          "seq": 6,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 7,
+          "type": "tool_call_update",
+          "title": "Reading budget-chain/start.txt",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 8,
+          "type": "usage"
+        },
+        {
+          "seq": 9,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 10,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 11,
+          "type": "tool_call_update",
+          "title": "Reading budget-chain/648385e5d4.txt",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 12,
+          "type": "usage"
+        },
+        {
+          "seq": 13,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 14,
+          "type": "tool_call",
+          "title": "read_file",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 15,
+          "type": "tool_call_update",
+          "title": "Reading budget-chain/8659cda711.txt",
+          "kind": "read",
+          "status": "in_progress"
+        },
+        {
+          "seq": 16,
+          "type": "usage"
+        },
+        {
+          "seq": 17,
+          "type": "tool_call_update",
+          "kind": "read",
+          "status": "completed"
+        },
+        {
+          "seq": 18,
+          "type": "usage"
+        },
+        {
+          "seq": 19,
+          "type": "message"
+        },
+        {
+          "seq": 20,
+          "type": "usage"
+        }
+      ],
+      "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+      "result": {
+        "run_id": "201c41e0-f3ff-44bc-954c-0d584e485405",
+        "state": "completed",
+        "backend": "acp",
+        "stop_reason": "max_turn_requests",
+        "summary": "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so continue with vibe_continue only with a larger max_turns, or start a new run.",
+        "warnings": [
+          "Vibe stopped with stop reason max_turn_requests instead of end_turn; the result may be incomplete."
+        ],
+        "next_action": "The turn budget is used up for this session: check stop_reason and warnings, then call vibe_continue with a larger max_turns or start a new run, or call vibe_close when done.",
+        "worker": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp/worktrees/201c41e0-f3ff-44bc-954c-0d584e485405",
+        "changed_files": [],
+        "changed_files_total": 0,
+        "artifacts": [
+          {
+            "name": "diff.patch",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp/runs/201c41e0-f3ff-44bc-954c-0d584e485405/artifacts/diff.patch"
+          },
+          {
+            "name": "diff.stat",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp/runs/201c41e0-f3ff-44bc-954c-0d584e485405/artifacts/diff.stat"
+          },
+          {
+            "name": "changed-files.json",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp/runs/201c41e0-f3ff-44bc-954c-0d584e485405/artifacts/changed-files.json"
+          },
+          {
+            "name": "transcript.md",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp/runs/201c41e0-f3ff-44bc-954c-0d584e485405/transcript.md"
+          },
+          {
+            "name": "events.ndjson",
+            "path": "/private/tmp/rc8-phase-d-6n1ney4v/budget-acp/runs/201c41e0-f3ff-44bc-954c-0d584e485405/events.ndjson"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "step": "FAIL",
+    "time": "2026-10-08T09:24:41.576Z",
+    "message": "SyntaxError: Unexpected token 'V', \"VSUP_TURN_\"... is not valid JSON"
+  },
+  {
+    "step": "closed",
+    "time": "2026-10-08T09:24:41.882Z",
+    "run_id": "201c41e0-f3ff-44bc-954c-0d584e485405",
+    "reply": {
+      "run_id": "201c41e0-f3ff-44bc-954c-0d584e485405",
+      "state": "closed",
+      "next_action": "The run is closed; start a new run for more work.",
+      "worktree_removed": true
+    }
+  },
+  {
+    "step": "final-client-shutdown",
+    "time": "2026-10-08T09:24:41.887Z",
+    "server_pid": 36819,
+    "exit_ms": 4,
+    "handles": [
+      "ChildProcess"
+    ]
+  }
+]

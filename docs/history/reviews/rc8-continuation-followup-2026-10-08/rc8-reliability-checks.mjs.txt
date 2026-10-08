@@ -1,0 +1,48 @@
+import {readFile,writeFile,mkdir,stat,readdir} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+import {Client} from '/Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/node_modules/@modelcontextprotocol/client/dist/index.mjs';
+import {StdioClientTransport} from '/Users/roman/.codex/worktrees/rc7-target-tests/codex-vibe/node_modules/@modelcontextprotocol/client/dist/stdio.mjs';
+const root=(await readFile('/private/tmp/rc8-phase-d-path.txt','utf8')).trim();
+const workspace=`${root}/workspace`,cli=`${root}/install/node_modules/vibe-supervisor/dist/cli.js`;
+const report=[],active=new Set();let client,transport,home;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const save=()=>writeFile(`${root}/reliability-checks.json`,JSON.stringify(report,null,2)+'\n',{mode:0o600});
+const record=async(step,data)=>{report.push({step,time:new Date().toISOString(),...data});await save();console.log(step,JSON.stringify(data).slice(0,180));};
+async function connect(backend,label){
+ home=`${root}/${label}`;await mkdir(home,{recursive:true,mode:0o700});
+ await writeFile(`${home}/config.toml`,(await readFile(`${root}/home/config.toml`,'utf8')).replace('backend = "programmatic"',`backend = "${backend}"`),{mode:0o600});
+ client=new Client({name:'rc8-phase-d',version:'1.0.0'});
+ transport=new StdioClientTransport({command:process.execPath,args:[cli,'serve','--stdio'],env:{...process.env,VIBE_SUPERVISOR_HOME:home},stderr:'pipe'});
+ transport.stderr?.on('data',()=>{});
+ await client.connect(transport);
+ await record(`tools-${backend}`,{tools:(await client.listTools()).tools.map(t=>t.name),server_pid:transport.pid,home});
+}
+async function raw(name,args){const t=performance.now();const reply=await client.callTool({name,arguments:args},{timeout:600000});const text=reply.content.find(c=>c.type==='text')?.text??'{}';let data=reply.structuredContent;if(!data){try{data=JSON.parse(text);}catch{data={error:{code:text.match(/VSUP_[A-Z_]+/)?.[0],message:text}};}}return {data,isError:!!reply.isError,ms:Math.round(performance.now()-t)};}
+async function call(name,args){const r=await raw(name,args);if(r.isError)throw Error(`${name}: ${JSON.stringify(r.data)}`);return r.data;}
+async function settle(id){let after=0;for(let n=0;n<100;n++){const s=await call('vibe_status',{run_id:id,after_seq:after,wait_seconds:30,max_events:100});after=s.next_after_seq??after;if(s.pending_request)throw Error('Unexpected permission/input request');if(['completed','failed','cancelled','closed'].includes(s.state)){await record('settled',{run_id:id,reply:s});if(s.state!=='completed')throw Error(`Unexpected state ${s.state}: ${JSON.stringify(s.result??s)}`);return s;} }throw Error('No settled result');}
+async function start(kind,task,max_turns=20,timeout_seconds=180){const s=await call(`vibe_${kind}_start`,{cwd:workspace,task,max_turns,timeout_seconds,wait_seconds:30});active.add(s.run_id);await record('started',{run_id:s.run_id,kind,reply:s});return s.run_id;}
+async function close(id,cleanup=false){const s=await call('vibe_close',{run_id:id,cleanup_worktree:cleanup});await record('closed',{run_id:id,reply:s});if(s.error)throw Error(`Close failed ${JSON.stringify(s.error)}`);if(cleanup&&!s.worktree_removed)throw Error('Worktree not removed');active.delete(id);}
+async function disconnect(label){const pid=transport.pid,t=performance.now();let timer;try{await Promise.race([client.close(),new Promise((_,rej)=>{timer=setTimeout(()=>rej(Error('Client close timeout')),10000);})]);}finally{clearTimeout(timer);}for(let n=0;n<100;n++){try{process.kill(pid,0);}catch{await record(label,{server_pid:pid,exit_ms:Math.round(performance.now()-t),handles:process._getActiveHandles().map(x=>x.constructor.name)});return;}await sleep(50);}throw Error('Server survives client close');}
+
+async function settleAny(id){let after=0;for(let n=0;n<100;n++){const s=await call('vibe_status',{run_id:id,after_seq:after,wait_seconds:30,max_events:100});after=s.next_after_seq??after;if(s.pending_request)throw Error('Unexpected request');if(['completed','failed','cancelled','closed'].includes(s.state)){await record('settled-any',{run_id:id,reply:s});return s;}}throw Error('No settled result');}
+async function asynchronous(task){const s=await call('vibe_review_start',{cwd:workspace,task,max_turns:30,timeout_seconds:180,wait_seconds:0});active.add(s.run_id);await record('started-async',{reply:s});return s.run_id;}
+const simple='Read only src/nested/arithmetic.py and in one sentence explain its bug. Available tools read_file and grep only. Do not run tests.';
+async function runningWithEvent(id){for(let n=0;n<120;n++){const s=await call('vibe_status',{run_id:id,after_seq:0,wait_seconds:1,max_events:100});if(s.state==='running'&&s.events.some(e=>e.type==='tool_call'||e.type==='message'))return s;if(['completed','failed'].includes(s.state))throw Error('Fixture settled before live cancellation');}throw Error('No live event observed');}
+try{
+ await connect('programmatic','reliability-programmatic');
+ let id=await start('review','Review the repository read-only for correctness. Read README.md, then src/nested/arithmetic.py, then short-chain/start.txt with separate read_file calls, one per response, before giving a detailed final finding. File tools only; no shell.',2);let s=await settle(id);
+ const saved=JSON.parse(await readFile(`${home}/runs/${id}/result.json`,'utf8'));
+ if(s.result.stop_reason!=='max_turn_requests'||saved.stop_reason!==s.result.stop_reason||saved.error)throw Error('D24 capped result mismatch');await close(id);await record('D24-PASS',{run_id:id,result:s.result});await disconnect('D24-shutdown');
+ await connect('acp','reliability-acp');
+ id=await asynchronous('Read budget-chain/start.txt then follow every pointer, one separate read_file call per response, and explain each file in detail. Review only; never create a file. No shell.');await runningWithEvent(id);
+ const before=JSON.parse(await readFile(`${home}/runs/${id}/meta.json`,'utf8'));await disconnect('D22-running-disconnect');active.delete(id);
+ await connect('acp','reliability-acp');const interrupted=await call('vibe_status',{run_id:id,max_events:0});if(interrupted.state!=='recoverable')throw Error(`Running restart state ${interrupted.state}`);await close(id);await record('D22-running-PASS',{run_id:id,worker_pid:before.process?.pid,state_after_restart:interrupted.state});
+ id=await start('review',simple);s=await settle(id);if(s.result.stop_reason!=='end_turn')throw Error('Idle fixture did not finish');await disconnect('D22-idle-completed-disconnect');
+ await connect('acp','reliability-acp');await close(id);await record('D22-idle-PASS',{run_id:id});
+ id=await start('review',simple,30,60);s=await settle(id);if(s.result.stop_reason!=='end_turn')throw Error('D23 initial turn failed');await record('D23-waiting',{run_id:id,wait_seconds:90});await sleep(90000);
+ const began=performance.now();await call('vibe_continue',{run_id:id,message:'This is a bounded worker lifetime stress test. Read src/nested/arithmetic.py once, then produce a very detailed arithmetic review: enumerate 400 distinct pairs (i, i+1) for i from 1 to 400. For EACH pair, give the expected sum, actual returned difference, explain the defect in 50 words, and give a corrected result. Write the full analysis in your answer only, no files or tests. Do not summarize or skip entries; the coordinator may cancel at its deadline. File read/search tools only, no shell.'});s=await settleAny(id);const ms=Math.round(performance.now()-began);
+ if(ms<60000)throw Error(`D23 continuation too short for lifetime criterion: ${ms} ms, ${s.state}`);
+ if(s.state!=='completed'&&s.error?.code!=='VSUP_TIMEOUT'&&s.result?.error?.code!=='VSUP_TIMEOUT')throw Error(`D23 unexpected outcome ${JSON.stringify(s)}`);await record('D23-PASS',{run_id:id,continuation_ms:ms,state:s.state,error:s.error??s.result?.error});await close(id);
+ await disconnect('reliability-shutdown');await record('PASS',{scope:'D24; official-client D22 running/idle; D23 long continuation'});
+}catch(error){await record('FAIL',{message:String(error)});process.exitCode=1;}
+finally{if(client){for(const id of active){try{await close(id,true);}catch(error){await record('cleanup-error',{run_id:id,message:String(error)});}}try{await disconnect('final-reliability-shutdown');}catch(error){await record('cleanup-error',{message:String(error)});}}}
