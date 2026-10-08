@@ -1,0 +1,81 @@
+{
+  "review": {
+    "run_id": "397bfb73-eb77-4262-b5f1-5c63da276d44",
+    "result": "PASS",
+    "read_file_calls": 2,
+    "grep_calls": 0,
+    "correct_final_bug_finding": true,
+    "integrity": "verified"
+  },
+  "acp": {
+    "run_id": "1810c5b3-12e7-424b-9c13-a0ff1fd3c046",
+    "initial_fix": "PASS",
+    "correction": "PASS",
+    "numeric_cases_per_candidate": 4,
+    "ast_scope_verified": true,
+    "cleanup_inventory": "PASS",
+    "fresh_export_unchanged_after_inventory": true,
+    "patch_sha256": "19ff92c063e71a6fdbe8d0a24759681d19e35dc2f1ada12a68c40a4764e757e6"
+  },
+  "offline_diagnostic_watchdog_tests": 25,
+  "harness_errors_preserved": [
+    "event-count polling cutoff",
+    "changed_files filenames misread as objects"
+  ],
+  "cleanup": [
+    {
+      "run_id": "397bfb73-eb77-4262-b5f1-5c63da276d44",
+      "state": "closed",
+      "worker_absent": true,
+      "worktrees_absent": true,
+      "owner_lock_absent": true
+    },
+    {
+      "run_id": "e048a0da-8f9e-4f4a-8210-af9cc3735ff0",
+      "state": "closed",
+      "worker_absent": true,
+      "worktrees_absent": true,
+      "owner_lock_absent": true
+    },
+    {
+      "run_id": "98733f32-d44a-4de7-8493-5c40bda4d2a0",
+      "state": "closed",
+      "worker_absent": true,
+      "worktrees_absent": true,
+      "owner_lock_absent": true
+    },
+    {
+      "run_id": "1810c5b3-12e7-424b-9c13-a0ff1fd3c046",
+      "state": "closed",
+      "worker_absent": true,
+      "worktrees_absent": true,
+      "owner_lock_absent": true
+    }
+  ],
+  "native_reported_costs": [
+    {
+      "run_id": "397bfb73-eb77-4262-b5f1-5c63da276d44",
+      "native_reported_usd": 0.0081495,
+      "authoritative": false
+    },
+    {
+      "run_id": "e048a0da-8f9e-4f4a-8210-af9cc3735ff0",
+      "native_reported_usd": 0.0098055,
+      "authoritative": false
+    },
+    {
+      "run_id": "98733f32-d44a-4de7-8493-5c40bda4d2a0",
+      "native_reported_usd": 0.0072471,
+      "authoritative": false
+    },
+    {
+      "run_id": "1810c5b3-12e7-424b-9c13-a0ff1fd3c046",
+      "native_reported_usd": 0.015423899999999999,
+      "authoritative": false
+    }
+  ],
+  "budget_source": "User clarified EUR1.20 used of EUR8.50; no live balance queried",
+  "source_integration": "not performed",
+  "full_soak": "not rerun; previous failures remain",
+  "silent_stall": "unresolved"
+}

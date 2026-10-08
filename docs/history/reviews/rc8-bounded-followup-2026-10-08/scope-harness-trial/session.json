@@ -1,0 +1,52 @@
+{
+  "server": "/private/tmp/rc8-diagnostic-soak-o3bq8bg_/install/node_modules/.bin/vibe-supervisor",
+  "workspace": "/private/tmp/rc8-phase-d-6n1ney4v/soak-workspace",
+  "elapsed_ms": 6467,
+  "records": [
+    {
+      "step": "accepted-review-retained",
+      "root": "/private/tmp/rc8-bounded-followup-HQ3rRS",
+      "reason": "review already passed; not repeated"
+    },
+    {
+      "step": "tools-acp",
+      "tools": [
+        "vibe_review_start",
+        "vibe_edit_start",
+        "vibe_status",
+        "vibe_continue",
+        "vibe_respond",
+        "vibe_result",
+        "vibe_close"
+      ],
+      "home": "/private/tmp/rc8-bounded-followup-GSxbiE/acp",
+      "server_pid": 62615
+    },
+    {
+      "step": "start",
+      "run_id": "98733f32-d44a-4de7-8493-5c40bda4d2a0",
+      "kind": "edit",
+      "max_turns": 12
+    },
+    {
+      "step": "settled",
+      "run_id": "98733f32-d44a-4de7-8493-5c40bda4d2a0",
+      "state": "completed",
+      "stop_reason": "end_turn"
+    },
+    {
+      "step": "FAIL",
+      "message": "Error: Unexpected edit scope"
+    },
+    {
+      "step": "closed",
+      "run_id": "98733f32-d44a-4de7-8493-5c40bda4d2a0",
+      "state": "closed",
+      "worktree_removed": true
+    },
+    {
+      "step": "server-exited",
+      "pid": 62615
+    }
+  ]
+}

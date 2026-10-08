@@ -1,5 +1,11 @@
 # Implementation handoff
 
+## Bounded Vibe follow-up (2026-10-08)
+
+The capped review passed: two reads, zero searches and a correct final bug finding. A synthetic ACP sum fix plus one docstring correction passed scope/AST checks and four numeric cases per candidate; a cleanup-inventory turn preserved the exact final patch, and supervisor cleanup removed the worktree. No source patch was applied. All four runs (including two interrupted harness trials) are closed with no owned workers, locks or worktrees remaining. The two coordinator harness errors are preserved rather than labeled product failures. Offline diagnostic/watchdog checks passed 25 tests; no real hosted stall snapshot was exercised.
+
+The user clarified EUR1.20 **used** of EUR8.50, approximately EUR7.30 remaining at that observation. No live balance inspection or account rotation. Full-soak failures and the unresolved silent stall remain. Next: harden review-task search/final-answer instructions before deliberately choosing a new soak. See [test results and limits](docs/history/reviews/rc8-bounded-followup-2026-10-08/Read.md). The bounded-test evidence is preserved with this handoff on the dedicated branch.
+
 ## Latest saved handoff: instrumented soak and cleanup status (2026-10-08)
 
 Implementation and evidence are committed and pushed on `codex/rc8-stall-diagnostics`, tip `7fc176b3f28285229801ee3dd8e2af2c8f3b25a3`. Tested candidate: `8e5c963`; fetched article revision `7d68f3d` was incorporated. CLI entry and soak deadline fixes are preserved, with opt-in private startup/frame diagnostics and an overall two-hour budget reserving the final minute for cleanup. Full offline verification passed 623 TypeScript tests, 76 Python cases, installed-Vibe profiles and installed npm executable/MCP smoke. No main-branch push, release, version bump or global configuration change.
