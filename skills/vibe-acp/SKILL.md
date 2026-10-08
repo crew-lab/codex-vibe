@@ -19,7 +19,7 @@ Start, wait, read and close follow the [vibe-supervisor](../vibe-supervisor/SKIL
 
 ## Assign the task
 
-Tell Vibe that it shares the codebase, must preserve other changes, cannot run shell checks and cannot commit, merge, push or apply its patch. Name the checks you will run and do not accept fabricated execution claims. Use the [templates](references/verification-loop.md#prompt-templates). Pass `wait_seconds` on the start call.
+Tell Vibe that it shares the codebase, must preserve other changes, cannot run shell checks and cannot commit, merge, push or apply its patch. Ask it to list any scratch files or plans it creates and to remove only those, inside its own worktree, before it finishes; it must keep the deliverables. Name the checks you will run and do not accept fabricated execution claims. Use the [templates](references/verification-loop.md#prompt-templates). Pass `wait_seconds` on the start call.
 
 ## Answer requests
 
@@ -39,7 +39,7 @@ On `VSUP_INVALID_STATE`, `VSUP_SESSION_NOT_RESUMABLE`, `VSUP_REQUEST_EXPIRED` or
 
 ## Accept and close
 
-Accept only when the final patch meets the outcome, the checks pass and the limitations are stated. Delegation alone does not authorize applying a patch, committing, merging or pushing. Close with `vibe_close`; request `cleanup_worktree: true` only after a fresh export matches the final worktree. Report the outcome, what was applied or retained, the checks actually run and what is unresolved, distinguishing "worker produced a patch" from "verified implementation delivered".
+Accept only when the final patch meets the outcome, the checks pass and the limitations are stated. Delegation alone does not authorize applying a patch, committing, merging or pushing. Before closing, check the final patch for scratch files the worker left; if any remain and the session is usable, send one short `vibe_continue` naming the exact paths to remove, then fetch fresh artifacts. Do not start a new run just to clean an old worktree; worktree, process and private-storage cleanup belong to the supervisor and to you. Close with `vibe_close`; request `cleanup_worktree: true` only after a fresh export matches the final worktree. Report the outcome, what was applied or retained, the checks actually run and what is unresolved, distinguishing "worker produced a patch" from "verified implementation delivered".
 
 ## References
 
