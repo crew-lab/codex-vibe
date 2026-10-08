@@ -1,0 +1,15 @@
+{
+  "candidate_commit": "b366c5932f95c60c00dfd43e292bcb7ec4739f09",
+  "candidate_tree": "af6f7a1b529ec3b06355aa3e64b5eab698ed2e22",
+  "archive_sha256": "987441497cd707cb0af0c688cee3614a99f2badd48c83a8463f0a000de238de9",
+  "prior_archive_sha256": "6a67fcba46259b43e0acce4cbe0ae02220ba241f8c07a969d7c0d152ee8536c4",
+  "driver_sha256": "abd27aa33f3c8ca8ba8b828756bb25177a260004ba6138d6cdb9cc50d14484c5",
+  "audit_sha256": "122dfdce7e4ab9055ceb7a82666f2af757b73ad290df682823475a6bab04aec8",
+  "installed_executable_version": "0.9.0-rc.8",
+  "fixture": "/private/tmp/rc8-phase-d-6n1ney4v/soak-workspace",
+  "private_evidence_root": "/private/tmp/rc8-bounded-candidate",
+  "hosted_runs": 1,
+  "automatic_retry": false,
+  "account_rotation": false,
+  "full_soak_started": false
+}

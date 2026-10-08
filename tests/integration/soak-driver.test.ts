@@ -184,6 +184,22 @@ describe('soak driver', () => {
     expect(await readFile(path.join(box.out, 'home-programmatic', 'config.toml'), 'utf8')).toContain('backend = "programmatic"');
   }, 120_000);
 
+  it.each(['reads', 'searches', 'missing-final', 'unsafe', 'unavailable'])('reports %s task-compliance outcomes without failing the soak', async (mode) => {
+    const box = await sandbox();
+    const outcome = await soak(box, real(box, { reviews: 3, edits: 0, acp: 0 }, ['--stop-on-fail']), { FAKE_AUDIT_MODE: mode });
+    const summary = await readSummary(box);
+    expect(outcome.code).toBe(0);
+    expect(summary.totals.runs).toBe(3);
+    const field = ['reads', 'searches'].includes(mode) ? 'over_bounds' : mode === 'missing-final' ? 'final_answer_missing' : 'unavailable';
+    expect(summary.task_compliance[field]).toBeGreaterThan(0);
+    for (const run of await readRuns(box)) {
+      expect(run.closeState).toBe('closed');
+      expect(run.failures).toEqual([]);
+    }
+    expect(await readFile(path.join(box.out, 'runs.ndjson'), 'utf8')).not.toContain('PRIVATE-FIXTURE-CANARY');
+    expect(criterion(summary, 'no_leaked_processes_or_worktrees')).toBe('PASS');
+  });
+
   it('orders runs deterministically for a seed', async () => {
     const first = await sandbox(); const second = await sandbox();
     const args = (box: Awaited<ReturnType<typeof sandbox>>) => real(box, { reviews: 6, edits: 0, acp: 0 }, ['--seed', 'repeatable']);

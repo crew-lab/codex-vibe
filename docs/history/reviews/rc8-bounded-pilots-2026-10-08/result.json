@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "run_id": "fda1df51-72a3-40ac-af66-700392b3a5bb",
+  "state": "completed",
+  "backend": "programmatic",
+  "stop_reason": "end_turn",
+  "summary": "**Defects found in src/nested/arithmetic.py:**\n\n1. **Correctness defect** at `src/nested/arithmetic.py:2`: `add(a, b)` returns `a - b` instead of `a + b`. Trigger: `add(10, 5)` returns `5` instead of `15`.\n\n2. **Input validation defect** at `src/nested/arithmetic.py:1-2`: No input validation. Trigger: `add(\"a\", \"b\")` raises `TypeError: unsupported operand type(s) for -: 'str' and 'str'`.\n\n3. **Error handling defect** at `src/nested/arithmetic.py:1-2`: No error handling for type mismatches. Same trigger as #2.\n\nResource cleanup: N/A — no resources are acquired.\n\n*Scope: Only src/nested/arithmetic.py was successfully read within the 3 read_file and 2 grep call limits.*",
+  "workspace": {
+    "source": "/private/tmp/rc8-phase-d-6n1ney4v/soak-workspace",
+    "worker": "/private/tmp/rc8-phase-d-6n1ney4v/soak-workspace"
+  },
+  "artifacts": [
+    {
+      "name": "transcript.md",
+      "path": "/private/tmp/rc8-bounded-candidate/pilots/home-programmatic/runs/fda1df51-72a3-40ac-af66-700392b3a5bb/transcript.md",
+      "sha256": "7f7eb9aba2563eeb54b069d6ffc0af86bbcbd3e7a312ea586b480bfcafb759a8",
+      "bytes": 678,
+      "media_type": "text/markdown"
+    },
+    {
+      "name": "events.ndjson",
+      "path": "/private/tmp/rc8-bounded-candidate/pilots/home-programmatic/runs/fda1df51-72a3-40ac-af66-700392b3a5bb/events.ndjson",
+      "sha256": "24cb84aa201c038c4a9eb71ea959a4ab40b6d67c6b8c76f04afa15393c8a5c33",
+      "bytes": 904,
+      "media_type": "application/x-ndjson"
+    }
+  ],
+  "changed_files": [],
+  "warnings": [],
+  "integrity": {
+    "status": "verified",
+    "write_tool_observed": false
+  }
+}

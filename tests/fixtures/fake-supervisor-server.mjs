@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { appendFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -86,6 +86,18 @@ class FakeBackend {
 
   async play(session) {
     session.turn += 1;
+    if (session.input.runDirectory) {
+      const auditMode = process.env.FAKE_AUDIT_MODE;
+      const directory = path.join(session.input.runDirectory, 'vibe-home', 'sessions', 'session_fixture');
+      mkdirSync(directory, { recursive: true, mode: 0o700 });
+      const file = path.join(directory, 'messages.jsonl');
+      const calls = Array.from({ length: auditMode === 'reads' ? 4 : 1 }, () => ({ function: { name: 'read_file', arguments: 'PRIVATE-FIXTURE-CANARY' } }));
+      if (auditMode === 'searches') calls.push(...Array.from({ length: 3 }, () => ({ function: { name: 'grep' } })));
+      if (auditMode !== 'unavailable') {
+        if (auditMode === 'unsafe') { try { symlinkSync(logFile, file); } catch {} }
+        else writeFileSync(file, [JSON.stringify({ role: 'assistant', tool_calls: calls }), ...(auditMode === 'missing-final' ? [] : [JSON.stringify({ role: 'assistant', content: 'No defect found in the inspected file; remaining files were not reviewed.' })])].join('\n') + '\n', { mode: 0o600 });
+      }
+    }
     const turn = session.turn;
     const { callbacks, mode } = session;
     const steps = mode === 'slow' ? 8 : 3;
@@ -103,7 +115,7 @@ class FakeBackend {
           await session.sleep(120);
         }
       }
-      if (session.input.mode === 'edit') writeFileSync(path.join(session.input.workerWorkspace, `soak-fake-${turn}.txt`), `fake edit ${turn}\n`);
+      if (session.input.mode === 'edit') writeFileSync(path.join(session.input.workerWorkspace, session.input.task?.match(/named (soak-note-[0-9]+\.txt)/)?.[1] ?? session.input.task?.match(/In the file ([^,]+),/)?.[1] ?? `soak-fake-${turn}.txt`), `fake edit ${turn}\n`);
       await callbacks.onEvent({ source: this.kind === 'acp' ? 'acp' : 'vibe', type: 'agent_message', severity: 'info', data: { text: `Fake review turn ${turn} finished.\n` } });
       await callbacks.onState('completed', {
         result: { stopReason: mode === 'truncated' ? (process.env.FAKE_STOP_REASON || 'max_turn_requests') : 'end_turn', summary: `Fake summary for turn ${turn}.` },
@@ -152,7 +164,7 @@ class FakeBackend {
   async recover(runRecord, callbacks) {
     record('recover', { runId: runRecord.runId, hasSession: Boolean(runRecord.acp?.sessionId) });
     if (!runRecord.acp?.sessionId) return undefined;
-    this.session(runRecord.runId, callbacks, { mode: runRecord.mode, workerWorkspace: runRecord.workerWorkspace }, 1, 'normal');
+    this.session(runRecord.runId, callbacks, { mode: runRecord.mode, workerWorkspace: runRecord.workerWorkspace, runDirectory: path.join(dataDir, 'runs', runRecord.runId) }, 1, 'normal');
     return { runId: runRecord.runId, backend: this.kind, opaque: {} };
   }
 }

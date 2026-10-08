@@ -8,6 +8,8 @@ import { parse, stringify } from 'smol-toml';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 
+import { auditReview } from './soak-review-audit.mjs';
+
 const exec = promisify(execFile);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distRoot = process.env.VIBE_SUPERVISOR_DIST_DIR ? path.resolve(process.env.VIBE_SUPERVISOR_DIST_DIR) : path.join(root, 'dist');
@@ -535,7 +537,15 @@ async function closeRun(ctx) {
 async function recordUsage(ctx) {
   if (!ctx.runId || ctx.closed || !isAlive(ctx.holder.server?.pid)) return;
   const reply = await call(ctx, 'vibe_result', { run_id: ctx.runId, detail: 'full' });
-  if (reply.ok && reply.data.usage && ctx.turn) ctx.turn.usage = reply.data.usage;
+  if (reply.ok && ctx.turn) {
+    if (reply.data.usage) ctx.turn.usage = reply.data.usage;
+    ctx.publicFinal = typeof reply.data.summary === 'string' && Boolean(reply.data.summary.trim()) && !reply.data.summary.includes('<vibe_stop_event>');
+    if (ctx.job.kind === 'edit' && ctx.turn.stopReason === 'end_turn') {
+      const files = reply.data.changed_files;
+      const expected = ctx.job.taskId === 'edit-add-file' ? ctx.job.task.match(/named (soak-note-[0-9]+\.txt)/)?.[1] : ctx.job.taskId === 'edit-one-line' ? ctx.job.task.match(/In the file ([^,]+),/)?.[1] : undefined;
+      ctx.rec.editExport = { valid_scope: Array.isArray(files) && files.length === 1 && (!expected || files[0] === expected) };
+    }
+  }
 }
 
 async function continueTurn(ctx, message) {
@@ -592,6 +602,7 @@ async function scenario(ctx) {
   if (job.scenario === 'restart_in_progress') return restartScenario(ctx, first, true);
   const good = judge(ctx, await awaitSettled(ctx, first));
   if (!good) return;
+  await auditRun(ctx);
   if (job.scenario === 'continue') {
     if (ctx.turn.truncated === true) { ctx.rec.continuation = { skipped: 'first_turn_truncated' }; return; }
     const second = await continueTurn(ctx, job.followup);
@@ -670,9 +681,25 @@ async function executeJob(holder, job, o, index, total) {
   if (o.workDeadline !== undefined && performance.now() >= o.workDeadline) o.totalExpired = true;
   try { await preserveDiagnostics(ctx); } catch { rec.diagnostics = { status: 'unavailable' }; }
   try { await recordUsage(ctx); } catch {}
+  if (ctx.job.kind !== 'edit') await auditRun(ctx);
   try { await closeRun(ctx); } catch (error) { failRun(ctx, 'driver:exception', `close: ${error?.message ?? error}`); }
   finalizeRecord(ctx);
   return rec;
+}
+
+const AUDIT_BOUNDS = { 'review-file': { reads: 3, searches: 3 }, 'review-bug-class': { reads: 2, searches: 2 } };
+
+async function auditRun(ctx) {
+  if (!ctx.runId || !AUDIT_BOUNDS[ctx.job.taskId]) return;
+  try {
+    await recordUsage(ctx);
+    const answered = !ctx.rec.closeMid?.exercised && ctx.turn?.stopReason === 'end_turn';
+    const audit = await auditReview(ctx.holder.home, ctx.runId, { ...AUDIT_BOUNDS[ctx.job.taskId], requireFinal: answered });
+    if (answered && !ctx.publicFinal && !audit.violations.includes('final_answer_missing')) audit.violations.push('final_answer_missing');
+    ctx.rec.reviewAudit = audit;
+  } catch {
+    ctx.rec.reviewAudit = { status: 'unavailable' };
+  }
 }
 
 async function preserveDiagnostics(ctx) {
@@ -827,6 +854,13 @@ function summarize({ records, o, plan, startedAt, reports, processes, registered
     by_backend: by((rec) => rec.backend),
     by_scenario: by((rec) => rec.scenario ?? rec.kind),
     truncated: { runs: truncatedRuns.length, by_kind: truncatedCount((rec) => rec.kind), by_backend: truncatedCount((rec) => rec.backend) },
+    task_compliance: {
+      audited: records.filter((rec) => rec.reviewAudit?.status === 'validated').length,
+      unavailable: records.filter((rec) => rec.reviewAudit?.status === 'unavailable').length,
+      over_bounds: records.filter((rec) => rec.reviewAudit?.violations?.includes('task_bounds')).length,
+      final_answer_missing: records.filter((rec) => rec.reviewAudit?.violations?.includes('final_answer_missing')).length,
+      edits_outside_requested_file: records.filter((rec) => rec.editExport && rec.editExport.valid_scope === false).length,
+    },
     latency_ms: {
       time_to_first_event: latency(timed.map((rec) => rec.timeToFirstEventMs).filter((value) => value !== null)),
       time_to_settled: latency(timed.map((rec) => rec.timeToSettledMs).filter((value) => value !== null)),
