@@ -1,29 +1,31 @@
 ---
-title: "7 things to check before one coding agent hands work to another"
+title: "7 checks before one coding agent delegates to another"
 published: false
-description: "Lessons from an MCP server that lets Codex delegate reviews and edits to Mistral Vibe: read-only that is checked, edits as patches, honest stop reasons, and the soak test that died on run 1."
+description: "My 100-run agent soak test died on run 1 because my MCP server called a turn limit a crash. Seven checks I now make before Codex hands code to Mistral Vibe."
 tags: showdev, mcp, ai, security
 ---
 
 {% card %}
-**TL;DR** I built vibe-supervisor, a local Model Context Protocol (MCP) server that lets Codex hand code reviews and edits to Mistral Vibe. This post is about the seven boundaries I had to make true before trusting one agent to drive another; they transfer to any MCP server or agent setup. MIT licensed, macOS only, release candidate 0.9.0-rc.8. "Real run" below means Vibe 2.25.8 on my Mac through the official MCP test client, not a fake backend.
+**TL;DR** I built vibe-supervisor, a local Model Context Protocol (MCP) server that lets Codex hand code reviews and edits to Mistral Vibe. This post is about the seven boundaries I had to make true before trusting one agent to drive another; they transfer to any MCP server or agent setup. MIT licensed, macOS only, release candidate 0.9.0-rc.8. "Real run" below means Vibe 2.25.8 on my Mac through the official MCP test client, as opposed to the fake backends my tests use.
 {% endcard %}
 
 On 2026-10-07 I started my first 100-run soak test of a tool that lets one coding agent delegate to another. It died on run 1. Nothing had crashed: Mistral Vibe had used its 12-turn budget (a turn is one model request with its tool calls) in 27.4 seconds, printed `<vibe_stop_event>Turn limit of 12 reached</vibe_stop_event>`, and exited with code 1. My supervisor saw the non-zero exit and reported `VSUP_BACKEND_CRASHED`. I had shipped a release candidate that called a limit a crash, and a partial review had come within one field of looking like a finished one.
 
-Wiring one agent into another is a few lines of configuration in any current tool. Knowing what the second agent did, and did not do, is the hard part, whether your coordinator is Codex, Claude Code, Cursor or a script you wrote. Here is what I needed to be true, how I checked it, and where the checks still fall short.
+Wiring one agent into another is a few lines of configuration in any current tool. Knowing what the second agent did, and did not do, is the hard part, whether your coordinator is Codex, Claude Code, Cursor or a script you wrote. The seven checks below are what I needed to be true. Each one shows how I tested it and where the test is still thin.
 
 ## 1. Read-only has to be checked, not promised
 
 A review profile that exposes only `read_file` and `grep` is a promise, and a tool that turns out to write breaks it silently. So the supervisor snapshots the workspace when a review starts and compares it when the run ends: files Git can see are hashed with SHA-256, everything else is compared by size, modification time and inode. The result carries `integrity.status` (`verified`, `changed` with the paths, or `unverified` with a reason) and `write_tool_observed`, true if the run's own events show a write-capable tool call.
 
-The blind spot: a write to an ignored path such as `node_modules/` that keeps size, time and inode would be missed. In the real runs on 2026-10-07, reads outside the workspace and of `.env` were refused, `write_file` was an unknown tool in a review, and both reviews found the planted arithmetic bug in a nested file of a synthetic repository without changing it. Two runs on my own fixture, not a benchmark.
+The blind spot: a write to an ignored path such as `node_modules/` that keeps size, time and inode would be missed. In the real runs on 2026-10-07, reads outside the workspace and of `.env` were refused (on the ACP backend), `write_file` was an unknown tool in a review, and both reviews found the planted arithmetic bug in a nested file of a synthetic repository without changing it. That is two runs on my own fixture, so treat it as a smoke test.
 
 ## 2. Edits come back as a patch from a throwaway worktree
 
 For an edit, the supervisor creates a detached Git worktree from the base you name, gives Vibe `read_file`, `grep`, `write_file` and `edit` inside it and nothing else, and exports the result as a patch. Small patches come back inline, larger ones are saved next to the run. Nothing is applied, committed, merged or pushed; you read the patch and decide.
 
-Uncommitted changes in your checkout are not in the worktree, which caught me out once. Cleanup is a check, not an `rm -rf`: the worktree is removed only when a fresh export still matches the saved patch and no ignored files are left behind. On 2026-10-07 a real edit's eleven-file patch applied to a clean clone, its four test cases passed, and the worktree was removed.
+Uncommitted changes in your checkout are not in the worktree, which caught me out once. Cleanup is a check in its own right: the worktree is removed only when a fresh export still matches the saved patch and no ignored files are left behind. On 2026-10-07 a real edit's eleven-file patch applied to a clean clone, its four test cases passed, and the worktree was removed.
+
+Takeaway: the worker's output should be an artifact you review, never a change you have to undo.
 
 ## 3. No shell for the worker
 
@@ -39,34 +41,61 @@ Vibe runs in two modes. One-shot: the supervisor sends a task, Vibe answers once
 
 **The continuation that could never work.** The second came from a real deployment task on an earlier candidate in ACP mode. A run used up its turns without producing a patch, and every correction sent to that session came back exhausted. Vibe 2.25.8's source explained why: it counts turns per session, not per prompt, and keeps the count across `session/load`, so once the budget is spent every further prompt ends with `max_turn_requests` and does nothing.
 
-The supervisor now refuses a plain `vibe_continue` on such a run with `VSUP_TURN_LIMIT_REACHED`, before anything reaches Vibe, and asks for a `max_turns` above the run's current limit (a cumulative ceiling, not an increment); at 50, the supervisor's maximum, you start a new run. This gate is new in rc.8 and tested only against fake backends that model Vibe's counting; confirming it on a real run is still open before 1.0.
+The supervisor now refuses a plain `vibe_continue` on such a run with `VSUP_TURN_LIMIT_REACHED`, before anything reaches Vibe, and asks for a `max_turns` above the run's current limit (the new value is the session's total ceiling, so raising a spent 12 to 20 buys roughly eight more turns); at 50, the supervisor's maximum, you start a new run. This gate is new in rc.8 and tested only against fake backends that model Vibe's counting; confirming it on a real run is still open before 1.0.
 
-If you take one thing from this post: find out how your worker signals "I stopped at a limit", and test that your coordinator sees that signal as different from both success and failure.
+Find out how your worker signals "I stopped at a limit", then test that your coordinator treats that signal as neither success nor failure. Mine did not, twice.
 
 ## 5. A run has to survive a restart
 
-Codex quits, the laptop sleeps, the server restarts. Every run is recorded on disk, and after a restart the supervisor only reads those records; a run that was still going becomes `recoverable`, and a continuation reloads its session on demand. The original task is never resubmitted, because replaying an uncertain task is worse than asking. In the real runs on 2026-10-07, restarts after a completed run and during a running one both recovered, with the supervisor up in 98 ms. Those restarts were graceful, as when Codex quits, not `kill -9`.
+Codex quits, the laptop sleeps, the server restarts. Every run is recorded on disk, and after a restart the supervisor only reads those records; a run that was still going becomes `recoverable`, and a continuation reloads its session on demand. The original task is never resubmitted, because replaying an uncertain task is worse than asking. In the real runs on 2026-10-07, restarts after a completed run and during a running one both recovered, with the supervisor up in 98 ms. Those restarts were graceful, as when Codex quits; a `kill -9` mid-run is still untested on real Vibe.
+
+Takeaway: if a restart loses the run, the coordinator will start it again, and you pay for the work twice.
 
 ## 6. Every reply tells the model what to do next
 
-The coordinator is a language model without your docs open, and it should not need a skill installed to drive the loop. So every reply carries `next_action`, one sentence naming the next call, and a result is small on purpose. These are the fields Codex checks before it believes anything (shape only; values illustrative):
+The coordinator is a language model without your docs open, and it should not need a skill installed to drive the loop. So every reply carries `next_action`, one sentence naming the next call, and a result is small on purpose. This is the saved result of the 15.2-second retry from check 4, trimmed of run IDs, paths and artifact hashes (rc.7 with the fix; rc.8 rewords the summary to point at a larger `max_turns` or a new run). These are the fields Codex checks before it believes anything:
 
 ```json
 {
   "state": "completed",
+  "backend": "programmatic",
   "stop_reason": "max_turn_requests",
-  "summary": "…",
-  "warnings": ["Vibe stopped with stop reason max_turn_requests instead of end_turn; the result may be incomplete."],
-  "integrity": { "status": "verified", "write_tool_observed": false },
-  "next_action": "Start a new run with a larger max_turns, or narrow the task."
+  "summary": "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; ...",
+  "changed_files": [],
+  "warnings": [
+    "Vibe stopped with stop reason max_turn_requests instead of end_turn; the result may be incomplete."
+  ],
+  "integrity": { "status": "verified", "write_tool_observed": false }
 }
 ```
 
 Every error code carries a remedy for the same reason: a model that reads a bare code guesses, one that reads the fix applies it.
 
+The request side matters as much. The prompt that starts a review gives an absolute path, a scope and what to report:
+
+> Use Vibe to review `/absolute/path/to/repo` for correctness bugs in the authentication module. Read only. Report findings with file and line, and tell me if the review stopped early.
+
+Takeaway: write tool replies for a reader that has no docs open, because that is exactly who reads them.
+
 ## 7. Wait inside the tool call instead of polling
 
 A coordinator that polls burns tokens and context on "still running". The start tools and `vibe_status` take `wait_seconds` from 0 to 300 and return as soon as the coordinator is needed: a new event, a state change, a pending permission request, or a settled run. A finished run returns its result inside the start reply, so the usual loop is three calls: start with a wait of 120 to 300, `vibe_status` if needed, then `vibe_close`. The client's tool timeout must exceed the longest wait; `setup` writes `tool_timeout_sec = 600` into `~/.codex/config.toml` for that reason.
+
+Takeaway: a wait that returns on the first useful event costs one call where polling costs many.
+
+## Steal this checklist
+
+{% card %}
+Before one agent hands work to another, in whatever stack you use:
+
+1. **Read-only is verified** by a snapshot before and a comparison after, with the blind spots named.
+2. **Edits land in a throwaway worktree** and come back as a patch; nothing is applied, committed or pushed for you.
+3. **No shell for the worker**, and the coordinator knows it has to run the tests itself.
+4. **A stop at a limit is neither success nor failure.** Find your worker's limit signal and test that your code sees it.
+5. **Runs are on disk** and recoverable after a restart, without replaying the task or restoring a pending grant.
+6. **Every reply names the next call**, and every error names its remedy.
+7. **Waiting happens inside the tool call**, bounded, with the client's tool timeout longer than the wait.
+{% endcard %}
 
 ## How the pieces fit
 
@@ -85,20 +114,6 @@ Mistral Vibe 2.25.8 ──► Mistral API
 
 Each run gets a private `HOME`, so your Vibe config, hooks, skills and MCP servers are not inherited. A one-shot task travels through a file the shim deletes before Vibe starts, so it never shows in `ps`. Known secret formats are redacted, and the model's reasoning is neither persisted nor left in Vibe's own session history.
 
-## Steal this checklist
-
-{% card %}
-Before one agent hands work to another, in whatever stack you use:
-
-1. **Read-only is verified**, not configured: snapshot before, compare after, name the blind spots.
-2. **Edits land in a throwaway worktree** and come back as a patch; nothing is applied, committed or pushed for you.
-3. **No shell for the worker**, and the coordinator knows it has to run the tests itself.
-4. **A stop at a limit is neither success nor failure.** Find your worker's limit signal and test that your code sees it.
-5. **Runs are on disk** and recoverable after a restart, without replaying the task or restoring a pending grant.
-6. **Every reply names the next call**, and every error names its remedy.
-7. **Waiting happens inside the tool call**, bounded, with the client's tool timeout longer than the wait.
-{% endcard %}
-
 ## What it costs
 
 Real-run numbers from the rc.7 session on 2026-10-07 (macOS arm64, Vibe 2.25.8 with `mistral-medium-3.5`, the official MCP client, a synthetic repository). These are settled-reply times after the start call's wait returned, not first-token latencies, and most of each is the model's time.
@@ -112,7 +127,7 @@ Earlier real edits cost about $0.02 each as Vibe reported them (rc.2, 2026-10-05
 
 ## What this is not
 
-It is not an operating-system sandbox. It is an application-level policy: it validates workspaces, filters the worker's environment and tools, and bounds its time, turns and output, but Vibe still runs as your user, and the file content it is allowed to read is sent to Mistral. Redaction catches known secret formats, not every one. Treat a delegated run like running someone else's code with your permissions, on a repository you are willing to share with the provider.
+It is not an operating-system sandbox. It is an application-level policy: it validates workspaces, filters the worker's environment and tools, and bounds its time, turns and output, but Vibe still runs as your user, and the file content it is allowed to read is sent to Mistral. Redaction catches known secret formats; an unusual one can slip through. Treat a delegated run like running someone else's code with your permissions, on a repository you are willing to share with the provider.
 
 ## Try it
 
@@ -135,9 +150,7 @@ npm link
 vibe-supervisor setup --workspace /absolute/path/to/your/repo
 ```
 
-`setup` adds the workspace to the allowlist, runs a health check, and shows the Codex configuration change before writing it. Restart Codex and ask in plain words with an absolute path and a concrete scope:
-
-> Use Vibe to review `/absolute/path/to/repo` for correctness bugs in the authentication module. Read only. Report findings with file and line, and tell me if the review stopped early.
+`setup` adds the workspace to the allowlist, runs a health check, and shows the Codex configuration change before writing it. Restart Codex and try the review prompt from check 6.
 
 Verified on real Vibe: reviews, edits, continuation, restart recovery and idle timeout through the official MCP client, and Codex desktop registration on an earlier build. Not yet: the 100-run soak, the turn-budget gate on a real run, a full pass inside the Codex desktop app, and a clean-account install. The repository's compatibility notes keep that list. This is an independent project, not affiliated with OpenAI or Mistral AI.
 
