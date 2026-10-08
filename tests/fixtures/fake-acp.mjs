@@ -115,6 +115,10 @@ async function handle(message) {
       notification('vibe/unknown_test_notification', { arbitrary: 'unknown notification is ignored' });
       notification('session/update', { sessionId, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `reply-${promptCount}` } } });
     }
+    if (mode === 'silent') { await new Promise(() => {}); }
+    if (mode === 'slow-chunks') {
+      for (let index = 0; index < 3; index += 1) { await new Promise((resolve) => setTimeout(resolve, 1000)); chunk(`slow-${index}\n`); }
+    }
     if (mode === 'partial-wait') {
       chunk('first complete line\n');
       chunk('partial line without newline');

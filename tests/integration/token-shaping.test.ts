@@ -178,7 +178,7 @@ describe("vibe_status wait_seconds", () => {
   });
 
   it("leaves no timers, waiters or abort listeners behind across many waits", async () => {
-    const { source, manager, backend } = await setup();
+    const { source, manager, backend } = await setup(new FakeBackend(), { limits: { ...DEFAULT_CONFIG.limits, workerProgressTimeoutSeconds: 0 } });
     try {
       const runId = await runningRun(manager, source);
       const runtime = (manager as unknown as { runs: Map<string, { waiters: Set<unknown> }> }).runs.get(runId)!;

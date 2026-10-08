@@ -32,6 +32,7 @@ const configSchema = z.object({
     max_event_bytes: z.number().int().min(1024).max(1_073_741_824).default(52_428_800),
     max_transcript_bytes: z.number().int().min(1024).max(1_073_741_824).default(10_485_760),
     max_artifact_bytes: z.number().int().min(1024).max(2_147_483_648).default(104_857_600),
+    worker_progress_timeout_seconds: z.number().int().refine((value) => value === 0 || (value >= 60 && value <= 7200), "must be 0 or between 60 and 7200").default(600),
     max_mcp_result_chars: z.number().int().min(1000).max(1_000_000).default(8000),
     mcp_result_format: z.enum(["text", "structured", "both"]).default("text")
   }).strict().prefault({}),
@@ -58,6 +59,7 @@ export function validateConfig(input: unknown): SupervisorConfig {
       maxEventBytes: parsed.limits.max_event_bytes,
       maxTranscriptBytes: parsed.limits.max_transcript_bytes,
       maxArtifactBytes: parsed.limits.max_artifact_bytes,
+      workerProgressTimeoutSeconds: parsed.limits.worker_progress_timeout_seconds,
       maxMcpResultChars: parsed.limits.max_mcp_result_chars,
       mcpResultFormat: parsed.limits.mcp_result_format
     },

@@ -63,7 +63,7 @@ class FakeBackend {
     this.starts += 1;
     const start = this.starts;
     const mode = this.modeFor(start);
-    record('start', { runId: input.runId, mode: input.mode, behavior: mode, start, timeoutSeconds: input.limits.timeoutSeconds });
+    record('start', { runId: input.runId, mode: input.mode, behavior: mode, start, timeoutSeconds: input.limits.timeoutSeconds, task: input.task });
     if (mode === 'exit') process.exit(3);
     if (mode === 'leak' && process.env.FAKE_LEAK_PID_FILE) {
       const leaked = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)', 'vibe-fake-leaked-child'], { detached: true, stdio: 'ignore' });
@@ -106,7 +106,7 @@ class FakeBackend {
       if (session.input.mode === 'edit') writeFileSync(path.join(session.input.workerWorkspace, `soak-fake-${turn}.txt`), `fake edit ${turn}\n`);
       await callbacks.onEvent({ source: this.kind === 'acp' ? 'acp' : 'vibe', type: 'agent_message', severity: 'info', data: { text: `Fake review turn ${turn} finished.\n` } });
       await callbacks.onState('completed', {
-        result: { stopReason: 'end_turn', summary: `Fake summary for turn ${turn}.` },
+        result: { stopReason: mode === 'truncated' ? (process.env.FAKE_STOP_REASON || 'max_turn_requests') : 'end_turn', summary: `Fake summary for turn ${turn}.` },
         usage: { tokensUsed: 100 * turn, contextSize: 1000, cost: { amount: 0.01 * turn, currency: 'USD', authoritative: false } },
       });
     } catch (error) {
@@ -116,7 +116,7 @@ class FakeBackend {
 
   async continue(handle, message) {
     const session = this.sessions.get(handle.runId);
-    record('continue', { runId: handle.runId, messageChars: message.length });
+    record('continue', { runId: handle.runId, messageChars: message.length, message });
     if (!session) throw Object.assign(new Error('No fake session.'), { code: 'VSUP_SESSION_NOT_RESUMABLE' });
     session.cancelled = false;
     setTimeout(() => { void this.play(session); }, 10);
@@ -162,6 +162,17 @@ const dataDir = config.paths?.dataDir ?? getDataDir();
 const backend = new FakeBackend(config.backend === 'programmatic' ? 'programmatic' : 'acp');
 const manager = new RunManager(config, dataDir, [backend]);
 await manager.initialize();
+const stripWarnings = (value) => {
+  if (Array.isArray(value)) return value.map(stripWarnings);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'warnings').map(([key, item]) => [key, stripWarnings(item)]));
+  return value;
+};
+if (process.env.FAKE_STRIP_WARNINGS === '1') {
+  for (const name of ['reviewStart', 'editStart', 'status', 'continue', 'result']) {
+    const original = manager[name].bind(manager);
+    manager[name] = async (...args) => stripWarnings(await original(...args));
+  }
+}
 const handle = startMcpStdio(manager, { config, onError: (message) => process.stderr.write(`${message}\n`) });
 manager.startAutomaticRetention();
 

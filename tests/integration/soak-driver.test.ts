@@ -29,6 +29,7 @@ interface Summary {
   restarts: { reloaded: number; error: number; other: number; not_exercised: number };
   close_mid_turn: { exercised: number; not_exercised: number };
   stopped_early: boolean;
+  truncated: { runs: number; by_kind: Record<string, number>; by_backend: Record<string, number> };
   cost: { reported: number; amount: number };
   leftovers: { processes: { leaked: { pid: number }[] }; homes: Record<string, { leftover_worktrees: string[]; total_bytes: number; missing_runs: string[] }> };
   servers: { backend: string; servers_started: number }[];
@@ -129,7 +130,9 @@ describe('soak driver', () => {
     expect(outcome.code).toBe(0);
     const summary = await readSummary(box);
     expect(summary.result).toBe('PASS');
-    expect(summary.criteria.map((item) => item.status)).toEqual(['PASS', 'PASS', 'PASS', 'PASS', 'PASS']);
+    expect(summary.criteria.map((item) => item.status)).toEqual(['PASS', 'PASS', 'PASS', 'PASS', 'PASS', 'PASS']);
+    expect(criterion(summary, 'truncated_within_threshold')).toBe('PASS');
+    expect(summary.truncated.runs).toBe(0);
     expect(summary.totals).toEqual({ runs: 9, ok: 9, failed: 0 });
     expect(summary.by_kind).toMatchObject({ review: { runs: 3 }, edit: { runs: 2 }, acp: { runs: 4 } });
     expect(summary.by_backend).toMatchObject({ programmatic: { runs: 5 }, acp: { runs: 4 } });
@@ -298,6 +301,97 @@ describe('soak driver', () => {
     expect(summary.totals.ok).toBeGreaterThanOrEqual(1);
     expect(summary.servers.find((item) => item.backend === 'programmatic')?.servers_started).toBeGreaterThanOrEqual(2);
   }, 90_000);
+
+  it('reports a truncated run with the partial-result warning in its own bucket without failing the soak', async () => {
+    const box = await sandbox();
+    const outcome = await soak(box, real(box, { reviews: 10, edits: 0, acp: 0 }), { FAKE_MODE_PROGRAMMATIC: 'truncated', FAKE_ONLY_NTH: '3' });
+    expect(outcome.code).toBe(0);
+    const summary = await readSummary(box);
+    expect(summary.result).toBe('PASS');
+    expect(summary.truncated).toEqual({ runs: 1, by_kind: { review: 1 }, by_backend: { programmatic: 1 } });
+    expect(summary.failures_by_code).toEqual({});
+    expect(criterion(summary, 'zero_unexpected_failures')).toBe('PASS');
+    expect(criterion(summary, 'truncated_within_threshold')).toBe('PASS');
+    const runs = await readRuns(box);
+    expect(runs.filter((run) => run.stopReason === 'max_turn_requests')).toHaveLength(1);
+    expect(runs.every((run) => run.ok)).toBe(true);
+  }, 90_000);
+
+  it('counts max_tokens with the warning as truncated too', async () => {
+    const box = await sandbox();
+    const outcome = await soak(box, real(box, { reviews: 10, edits: 0, acp: 0 }), { FAKE_MODE_PROGRAMMATIC: 'truncated', FAKE_ONLY_NTH: '1', FAKE_STOP_REASON: 'max_tokens' });
+    expect(outcome.code).toBe(0);
+    expect((await readSummary(box)).truncated.runs).toBe(1);
+  }, 90_000);
+
+  it('fails truncated_within_threshold above the configured percentage and honours --max-truncated-percent', async () => {
+    const box = await sandbox();
+    const env = { FAKE_MODE_PROGRAMMATIC: 'truncated', FAKE_ONLY_NTH: '2' };
+    const outcome = await soak(box, real(box, { reviews: 4, edits: 0, acp: 0 }), env);
+    expect(outcome.code).toBe(1);
+    const summary = await readSummary(box);
+    expect(criterion(summary, 'truncated_within_threshold')).toBe('FAIL');
+    expect(criterion(summary, 'zero_unexpected_failures')).toBe('PASS');
+    expect(summary.result).toBe('FAIL');
+    const relaxed = await sandbox();
+    expect((await soak(relaxed, real(relaxed, { reviews: 4, edits: 0, acp: 0 }, ['--max-truncated-percent', '25']), env)).code).toBe(0);
+    expect(criterion(await readSummary(relaxed), 'truncated_within_threshold')).toBe('PASS');
+    expect((await soak(box, ['--max-truncated-percent', '101'])).code).toBe(2);
+  }, 90_000);
+
+  it('still fails max_turn_requests without the partial-result warning', async () => {
+    const box = await sandbox();
+    const outcome = await soak(box, real(box, { reviews: 3, edits: 0, acp: 0 }), { FAKE_MODE_PROGRAMMATIC: 'truncated', FAKE_ONLY_NTH: '2', FAKE_STRIP_WARNINGS: '1' });
+    expect(outcome.code).toBe(1);
+    const summary = await readSummary(box);
+    expect(summary.failures_by_code).toEqual({ 'driver:stop_reason_max_turn_requests': 1 });
+    expect(summary.truncated.runs).toBe(0);
+    expect(criterion(summary, 'zero_unexpected_failures')).toBe('FAIL');
+  }, 90_000);
+
+  it('does not stop on truncation with --stop-on-fail', async () => {
+    const box = await sandbox();
+    const outcome = await soak(box, real(box, { reviews: 10, edits: 0, acp: 0 }, ['--stop-on-fail']), { FAKE_MODE_PROGRAMMATIC: 'truncated', FAKE_ONLY_NTH: '1' });
+    expect(outcome.code).toBe(0);
+    const summary = await readSummary(box);
+    expect(summary.stopped_early).toBe(false);
+    expect(summary.totals.runs).toBe(10);
+    expect(summary.truncated.runs).toBe(1);
+  }, 90_000);
+
+  it('sends bounded built-in tasks that name their limits and require a final answer', async () => {
+    const box = await sandbox();
+    expect((await soak(box, real(box, { reviews: 2, edits: 2, acp: 4 }))).code).toBe(0);
+    const operations = await readFile(box.log, 'utf8');
+    const entries = operations.trim().split('\n').map((line) => JSON.parse(line) as { operation: string; task?: string; message?: string });
+    const tasks = entries.filter((entry) => entry.operation === 'start').map((entry) => entry.task ?? '');
+    expect(tasks).toHaveLength(8);
+    const long = tasks.filter((task) => task.startsWith('Read every source file'));
+    expect(long.length).toBeGreaterThan(0);
+    for (const task of tasks.filter((item) => !long.includes(item))) {
+      expect(task).toMatch(/at most|exactly/i);
+      expect(task).toMatch(/answer|reply|stop/i);
+      expect(task).not.toContain('{file}');
+      expect(task).not.toContain('{n}');
+    }
+    for (const task of tasks.filter((item) => !long.includes(item) && !/^(Create|In the file)/.test(item))) {
+      expect(task).toMatch(/at most \w+ searches/);
+      expect(task).toMatch(/at most 5 lines/);
+    }
+    const followups = entries.filter((entry) => entry.operation === 'continue').map((entry) => entry.message ?? '');
+    expect(followups.length).toBeGreaterThan(0);
+    for (const message of followups) expect(message).toMatch(/previous task is finished|same/i);
+  }, 90_000);
+
+  it('describes the bounded tasks and the truncation rule in the help and the plan', async () => {
+    const box = await sandbox();
+    const help = await soak(box, ['--help']);
+    expect(help.stdout).toContain('--max-truncated-percent');
+    expect(help.stdout).toMatch(/bounded/i);
+    const plan = await soak(box, ['--reviews', '1', '--out', box.out, '--server-command', process.execPath, '--server-arg', fixture]);
+    expect(plan.stdout).toMatch(/bounded/i);
+    expect(plan.stdout).toContain('truncated');
+  });
 
   it('never touches processes it did not start and reports a leaked child without killing it', async () => {
     const bystander = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)', 'vibe-unrelated-bystander'], { stdio: 'ignore' });

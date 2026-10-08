@@ -103,7 +103,7 @@ export type SupervisorErrorCode =
   | "VSUP_RATE_LIMITED" | "VSUP_CANCELLED" | "VSUP_OUTPUT_LIMIT"
   | "VSUP_ARTIFACT_ERROR" | "VSUP_INVALID_ARGUMENT" | "VSUP_NOT_FOUND"
   | "VSUP_BACKEND_ERROR" | "VSUP_LIMIT_EXCEEDED" | "VSUP_PERMISSION_DENIED"
-  | "VSUP_TURN_LIMIT_REACHED" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR" | "VSUP_RECOVERY_ERROR" | "VSUP_INTERNAL";
+  | "VSUP_TURN_LIMIT_REACHED" | "VSUP_NO_PROGRESS" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR" | "VSUP_RECOVERY_ERROR" | "VSUP_INTERNAL";
 
 export interface RunRecord {
   schemaVersion: typeof SCHEMA_VERSION;
@@ -160,6 +160,7 @@ export interface SupervisorConfig {
     maxEventBytes: number;
     maxTranscriptBytes: number;
     maxArtifactBytes: number;
+    workerProgressTimeoutSeconds: number;
     maxMcpResultChars: number;
     mcpResultFormat: McpResultFormat;
   };
@@ -277,6 +278,7 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_BACKEND_ERROR: "Inspect backend diagnostics and retry if the problem is transient.",
   VSUP_LIMIT_EXCEEDED: "Wait for capacity or increase the configured limit.",
   VSUP_PERMISSION_DENIED: "Review the requested action and grant only if appropriate.",
+  VSUP_NO_PROGRESS: "The worker produced no output for the configured limits.worker_progress_timeout_seconds; inspect the run diagnostics and events, then start a new run deliberately; the task is never replayed.",
   VSUP_TURN_LIMIT_REACHED: "Vibe counts turns cumulatively per session: pass max_turns greater than the current limit when it is below 50, otherwise start a new run from a deliberate base; the task is never replayed.",
   VSUP_INVALID_STATE: "Check the run status and use an action valid for its current state.",
   VSUP_STORAGE_ERROR: "Check the supervisor data directory permissions and disk space.",
