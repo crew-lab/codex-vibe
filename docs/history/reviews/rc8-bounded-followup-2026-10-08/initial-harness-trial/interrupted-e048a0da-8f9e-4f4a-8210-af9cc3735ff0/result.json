@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "run_id": "e048a0da-8f9e-4f4a-8210-af9cc3735ff0",
+  "state": "running",
+  "backend": "acp",
+  "stop_reason": "end_turn",
+  "summary": "",
+  "workspace": {
+    "source": "/private/tmp/rc8-phase-d-6n1ney4v/soak-workspace",
+    "worker": "/private/tmp/rc8-bounded-followup-HQ3rRS/acp/worktrees/e048a0da-8f9e-4f4a-8210-af9cc3735ff0"
+  },
+  "artifacts": [],
+  "changed_files": [],
+  "warnings": [],
+  "next_action": "Call vibe_status with wait_seconds 120-300 until the run needs action."
+}

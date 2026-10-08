@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "run_id": "1810c5b3-12e7-424b-9c13-a0ff1fd3c046",
+  "state": "completed",
+  "backend": "acp",
+  "stop_reason": "end_turn",
+  "summary": "Vibe completed the delegated task.",
+  "workspace": {
+    "source": "/private/tmp/rc8-phase-d-6n1ney4v/soak-workspace",
+    "worker": "/private/tmp/rc8-bounded-followup-P9jFLN/acp/worktrees/1810c5b3-12e7-424b-9c13-a0ff1fd3c046"
+  },
+  "artifacts": [
+    {
+      "name": "diff.patch",
+      "path": "/private/tmp/rc8-bounded-followup-P9jFLN/acp/runs/1810c5b3-12e7-424b-9c13-a0ff1fd3c046/artifacts/diff.patch",
+      "sha256": "19ff92c063e71a6fdbe8d0a24759681d19e35dc2f1ada12a68c40a4764e757e6",
+      "bytes": 263,
+      "media_type": "text/x-diff"
+    },
+    {
+      "name": "diff.stat",
+      "path": "/private/tmp/rc8-bounded-followup-P9jFLN/acp/runs/1810c5b3-12e7-424b-9c13-a0ff1fd3c046/artifacts/diff.stat",
+      "sha256": "0bc73c04c71de4a82038c92b451cc74cf0865661e710b714a1a7ffb72fafb95c",
+      "bytes": 82,
+      "media_type": "text/plain"
+    },
+    {
+      "name": "changed-files.json",
+      "path": "/private/tmp/rc8-bounded-followup-P9jFLN/acp/runs/1810c5b3-12e7-424b-9c13-a0ff1fd3c046/artifacts/changed-files.json",
+      "sha256": "b31ea8d8ed7deda00403608d2fcc8af31bffac365d60ea4ec3536beb0001baf6",
+      "bytes": 83,
+      "media_type": "application/json"
+    },
+    {
+      "name": "transcript.md",
+      "path": "/private/tmp/rc8-bounded-followup-P9jFLN/acp/runs/1810c5b3-12e7-424b-9c13-a0ff1fd3c046/transcript.md",
+      "sha256": "1c8d999a67d04c32565de4c55bbefae460451d96c1861f4f9d82852ad453ac10",
+      "bytes": 65,
+      "media_type": "text/markdown"
+    },
+    {
+      "name": "events.ndjson",
+      "path": "/private/tmp/rc8-bounded-followup-P9jFLN/acp/runs/1810c5b3-12e7-424b-9c13-a0ff1fd3c046/events.ndjson",
+      "sha256": "25863074c5d1eca610e5683b00cc254c4c9f7a4ca894706061404b7a2aa03bcb",
+      "bytes": 15536,
+      "media_type": "application/x-ndjson"
+    }
+  ],
+  "changed_files": [
+    "src/nested/arithmetic.py"
+  ],
+  "warnings": []
+}

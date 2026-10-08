@@ -1,0 +1,9 @@
+{
+  "run_state": "closed",
+  "saved_worker_pid": 40924,
+  "saved_worker_absent": true,
+  "owner_locks_absent": true,
+  "fixture_git_clean": true,
+  "registered_owned_worktrees": [],
+  "private_homes_preserved": true
+}
