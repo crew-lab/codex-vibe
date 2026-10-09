@@ -278,6 +278,31 @@
       "hosted_soak": "NOT_RUN",
       "remaining_gates": "UNVERIFIED",
       "evidence": "history/reviews/rc17-local-installation-2026-10-09.md"
+    },
+    {
+      "date": "2026-10-09",
+      "name": "rc17-native-desktop-preflight-stale-connection",
+      "status": "FAIL",
+      "installed_version": "0.9.0-rc.17",
+      "observed_run_creator_version": "0.9.0-rc.12",
+      "run_id": "d64eb230-3762-4142-b064-8393875ce2c6",
+      "backend": "acp",
+      "mode": "review",
+      "max_turns": 6,
+      "timeout_seconds": 120,
+      "wait_seconds": 30,
+      "stop_reason": "end_turn",
+      "warnings": [],
+      "integrity": "verified",
+      "changed_files": [],
+      "closed": true,
+      "source_unchanged": true,
+      "edit_worktree_created": false,
+      "rc17_hosted_inference": "NOT_RUN",
+      "controlled_correction": "NOT_RUN",
+      "D25": "NOT_RUN: stale desktop connection",
+      "next_prerequisite": "Complete desktop restart and fresh connection version verification",
+      "evidence": "history/reviews/rc17-desktop-preflight-2026-10-09.md"
     }
   ]
 }
