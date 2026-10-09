@@ -170,7 +170,7 @@ class FakeBackend {
 }
 
 const config = await loadConfig({ createDataDir: true });
-const dataDir = config.paths?.dataDir ?? getDataDir();
+const dataDir = getDataDir();
 const backend = new FakeBackend(config.backend === 'programmatic' ? 'programmatic' : 'acp');
 const manager = new RunManager(config, dataDir, [backend]);
 await manager.initialize();

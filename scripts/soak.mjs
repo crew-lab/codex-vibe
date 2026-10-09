@@ -952,9 +952,6 @@ async function main() {
     await chmod(home, 0o700);
     const copy = structuredClone(rawTemplate);
     copy.backend = backend;
-    delete copy.phase1;
-    delete copy.security;
-    if (copy.paths) { delete copy.paths.data_dir; if (Object.keys(copy.paths).length === 0) delete copy.paths; }
     dist.validateConfig(copy);
     await writeFile(path.join(home, 'config.toml'), stringify(copy), { mode: 0o600 });
     await chmod(path.join(home, 'config.toml'), 0o600);

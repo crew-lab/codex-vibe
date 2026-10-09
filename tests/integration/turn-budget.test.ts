@@ -17,7 +17,7 @@ afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root,
 
 class BudgetBackend extends AcpBackend {
   constructor(private readonly log: string, private readonly steps: string, dataDir: string, allowedWorkspaceRoots: string[], private readonly hangAt?: number) {
-    super({ ...DEFAULT_CONFIG, backend: "acp", allowedWorkspaceRoots, paths: { vibeAcp: "fake-acp", dataDir } }, dataDir);
+    super({ ...DEFAULT_CONFIG, backend: "acp", allowedWorkspaceRoots, paths: { vibeAcp: "fake-acp" } }, dataDir);
   }
   protected override executable(): string { return "fake-acp"; }
   protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {

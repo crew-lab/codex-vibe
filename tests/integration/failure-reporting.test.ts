@@ -103,7 +103,7 @@ async function failedRun(manager: RunManager, source: string) {
 class FakeAcpBackend extends AcpBackend {
   pidDir: string | undefined;
   constructor(private readonly testMode: string, dataDir: string, allowedWorkspaceRoots: string[]) {
-    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp', dataDir } }, dataDir);
+    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp' } }, dataDir);
   }
   protected override executable(): string { return 'fake-acp'; }
   protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {
@@ -115,7 +115,7 @@ class FakeAcpBackend extends AcpBackend {
 class FixtureAcp extends AcpBackend {
   pidDir = '';
   constructor(private readonly testMode: string, private readonly script: string, dataDir?: string) {
-    super({ ...DEFAULT_CONFIG, backend: 'acp', paths: { vibeAcp: script, ...(dataDir ? { dataDir } : {}) } }, dataDir);
+    super({ ...DEFAULT_CONFIG, backend: 'acp', paths: { vibeAcp: script } }, dataDir);
   }
   protected override executable(): string { return this.script; }
   protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {
@@ -369,7 +369,7 @@ describe('explicit backends skip the availability probe', () => {
     const child = path.join(parent, 'shim-child.mjs'); await writeFile(child, `${versionStderr}\n`);
     childScript.path = child;
     const script = path.join(parent, 'vibe-acp'); await writeExecutable(script, '#!/usr/bin/env python3\n');
-    const manager = managerFor(source, data, [new AcpBackend({ ...DEFAULT_CONFIG, backend: 'acp', paths: { vibeAcp: script, dataDir: data } }, data)], { backend: 'acp' });
+    const manager = managerFor(source, data, [new AcpBackend({ ...DEFAULT_CONFIG, backend: 'acp', paths: { vibeAcp: script } }, data)], { backend: 'acp' });
     try { expect((await failedRun(manager, source)).status.error).toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED', message: expect.stringMatching(/2\.26\.0.*2\.25\.8/) }); }
     finally { await manager.shutdown(); }
   });

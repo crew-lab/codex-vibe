@@ -4,8 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { getConfigPath, getDataDir, loadConfig } from "../../src/config/config.js";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
-import { ignoredConfigKeys, validateConfig } from "../../src/config/validation.js";
-import { parse } from "smol-toml";
+import { validateConfig } from "../../src/config/validation.js";
 
 const roots: string[] = [];
 const canonicalTmp = await realpath(tmpdir());
@@ -36,23 +35,19 @@ describe("supervisor config", () => {
     expect(config.limits.maxTurnsEdit).toBe(DEFAULT_CONFIG.limits.maxTurnsEdit);
   });
 
-  it("loads a config that still carries removed keys and lists them as ignored", async () => {
+  it("rejects keys removed in earlier releases like any unknown key", async () => {
     const root = await mkdtemp(join(canonicalTmp, "vsup-config-")); roots.push(root);
-    const source = 'version = 1\n[phase1]\nallow_temporary_trust = true\n[security]\nallow_shell_in_review = true\nallow_shell_in_edit = true\nallow_network_tools = true\nlog_raw_acp = true\npersist_reasoning = true\n';
-    await writeFile(join(root, "config.toml"), source);
-    const config = await loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } });
-    expect(config).toEqual(DEFAULT_CONFIG);
-    expect(ignoredConfigKeys(parse(source))).toEqual([
-      "phase1.allow_temporary_trust", "security.allow_shell_in_review", "security.allow_shell_in_edit",
-      "security.allow_network_tools", "security.log_raw_acp", "security.persist_reasoning"
-    ]);
+    await writeFile(join(root, "config.toml"), 'version = 1\n[security]\nallow_network_tools = true\n');
+    await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } })).rejects.toMatchObject({ supervisor: { code: "VSUP_CONFIG_INVALID" } });
+    expect(() => validateConfig({ version: 1, phase1: { allow_temporary_trust: true } })).toThrow(/phase1/);
+    expect(() => validateConfig({ version: 1, security: { allow_shell_in_review: true } })).toThrow(/security/);
   });
 
-  it("reports no ignored keys for a clean or non-object config", () => {
-    expect(ignoredConfigKeys({ version: 1, limits: { max_turns_review: 5 } })).toEqual([]);
-    expect(ignoredConfigKeys(undefined)).toEqual([]);
-    expect(ignoredConfigKeys("text")).toEqual([]);
-    expect(ignoredConfigKeys({ version: 1, security: { allow_network_tools: false } })).toEqual(["security.allow_network_tools"]);
+  it("rejects options that no longer exist", () => {
+    expect(() => validateConfig({ version: 1, max_queued_runs: 8 })).toThrow(/max_queued_runs/);
+    expect(() => validateConfig({ version: 1, retention: { preserve_failed_runs: false } })).toThrow(/preserve_failed_runs/);
+    expect(() => validateConfig({ version: 1, limits: { mcp_result_format: "both" } })).toThrow(/mcp_result_format/);
+    expect(() => validateConfig({ version: 1, paths: { data_dir: "/var/vibe" } })).toThrow(/data_dir/);
   });
 
   it("rejects backend auto and names the two valid values", () => {
@@ -109,10 +104,5 @@ describe("path contracts", () => {
       expect(() => validateConfig({ version: 1, paths: { vibe: value } }), value).toThrow();
       expect(() => validateConfig({ version: 1, paths: { vibe_acp: value } }), value).toThrow();
     }
-  });
-
-  it("requires an absolute data_dir", () => {
-    expect(validateConfig({ version: 1, paths: { data_dir: "/var/vibe" } }).paths).toEqual({ dataDir: "/var/vibe" });
-    expect(() => validateConfig({ version: 1, paths: { data_dir: "data" } })).toThrow();
   });
 });

@@ -14,7 +14,7 @@ const fixture = fileURLToPath(new URL('../fixtures/fake-acp.mjs', import.meta.ur
 const canonicalTmp = await realpath(tmpdir());
 
 class FakeAcpBackend extends AcpBackend {
-  constructor(private readonly testMode = 'normal', dataDir?: string, allowedWorkspaceRoots: string[] = []) { super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp', ...(dataDir ? { dataDir } : {}) } }, dataDir); }
+  constructor(private readonly testMode = 'normal', dataDir?: string, allowedWorkspaceRoots: string[] = []) { super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp' } }, dataDir); }
   protected override executable(): string { return 'fake-acp'; }
   protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {
     return {

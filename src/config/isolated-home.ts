@@ -27,8 +27,7 @@ async function readTemplate(env: NodeJS.ProcessEnv): Promise<string> {
     source = await handle.readFile('utf8');
   } finally { await handle.close(); }
   if (Buffer.byteLength(source) > 1_048_576) throw new Error('Configuration exceeds 1 MiB.');
-  const config = validateConfig(parse(source));
-  if (config.paths?.dataDir) throw new Error('Isolated startup refuses paths.data_dir; use VIBE_SUPERVISOR_HOME to select the template home instead.');
+  validateConfig(parse(source));
   return source;
 }
 

@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
-import { getConfigPath, loadConfig } from '../config/config.js';
-import { ignoredConfigKeys, validateConfig } from '../config/validation.js';
+import { loadConfig } from '../config/config.js';
+import { validateConfig } from '../config/validation.js';
 import { formatDoctorCheck, runDoctor } from '../diagnostics/doctor.js';
 import type { SupervisorConfig } from '../contracts.js';
 import { configInvalid, fail } from './fail.js';
@@ -22,22 +22,19 @@ export function parseDoctorArgs(args: string[]): { json: boolean; config?: strin
   return { json, ...(config ? { config } : {}) };
 }
 
-async function loadForDoctor(configPath: string | undefined): Promise<{ config: SupervisorConfig; warnings: string[] }> {
-  const file = configPath ? resolve(configPath) : getConfigPath();
+async function loadForDoctor(configPath: string | undefined): Promise<SupervisorConfig> {
+  if (!configPath) return loadConfig();
+  const file = resolve(configPath);
   const raw = await readConfigDocument(file);
-  if (configPath && raw === undefined) fail(`Config not found: ${file}`, 2);
-  const warnings = raw === undefined ? [] : ignoredConfigKeys(raw).map((key) => `ignored key ${key}; it has no effect`);
-  if (!configPath) return { config: await loadConfig(), warnings };
-  let config: SupervisorConfig;
-  try { config = validateConfig(raw); } catch (error) { throw configInvalid(`Invalid supervisor configuration: ${(error as Error).message}`); }
-  return { config: config.paths?.dataDir ? { ...config, paths: { ...config.paths, dataDir: resolve(config.paths.dataDir) } } : config, warnings };
+  if (raw === undefined) fail(`Config not found: ${file}`, 2);
+  try { return validateConfig(raw); } catch (error) { throw configInvalid(`Invalid supervisor configuration: ${(error as Error).message}`); }
 }
 
 export async function doctorCommand(args: string[]): Promise<void> {
   const options = parseDoctorArgs(args);
-  const { config, warnings } = await loadForDoctor(options.config);
+  const config = await loadForDoctor(options.config);
   const report = await runDoctor(config);
-  if (options.json) print({ ...report, warnings });
-  else print([...report.checks.map(formatDoctorCheck), ...warnings.map((warning) => `WARN config: ${warning}`)].join('\n'));
+  if (options.json) print(report);
+  else print(report.checks.map(formatDoctorCheck).join('\n'));
   if (!report.ok) process.exitCode = 1;
 }

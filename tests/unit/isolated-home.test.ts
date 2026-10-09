@@ -43,12 +43,6 @@ describe('per-connection isolated storage', () => {
     } finally { await Promise.all(owners.map(owner => owner.shutdown())); await shared.shutdown(); }
   });
 
-  it('rejects explicit shared storage without creating a session', async () => {
-    const root = await template('version = 1\nallowed_workspace_roots = []\n[paths]\ndata_dir = "/some/shared/directory"\n');
-    await expect(prepareIsolatedHome({ VIBE_SUPERVISOR_HOME: root })).rejects.toThrow('paths.data_dir');
-    expect(await readdir(root)).toEqual(['config.toml']);
-  });
-
   it('rejects symlinked configuration and template ancestors', async () => {
     const root = await template();
     await rm(path.join(root, 'config.toml'));

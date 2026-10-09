@@ -149,7 +149,7 @@ export class AcpBackend implements SupervisorBackend {
   readonly supportsContinue = true;
   private readonly recoverTimeoutMs: number;
   private readonly startTimeoutMs: number;
-  constructor(private readonly config: SupervisorConfig, private readonly dataDirectory = config.paths?.dataDir, options: { recoverTimeoutMs?: number; startTimeoutMs?: number } = {}) {
+  constructor(private readonly config: SupervisorConfig, private readonly dataDirectory?: string, options: { recoverTimeoutMs?: number; startTimeoutMs?: number } = {}) {
     this.recoverTimeoutMs = options.recoverTimeoutMs ?? DEFAULT_RECOVER_TIMEOUT_MS;
     this.startTimeoutMs = options.startTimeoutMs ?? DEFAULT_START_TIMEOUT_MS;
   }

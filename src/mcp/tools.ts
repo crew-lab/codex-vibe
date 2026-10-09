@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/server';
-import { supervisorError, type SupervisorError, type SupervisorErrorCode, type ReviewStartToolInput, type EditStartToolInput, type StatusToolInput, type ContinueToolInput, type RespondToolInput, type ResultToolInput, type CloseToolInput, type BackendPreference, type McpResultFormat, type WaitOptions } from '../contracts.js';
+import { supervisorError, type SupervisorError, type SupervisorErrorCode, type ReviewStartToolInput, type EditStartToolInput, type StatusToolInput, type ContinueToolInput, type RespondToolInput, type ResultToolInput, type CloseToolInput, type BackendPreference, type WaitOptions } from '../contracts.js';
 import { toolSchemas, type ToolName } from './schemas.js';
 import { sanitizeForPersistence } from '../persistence/atomic.js';
 import { describeFailure } from '../diagnostics/background.js';
@@ -18,7 +18,6 @@ export interface RunManagerTools {
 export interface ToolRegistrationOptions {
   backend: BackendPreference;
   maxResultChars: number;
-  resultFormat: McpResultFormat;
   onError?: (error: SupervisorError) => void;
 }
 
@@ -174,19 +173,8 @@ export function bounded(value: unknown, maxChars: number): { structuredContent: 
   return { structuredContent: JSON.parse(result) as Record<string, unknown>, text: result };
 }
 
-function pointerText(structured: Record<string, unknown>): string {
-  const pointer: Record<string, unknown> = {};
-  for (const key of ['run_id', 'state']) if (typeof structured[key] === 'string') pointer[key] = structured[key];
-  const error = structured.error;
-  if (error && typeof error === 'object' && typeof (error as { code?: unknown }).code === 'string') pointer.error = (error as { code: string }).code;
-  pointer.see = 'structuredContent';
-  return JSON.stringify(pointer);
-}
-
-function shapeResult(structured: Record<string, unknown>, text: string, format: McpResultFormat): { content: { type: 'text'; text: string }[]; structuredContent?: Record<string, unknown> } {
-  if (format === 'text') return { content: [{ type: 'text', text }] };
-  if (format === 'structured') return { content: [{ type: 'text', text: pointerText(structured) }], structuredContent: structured };
-  return { content: [{ type: 'text', text }], structuredContent: structured };
+function shapeResult(text: string): { content: { type: 'text'; text: string }[] } {
+  return { content: [{ type: 'text', text }] };
 }
 
 interface ToolContext { mcpReq?: { signal?: AbortSignal } }
@@ -222,7 +210,7 @@ export function registerSupervisorTools(server: McpServer, manager: RunManagerTo
         const signal = context?.mcpReq?.signal;
         const result = await handlers[name](parsed, signal ? { signal } : {});
         const output = bounded(result, options.maxResultChars);
-        return shapeResult(output.structuredContent, output.text, options.resultFormat);
+        return shapeResult(output.text);
       } catch (cause) {
         const error = cause && typeof cause === 'object' && 'issues' in cause
           ? supervisorError('VSUP_INVALID_ARGUMENT', 'Tool arguments failed schema validation.')
@@ -235,7 +223,7 @@ export function registerSupervisorTools(server: McpServer, manager: RunManagerTo
         if (JSON.stringify({ error: safeError }).length > options.maxResultChars) safeError.message = 'The request failed; inspect the stable code and remediation.';
         options.onError?.(safeError.code === 'VSUP_INTERNAL' ? { ...safeError, message: `${safeError.message} Cause: ${describeFailure(cause)}` } : safeError);
         const text = `${safeError.code}: ${safeError.message} ${safeError.remediation}`.slice(0, options.maxResultChars);
-        return { isError: true, ...shapeResult({ error: safeError }, text, options.resultFormat) };
+        return { isError: true, ...shapeResult(text) };
       }
     });
   }

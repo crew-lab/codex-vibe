@@ -223,7 +223,7 @@ describe('automatic retention', () => {
     const freshCompleted = await seed(data, source, { state: 'completed', ageDays: 0 });
     const dayOldCompleted = await seed(data, source, { state: 'completed', ageDays: 2 });
     const justClosed = await seed(data, source, { state: 'closed', ageDays: 0.001 });
-    const manager = new RunManager(configFor(source, { retention: { days: 0, preserveFailedRuns: true } }), data, [new FakeBackend()]);
+    const manager = new RunManager(configFor(source, { retention: { days: 0 } }), data, [new FakeBackend()]);
     try {
       await manager.initialize();
       manager.startAutomaticRetention({ firstDelayMs: 10, intervalMs: 60_000 });
@@ -234,18 +234,6 @@ describe('automatic retention', () => {
       expect(remaining.has(dayOldCompleted)).toBe(false);
       expect(remaining.has(freshCompleted)).toBe(true);
       expect((await manager.status({ run_id: freshCompleted })).state).toBe('completed');
-    } finally { await manager.shutdown(); }
-  });
-
-  it('removes old failed runs when preserve_failed_runs is off', async () => {
-    const { source, data } = await root();
-    const oldFailed = await seed(data, source, { state: 'failed', ageDays: 30 });
-    const manager = new RunManager(configFor(source, { retention: { days: 7, preserveFailedRuns: false } }), data, [new FakeBackend()]);
-    try {
-      await manager.initialize();
-      manager.startAutomaticRetention({ firstDelayMs: 10, intervalMs: 60_000 });
-      for (let attempt = 0; attempt < 300 && await exists(path.join(data, 'runs', oldFailed)); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(await exists(path.join(data, 'runs', oldFailed))).toBe(false);
     } finally { await manager.shutdown(); }
   });
 

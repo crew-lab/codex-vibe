@@ -27,7 +27,7 @@ class FakeAcpBackend extends AcpBackend {
 }
 
 const config = await loadConfig({ createDataDir: true });
-const dataDir = config.paths?.dataDir ?? getDataDir();
+const dataDir = getDataDir();
 const manager = new RunManager(config, dataDir, [new FakeAcpBackend({ ...config, backend: 'acp' }, dataDir)]);
 await manager.initialize();
 const handle = startMcpStdio(manager, { config, onError: (message) => process.stderr.write(`${message}\n`) });

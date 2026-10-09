@@ -312,14 +312,6 @@ describe('setup plans before writing', () => {
 });
 
 describe('doctor --config and command aliases', () => {
-  it('doctor --config reports ignored keys as warnings', async () => {
-    const box = await sandbox(); capture();
-    const file = path.join(box.data, 'custom.toml'); await mkdir(box.data, { recursive: true });
-    await writeFile(file, `version = 1\nallowed_workspace_roots = [${JSON.stringify(box.workspace)}]\n\n[security]\nallow_network_tools = true\n`);
-    await runCli(['doctor', '--config', file]);
-    expect(output.join('')).toMatch(/WARN .*allow_network_tools/);
-  }, 60_000);
-
   it('doctor --config fails with exit code 1 on an invalid config', async () => {
     const box = await sandbox(); capture();
     await mkdir(box.data, { recursive: true });

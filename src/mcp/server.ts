@@ -17,7 +17,6 @@ export function createSupervisorMcpServer(manager: RunManagerTools, options: Mcp
   registerSupervisorTools(server, manager, {
     backend: options.config.backend,
     maxResultChars: options.config.limits.maxMcpResultChars,
-    resultFormat: options.config.limits.mcpResultFormat,
     onError: (error) => options.onError?.(`${error.code}: ${error.message}`),
   });
   return server;

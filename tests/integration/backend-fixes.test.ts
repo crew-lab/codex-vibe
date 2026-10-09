@@ -78,7 +78,7 @@ class FixtureAcpBackend extends AcpBackend {
   readonly launchEnvs: NodeJS.ProcessEnv[] = [];
   pidDir: string | undefined;
   constructor(private readonly testMode: string, dataDir?: string, allowedWorkspaceRoots: string[] = []) {
-    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp', ...(dataDir ? { dataDir } : {}) } }, dataDir);
+    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp' } }, dataDir);
   }
   protected override executable(): string { return 'fake-acp'; }
   protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {

@@ -5,9 +5,8 @@ export const DEFAULT_CONFIG: SupervisorConfig = {
   backend: "programmatic",
   allowedWorkspaceRoots: [],
   maxConcurrentRuns: 2,
-  maxQueuedRuns: 8,
   workerIdleTtlSeconds: 600,
-  retention: { days: 7, preserveFailedRuns: true },
+  retention: { days: 7 },
   limits: {
     reviewTimeoutSeconds: 1800,
     editTimeoutSeconds: 2400,
@@ -17,7 +16,6 @@ export const DEFAULT_CONFIG: SupervisorConfig = {
     maxTranscriptBytes: 10_485_760,
     maxArtifactBytes: 104_857_600,
     workerProgressTimeoutSeconds: 600,
-    maxMcpResultChars: 8000,
-    mcpResultFormat: "text"
+    maxMcpResultChars: 8000
   }
 };

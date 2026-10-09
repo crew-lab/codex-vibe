@@ -7,6 +7,14 @@ import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { createSupervisorMcpServer } from '../../src/mcp/server.js';
 import type { RunManagerTools } from '../../src/mcp/tools.js';
 
+function errorText(result: unknown): string {
+  return (result as { content: { text: string }[] }).content[0]!.text;
+}
+
+function structured(result: unknown): unknown {
+  return JSON.parse((result as { content: { text: string }[] }).content[0]!.text);
+}
+
 class StdioClientHarness implements Transport {
   onclose?: () => void;
   onerror?: (error: Error) => void;
@@ -44,7 +52,7 @@ describe('MCP stdio tool surface', () => {
       result: vi.fn(async () => ({ run_id: '123e4567-e89b-42d3-a456-426614174000', artifacts: [{ name: 'diff.patch', path: '/private/runs/diff.patch', sha256: 'abc' }], summary: 'complete', reasoning_content: 'should never cross the MCP boundary' })),
       close: vi.fn(async () => ({ closed: true })),
     } satisfies RunManagerTools;
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, backend: 'acp', limits: { ...DEFAULT_CONFIG.limits, maxMcpResultChars: 500, mcpResultFormat: 'both' } } });
+    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, backend: 'acp', limits: { ...DEFAULT_CONFIG.limits, maxMcpResultChars: 500 } } });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
@@ -59,11 +67,11 @@ describe('MCP stdio tool surface', () => {
 
     const result = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp' } });
     expect(result.isError).toBeUndefined();
-    expect(result.structuredContent).toMatchObject({ state: 'queued', received_task: 'review' });
+    expect(structured(result)).toMatchObject({ state: 'queued', received_task: 'review' });
     expect(manager.reviewStart).toHaveBeenCalledOnce();
     const got = await client.callTool({ name: 'vibe_result', arguments: { run_id: '123e4567-e89b-42d3-a456-426614174000', detail: 'full' } });
-    expect(got.structuredContent).toMatchObject({ run_id: '123e4567-e89b-42d3-a456-426614174000' });
-    expect(JSON.stringify(got.structuredContent)).not.toContain('should never cross');
+    expect(structured(got)).toMatchObject({ run_id: '123e4567-e89b-42d3-a456-426614174000' });
+    expect(JSON.stringify(structured(got))).not.toContain('should never cross');
   });
 
   it('returns stable errors and rejects unknown arguments', async () => {
@@ -73,13 +81,13 @@ describe('MCP stdio tool surface', () => {
       editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})), continue: vi.fn(async () => ({})),
       respond: vi.fn(async () => ({})), result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
     } satisfies RunManagerTools;
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits, mcpResultFormat: 'both' } } });
+    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits } } });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
     const error = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp' } });
     expect(error.isError).toBe(true);
-    expect(error.structuredContent).toMatchObject({ error: { code: 'VSUP_NOT_FOUND', remediation: expect.any(String) } });
+    expect(errorText(error)).toMatch(/^VSUP_NOT_FOUND: .+ .+/);
     const malformed = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp', extra: true } });
     expect(malformed.isError).toBe(true);
     expect(JSON.stringify(malformed)).toContain('Unrecognized key');
@@ -93,13 +101,13 @@ describe('MCP stdio tool surface', () => {
       continue: vi.fn(async () => ({})), respond: vi.fn(async () => ({})), result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
     } satisfies RunManagerTools;
     const logged: string[] = [];
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits, mcpResultFormat: 'both' } }, onError: (message) => logged.push(message) });
+    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits } }, onError: (message) => logged.push(message) });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
     const failed = await client.callTool({ name: 'vibe_status', arguments: { run_id: '123e4567-e89b-42d3-a456-426614174000' } });
     expect(failed.isError).toBe(true);
-    expect(failed.structuredContent).toMatchObject({ error: { code: 'VSUP_INTERNAL', message: 'The request could not be completed.' } });
+    expect(errorText(failed)).toContain('VSUP_INTERNAL: The request could not be completed.');
     expect(JSON.stringify(failed)).not.toContain('disk exploded');
     expect(logged).toHaveLength(1);
     expect(logged[0]).toContain('VSUP_INTERNAL');
@@ -114,12 +122,12 @@ describe('MCP stdio tool surface', () => {
       reviewStart: vi.fn(async () => { throw storage; }), editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})), continue: vi.fn(async () => ({})),
       respond: vi.fn(async () => ({})), result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
     } satisfies RunManagerTools;
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits, mcpResultFormat: 'both' } } });
+    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits } } });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
     const failed = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp' } });
-    expect(failed.structuredContent).toMatchObject({ error: { code: 'VSUP_STORAGE_ERROR', details: { code: 'ENOSPC', directory: '/data/runs/abc' } } });
+    expect(errorText(failed)).toContain('VSUP_STORAGE_ERROR');
   });
 
   async function listTools(backend: 'acp' | 'programmatic') {

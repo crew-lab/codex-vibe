@@ -54,7 +54,7 @@ afterEach(async () => {
 class FakeAcpBackend extends AcpBackend {
   pidDir: string | undefined;
   constructor(private readonly testMode: string, dataDir: string, allowedWorkspaceRoots: string[]) {
-    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp', dataDir } }, dataDir);
+    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp' } }, dataDir);
   }
   protected override executable(): string { return 'fake-acp'; }
   protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {
@@ -256,7 +256,7 @@ describe('RunManager regressions', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], shouldAdvanceTime: true });
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
-    const manager = new RunManager({ ...DEFAULT_CONFIG, backend: 'programmatic', allowedWorkspaceRoots: [source], maxConcurrentRuns: 1, maxQueuedRuns: 2, workerIdleTtlSeconds: 0 }, data, [backend]);
+    const manager = new RunManager({ ...DEFAULT_CONFIG, backend: 'programmatic', allowedWorkspaceRoots: [source], maxConcurrentRuns: 1, workerIdleTtlSeconds: 0 }, data, [backend]);
     try {
       const runA = await manager.reviewStart({ task: 'a', cwd: source, timeout_seconds: 7200 });
       await waitFor(() => manager.status({ run_id: runA.run_id }), (value) => value.state === 'running', 5_000);

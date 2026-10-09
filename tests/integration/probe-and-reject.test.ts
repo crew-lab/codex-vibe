@@ -58,7 +58,7 @@ class FixtureAcp extends AcpBackend {
   filePath = '';
   probeSpawns = 0;
   constructor(private readonly testMode: string, private readonly script: string, dataDir?: string, allowedWorkspaceRoots: string[] = []) {
-    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: script, ...(dataDir ? { dataDir } : {}) } }, dataDir);
+    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: script } }, dataDir);
   }
   protected override executable(): string { return this.script; }
   protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {
