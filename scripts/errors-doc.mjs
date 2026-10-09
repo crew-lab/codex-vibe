@@ -21,7 +21,7 @@ export const MEANINGS = {
   VSUP_INPUT_REQUIRED: 'An input request is pending; the action cannot proceed until it is answered.',
   VSUP_REQUEST_EXPIRED: 'The permission or input request is no longer pending, for example after a restart.',
   VSUP_SESSION_NOT_RESUMABLE: 'The saved backend session cannot be continued or reloaded.',
-  VSUP_BACKEND_UNAVAILABLE: 'No backend could be selected, or the launcher interpreter is missing.',
+  VSUP_BACKEND_UNAVAILABLE: 'The configured backend is not available, or the launcher interpreter is missing.',
   VSUP_BACKEND_CRASHED: 'The Vibe process exited before the turn finished.',
   VSUP_TIMEOUT: 'The run deadline elapsed.',
   VSUP_RATE_LIMITED: 'Vibe or its provider answered with HTTP 429.',

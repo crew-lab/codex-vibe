@@ -147,7 +147,7 @@ export async function runDoctor(config: SupervisorConfig): Promise<DoctorReport>
     else checks.push({ name: 'lock', ok: true, message: `The data directory lock belongs to pid ${lock.pid}, which is gone or was reused (stale); the next supervisor start takes it over.` });
   } catch { checks.push({ name: 'lock', ok: false, message: 'The supervisor owner lock could not be inspected.' }); }
   checks.push({ name: 'authentication', ok: true, status: 'unverified', message: 'Vibe authentication was not inspected; Vibe may use its existing local sign-in or operating-system credential store.' });
-  checks.push({ name: 'codex-registration', ok: true, status: 'unverified', message: 'Codex desktop visibility is not verified by doctor; run configure-codex and restart Codex after reviewing its changes.' });
+  checks.push({ name: 'codex-registration', ok: true, status: 'unverified', message: 'Codex desktop visibility is not verified by doctor; run `vibe-supervisor setup` and restart Codex after reviewing its changes.' });
   try { await import('@modelcontextprotocol/server'); checks.push({ name: 'mcp-server', ok: true, message: 'The MCP SDK dependency is installed.' }); }
   catch { checks.push({ name: 'mcp-server', ok: false, message: 'The MCP SDK dependency is unavailable.' }); }
   const requiredFailure = checks.some((check) => !check.ok && ['node', 'git', 'vibe', 'workspace-roots', 'data-directory', 'mcp-server'].includes(check.name));

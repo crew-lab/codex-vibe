@@ -13,10 +13,10 @@ The server speaks MCP over stdio: frames on stdout, diagnostics on stderr. Input
 | `vibe_status` | always | Read state and bounded events; embeds the compact result once the run has settled. |
 | `vibe_result` | always | Read the full record or the transcript. |
 | `vibe_close` | always | Cancel the run if it is live, close it, optionally remove a verified worktree. |
-| `vibe_continue` | backend `acp` or `auto` | Send a follow-up to a completed, ready or recoverable ACP run. |
-| `vibe_respond` | backend `acp` or `auto` | Answer a pending permission or input request. |
+| `vibe_continue` | backend `acp` | Send a follow-up to a completed, ready or recoverable ACP run. |
+| `vibe_respond` | backend `acp` | Answer a pending permission or input request. |
 
-The backend comes only from the configuration. There is no cancel tool (`vibe_close` cancels), no shell switch and no tool-side backend selection. The usual loop is: start with `wait_seconds`, then `vibe_status` with `wait_seconds` until `result` appears, independent verification and any same-session correction, then a fresh export and `vibe_close`. Do not close a candidate session before deciding acceptance. Keep the client's tool timeout above 300 seconds; `configure-codex` writes `tool_timeout_sec = 600` and `startup_timeout_sec = 30`.
+The backend comes only from the configuration. There is no cancel tool (`vibe_close` cancels), no shell switch and no tool-side backend selection. The usual loop is: start with `wait_seconds`, then `vibe_status` with `wait_seconds` until `result` appears, independent verification and any same-session correction, then a fresh export and `vibe_close`. Do not close a candidate session before deciding acceptance. Keep the client's tool timeout above 300 seconds; `setup` writes `tool_timeout_sec = 600` and `startup_timeout_sec = 30`.
 
 ### Inputs
 
@@ -104,12 +104,12 @@ Every reply carries `next_action`, a one-sentence instruction for the next call.
 
 ## Configuration
 
-Run `vibe-supervisor init` (or `setup`) to create the private config, then edit it. The location is `~/Library/Application Support/VibeSupervisor/config.toml` on macOS (`$XDG_DATA_HOME/vibe-supervisor` or `~/.local/share/vibe-supervisor` on Linux); `VIBE_SUPERVISOR_HOME` overrides the directory and must also reach the MCP server's environment. Validate with `vibe-supervisor doctor --config <path>`. A complete example is [examples/config.toml](../examples/config.toml), and the JSON schema is `schemas/config.schema.json`.
+Run `vibe-supervisor setup --workspace <dir>` to create the private config, then edit it. The location is `~/Library/Application Support/VibeSupervisor/config.toml` on macOS (`$XDG_DATA_HOME/vibe-supervisor` or `~/.local/share/vibe-supervisor` on Linux); `VIBE_SUPERVISOR_HOME` overrides the directory and must also reach the MCP server's environment. Validate with `vibe-supervisor doctor --config <path>`. A complete example is [examples/config.toml](../examples/config.toml), and the JSON schema is `schemas/config.schema.json`.
 
 | Key | Default | Bounds |
 |---|---|---|
 | `version` | required | `1` |
-| `backend` | `programmatic` | `programmatic`, `acp` or `auto`; `acp` and `auto` also register `vibe_continue` and `vibe_respond` |
+| `backend` | `programmatic` | `programmatic` or `acp`; `auto` is rejected. `acp` also registers `vibe_continue` and `vibe_respond` |
 | `allowed_workspace_roots` | `[]` (denies all work) | up to 100 directories, each an absolute path or one starting with `~/` (or `~`); relative paths are rejected, and each entry is canonicalized when a workspace is checked |
 | `max_concurrent_runs` | 2 | 1 to 32 |
 | `max_queued_runs` | 8 | 0 to 256 |
@@ -140,32 +140,18 @@ Installed use is `vibe-supervisor <command>`.
 
 | Command | Purpose |
 |---|---|
-| `setup --workspace <dir> [--codex user\|project] [--isolated] [--yes]` | Plan every change first (a malformed Codex config aborts before anything is written), then create the config if missing, add the canonical workspace, fill `[paths]` from PATH, run doctor (non-PASS lines only), then show the Codex change; written only with `--yes` or an interactive confirmation. Refuses `/` and the home directory. Rewriting an existing `config.toml` drops its comments and layout and keeps a `config.toml.bak-<timestamp>` copy. A running MCP server must be restarted (reconnected for `--isolated`) to read a changed allowlist. |
+| `setup --workspace <dir> [--codex user\|project] [--isolated] [--yes\|--dry-run]` | Plan every change first (a malformed Codex config aborts before anything is written), then create the config if missing, add the canonical workspace, fill `[paths]` from PATH, run doctor (non-PASS lines only), then show the Codex change; written only with `--yes` or an interactive confirmation. `--dry-run` prints the planned config and Codex changes and writes nothing, so it also skips doctor. Refuses `/` and the home directory. Rewriting an existing `config.toml` drops its comments and layout and keeps a `config.toml.bak-<timestamp>` copy. A running MCP server must be restarted (reconnected for `--isolated`) to read a changed allowlist. |
 | `allow <dir>` | Add one canonical workspace root; idempotent, including for roots written with `~`. Symlinked or missing directories, `/` and the home directory are refused. A change rewrites `config.toml` (comments and layout are lost; the previous file is kept as `config.toml.bak-<timestamp>`) and needs a restart of the Codex MCP server, or a reconnect for `--isolated`, to take effect. |
 | `doctor [--json] [--config <path>]` | Report local prerequisites without a model request; `--config` validates that file and warns about ignored keys. Its `acp-initialize` check negotiates ACP without a prompt. |
 | `serve --stdio [--isolated]` | Run the MCP server. The client owns stdin and stdout. |
-| `init` | Create a private starter config; refuses to overwrite. |
-| `configure-codex --user\|--project [--path <dir>] [--dry-run] [--isolated]` | Write (or with `--dry-run` preview) the `mcp_servers.vibe-supervisor` entry in the Codex config, backing up a nonempty file. `--path` needs `--project`. |
-| `baseline prepare <manifest> [--create]` | Validate a reviewed overlay; explicit creation writes only an independent private snapshot repository. |
-| `audit-edit <home> <run-id> [--files <absolute-scope.json>]` | Audit settled edit evidence; scope lists describe tool arguments, not candidate acceptance. |
 | `runs list`, `runs show <id>`, `runs tail <id>` | Inspect saved runs. |
 | `runs cleanup [run-id]` | Retention sweep, or safe cleanup of one `failed`, `cancelled` or `closed` run. Stop the server first: storage has one owner. |
 | `--version` | Print the version. |
 
-`config validate [path]` and `test-acp` still work as aliases and print a one-line pointer to `doctor` on stderr. Exit status is 0 on success, 2 for usage errors and 1 otherwise; errors print `CODE: message remedy` on stderr.
+The reviewed-baseline and edit-audit coordinator tools are repository scripts, not commands (see `scripts/README.md`). Exit status is 0 on success, 2 for usage errors and 1 otherwise; errors print `CODE: message remedy` on stderr.
 
 Run records and private histories can contain source content despite filtering; keep the data directory private.
 
 ## Run provenance
 
 New runs persist `supervisor_version`, the release that created the run. Start, status, result, continuation and close responses expose it. Existing runs retain their recorded creator release across restart or continuation; legacy records return `null` in public run responses and remain absent in persisted metadata. The MCP initialization server version identifies the currently connected executable separately. A diagnostic event `reason` is not the backend structured `stop_reason`; preserve the two fields separately.
-
-## Coordinator baseline and audit CLI
-
-`baseline prepare manifest.json [--create]` reads an owner-private JSON manifest with `source`, `baseRef`, `outputParent`, and `entries`. Each entry has a relative `path`, `operation` (add/replace/delete), `baseSha256` (null for additions), `reviewedSha256` (null for deletions), and `mode` (100644/100755 for writes). Selected content comes from the source, never from an embedded patch. Dry-run is the default. Explicit creation makes local commits only in a new disposable snapshot repository. Existing source files/index/refs and config stay unchanged. The output parent must be owner-private and inside an existing allowed root, outside the source.
-
-Bounds: 64 overlays, 4096 base/final files, 2 MiB per file, 100 MiB total tree. Overlays must be regular UTF-8 text; binary base blobs are permitted within bounds. Sensitive filenames/recognized credentials, links/submodules, ignored/reserved overlays, conflicting/case-colliding paths and external Git filters are refused. Tracked AGENTS/.agents in the base retain discovery isolation. The output manifest is owner-read-only and hash-bound. Failed creations retain an owner-private output and generic failure marker for explicit recovery; no uncertain deletion/replay is attempted.
-
-`audit-edit canonical-private-home run-id [--files /absolute/private/scope.json]` reads settled pinned-Vibe ACP edit evidence safely and returns only allowlisted counts/classes, creator version and recognized stop reason. It makes no model request and changes no permissions. Missing or incompatible evidence returns unverified. This command does not certify candidate behavior, all task scope, billing, restart or other hosted gates.
-
-Audit scope evidence: `argument_scope` describes only declared tool-call paths when a coordinator supplies a scope list directly to the module. `declared_scope` remains `unverified`: actual candidate/export and symlink targets require independent review. The CLI supplies that list only with an explicit `--files` owner-private JSON file: 1–64 unique repository-relative strings, each at most 1024 characters. Absolute, empty/dot/traversal, leading-dash components, backslash, control and colon paths are rejected. With a scope list, `status` is `validated` only when `argument_scope` is `within_declared_arguments`: a write outside the list, a write whose path cannot be read, or a successful call to any tool other than read, search and file edits makes the report `unverified` and the CLI exit non-zero. `policy_denial_events` counts the supervisor's policy denials and the backend's refused permission requests; a call gets the `policy_denied` class when the denial names its tool-call ID, which the backend refusal does and the supervisor denial, keyed by request ID, does not. Ancestor ownership/write permissions and identities are checked before/after reads, with root-owned sticky temporary directories permitted. These application checks do not resist malicious concurrent mutation by another process running as the same account.

@@ -58,7 +58,7 @@ describe('a missing interpreter is not reported as a missing Vibe executable', (
     const script = path.join(root, 'vibe-acp');
     await writeExecutable(script, '#!/nonexistent/dir/python3\n');
     const config = { ...DEFAULT_CONFIG, backend: 'acp' as const, allowedWorkspaceRoots: [source], paths: { vibeAcp: script, dataDir: data } };
-    const probe = await new AcpBackend(config, data).probe({ fresh: true });
+    const probe = await new AcpBackend(config, data).probe();
     expect(probe.available).toBe(false);
     expect(probe.details).toMatchObject({ interpreter_missing: true, interpreter: '/nonexistent/dir/python3' });
     expect(probe.details?.executable_missing).toBeUndefined();
@@ -77,7 +77,7 @@ describe('a missing interpreter is not reported as a missing Vibe executable', (
     const empty = path.join(root, 'empty-path'); await mkdir(empty);
     process.env.PATH = empty;
     const config = { ...DEFAULT_CONFIG, backend: 'acp' as const, allowedWorkspaceRoots: [source], paths: { vibeAcp: script, dataDir: data } };
-    const probe = await new AcpBackend(config, data).probe({ fresh: true });
+    const probe = await new AcpBackend(config, data).probe();
     expect(probe.details).toMatchObject({ interpreter_missing: true, interpreter: 'python3' });
     expect(probe.details?.executable_missing).toBeUndefined();
     const manager = new RunManager(config, data, [new AcpBackend(config, data)]);
@@ -91,7 +91,7 @@ describe('a missing interpreter is not reported as a missing Vibe executable', (
     const script = path.join(root, 'vibe');
     await writeExecutable(script, '#!/nonexistent/dir/python3\n');
     const config = { ...DEFAULT_CONFIG, backend: 'programmatic' as const, allowedWorkspaceRoots: [source], paths: { vibe: script, dataDir: data } };
-    const probe = await new ProgrammaticBackend(config).probe({ fresh: true });
+    const probe = await new ProgrammaticBackend(config).probe();
     expect(probe.details).toMatchObject({ interpreter_missing: true });
     expect(probe.details?.executable_missing).toBeUndefined();
     const manager = new RunManager(config, data, [new ProgrammaticBackend(config)]);
@@ -107,7 +107,7 @@ describe('a missing interpreter is not reported as a missing Vibe executable', (
     const backend = kind === 'acp' ? new AcpBackend(config, data) : new ProgrammaticBackend(config);
     const manager = new RunManager(config, data, [backend]);
     try {
-      const probe = await backend.probe({ fresh: true });
+      const probe = await backend.probe();
       expect(probe.details).toMatchObject({ executable_missing: true });
       expect((await failedRun(manager, source)).error).toMatchObject({ code });
     } finally { await manager.shutdown(); }

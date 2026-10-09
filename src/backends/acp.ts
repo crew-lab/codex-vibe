@@ -16,8 +16,6 @@ import { APP_VERSION } from '../version.js';
 import { buildVibeLaunch, classifyFailureText, classifyStartFailure, describeMissing, isCodedError, spawned, versionUnsupported } from './launcher.js';
 import { ACP_PROTOCOL_VERSION, SUPPORTED_VIBE } from './pinned.js';
 import { idleDeadlineSeconds, turnDeadlineSeconds, writeWorkerDeadline, WORKER_DEADLINE_FILE_ENV } from './worker-deadline.js';
-import { executableProbeKey, ProbeCache } from './probe-cache.js';
-import type { ProbeOptions } from './probe-cache.js';
 import type { VibeLaunch } from './launcher.js';
 import { environmentSecrets, redactSecrets, redactedTail, StreamingRedactor } from '../security/redaction.js';
 import { resolveCanonicalRoot } from '../security/paths.js';
@@ -155,19 +153,13 @@ export class AcpBackend implements SupervisorBackend {
     this.recoverTimeoutMs = options.recoverTimeoutMs ?? DEFAULT_RECOVER_TIMEOUT_MS;
     this.startTimeoutMs = options.startTimeoutMs ?? DEFAULT_START_TIMEOUT_MS;
   }
-  private readonly probeCache = new ProbeCache();
   protected executable(): string { return this.config.paths?.vibeAcp ?? 'vibe-acp'; }
   /** Test subclasses can attach an ACP fixture process; production uses the pinned shim only. */
   protected buildLaunch(args: readonly string[], profile: VibeChildProfile, runDirectory: string): Promise<VibeLaunch> {
     return buildVibeLaunch(this.executable(), 'acp', args, profile, runDirectory);
   }
 
-  async probe(options: ProbeOptions = {}): Promise<BackendCapabilities> {
-    const key = await executableProbeKey(this.executable(), { interpreter: true });
-    return this.probeCache.get(key, options.fresh === true, () => this.runProbe());
-  }
-
-  protected async runProbe(): Promise<BackendCapabilities> {
+  async probe(): Promise<BackendCapabilities> {
     const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'vibe-supervisor-acp-probe-')));
     let home = '';
     let vibeHome = '';
@@ -211,8 +203,7 @@ export class AcpBackend implements SupervisorBackend {
 
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     await assertNoProjectVibeExtensions(input.cwd); await assertNoProjectVibeExtensions(input.workerWorkspace);
-    try { return await this.launchSession(input, callbacks); }
-    catch (error) { this.probeCache.invalidate(); throw error; }
+    return this.launchSession(input, callbacks);
   }
 
   private async launchSession(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {

@@ -33,7 +33,7 @@ try {
   if (!run(executable, ['--help']).includes('serve --stdio')) throw new Error('Installed CLI help check failed.');
 
   // Exercise the installed stdio process and official client without starting a backend run.
-  run(executable, ['init']);
+  run(executable, ['allow', packDir]);
   const configuredBackend = (await readFile(path.join(env.VIBE_SUPERVISOR_HOME, 'config.toml'), 'utf8')).match(/^backend\s*=\s*"(\w+)"/m)?.[1] ?? 'programmatic';
   const expectedTools = configuredBackend === 'programmatic' ? 5 : 7;
   const { Client } = await import('@modelcontextprotocol/client');

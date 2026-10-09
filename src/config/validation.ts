@@ -15,7 +15,7 @@ const executableString = pathString.refine((value) => path.isAbsolute(value) || 
 const absoluteString = pathString.refine((value) => path.isAbsolute(value), "must be an absolute path");
 const configSchema = z.object({
   version: z.literal(1),
-  backend: z.enum(["auto", "acp", "programmatic"]).default("programmatic"),
+  backend: z.enum(["programmatic", "acp"], { error: "backend must be \"programmatic\" or \"acp\"" }).default("programmatic"),
   allowed_workspace_roots: z.array(rootString).max(100).default([]),
   max_concurrent_runs: z.number().int().min(1).max(32).default(2),
   max_queued_runs: z.number().int().min(0).max(256).default(8),

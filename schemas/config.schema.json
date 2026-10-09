@@ -7,7 +7,7 @@
   "required": ["version"],
   "properties": {
     "version": { "const": 1 },
-    "backend": { "enum": ["auto", "acp", "programmatic"], "default": "programmatic" },
+    "backend": { "enum": ["acp", "programmatic"], "default": "programmatic" },
     "allowed_workspace_roots": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^(/|~$|~/)" }, "default": [] },
     "max_concurrent_runs": { "type": "integer", "minimum": 1, "maximum": 32, "default": 2 },
     "max_queued_runs": { "type": "integer", "minimum": 0, "maximum": 256, "default": 8 },

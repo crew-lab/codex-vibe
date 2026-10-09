@@ -55,6 +55,11 @@ describe("supervisor config", () => {
     expect(ignoredConfigKeys({ version: 1, security: { allow_network_tools: false } })).toEqual(["security.allow_network_tools"]);
   });
 
+  it("rejects backend auto and names the two valid values", () => {
+    expect(() => validateConfig({ version: 1, backend: "auto" })).toThrow(/programmatic.*acp/);
+    expect(validateConfig({ version: 1, backend: "acp" }).backend).toBe("acp");
+  });
+
   it("enforces the tool bounds on the limits defaults", () => {
     expect(() => validateConfig({ version: 1, limits: { max_turns_review: 0 } })).toThrow();
     expect(() => validateConfig({ version: 1, limits: { max_turns_edit: 51 } })).toThrow();

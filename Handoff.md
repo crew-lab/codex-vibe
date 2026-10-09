@@ -1,6 +1,36 @@
 # Implementation handoff
 
-## Current delivery — 2026-10-09, rc.14
+## Current delivery — 2026-10-09, rc.15
+
+`vibe-supervisor@0.9.0-rc.15` is rc.14 made smaller. The owner's goal for 1.0 is a supervisor that works stably, so new surface waits until the remaining gates pass. rc.15 changes no MCP tool, allowlist, worktree, launcher-shim or permission behaviour; it removes code that no real run depended on:
+
+- `backend = "auto"` and the availability probe cache are gone. The backend is `programmatic` (default, five tools) or `acp` (seven tools); `auto` in a configuration is rejected. `doctor` probes Vibe directly.
+- The CLI is `setup` (now with `--dry-run`), `allow`, `doctor`, `serve` and `runs`. `init`, `configure-codex`, `test-acp` and `config validate` are removed; `setup` covers what they did.
+- The rc.13/14 coordinator tools are no longer shipped: `baseline prepare` and `audit-edit` are `scripts/prepare-reviewed-baseline.mjs` and `scripts/audit-edit-run.mjs` ([scripts/README.md](scripts/README.md)). The audit's cold-review fixes are kept: a breached scope is `unverified` with a non-zero exit, and backend permission refusals link to their tool calls.
+
+Installing rc.15 on the target machine: anyone whose configuration says `backend = "auto"` must change it to `programmatic` or `acp`, and anything scripted around `configure-codex` or `init` must use `setup`. rc.15 has not been run against hosted Vibe; the rc.13 pilot and rc.14 checks below are evidence for the unchanged paths only.
+
+### Simplification plan (2026-10-09)
+
+From a read-only review of the whole project at rc.14 (`src/` 8,199 lines, tests 12,647, Handoff 487). Phase 1 items 1 to 3 are done in rc.15.
+
+| Phase | Item | Status |
+| --- | --- | --- |
+| 1, before 1.0 | Coordinator tooling out of the package | Done in rc.15 |
+| 1 | `auto` backend and probe cache removed | Done in rc.15 |
+| 1 | CLI reduced to five commands | Done in rc.15 (`RunManager.cancel` stays: `vibe_close` uses it) |
+| 1 | Removed-keys shim for pre-rc.6 settings (`validation.ts`): reject through the strict schema instead | Open |
+| 1 | Config options with no recorded use: `limits.mcp_result_format`, `max_queued_runs`, `retention.preserve_failed_runs`, `paths.data_dir` | Open |
+| 1 | This Handoff to about 60 lines (superseded plans and test plans to `docs/history/`); `article/` out of the root | Open |
+| 2, 1.0.x | A run whose `meta.json` cannot be read is skipped at startup (`run-manager.ts`, `initializeInternal`) and never reaches retention, so it and its worktree stay forever | Open |
+| 2 | Shutdown on client disconnect has no deadline; a stuck Git export keeps the owner lock and the next Codex start fails with `VSUP_INVALID_STATE` | Open |
+| 2 | If the automatic policy-deny response fails, the ACP permission request never resolves and only the 600 s watchdog ends the turn | Open |
+| 3, after the hosted soak | One backend: if ACP passes the soak, make it the default and drop programmatic (about 400 lines) | Decision after D18 |
+| 3 | Fold the ACP negotiation timer into the progress watchdog; tests regrouped by subject instead of by review cycle | Open |
+
+Risks to keep in view: programmatic turn-limit detection requires Vibe's stop marker to match stdout and stderr exactly (one extra stderr line turns a turn limit into `VSUP_BACKEND_CRASHED`); a Vibe upgrade needs the version, the harness source hash and the signatures updated together.
+
+### rc.14 delivery (from the target machine)
 
 `vibe-supervisor@0.9.0-rc.14` is implemented and installed locally. Source delivery is on `codex/project-agents-isolation`, based on `8da1c7d`; the dirty primary checkout is preserved. The user authorized committing and pushing this delivery. The package remains private, unpublished, ESM and MIT; no production 1.0 certification or deployment is claimed.
 
@@ -28,7 +58,7 @@ rc.11 accepted a real project `.agents` directory while disabling pinned Vibe pr
 
 rc.12 records the creating Supervisor version without relabeling legacy/recovered runs and prepared the bounded edit pilot. Its failed SEO run is analyzed in [the worker review](docs/history/reviews/rc12-seo-worker-adoption-2026-10-09.md). Earlier failures remain separate evidence; rc.13 subsequently passed the prepared pilot, and rc.14 is the currently installed candidate.
 
-The rc.10/2026-10-08 sections below are a historical baseline. Their release versions, account observations and planned target-machine steps are not current installation or gate results; use the current delivery table above and preserve their original evidence. Existing Git history and MIT copyright are unchanged. The former rc.2 and 2026-10-05 handoff is in [handoff history](docs/history/handoff-2026-10-05.md).
+The rc.10/2026-10-08 sections below (from "Where the project stands") are a historical baseline. Their release versions, account observations and planned target-machine steps are not current installation or gate results; use the current delivery table above and preserve their original evidence. Existing Git history and MIT copyright are unchanged. The former rc.2 and 2026-10-05 handoff is in [handoff history](docs/history/handoff-2026-10-05.md).
 
 ## Where the project stands and what comes next (2026-10-08)
 
@@ -65,7 +95,7 @@ Root `AGENTS.md` and `Handoff.md` are not in the npm `files` allowlist; the form
 
 ## Implemented surface
 
-Strict-schema MCP tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result` and `vibe_close` always, plus `vibe_continue` and `vibe_respond` when the configured backend is `acp` or `auto` (five or seven tools). There is no cancel tool; `vibe_close` cancels a live run. The official stdio transport has protocol-only stdout, bounded/redacted structured results, annotations, and stable supervisor errors. The CLI also has `baseline prepare` (dry-run by default, explicit disposable creation) and `audit-edit` (optional private `--files` argument scope). The CLI has `setup`, `allow`, `init`, `doctor` (with `--config`), `configure-codex`, `serve`, `runs list|show|tail|cleanup` and version/help; `test-acp` and `config validate` remain as aliases.
+Strict-schema MCP tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result` and `vibe_close` always, plus `vibe_continue` and `vibe_respond` when the configured backend is `acp` (five or seven tools). There is no cancel tool; `vibe_close` cancels a live run. The official stdio transport has protocol-only stdout, bounded/redacted structured results, annotations, and stable supervisor errors. The CLI has `setup` (with `--dry-run`), `allow`, `doctor` (with `--config`), `serve`, `runs list|show|tail|cleanup` and version/help. The coordinator scripts `prepare-reviewed-baseline.mjs` and `audit-edit-run.mjs` are in `scripts/`, not in the package.
 
 Reviews read/search an allowed source workspace and check integrity. Edits create detached Git worktrees from a selected base and export changes without applying them to the source. There is no automatic patch application, commit, merge, or push. Default execution is programmatic; ACP is opt-in and supports correlated permission callbacks, form input, same-session continuation, cancellation, and conditional session loading.
 
@@ -78,13 +108,13 @@ Reviews read/search an allowed source workspace and check integrity. Edits creat
 | Shared contracts | `src/contracts.ts`: versioned runs, events, limits, errors, backend interfaces, artifacts, configuration. |
 | Configuration | `src/config/`: defaults, strict validation, private TOML loading, data/config path resolution. |
 | Lifecycle | `src/core/run-manager.ts`, `run-state.ts`, `policy-engine.ts`, `serialization.ts`: queue, state, persistence, policy, responses, recovery, cleanup. |
-| Backends | `src/backends/programmatic.ts`, `acp.ts`: process/SDK adapters and capability checks; `pinned.ts`: the Vibe version pin; `probe-cache.ts`: availability probes; `worker-deadline.ts`: the deadline file the launcher watchdog re-reads. |
+| Backends | `src/backends/programmatic.ts`, `acp.ts`: process/SDK adapters and capability checks; `pinned.ts`: the Vibe version pin; `worker-deadline.ts`: the deadline file the launcher watchdog re-reads. |
 | Launch profile | `src/backends/profile.ts`, `launcher.ts`, `runtime/vibe_supervisor_launcher.py`: isolated homes, filtered tools/environment, installed Python runtime, persistence shim/watchdog. |
 | Security primitives | `src/security/`: canonical paths, private filesystem objects, child environment, streaming redaction. |
-| Git | `src/git/worktree.ts`: detached worktrees, safe export/cleanup; `reviewed-baseline.ts`: explicit hash-bound reviewed snapshot preparation. |
+| Git | `src/git/worktree.ts`: detached worktrees, safe export/cleanup. |
 | Process management | `src/process/managed.ts`: bounded output and managed process-group termination. |
 | Storage | `src/persistence/`: atomic private writes and NDJSON recovery. |
-| Public interfaces | `src/mcp/`, `src/cli.ts`, `src/cli/` (`setup.ts`, `codex.ts`, `diagnose.ts`), `src/diagnostics/doctor.ts`, `edit-run-audit.ts`: local diagnostics and sanitized settled-edit evidence. |
+| Public interfaces | `src/mcp/`, `src/cli.ts`, `src/cli/` (`setup.ts`, `codex.ts`, `diagnose.ts`), `src/diagnostics/doctor.ts`. |
 | Packaging and tools | `scripts/`: runtime asset copy, acceptance, secret scan, SPDX inventory, checksums, install smoke, RC packaging, error docs, `compat-probe.mjs`, the hosted `soak.mjs` driver. |
 | Tests | `tests/`: schemas/config/CLI, core and official MCP integration, security/process/Git, fake ACP subprocess integration. |
 | Skills and plugin scaffold | `skills/vibe-supervisor`, `skills/vibe-acp` (shipped); `.codex-plugin/plugin.json` and `.mcp.json` stay in the repository only and are out of scope for 1.0. |
@@ -143,18 +173,18 @@ Documentation additions were checked for local link targets and whitespace. They
 
 ## Release artifacts and reproduction
 
-`release/` is ignored by Git. The current candidate is **0.9.0-rc.10**, built on 2026-10-09 on the preparing machine (Node 24.19.0, npm 11.17.0, macOS arm64) from the `Cut 0.9.0-rc.10` commit. It adds to rc.9 the fixes for the pre-1.0 cold review: the narrowed patch credential check, killable and bounded ACP negotiation, edits refused outside the repository root, `doctor` resolving bare names on `PATH`, corrected permission and input codes, and input problems refused at start. The release workflow is not in it; it waits on `claude/release-workflow`.
+`release/` is ignored by Git. The current candidate is **0.9.0-rc.15**, built on 2026-10-09 on the preparing machine (Node 24.19.0, npm 11.17.0, macOS arm64) from the `Cut 0.9.0-rc.15` commit. It is rc.14 with Phase 1 items 1 to 3 of the [simplification plan](#simplification-plan-2026-10-09): no `auto` backend or probe cache, a five-command CLI, and the coordinator tools moved to `scripts/`. The release workflow is not in it; it waits on `claude/release-workflow`. Suite at rc.15: 773 passed and 2 skipped in 67 files.
 
 ```text
-vibe-supervisor-0.9.0-rc.10.tgz  sha256 7c6c3e6b277a6022a8fdf1d5509909e1cde177a29dc11c7f52917e707aaa8894
-sbom.spdx.json                   sha256 5d87454085b307b4ed0446f479f46b6b9e5515ba0195e1470433e4a64d37719c
-acceptance.json                  sha256 9d17fb22fd167959e3966b510c8baf7b3c26006cd8ea6c8bc455bb86189999d0; 7 deterministic checks PASS; hosted, soak and platform gates listed UNVERIFIED
+vibe-supervisor-0.9.0-rc.15.tgz  sha256 7b7ae055ab5e66fede8cecb9e3409203efeccd71f61615cc80849c07fe528098
+sbom.spdx.json                   sha256 5859965cf469deb0ad5e7194704e8083ad2dd3f2611b0694631023d50589aeed
+acceptance.json                  sha256 03451eb6d23d0f86b71f23802ab420b3f0380e4df5bfe17ddf905ec0f92e7e81; 7 deterministic checks PASS; hosted, soak and platform gates listed UNVERIFIED
 SHA256SUMS
 ```
 
-`package:rc` passed end to end, including the offline installed-package smoke test (MCP initialize, the backend-dependent tool listing, EOF shutdown, and two concurrent `--isolated` clients from the installed tarball). The tarball has no `docs/history/`, `.mcp.json` or `.codex-plugin/`. Earlier candidates (rc.1 to rc.9) are superseded. Never edit archive contents manually; rebuild instead.
+`package:rc` passed end to end, including the offline installed-package smoke test (MCP initialize, the backend-dependent tool listing, EOF shutdown, and two concurrent `--isolated` clients from the installed tarball). The tarball has no `docs/history/`, `.mcp.json` or `.codex-plugin/`. Earlier candidates (rc.1 to rc.14) are superseded. Never edit archive contents manually; rebuild instead.
 
-The delivered copy of these four files is kept on the preparing machine at `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.10/` (older candidates are next to it), Git-ignored; verify it with `shasum -a 256 -c SHA256SUMS` in that folder before installing on the target machine. What to check there first: `vibe-supervisor setup --workspace <repo>` end to end including the Codex registration; that Codex lists five tools (programmatic) or seven (`acp`/`auto`); the Phase B measurements P1 to P4; hosted ACP cancellation, restart and lazy reload, and idle expiry (D10 to D12); and that `--isolated` reuses its session directory across Codex restarts. npm 11 warns that the dev dependencies `esbuild` and `fsevents` have install scripts outside `allowScripts`; the project's own `prepare` build still runs.
+The delivered copy of these four files is kept on the preparing machine at `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.15/` (older candidates are next to it), Git-ignored; verify it with `shasum -a 256 -c SHA256SUMS` in that folder before installing on the target machine. What to check there first: `vibe-supervisor setup --workspace <repo>` end to end including the Codex registration; that Codex lists five tools (programmatic) or seven (`acp`); the Phase B measurements P1 to P4; hosted ACP cancellation, restart and lazy reload, and idle expiry (D10 to D12); and that `--isolated` reuses its session directory across Codex restarts. npm 11 warns that the dev dependencies `esbuild` and `fsevents` have install scripts outside `allowScripts`; the project's own `prepare` build still runs.
 
 Populating the offline cache needs two steps. `npm ci --cache /abs/cache` stores package tarballs but not the registry metadata the offline tarball install needs, so the first `package:rc` run fails with `ENOTCACHED`. Warm the metadata once by packing the tarball and installing it online with `--ignore-scripts` into a throwaway prefix using the same cache, then run `package:rc`. The smoke install uses `--ignore-scripts`, so it does not exercise the `prepare` script; a fresh `npm ci` (Phase D, D18 setup) covers that.
 

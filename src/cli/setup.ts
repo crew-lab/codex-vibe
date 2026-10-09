@@ -19,6 +19,7 @@ export interface SetupOptions {
   codex: CodexScope;
   isolated: boolean;
   yes: boolean;
+  dryRun: boolean;
   interactive: boolean;
   confirm?: (question: string) => Promise<boolean>;
 }
@@ -136,7 +137,7 @@ function reportUpdate(update: WorkspaceUpdate): void {
 }
 
 export function parseSetupArgs(args: string[]): Omit<SetupOptions, 'interactive' | 'confirm'> {
-  let workspace: string | undefined; let codex: CodexScope = 'user'; let isolated = false; let yes = false;
+  let workspace: string | undefined; let codex: CodexScope = 'user'; let isolated = false; let yes = false; let dryRun = false;
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
     if (arg === '--workspace' || arg === '--codex') {
@@ -147,10 +148,12 @@ export function parseSetupArgs(args: string[]): Omit<SetupOptions, 'interactive'
       else fail('--codex must be user or project.', 2);
     } else if (arg === '--isolated') isolated = true;
     else if (arg === '--yes') yes = true;
-    else fail(`Unknown setup argument: ${String(arg)}. Usage: vibe-supervisor setup --workspace <dir> [--codex user|project] [--isolated] [--yes]`, 2);
+    else if (arg === '--dry-run') dryRun = true;
+    else fail(`Unknown setup argument: ${String(arg)}. Usage: vibe-supervisor setup --workspace <dir> [--codex user|project] [--isolated] [--yes|--dry-run]`, 2);
   }
-  if (!workspace) fail('Usage: vibe-supervisor setup --workspace <dir> [--codex user|project] [--isolated] [--yes]', 2);
-  return { workspace, codex, isolated, yes };
+  if (!workspace) fail('Usage: vibe-supervisor setup --workspace <dir> [--codex user|project] [--isolated] [--yes|--dry-run]', 2);
+  if (yes && dryRun) fail('--yes and --dry-run cannot be combined.', 2);
+  return { workspace, codex, isolated, yes, dryRun };
 }
 
 async function askYesNo(question: string): Promise<boolean> {
@@ -162,6 +165,15 @@ export async function runSetup(options: SetupOptions): Promise<void> {
   const canonical = await canonicalWorkspace(options.workspace);
   const configPlan = await planWorkspaceConfig(canonical, { resolveExecutables: true });
   const plan = await planCodexConfig(options.codex, canonical, options.isolated);
+  if (options.dryRun) {
+    say(`Dry run: ${configPlan.created ? 'would create private config' : 'would use config'} at ${configPlan.file}`);
+    say(configPlan.added ? `Would allow workspace: ${canonical}` : `Workspace already allowed: ${canonical}`);
+    for (const note of configPlan.notes) say(note);
+    for (const warning of configPlan.warnings) say(`WARN ${warning}`);
+    say(plan.changed ? `Would change ${plan.file}:\n${plan.block}` : `Codex config is already up to date: ${plan.file}`);
+    say('Nothing was written.');
+    return;
+  }
   const update = await applyWorkspacePlan(configPlan);
   say(`${update.created ? 'Created private config' : 'Using config'} at ${update.file}`);
   say(update.added ? `Allowed workspace: ${update.canonical}` : `Workspace already allowed: ${update.canonical}`);
@@ -178,7 +190,7 @@ export async function runSetup(options: SetupOptions): Promise<void> {
     if (approved) {
       const { backup } = await applyCodexPlan(plan);
       say(`Wrote ${plan.file}${backup ? ` (backup ${backup})` : ''}. Restart Codex to load it.`);
-    } else say(`Not written. Rerun with --yes to write it, or run: vibe-supervisor configure-codex --${options.codex}`);
+    } else say(`Not written. Rerun with --yes to write it.`);
   }
   if (!report.ok) process.exitCode = 1;
 }

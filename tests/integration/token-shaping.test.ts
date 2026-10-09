@@ -17,7 +17,11 @@ import { RunManager } from "../../src/core/run-manager.js";
 import { createSupervisorMcpServer } from "../../src/mcp/server.js";
 import type { RunManagerTools } from "../../src/mcp/tools.js";
 import { toolSchemas } from "../../src/mcp/schemas.js";
-import { runCli } from "../../src/cli.js";
+import { applyCodexPlan, planCodexConfig } from "../../src/cli/codex.js";
+async function configureCodex(): Promise<void> {
+  const plan = await planCodexConfig("user", process.cwd(), false);
+  if (plan.changed) await applyCodexPlan(plan);
+}
 
 const roots: string[] = [];
 const canonicalTmp = await realpath(tmpdir());
@@ -484,7 +488,7 @@ describe("MCP result formats", () => {
   });
 });
 
-describe("configure-codex tool timeout", () => {
+describe("Codex registration tool timeout", () => {
   async function codexHome() {
     const home = await mkdtemp(join(canonicalTmp, "vsup-codex-")); roots.push(home);
     await mkdir(join(home, ".codex"));
@@ -494,11 +498,8 @@ describe("configure-codex tool timeout", () => {
 
   it("writes tool_timeout_sec = 600 in the generated block", async () => {
     const file = await codexHome();
-    const written: string[] = [];
-    vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => { written.push(String(chunk)); return true; }) as typeof process.stdout.write);
-    await runCli(["configure-codex", "--user", "--dry-run"]);
-    expect(written.join("")).toContain("tool_timeout_sec = 600");
-    await runCli(["configure-codex", "--user"]);
+    expect((await planCodexConfig("user", process.cwd(), false)).block).toContain("tool_timeout_sec = 600");
+    await configureCodex();
     const parsed = parse(await readFile(file, "utf8")) as { mcp_servers: Record<string, { tool_timeout_sec: number }> };
     expect(parsed.mcp_servers["vibe-supervisor"]!.tool_timeout_sec).toBe(600);
   });
@@ -506,13 +507,13 @@ describe("configure-codex tool timeout", () => {
   it("adds the timeout to an existing registration that lacks it and then stays idempotent", async () => {
     const file = await codexHome();
     vi.spyOn(process.stdout, "write").mockImplementation((() => true) as typeof process.stdout.write);
-    await runCli(["configure-codex", "--user"]);
+    await configureCodex();
     const current = await readFile(file, "utf8");
     await writeFile(file, current.replace(/tool_timeout_sec = 600\n/, ""));
-    await runCli(["configure-codex", "--user"]);
+    await configureCodex();
     const updated = await readFile(file, "utf8");
     expect(updated).toContain("tool_timeout_sec = 600");
-    await runCli(["configure-codex", "--user"]);
+    await configureCodex();
     expect(await readFile(file, "utf8")).toBe(updated);
   });
 });

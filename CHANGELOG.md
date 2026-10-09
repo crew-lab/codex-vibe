@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0-rc.15
+
+Simplification; no change to the MCP tools, allowlists, worktree model, launcher shim or permission handling.
+
+- `backend = "auto"` and the availability probe cache are removed. The backend is `programmatic` (default, five tools) or `acp` (seven tools); a configuration with `auto` is rejected with an error naming both. `doctor` still probes Vibe directly.
+- The CLI is `setup`, `allow`, `doctor`, `serve` and `runs list|show|tail|cleanup`. `init`, `configure-codex` and the `test-acp` and `config validate` aliases are removed; `setup --dry-run` prints the planned configuration and Codex changes without writing them.
+- The coordinator tools `baseline prepare` and `audit-edit` leave the package and become `scripts/prepare-reviewed-baseline.mjs` and `scripts/audit-edit-run.mjs`, with the same behaviour (see `scripts/README.md`). The duplicated preflight text is removed from the README and both skills.
+- `audit-edit-run.mjs` reports `unverified` and exits non-zero when a declared scope is breached, including by a successful call to a tool other than read, search and file edits; backend permission refusals are linked to their tool calls.
+
 ## 0.9.0-rc.14
 
 - Add optional owner-private scope files to the offline audit CLI, retaining argument-only scope evidence and unverified candidate acceptance.

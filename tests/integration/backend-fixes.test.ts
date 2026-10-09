@@ -85,10 +85,7 @@ class FixtureAcpBackend extends AcpBackend {
     this.launchEnvs.push({ ...profile.env });
     return { command: process.execPath, args: [fixture], env: { ...profile.env, FAKE_ACP_CASE: this.testMode, ...(this.pidDir ? { FAKE_PID_DIR: this.pidDir } : {}) } };
   }
-  override async probe() {
-    return { available: true, backend: 'acp' as const, executable: 'fake-acp', version: '2.25.8', supportsContinue: true, supportsPermissionResponse: true };
-  }
-  probeProcess() { return this.runProbe(); }
+  probeProcess() { return this.probe(); }
 }
 
 function makeInput(root: string): StartRunInput {
