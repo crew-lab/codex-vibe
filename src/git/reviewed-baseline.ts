@@ -8,7 +8,6 @@ import { environmentSecrets, patchContainsCredential } from '../security/redacti
 import { assertNoProjectVibeExtensions, assertSimpleGlobRoot } from '../backends/profile.js';
 import { preparationGit as boundedGit, resolveBaseCommit, resolveGitRoot } from './worktree.js';
 
-// Snapshot operations must never inherit the caller's external index.
 const git = (cwd: string, args: string[], _env = process.env, codes = [0]): Promise<Buffer> =>
   boundedGit(cwd, args, { PATH: process.env.PATH, HOME: process.env.HOME, LANG: process.env.LANG }, codes);
 
@@ -85,7 +84,6 @@ export async function prepareReviewedBaseline(value: unknown, allowedRoots: read
     if ((original ? digest(original.bytes) : null) !== e.baseSha256 || (e.operation === 'add') !== !original) refuse();
     if (!original && folded.has(e.path.toLowerCase())) refuse();
     if ((e.operation === 'delete') !== (e.reviewedSha256 === null) || (e.operation !== 'delete' && !e.mode)) refuse();
-    // No index mutation, and ignored content cannot enter through an overlay.
     if ((await git(source, ['check-ignore', '--no-index', '--', e.path], process.env, [0, 1])).length) refuse();
     if (e.operation === 'delete') {
       await noLinks(source, e.path, true);
@@ -114,7 +112,6 @@ export async function prepareReviewedBaseline(value: unknown, allowedRoots: read
   const provenance = { schema_version: 1, original_source: source, original_base: base, entries: input.entries };
   if (!create) return { status: 'validated_dry_run', ...provenance, manifest_sha256: digest(Buffer.from(JSON.stringify(provenance))), creates_snapshot_commit: true };
   const output = await mkdtemp(path.join(parent, 'reviewed-baseline-')); const repo = path.join(output, 'repo');
-  // Failed creations are retained, owner-private, for explicit safe recovery.
   try {
     await mkdir(repo, { mode: 0o700 }); await git(repo, ['-c', 'init.templateDir=', 'init', '--quiet']);
     const write = async (f: FileEntry): Promise<void> => {

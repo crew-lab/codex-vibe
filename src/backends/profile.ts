@@ -59,8 +59,6 @@ export async function assertNoProjectVibeExtensions(root: string): Promise<void>
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
   }
-  // The pinned launcher disables project discovery before either entrypoint.
-  // Keep this path reserved to file tools; only a real directory is supported.
   try {
     const info = await lstat(path.join(canonical, '.agents'));
     if (info.isSymbolicLink() || !info.isDirectory()) throw new WorkspacePathError(`Workspace ${canonical} has a .agents path that is not a regular non-symlink directory.`);

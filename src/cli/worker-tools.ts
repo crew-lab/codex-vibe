@@ -1,4 +1,3 @@
-// Coordinator scope input describes tool arguments, never candidate acceptance.
 import path from 'node:path';
 import { loadConfig } from '../config/config.js';
 import { prepareReviewedBaseline } from '../git/reviewed-baseline.js';
@@ -7,7 +6,7 @@ export async function baselineCommand(args: string[]): Promise<unknown> {
   const [sub,file,flag,...extra]=args;
   if(sub!=='prepare'||!file||(flag!==undefined&&flag!=='--create')||extra.length)throw new Error('Usage: baseline prepare manifest.json [--create]; default dry-run, creation makes disposable local snapshot commits only.');
   try {const config=await loadConfig();return await prepareReviewedBaseline(JSON.parse(await privateAuditRead(path.resolve(file))),config.allowedWorkspaceRoots,flag==='--create');}
-  catch {throw new Error('Baseline preparation refused; source and allowlists are preserved. Check selected paths/hashes and owned private output.');}
+  catch (error) {const retained=error instanceof Error?/owned private output retained at (\S+)/.exec(error.message)?.[1]:undefined;throw new Error(`Baseline preparation refused; source and allowlists are preserved. ${retained?`Owned private output retained at ${retained}.`:'Check selected paths/hashes and owned private output.'}`);}
 }
 export async function auditEditCommand(args: string[]): Promise<unknown> {
   const [home,id,flag,file,...extra]=args;
