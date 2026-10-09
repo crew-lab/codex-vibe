@@ -1,0 +1,50 @@
+{
+  "scope": "offline fake-backend reproduction; not hosted acceptance",
+  "findings": {
+    "F7": {
+      "reproduced": true,
+      "completedThenRevived": "running",
+      "expected": "completed"
+    },
+    "F8": {
+      "reproduced": true,
+      "automaticallySelectedKind": "allow_once",
+      "expected": "reject_once",
+      "shellExecuted": false
+    },
+    "F9": {
+      "reproduced": true,
+      "annotatedFormResponse": "VSUP_INVALID_ARGUMENT",
+      "state": "waiting_input",
+      "adapterAdmission": "source inspection, not hosted"
+    },
+    "F10": {
+      "reproduced": true,
+      "broadRootsAcceptedByValidator": [
+        "/",
+        "~"
+      ],
+      "globalConfigurationChanged": false
+    },
+    "F11": {
+      "reproduced": true,
+      "firstCloseState": "closed",
+      "firstCloseHadRetentionReason": false,
+      "lateWorktreeRecorded": true,
+      "supportedSecondCloseRemoved": true
+    },
+    "F15": {
+      "reproduced": true,
+      "differentRunWorktreeRemoved": true,
+      "scope": "two supervisor-owned disposable fixture worktrees only",
+      "restoredIdentitySupportedCleanup": true
+    }
+  },
+  "source_commit": "9191338380cca6f2723765a513d26040c1b636a4",
+  "checks": {
+    "build": "pass",
+    "recovery_client_shutdown_worktree_close": "29/29",
+    "stability_fixes": "5/5",
+    "hosted_runs": 0
+  }
+}
