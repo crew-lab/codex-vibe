@@ -108,6 +108,7 @@ Historical native desktop and hosted results are version-bound. The rc.13 prepar
 ## Documentation
 
 - [Reference](docs/reference.md): tools, fields, results, configuration keys and CLI.
+- [v1.0 stable strategy](docs/v1-stable-strategy.md): delivery order, adoption evidence, release gates and later priorities.
 - [How it works](docs/functionality.md): lifecycle, recovery, storage and isolation.
 - [Error codes](docs/errors.md), [security](docs/security.md), [compatibility](docs/compatibility.md), [changelog](CHANGELOG.md).
 - [Contributor instructions](https://github.com/crew-lab/codex-vibe/blob/main/AGENTS.md) and [implementation handoff](https://github.com/crew-lab/codex-vibe/blob/main/Handoff.md) in the repository.
