@@ -171,6 +171,10 @@ export class ProgrammaticBackend implements SupervisorBackend {
     const state = handle.opaque as ProgrammaticHandle['opaque'];
     await state.process.terminate();
   }
+  async terminateNow(handle: BackendRunHandle): Promise<void> {
+    const state = handle.opaque as ProgrammaticHandle['opaque'];
+    await state.process.terminate();
+  }
   async close(handle: BackendRunHandle): Promise<void> {
     const state = handle.opaque as ProgrammaticHandle['opaque'];
     if (!state.done) await state.process.terminate();

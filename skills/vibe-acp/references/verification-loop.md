@@ -6,13 +6,16 @@
 
 ```text
 Outcome: <observable behavior>.
-Workspace/base: <canonical source path and selected Git reference>.
+Prepared cwd/base_ref: <verified snapshot repository and immutable reference>.
+Reviewed baseline: already present; implement only the new delta.
+Budget: <authorized cumulative turns/deadline; coordinator owns cleanup reserve>.
 Ownership: <exact files/modules>; excluded files: <list>.
 You share the codebase. Preserve other contributors' changes.
 Constraints: <versions, path boundaries, lifecycle and security requirements>.
 Acceptance: <regressions and exact checks the coordinator will execute>.
-Shell/network tools are disabled. Do not claim to have run shell checks.
-Produce a scoped patch and concise explanation of changes and limitations.
+Permitted tools: read_file, grep, write_file, edit. Shell/network are unavailable.
+Do not claim to have run shell checks. Avoid scratch; inventory any required scratch.
+Produce a scoped patch and an actual concise final answer with limitations.
 Do not commit, merge, push, or apply changes to the source checkout.
 ```
 
@@ -35,7 +38,8 @@ Explain what changed and anything still unresolved.
 
 | Observation | Next action |
 |---|---|
-| ACP completed with a patch | Independently review and test before acceptance. |
+| ACP completed/end_turn with an actual final answer and patch | Candidate-ready only: independently review/test while session remains open. |
+| max_turn_requests | Preserve partial artifacts; no automatic budget increase or replacement run. |
 | Candidate fails tests but session is usable | Send specific corrections through `vibe_continue`; fetch fresh results afterward. |
 | Running or waiting for permission/input | Call `vibe_status` with `wait_seconds` or answer the current validated request; do not issue another prompt. |
 | Failed, cancelled, closed, or expired session | Inspect artifacts and recovery capability; do not assume continuation or replay. |
@@ -47,4 +51,10 @@ Explain what changed and anything still unresolved.
 
 ## Baseline, scope and closure
 
-Prepare selected reviewed overlays before inference with the repository's coordinator baseline script (`scripts/`); use the returned immutable snapshot/ref and verify file hashes. Optional audit scope files describe tool-call argument paths only. Tests/builds run in a separate exact candidate copy. Keep the session open until independent checks and reviewer acceptance, including any same-session correction within the authorized cumulative ceiling; obtain a fresh export before cleanup. A premature close followed by coordinator correction is a partial worker gate, not a passed same-session implementation loop.
+Prepare selected reviewed overlays before inference with the coordinator script `scripts/prepare-reviewed-baseline.mjs` from a source checkout (not in the installed package); use the returned immutable snapshot/ref and verify file hashes. Optional `scripts/audit-edit-run.mjs` scope files describe tool-call argument paths only. Tests/builds run in a separate exact candidate copy. Keep the session open until independent checks and reviewer acceptance, including any same-session correction within the authorized cumulative ceiling; obtain a fresh export before cleanup. A premature close followed by coordinator correction is a partial worker gate, not a passed same-session implementation loop.
+
+## Baseline and audit inputs
+
+Use the baseline script only with explicit existing allowed source/output roots and an owner-private manifest of selected operations/hashes/modes; dry-run precedes creation. Keep original-source provenance with the coordinator. An edit worktree is not a place for dependency installs or test caches.
+
+The optional audit scope JSON is an owner-private array of 1–64 unique repository-relative strings, each at most 1024 characters. Reject absolute/traversal/dot/empty/leading-dash segments, backslashes, controls and colons. `argument_scope` checks call arguments only; `declared_scope` remains unverified until independent candidate/export checks. Assistant messages, tool calls, failed updates and provider requests/billing are different measurements.

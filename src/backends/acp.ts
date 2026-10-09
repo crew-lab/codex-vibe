@@ -459,6 +459,20 @@ export class AcpBackend implements SupervisorBackend {
     await write;
   }
 
+  async terminateNow(handle: BackendRunHandle): Promise<void> {
+    const state = (handle as AcpHandle).opaque; state.released = true; state.closed = true; closeQueue(state.commands);
+    this.cancelPendingRequest(state);
+    await state.process.terminate();
+  }
+  async refusePending(handle: BackendRunHandle, requestId: string): Promise<boolean> {
+    const state = (handle as AcpHandle).opaque;
+    const pending = state.request;
+    if (!pending || pending.requestId !== requestId || pending.kind !== 'permission') return false;
+    delete state.request;
+    pending.resolve(refusalOutcome(pending.options));
+    await state.callbacks.onPendingRequest(undefined);
+    return true;
+  }
   async cancel(handle: BackendRunHandle): Promise<void> {
     const state = (handle as AcpHandle).opaque; state.released = true; state.closed = true; closeQueue(state.commands);
     await state.deadlineWrite;

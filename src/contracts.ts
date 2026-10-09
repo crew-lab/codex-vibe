@@ -226,6 +226,8 @@ export interface SupervisorBackend {
   respond(handle: BackendRunHandle, response: BackendRespondInput): Promise<void>;
   cancel(handle: BackendRunHandle): Promise<void>;
   close(handle: BackendRunHandle): Promise<void>;
+  terminateNow?(handle: BackendRunHandle): Promise<void>;
+  refusePending?(handle: BackendRunHandle, requestId: string): Promise<boolean>;
   recover(record: RunRecord, callbacks: BackendCallbacks): Promise<BackendRunHandle | undefined>;
 }
 
