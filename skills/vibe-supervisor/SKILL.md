@@ -77,3 +77,11 @@ Obtain a fresh export matching the final worktree before vibe_close(cleanup_work
 - [ACP correction workflow](../vibe-acp/SKILL.md)
 - [Reference](../../docs/reference.md), [behavior](../../docs/functionality.md), [security](../../docs/security.md), [compatibility](../../docs/compatibility.md), [errors](../../docs/errors.md)
 - [Agent Skills specification](https://agentskills.io/specification)
+
+## Preparation diagnostics and public templates
+
+Use the source checkout's documented preparation prerequisites; these scripts are not shipped with the installed package. Record source/script hashes and the explicitly selected compiled runtime/configuration identity. Do not substitute a default legacy configuration for the active native session configuration.
+
+On refusal, preserve the sanitized diagnostic code/stage and any private retained-output receipt. Diagnose the failed stage before changing inputs; never weaken guards or reconstruct the baseline through a worker. An old manifest becomes stale when reviewed bytes change.
+
+Only an explicitly reviewed, hash-bound root `.env.example` can use the public-template exception. Default refusal remains; real environment/credential files, unsafe content, paths and ownership stay blocked. Verify the effective snapshot bytes independently before inference. The exception changes coordinator preparation only, not worker tool permissions.

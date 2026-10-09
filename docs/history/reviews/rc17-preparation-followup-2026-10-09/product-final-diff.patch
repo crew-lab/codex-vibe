@@ -1,0 +1,27 @@
+diff --git a/scripts/prepare-reviewed-baseline.mjs b/scripts/prepare-reviewed-baseline.mjs
+index b4b070d..4f08af7 100644
+--- a/scripts/prepare-reviewed-baseline.mjs
++++ b/scripts/prepare-reviewed-baseline.mjs
+@@ -56,7 +56,12 @@ function validatePublicDotenv(bytes) {
+   const text = bytes.toString('utf8');
+   for (const line of text.split(/\r?\n/)) {
+     const trimmed = line.trim();
+-    if (!trimmed || trimmed.startsWith('#')) continue;
++    if (!trimmed) continue;
++    if (trimmed.startsWith('#')) {
++      const comment = trimmed.slice(1).trim();
++      if (/^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(comment) || /:\/\/[^\s@]*@/.test(comment)) refuse('sensitive_content');
++      continue;
++    }
+     const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(trimmed);
+     if (!match) refuse('sensitive_content');
+     const key = match[1]; const value = match[2].trim();
+@@ -271,6 +276,8 @@ export async function prepareReviewedBaseline(value, allowedRoots, create = fals
+ 
+ export const baselineUsage = 'Usage: prepare-reviewed-baseline.mjs manifest.json [--create]. Default: dry-run. --create writes a disposable snapshot repository with local commits, never source refs.';
+ export async function baselineCommand(args) {
++  if (args.length === 1 && args[0] === '--help') return { status: 'help', usage: baselineUsage };
++  if (args[0] === '--help') throw new BaselinePreparationError('input');
+   const [file, flag, ...extra] = args;
+   if (!file || (flag !== undefined && flag !== '--create') || extra.length) throw new BaselinePreparationError('input');
+   let config;
