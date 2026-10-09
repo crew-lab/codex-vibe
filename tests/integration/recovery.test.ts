@@ -105,6 +105,21 @@ async function readMeta(data: string, runId: string): Promise<Record<string, unk
 const pending = { requestId: 'req-1', kind: 'permission' as const, title: 'Read file', options: [{ optionId: 'allow', name: 'Allow once' }] };
 
 describe('restart recovery', () => {
+  it('leaves legacy creator versions unknown after restart', async () => {
+    const { source, data } = await makeParent();
+    const record = baseRecord(source, 'programmatic', 'closed', false);
+    await writeRecord(data, record);
+    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [new FakeBackend()]);
+    try {
+      await manager.initialize();
+      expect((await manager.status({ run_id: record.runId })).supervisor_version).toBeNull();
+      for (const detail of ['compact', 'full'] as const) {
+        expect((await manager.result({ run_id: record.runId, detail })).supervisor_version).toBeNull();
+      }
+      expect((await readMeta(data, record.runId)).supervisor_version).toBeUndefined();
+    } finally { await manager.shutdown(); }
+  });
+
   it('maps every non-terminal record without spawning, holding a slot or touching artifacts', async () => {
     const { source, data, pidDir } = await makeParent();
     const backend = new FakeAcpBackend('normal', data, [source]); backend.pidDir = pidDir;

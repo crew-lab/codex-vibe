@@ -16,7 +16,7 @@ The server speaks MCP over stdio: frames on stdout, diagnostics on stderr. Input
 | `vibe_continue` | backend `acp` or `auto` | Send a follow-up to a completed, ready or recoverable ACP run. |
 | `vibe_respond` | backend `acp` or `auto` | Answer a pending permission or input request. |
 
-The backend comes only from the configuration. There is no cancel tool (`vibe_close` cancels), no shell switch and no tool-side backend selection. The usual loop is: start with `wait_seconds`, then `vibe_status` with `wait_seconds` until `result` appears, then `vibe_close`. Keep the client's tool timeout above 300 seconds; `configure-codex` writes `tool_timeout_sec = 600` and `startup_timeout_sec = 30`.
+The backend comes only from the configuration. There is no cancel tool (`vibe_close` cancels), no shell switch and no tool-side backend selection. The usual loop is: start with `wait_seconds`, then `vibe_status` with `wait_seconds` until `result` appears, independent verification and any same-session correction, then a fresh export and `vibe_close`. Do not close a candidate session before deciding acceptance. Keep the client's tool timeout above 300 seconds; `configure-codex` writes `tool_timeout_sec = 600` and `startup_timeout_sec = 30`.
 
 ### Inputs
 
@@ -146,6 +146,8 @@ Installed use is `vibe-supervisor <command>`.
 | `serve --stdio [--isolated]` | Run the MCP server. The client owns stdin and stdout. |
 | `init` | Create a private starter config; refuses to overwrite. |
 | `configure-codex --user\|--project [--path <dir>] [--dry-run] [--isolated]` | Write (or with `--dry-run` preview) the `mcp_servers.vibe-supervisor` entry in the Codex config, backing up a nonempty file. `--path` needs `--project`. |
+| `baseline prepare <manifest> [--create]` | Validate a reviewed overlay; explicit creation writes only an independent private snapshot repository. |
+| `audit-edit <home> <run-id> [--files <absolute-scope.json>]` | Audit settled edit evidence; scope lists describe tool arguments, not candidate acceptance. |
 | `runs list`, `runs show <id>`, `runs tail <id>` | Inspect saved runs. |
 | `runs cleanup [run-id]` | Retention sweep, or safe cleanup of one `failed`, `cancelled` or `closed` run. Stop the server first: storage has one owner. |
 | `--version` | Print the version. |
@@ -153,3 +155,17 @@ Installed use is `vibe-supervisor <command>`.
 `config validate [path]` and `test-acp` still work as aliases and print a one-line pointer to `doctor` on stderr. Exit status is 0 on success, 2 for usage errors and 1 otherwise; errors print `CODE: message remedy` on stderr.
 
 Run records and private histories can contain source content despite filtering; keep the data directory private.
+
+## Run provenance
+
+New runs persist `supervisor_version`, the release that created the run. Start, status, result, continuation and close responses expose it. Existing runs retain their recorded creator release across restart or continuation; legacy records return `null` in public run responses and remain absent in persisted metadata. The MCP initialization server version identifies the currently connected executable separately. A diagnostic event `reason` is not the backend structured `stop_reason`; preserve the two fields separately.
+
+## Coordinator baseline and audit CLI
+
+`baseline prepare manifest.json [--create]` reads an owner-private JSON manifest with `source`, `baseRef`, `outputParent`, and `entries`. Each entry has a relative `path`, `operation` (add/replace/delete), `baseSha256` (null for additions), `reviewedSha256` (null for deletions), and `mode` (100644/100755 for writes). Selected content comes from the source, never from an embedded patch. Dry-run is the default. Explicit creation makes local commits only in a new disposable snapshot repository. Existing source files/index/refs and config stay unchanged. The output parent must be owner-private and inside an existing allowed root, outside the source.
+
+Bounds: 64 overlays, 4096 base/final files, 2 MiB per file, 100 MiB total tree. Overlays must be regular UTF-8 text; binary base blobs are permitted within bounds. Sensitive filenames/recognized credentials, links/submodules, ignored/reserved overlays, conflicting/case-colliding paths and external Git filters are refused. Tracked AGENTS/.agents in the base retain discovery isolation. The output manifest is owner-read-only and hash-bound. Failed creations retain an owner-private output and generic failure marker for explicit recovery; no uncertain deletion/replay is attempted.
+
+`audit-edit canonical-private-home run-id [--files /absolute/private/scope.json]` reads settled pinned-Vibe ACP edit evidence safely and returns only allowlisted counts/classes, creator version and recognized stop reason. It makes no model request and changes no permissions. Missing or incompatible evidence returns unverified. This command does not certify candidate behavior, all task scope, billing, restart or other hosted gates.
+
+Audit scope evidence: `argument_scope` describes only declared tool-call paths when a coordinator supplies a scope list directly to the module. `declared_scope` remains `unverified`: actual candidate/export and symlink targets require independent review. The CLI supplies that list only with an explicit `--files` owner-private JSON file: 1–64 unique repository-relative strings, each at most 1024 characters. Absolute, empty/dot/traversal, leading-dash components, backslash, control and colon paths are rejected. `policy_denial_events` counts request-level denials separately; a call gets a policy-denied class only with explicit validated correlation. Ancestor ownership/write permissions and identities are checked before/after reads, with root-owned sticky temporary directories permitted. These application checks do not resist malicious concurrent mutation by another process running as the same account.

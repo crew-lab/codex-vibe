@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, realpath, rm, symlink, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -221,7 +221,8 @@ describe('workspace and context problems are refused synchronously', () => {
 
   it.each([
     ['a project .vibe directory', async (source: string) => { await mkdir(path.join(source, '.vibe')); }, '.vibe'],
-    ['a project .agents directory', async (source: string) => { await mkdir(path.join(source, '.agents')); }, '.agents'],
+    ['a project .agents file', async (source: string) => { await writeFile(path.join(source, '.agents'), 'unsafe'); }, '.agents'],
+    ['a symlinked .agents directory', async (source: string) => { await mkdir(path.join(source, 'agent-target')); await symlink(path.join(source, 'agent-target'), path.join(source, '.agents')); }, '.agents'],
     ['a symlinked .vibeignore', async (source: string) => { await writeFile(path.join(source, 'real-ignore'), ''); await symlink(path.join(source, 'real-ignore'), path.join(source, '.vibeignore')); }, '.vibeignore']
   ])('refuses %s before accepting a review or creating an edit worktree', async (_name, prepare, needle) => {
     const { source, data } = await makeParent('vsup-profile-');
@@ -233,6 +234,29 @@ describe('workspace and context problems are refused synchronously', () => {
       await expect(manager.editStart({ task: 'edit', cwd: source })).rejects.toMatchObject({ code: 'VSUP_WORKSPACE_INVALID', message: expect.stringContaining(needle) });
       await noRunsOrWorktrees(manager, data);
       expect(backend.starts).toEqual([]);
+    } finally { await manager.shutdown(); }
+  });
+
+  it.each([false, true])('accepts a real .agents directory without altering it (tracked: %s)', async (tracked) => {
+    const { source, data } = await makeParent('vsup-project-agents-');
+    await initRepository(source);
+    await mkdir(path.join(source, '.agents', 'skills'), { recursive: true });
+    const content = 'project instructions must not be inherited\n';
+    await writeFile(path.join(source, '.agents', 'skills', 'canary.md'), content);
+    if (tracked) {
+      await exec('git', ['add', '.agents'], { cwd: source });
+      await exec('git', ['commit', '-qm', 'project skills fixture'], { cwd: source });
+    }
+    const { backend, manager } = await managerFor(source, data);
+    try {
+      const review = await manager.reviewStart({ task: 'review', cwd: source });
+      const edit = await manager.editStart({ task: 'edit', cwd: source });
+      await waitFor(() => backend.starts.length, count => count === 2);
+      expect(backend.starts).toHaveLength(2);
+      expect(review.source_workspace).toBe(source);
+      expect(edit.worker_workspace).not.toBe(source);
+      expect(await readFile(path.join(source, '.agents', 'skills', 'canary.md'), 'utf8')).toBe(content);
+      if (tracked) expect(await readFile(path.join(edit.worker_workspace, '.agents', 'skills', 'canary.md'), 'utf8')).toBe(content);
     } finally { await manager.shutdown(); }
   });
 

@@ -293,6 +293,7 @@ class MainTest(HomeCase):
         with mock.patch.dict(os.environ, environ, clear=True), \
                 mock.patch.dict(sys.modules, {"vibe": mock.Mock(__version__=version)}), \
                 mock.patch.object(LAUNCHER, "_start_parent_watchdog"), \
+                mock.patch.object(LAUNCHER, "_patch_project_discovery"), \
                 mock.patch.object(LAUNCHER, "_patch_session_logger", side_effect=validate_error), \
                 mock.patch.object(LAUNCHER, "__import__", create=True, return_value=entry), \
                 mock.patch.object(LAUNCHER, "resolve_credential", side_effect=lambda env, home: real_resolve(env, home, "darwin", runner)), \
