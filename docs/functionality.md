@@ -14,7 +14,15 @@ The programmatic backend does not put the task on the Vibe command line. The sup
 
 Edits produce a patch for inspection. The supervisor does not apply patches to the source checkout, commit changes, merge branches, or push to a remote. Shell access has no switch: the tool schema has no `allow_shell` input (it is rejected as an unknown field) and no configuration key can enable shell or network tools, because a certified operating-system sandbox is not available.
 
-The usual client loop is start with `wait_seconds`, `vibe_status` with `wait_seconds` until the compact `result` appears, then `vibe_close`. See the [reference](reference.md#tools).
+The usual client loop is start with `wait_seconds`, `vibe_status` with `wait_seconds` until the compact `result` appears, then independent candidate verification and any same-session correction, followed by a fresh export and `vibe_close`. Keep the session open until acceptance or an explicit stop decision. See the [reference](reference.md#tools).
+
+## Coordinator preparation and offline audit
+
+`baseline prepare` validates an explicitly selected reviewed overlay against an immutable Git base. It dry-runs by default; `--create` makes a separate owner-private snapshot repository with local commits and a hash-bound manifest. It does not change the original files, index, refs, configuration or allowlist. The worker starts from the returned source_workspace/base_ref, so it implements a new delta rather than recreating baseline changes. Bounds and refusal cases are in the [reference](reference.md#coordinator-baseline-and-audit-cli).
+
+`audit-edit` reads settled pinned-Vibe ACP edit evidence without inference. It reports sanitized counts, known failed-tool classes, creator version and structured stop reason. Optional `--files` supplies an owner-private JSON scope list for tool-argument evidence; actual candidate scope remains unverified until independently checked against the export. Unknown-tool failures are distinct from request-level policy denials. Missing, unsafe or incompatible evidence remains unverified. Raw native histories, arguments and reasoning stay private.
+
+Keep tests, dependencies, builds and caches in a separate exact candidate copy. Keep the worker session open through independent tests/review; send needed corrections within the existing cumulative budget before verified close. Re-read a file after an edit-match error and reassess after a second repeated failure. This is coordinator guidance, not an automatic runtime interruption.
 
 ## Run lifecycle and recovery
 

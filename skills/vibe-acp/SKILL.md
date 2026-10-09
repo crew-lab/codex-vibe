@@ -35,7 +35,7 @@ On `waiting_permission` or `waiting_input`, read `pending_request` and answer wi
 
 ## Recovery
 
-On `VSUP_TURN_LIMIT_REACHED`, pass a larger `max_turns` only if more work is worth it, otherwise start a new run from a deliberate base. On `VSUP_INVALID_STATE`, `VSUP_SESSION_NOT_RESUMABLE`, `VSUP_REQUEST_EXPIRED` or a process failure, inspect the status and saved artifacts before choosing an action ([errors](../../docs/errors.md)). A `recoverable` run reloads its saved session on `vibe_continue` and needs a free run slot. Never replay an uncertain task, restore pending grants or use saved PIDs as kill authority. A new run needs a deliberate base and a plan to preserve reviewed changes, since restarting from `HEAD` loses the candidate. If no safe recovery exists, keep the artifacts and report the blocker.
+On `VSUP_TURN_LIMIT_REACHED`, keep artifacts and stop under the current ceiling. A larger cumulative `max_turns` or replacement run requires explicit authorization in the execution plan. On `VSUP_INVALID_STATE`, `VSUP_SESSION_NOT_RESUMABLE`, `VSUP_REQUEST_EXPIRED` or a process failure, inspect the status and saved artifacts before choosing an action ([errors](../../docs/errors.md)). A `recoverable` run reloads its saved session on `vibe_continue` and needs a free run slot. Never replay an uncertain task, restore pending grants or use saved PIDs as kill authority. A new run needs a deliberate base and a plan to preserve reviewed changes, since restarting from `HEAD` loses the candidate. If no safe recovery exists, keep the artifacts and report the blocker.
 
 ## Accept and close
 
@@ -46,3 +46,13 @@ Accept only when the final patch meets the outcome, the checks pass and the limi
 - [Verification loop and templates](references/verification-loop.md)
 - [How it works](../../docs/functionality.md), [reference](../../docs/reference.md), [security](../../docs/security.md), [compatibility](../../docs/compatibility.md)
 - [ACP v1 prompt turns](https://agentclientprotocol.com/protocol/v1/prompt-turn), [session loading](https://agentclientprotocol.com/protocol/v1/session-setup), [tool calls and permissions](https://agentclientprotocol.com/protocol/v1/tool-calls)
+
+## Reviewed baseline preflight
+
+A detached edit starts at base_ref; dirty source changes are not copied. The coordinator prepares reviewed changes before inference with `vibe-supervisor baseline prepare /absolute/private/manifest.json` (dry-run), then an explicit `--create` to make a disposable snapshot repository and local snapshot commits. It preserves source files/index/refs and requires existing canonical allowlist roots. Use the returned source_workspace/base_ref and bind the original reviewed baseline by hashes. Never ask the model to recreate baseline files from pasted diffs, nor modify a live worker worktree.
+
+Delegate one bounded increment with the real read_file/grep/write_file/edit inventory and file ownership. After an edit-match error re-read the current file; after a second repeated match error reassess from artifacts. This is coordinator guidance, not an automatic runtime stop. Reserve correction capacity within the cumulative ceiling; no automatic limit increase or task replay. Tests/dependencies/builds remain in a separate exact candidate copy.
+
+After a settled ACP edit use `vibe-supervisor audit-edit /canonical/private/home run-id`, optionally with `--files /absolute/private/scope.json` for argument-path evidence. Actual candidate scope still requires export verification. The sanitized audit distinguishes assistant messages, unique tool calls, failed updates and unique failures. It classifies only proven failed formats; Unknown tool is distinct from Supervisor policy denial. Unsafe/incomplete/unsupported records remain unverified. Native histories, arguments, commands and reasoning stay private. Only independently verified deltas are manually integrated; fetch a fresh export before verified close/cleanup.
+
+Keep a usable completed edit session open through independent tests and read-only review. Send needed corrections in the same session within the remaining authorized cumulative budget, then fetch a fresh export and close. Premature close loses that correction path; do not classify a coordinator-corrected replacement as an accepted original worker candidate.

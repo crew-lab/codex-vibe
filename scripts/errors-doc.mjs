@@ -14,7 +14,7 @@ export const MEANINGS = {
   VSUP_ACP_VERSION_UNSUPPORTED: 'Vibe ACP negotiated an unsupported ACP protocol version.',
   VSUP_ACP_PROTOCOL_ERROR: 'The ACP connection failed after the session was ready.',
   VSUP_AUTH_REQUIRED: 'Vibe reported a missing or rejected credential (401, unauthorized, missing API key).',
-  VSUP_WORKSPACE_INVALID: 'The workspace or a context file does not exist or lies outside every allowed root, contains project .vibe or .agents, a symlinked .vibeignore or glob characters in its path, or an edit run did not start at the git repository root.',
+  VSUP_WORKSPACE_INVALID: 'The workspace or a context file does not exist or lies outside every allowed root, contains project .vibe, a symlink or non-directory .agents, a symlinked .vibeignore or glob characters in its path, or an edit run did not start at the git repository root.',
   VSUP_WORKTREE_CREATE_FAILED: 'git worktree add failed for the edit run; details.stderr_tail and details.operation say why.',
   VSUP_GIT_REQUIRED: 'The git executable is missing.',
   VSUP_PERMISSION_REQUIRED: 'A permission decision is pending; the action cannot proceed until it is answered.',

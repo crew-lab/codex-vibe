@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, PendingRequest, RunRecord, StartRunInput, SupervisorBackend } from "../../src/contracts.js";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
 import { supervisorError } from "../../src/contracts.js";
+import { APP_VERSION } from "../../src/version.js";
 import { RunManager } from "../../src/core/run-manager.js";
 
 const roots: string[] = [];
@@ -77,6 +78,31 @@ describe("RunManager core lifecycle", () => {
       expect(result.summary).toBe("Finished");
       expect(result.artifacts).toEqual(expect.arrayContaining([expect.objectContaining({ name: "transcript.md", path: expect.any(String) })]));
     } finally { await manager.shutdown(); }
+  });
+
+  it("persists the creator version through results, close and restart", async () => {
+    const { source, data, manager, backend } = await setup();
+    const started = await manager.reviewStart({ task: "review", cwd: source });
+    try {
+      expect(started.supervisor_version).toBe(APP_VERSION);
+      await waitFor(() => manager.status({ run_id: started.run_id }), value => value.state === "running");
+      expect((await manager.result({ run_id: started.run_id })).supervisor_version).toBe(APP_VERSION);
+      await backend.callbacks?.onState("completed", { result: { summary: "Done", stopReason: "end_turn" } });
+      expect((await manager.result({ run_id: started.run_id, detail: "full" })).supervisor_version).toBe(APP_VERSION);
+      expect((await manager.close({ run_id: started.run_id })).supervisor_version).toBe(APP_VERSION);
+    } finally { await manager.shutdown(); }
+    const metaPath = join(data, "runs", started.run_id, "meta.json");
+    const meta = JSON.parse(await readFile(metaPath, "utf8"));
+    expect(meta.supervisor_version).toBe(APP_VERSION);
+    // A later supervisor must not overwrite the recorded creator release.
+    meta.supervisor_version = "0.9.0-rc.4";
+    await writeFile(metaPath, JSON.stringify(meta), { mode: 0o600 });
+    const restarted = new RunManager({ ...DEFAULT_CONFIG, backend: "programmatic", allowedWorkspaceRoots: [source] }, data, [new FakeBackend()]);
+    try {
+      await restarted.initialize();
+      expect((await restarted.status({ run_id: started.run_id })).supervisor_version).toBe("0.9.0-rc.4");
+      expect((await restarted.result({ run_id: started.run_id, detail: "full" })).supervisor_version).toBe("0.9.0-rc.4");
+    } finally { await restarted.shutdown(); }
   });
 
   it("prompts only with scoped permission metadata and accepts an offered safe choice", async () => {
