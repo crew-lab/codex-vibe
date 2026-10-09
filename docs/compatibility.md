@@ -125,3 +125,7 @@ The [bounded pilot evidence](history/reviews/rc8-bounded-pilots-2026-10-08/Read.
 ### rc.13/rc.14 adoption follow-up (2026-10-09)
 
 [The evaluation](history/reviews/rc13-worker-adoption-2026-10-09.md) separates the successful rc.13 synthetic edit/correction pilot from the rejected original product candidate and accepted coordinator correction. rc.14 retains those runtime boundaries and adds reviewed-baseline preparation and private offline audit scope input. Offline release verification passed 790 tests (two skipped), Python tests and installed-package smoke; a fresh official client confirmed seven tools. Native desktop reload, rc.14 hosted inference and the broader gates above remain unverified.
+
+## rc.18 release scope
+
+rc.18 packages refreshed coordinator skills and the preparation follow-up documentation; preparation scripts are available only in source. Earlier rc.17 native review/edit evidence remains version-bound. Current [lifecycle triage](history/reviews/lifecycle-triage-2026-10-09.md) reproduces F8/F7/F15/F11; these issues remain unresolved and block the [hosted recovery campaign](lifecycle-recovery-test-plan.md). Offline package/installation results do not clear those blockers. See the [release receipt](history/reviews/rc18-release-installation-2026-10-09.md) for exact artifact and connection identity.

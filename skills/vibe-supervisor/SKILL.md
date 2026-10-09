@@ -10,6 +10,10 @@ license: MIT
 
 Use for bounded review/edit delegation and version/catalog preflight. Use [vibe-acp](../vibe-acp/SKILL.md) when an edit requires same-session verification and correction. Do NOT use for deployment, credential extraction or work outside existing allowed roots. This is an application policy boundary, not an OS sandbox.
 
+## Current candidate limitations
+
+The rc.18 candidate retains known lifecycle issues in denial-option selection, response/completion ordering, saved-worktree ownership and late worktree creation. Do not launch hosted recovery/soak campaigns until the corresponding fixes and regressions are verified in the connected artifact. Earlier bounded rc.17 edit success does not clear these gates. Use the source Handoff and lifecycle triage for the exact prerequisites; initialization is not hosted acceptance.
+
 ## Inputs To Collect First
 
 1. Observable outcome, acceptance criteria, canonical allowed workspace and explicit Git base for edits.

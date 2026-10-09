@@ -1,6 +1,6 @@
 # Implementation handoff
 
-Status as of **2026-10-09**: release candidate `vibe-supervisor@0.9.0-rc.17` on main. Private, unpublished, ESM, MIT (`Copyright (c) 2026 crew-lab`). Not a production 1.0 certification. Repository: GitHub `crew-lab/codex-vibe`. Earlier handoffs and all dated evidence are in [docs/history/](docs/history/); the last long-form handoff is [the rc.15 snapshot](docs/history/handoff-rc15-2026-10-09.md).
+Status as of **2026-10-09**: release candidate `vibe-supervisor@0.9.0-rc.18` on main. Private, unpublished, ESM, MIT (`Copyright (c) 2026 crew-lab`). Not a production 1.0 certification. Repository: GitHub `crew-lab/codex-vibe`. Earlier handoffs and all dated evidence are in [docs/history/](docs/history/); the last long-form handoff is [the rc.15 snapshot](docs/history/handoff-rc15-2026-10-09.md).
 
 The [v1.0 stable development strategy](docs/v1-stable-strategy.md) consolidates adoption evidence, delivery priorities and acceptance criteria. Execute exact installation/connection checks and bounded desktop review/edit acceptance before the full soak; keep the release gates below.
 
@@ -28,7 +28,7 @@ Behaviour is specified in [docs/functionality.md](docs/functionality.md), the in
 
 The goal for 1.0 is a supervisor that works stably, so new surface waits until the remaining gates pass. Historical sessions provide version-bound evidence for policy refusals, exports and cleanup; they also record reporting defects, driver failures, incomplete model results and a premature coordinator close. Do not generalize those observations into a current-build stability pass. One silent 15-minute stall is unexplained; the progress watchdog (600 s) is designed to end such a run with `VSUP_NO_PROGRESS`, before Vibe's own 720 s read timeout ([analysis](docs/history/reviews/vibe-2.25.8-silent-stall-analysis-2026-10-08.md)). This does not establish the original stall's cause.
 
-Hosted evidence below comes from the target machine on macOS arm64 through the official MCP client and synthetic repositories. Native desktop evidence exists for the older patched rc.2 scope and a later bounded rc.17 read-only review; complete current-build edit/lifecycle coverage remains open ([compatibility](docs/compatibility.md#unverified-gates)).
+Hosted evidence below comes from the target machine on macOS arm64 through the official MCP client and synthetic repositories. Native desktop evidence exists for the older patched rc.2 scope and later bounded rc.17 review and independently verified controlled/product edit scopes; complete current-build lifecycle coverage remains open ([compatibility](docs/compatibility.md#unverified-gates)).
 
 | Version | Passed | Failed or open |
 | --- | --- | --- |
@@ -43,7 +43,7 @@ Changes since rc.10 have automated coverage; their hosted verification is limite
 - **rc.16**: settings keys from before rc.6 and the unused options `limits.mcp_result_format`, `max_queued_runs` (fixed at 8), `retention.preserve_failed_runs` and `paths.data_dir` are rejected like any unknown key.
 - **rc.17**: retention sweeps run directories whose record cannot be loaded (only a missing or non-JSON record is deleted, never one that still owns a worktree); shutdown on disconnect has a 10 s graceful deadline, then bounds force termination of the supervisor's own worker process groups and releases the owner lock; an undeliverable automatic policy denial resolves the ACP permission request instead of hanging the turn; both skills carry the target machine's verification guidance ([receipt](docs/history/reviews/rc15-skills-refresh-2026-10-09.md)).
 
-The target machine's historical "rc.15" was built from rc.14 plus the skills; it is not main's rc.15 and still has `auto` and removed CLI commands. It is retained. On 2026-10-09 the target installed an offline rc.17 rebuild from ac81280, migrated obsolete settings without changing its ACP backend, five roots or declared limits, and linked the refreshed skills. A fresh official MCP client confirmed rc.17 and seven tools. The subsequent [native desktop preflight](docs/history/reviews/rc17-desktop-preflight-2026-10-09.md) created a read-only run whose creator was still **rc.12** despite the correct rc17 registration; it was closed and execution stopped before editing. A complete desktop restart and fresh connection are the next prerequisite. A later UARoute native run confirmed rc.17 bounded read-only inference; complete edit acceptance remains open. See the [exact installation receipt](docs/history/reviews/rc17-local-installation-2026-10-09.md); its archive hash differs from the preparing-machine artifact below.
+The target machine's historical "rc.15" was built from rc.14 plus the skills; it is not main's rc.15 and still has `auto` and removed CLI commands. It is retained. On 2026-10-09 the target installed an offline rc.17 rebuild from ac81280, migrated obsolete settings without changing its ACP backend, five roots or declared limits, and linked the refreshed skills. A fresh official MCP client confirmed rc.17 and seven tools. The subsequent [native desktop preflight](docs/history/reviews/rc17-desktop-preflight-2026-10-09.md) created a read-only run whose creator was still **rc.12** despite the correct rc17 registration; it was closed and execution stopped before editing. That stale preflight remains historical. Later native runs confirmed rc.17 bounded review and the controlled/product edit scopes below; complete lifecycle acceptance remains open. See the [exact installation receipt](docs/history/reviews/rc17-local-installation-2026-10-09.md); its archive hash differs from the preparing-machine artifact below.
 
 Upgrading any other install to rc.17: `backend = "auto"` becomes `programmatic` or `acp`; anything that called `init`, `configure-codex` or `test-acp` calls `setup` or `doctor`; a configuration that still sets a removed key fails validation, and `vibe-supervisor doctor` names the key.
 
@@ -163,13 +163,8 @@ Target-machine housekeeping: the managed checkout is `/Users/roman/.codex/worktr
 
 ## Release artifacts
 
-`release/` is ignored by Git. The current candidate is **0.9.0-rc.17**, built on 2026-10-09 on the preparing machine (Node 24.19.0, npm 11.17.0, macOS arm64) from the `Cut 0.9.0-rc.17` commit.
+The current source candidate is **0.9.0-rc.18**. Its release/install receipt is [here](docs/history/reviews/rc18-release-installation-2026-10-09.md). The package remains npm-private, ESM and MIT; distribution is a GitHub prerelease archive, not an npm registry publication. Source-only preparation scripts and dated evidence remain excluded from the npm archive.
 
-```text
-vibe-supervisor-0.9.0-rc.17.tgz  sha256 5e25afc6ab0c292e6db2abf5ebaccd92b2fe957c283a34c3d0156a29e235b1b0
-sbom.spdx.json                   sha256 cbcd54543497f804b918927e331c9d563b6d405e6924f1d43e0576562042eab3
-acceptance.json                  sha256 4901ce23e11b9d3305c28476453cc7cba745320c63145d28a5979d99db70245d; 7 deterministic checks PASS; hosted, soak and platform gates UNVERIFIED
-SHA256SUMS
-```
+rc.18 includes preparation follow-up documentation and refreshed skills; the four reproduced runtime lifecycle blockers remain unresolved. No new hosted recovery/soak acceptance is claimed. The earlier [rc.17 installation receipt](docs/history/reviews/rc17-local-installation-2026-10-09.md) and preparing-machine hashes remain historical identities, not rc.18 bytes.
 
-`package:rc` passed: 761 tests passed and 2 skipped in 68 files, 83 Python tests, lint, typecheck, build, secret scan, SBOM, and the offline installed-package smoke test (MCP initialize and tool listing, EOF shutdown, two concurrent `--isolated` clients). The tarball has no `docs/history/`, `.mcp.json` or `.codex-plugin/`. A copy is at `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.17/` on the preparing machine; check it with `shasum -a 256 -c SHA256SUMS` before installing. Never edit archive contents; rebuild instead.
+Use the attached SHA256SUMS before installation. Keep rc.17 and existing session/provider directories for rollback. A fresh official-client handshake does not refresh or attest an already running native desktop connection; new hosted gates must record their actual creator and artifact.

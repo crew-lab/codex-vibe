@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0-rc.18
+
+- Reviewed-baseline coordinator tooling returns stable sanitized preparation diagnostics, supports explicitly reviewed hash-bound root `.env.example` templates under restrictive content validation, and covers actual dry-run/create refusals and file/directory transitions. These scripts remain source-only.
+- Refreshed packaged skills describe exact prepared baselines, independent candidate verification, same-session correction and fresh-export cleanup. Bounded native rc.17 controlled and product edit evidence is recorded separately from this artifact.
+- Current lifecycle triage reproduces F8 denial-option selection, F7 response/completion race, F15 saved-worktree ownership mismatch and F11 late-worktree bookkeeping. **These runtime issues remain unresolved in rc.18.** Hosted recovery/soak acceptance is blocked pending fixes; this is a prerelease, not stable certification.
+- The runtime behavior otherwise remains rc.17; no provider version or permission boundary was broadened.
+
 ## 0.9.0-rc.17
 
 Stability fixes (Phase 2 of the 2026-10-09 simplification plan) and the refreshed skills.

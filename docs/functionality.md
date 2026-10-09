@@ -176,3 +176,7 @@ The sidecar is created exclusively in the validated owner-only run directory wit
 ## Hosted review acceptance bounds
 
 Built-in soak reviews request correctness findings in the same turn, at most three separate reads and two searches. ACP lifecycle workloads request at most five separate reads with no searches. Before continuation and cleanup, the driver validates owner-only native session records and retains only fixed tool-name counts and final-answer presence. Exceeded bounds, unexpected tools, absent final answers on end_turn, or unavailable/unsafe records fail acceptance. These task bounds do not grant tools or change MCP policy. Deliberately interrupted lifecycle turns do not require a final answer; subsequent completed turns do. Private histories remain private.
+
+## rc.18 known lifecycle limitations
+
+The lifecycle contract above remains the intended behavior. Current-source reproductions found a response/completion race, late worktree creation after close and insufficient saved-worktree run binding before cleanup. The rc.18 runtime does not fix them; the hosted recovery campaign is blocked until focused fixes and regressions pass. Shutdown has a graceful deadline plus a separate bounded force-termination wait; measure the complete client/server path rather than equating it with the graceful timer. See [current triage](history/reviews/lifecycle-triage-2026-10-09.md) and [recovery plan](lifecycle-recovery-test-plan.md).
