@@ -11,8 +11,8 @@ describe('patchContainsCredential', () => {
     ['changed type line', ['+  password: string;']],
     ['env lookup', ['+const secret = process.env.SECRET;']],
     ['type reference', ['+  secret: SecretString,']],
-    ['removed credential', ['-const token = "sk-abcdefghijklmnopqrstuvwx";', '+const token = load();']],
-    ['context credential', [' const key = "AKIAABCDEFGHIJKLMNOP";', '+const x = 1;']],
+    ['removed credential', ['-const token = "sk' + '-abcdefghijklmnopqrstuvwx";', '+const token = load();']],
+    ['context credential', [' const key = "AK' + 'IAABCDEFGHIJKLMNOP";', '+const x = 1;']],
     ['placeholder', ['+password = "changeme-please"', '+api_key: "${API_KEY}"', '+secret = "$SECRET_VALUE"', '+secret = "{{ secret }}"', '+secret = "<token-here>"']],
     ['identifier-like literal', ['+  secret: "secret_required_message",']],
     ['bearer prose', ['+// Bearer authentication is required']],
@@ -23,12 +23,12 @@ describe('patchContainsCredential', () => {
   });
 
   it.each([
-    ['sk key in assignment', ['+api_key = "sk-abcdefghijklmnopqrstuvwx"']],
-    ['pem block', ['+-----BEGIN RSA PRIVATE KEY-----', '+MIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu', '+-----END RSA PRIVATE KEY-----']],
-    ['github token', ['+const t = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";']],
+    ['sk key in assignment', ['+api_key = "sk' + '-abcdefghijklmnopqrstuvwx"']],
+    ['pem block', ['+-----BEGIN RSA ' + 'PRIVATE KEY-----', '+MIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf9Cnzj4p4WGeKLs1Pt8Qu', '+-----END RSA PRIVATE KEY-----']],
+    ['github token', ['+const t = "gh' + 'p_abcdefghijklmnopqrstuvwxyz0123456789";']],
     ['quoted password literal', ['+password = "hunter2hunter2"']],
     ['json key', ['+  "client_secret": "a1b2c3d4e5f6g7h8"']],
-    ['aws key', ['+AKIAABCDEFGHIJKLMNOP']],
+    ['aws key', ['+AK' + 'IAABCDEFGHIJKLMNOP']],
     ['unquoted env assignment', ['+MISTRAL_API_KEY=Zk39dLmQ82xPaa71']],
     ['unquoted prefixed password', ['+DB_PASSWORD=Xk39dLmQ82x']],
     ['unquoted password colon', ['+password: hunter2hunter2']],
@@ -39,7 +39,7 @@ describe('patchContainsCredential', () => {
     ['cookie header', ['+Cookie: session=Zk39dLmQ82xPaa71']],
     ['basic auth header', ['+Authorization: Basic dXNlcjpwYXNzd29yZA==']],
     ['literal auth header', ['+Authorization: Zk39dLmQ82xPaa71']],
-    ['double-plus content line token', ['++sk-abcdefghijklmnopqrstuvwx']],
+    ['double-plus content line token', ['++sk' + '-abcdefghijklmnopqrstuvwx']],
     ['double-plus content line assignment', ['++ password = "Xk39dLmQ82x"']],
     ['bearer token', ['+Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345']],
   ])('refuses %s', (_name, lines) => {

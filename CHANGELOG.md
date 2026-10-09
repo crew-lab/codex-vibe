@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0-rc.10
 
 - An edit run's patch is checked for credentials in added lines only, with stricter shapes: Bearer, `sk-`, GitHub and AWS tokens, private-key blocks, secrets the supervisor itself holds, values assigned to password, secret, token or API-key names (quoted literals, and unquoted values that contain a digit) and literal `Authorization`, `Cookie` and `x-api-key` headers. Placeholders, `${...}` templates, type names and lookups such as `password: string`, `secret: SecretString` or `process.env.SECRET` are accepted, so ordinary code, and anything in context or removed lines, no longer fails the run and strands its worktree.
 - A worker is registered with its run as soon as it is spawned, so `vibe_close`, cancellation and the run deadline kill an ACP worker that is still negotiating, and its concurrency slot is released only after it exits. ACP negotiation is bounded by 60 seconds when that is shorter than the run's timeout (otherwise the run deadline applies) and fails with `VSUP_ACP_INIT_FAILED` naming the step that did not finish. A worker whose start returns after its run already ended is cancelled and closed instead of being attached.
