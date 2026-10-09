@@ -1,6 +1,23 @@
 # Implementation handoff
 
-## Current delivery — 2026-10-09, rc.14
+## Current delivery — rc.15, 2026-10-09
+
+`vibe-supervisor@0.9.0-rc.15` is installed locally from the verified skills-refresh package on `codex/project-agents-isolation`. The previous rc.14 implementation/documentation delivery was pushed as `eeea2ee`; this follow-up preserves its runtime behavior, pinned Vibe 2.25.8 and earlier hosted evidence.
+
+Both skills in `skills/` now have explicit inputs, numbered preflight/baseline/delegation/verification/correction/cleanup procedures and completion checks. Tests/builds/dependencies run only in a separate exact candidate copy. The worker session stays open until acceptance and required corrections; there is no automatic budget increase or replacement. Templates identify prepared cwd/base_ref, actual tool inventory and cumulative limits. Argument-scope audit evidence does not certify candidate acceptance.
+
+| rc.15 evidence | Actual result |
+| --- | --- |
+| Offline release/package verification | 790 tests passed, two skipped; Python, lint/typecheck/build, acceptance, secret scan, SBOM and installed-package smoke passed |
+| Skill validation | Portable frontmatter subset, required local structure, completion checks and local references passed; both bodies under 100 lines |
+| Local installation and discovery | CLI/MCP/skill registrations point to rc15; all three installed skill/reference files match source bytes |
+| Fresh official MCP connection | rc.15, seven tools, no backend/allow_shell start fields; no saved runs or owner locks left by preflight |
+| Configuration and history | Active rc.14 ACP configuration copied unchanged; original config, allowlists and old installations retained |
+| rc.15 hosted inference / native desktop reload | NOT RUN / UNVERIFIED |
+
+See [skills-refresh receipt and gap audit](docs/history/reviews/rc15-skills-refresh-2026-10-09.md). Archive SHA-256: `87ba5194fd000db8d12f629f7078c4ba584aa9a8debb52cfbc65d4b6963c4e78`. Reconnect the desktop MCP integration or open a fresh chat and verify its actual version/catalog before the next task. The next product test must retain the session through independent acceptance/correction before verified cleanup; the rc.13 product gate remains partial.
+
+## Preceding delivery — 2026-10-09, rc.14
 
 `vibe-supervisor@0.9.0-rc.14` is implemented and installed locally. Source delivery is on `codex/project-agents-isolation`, based on `8da1c7d`; the dirty primary checkout is preserved. The user authorized committing and pushing this delivery. The package remains private, unpublished, ESM and MIT; no production 1.0 certification or deployment is claimed.
 
@@ -26,7 +43,7 @@ Do not replay accepted UARoots work, raise budgets automatically, weaken guards 
 
 rc.11 accepted a real project `.agents` directory while disabling pinned Vibe project discovery, after validating harness source/signatures; `.agents` instructions/skills remain unavailable to worker tools. Root `.vibe`, unsafe `.agents` paths and unsafe `.vibeignore` remain refused. The hosted read-only result and its limits are in [the isolation report](docs/history/reviews/project-agents-isolation-2026-10-09.md).
 
-rc.12 records the creating Supervisor version without relabeling legacy/recovered runs and prepared the bounded edit pilot. Its failed SEO run is analyzed in [the worker review](docs/history/reviews/rc12-seo-worker-adoption-2026-10-09.md). Earlier failures remain separate evidence; rc.13 subsequently passed the prepared pilot, and rc.14 is the currently installed candidate.
+rc.12 records the creating Supervisor version without relabeling legacy/recovered runs and prepared the bounded edit pilot. Its failed SEO run is analyzed in [the worker review](docs/history/reviews/rc12-seo-worker-adoption-2026-10-09.md). Earlier failures remain separate evidence; rc.13 subsequently passed the prepared pilot, and rc.14 was installed for that delivery; rc.15 is now installed as recorded above.
 
 The rc.10/2026-10-08 sections below are a historical baseline. Their release versions, account observations and planned target-machine steps are not current installation or gate results; use the current delivery table above and preserve their original evidence. Existing Git history and MIT copyright are unchanged. The former rc.2 and 2026-10-05 handoff is in [handoff history](docs/history/handoff-2026-10-05.md).
 
