@@ -30,9 +30,9 @@ describe('exportDirtySnapshot credential check', () => {
 
   it.each([
     ['quoted password', 'const password = "hunter2hunter2";\n'],
-    ['api key prefix', 'const api_key = "sk-abcdefghijklmnopqrstuvwx";\n'],
-    ['github token', 'const t = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";\n'],
-    ['pem block', '-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf\n-----END RSA PRIVATE KEY-----\n'],
+    ['api key prefix', 'const api_key = "sk' + '-abcdefghijklmnopqrstuvwx";\n'],
+    ['github token', 'const t = "gh' + 'p_abcdefghijklmnopqrstuvwxyz0123456789";\n'],
+    ['pem block', '-----BEGIN RSA ' + 'PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD90vcNLYLInFEX6Ppy1tPf\n-----END RSA PRIVATE KEY-----\n'],
   ])('refuses an added %s and keeps the files', async (_name, addition) => {
     const { dir, repo } = await repoWith(base);
     await writeFile(path.join(repo, 'auth.ts'), base + addition);
