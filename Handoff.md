@@ -41,7 +41,7 @@ Changes since rc.10 have automated coverage; their hosted verification is limite
 - **rc.11 to rc.14** (target machine): a real project `.agents` directory is accepted while pinned Vibe project discovery is disabled; run records carry the creating supervisor version.
 - **rc.15**: no `backend = "auto"` or probe cache; the CLI is five commands; reviewed-baseline preparation and the edit audit became scripts.
 - **rc.16**: settings keys from before rc.6 and the unused options `limits.mcp_result_format`, `max_queued_runs` (fixed at 8), `retention.preserve_failed_runs` and `paths.data_dir` are rejected like any unknown key.
-- **rc.17**: retention sweeps run directories whose record cannot be loaded (only a missing or non-JSON record is deleted, never one that still owns a worktree); shutdown on disconnect has a 10 s deadline, then terminates the supervisor's own worker process groups and releases the owner lock; an undeliverable automatic policy denial resolves the ACP permission request instead of hanging the turn; both skills carry the target machine's verification guidance ([receipt](docs/history/reviews/rc15-skills-refresh-2026-10-09.md)).
+- **rc.17**: retention sweeps run directories whose record cannot be loaded (only a missing or non-JSON record is deleted, never one that still owns a worktree); shutdown on disconnect has a 10 s graceful deadline, then bounds force termination of the supervisor's own worker process groups and releases the owner lock; an undeliverable automatic policy denial resolves the ACP permission request instead of hanging the turn; both skills carry the target machine's verification guidance ([receipt](docs/history/reviews/rc15-skills-refresh-2026-10-09.md)).
 
 The target machine's historical "rc.15" was built from rc.14 plus the skills; it is not main's rc.15 and still has `auto` and removed CLI commands. It is retained. On 2026-10-09 the target installed an offline rc.17 rebuild from ac81280, migrated obsolete settings without changing its ACP backend, five roots or declared limits, and linked the refreshed skills. A fresh official MCP client confirmed rc.17 and seven tools. The subsequent [native desktop preflight](docs/history/reviews/rc17-desktop-preflight-2026-10-09.md) created a read-only run whose creator was still **rc.12** despite the correct rc17 registration; it was closed and execution stopped before editing. A complete desktop restart and fresh connection are the next prerequisite. A later UARoute native run confirmed rc.17 bounded read-only inference; complete edit acceptance remains open. See the [exact installation receipt](docs/history/reviews/rc17-local-installation-2026-10-09.md); its archive hash differs from the preparing-machine artifact below.
 
@@ -65,12 +65,14 @@ Offline rc.17 release/install checks and a bounded native rc.17 read-only review
 
 The [preparation follow-up](docs/history/reviews/rc17-preparation-followup-2026-10-09.md) reconciles the UARoute security bundle, public-template policy, diagnostics and new edit-gate evidence.
 
+The [current-source lifecycle triage](docs/history/reviews/lifecycle-triage-2026-10-09.md) reproduced F8 denial-option selection, F7 response completion race, F15 saved-worktree identity mismatch and F11 late-creation bookkeeping. Fix these before hosted recovery testing. F13 has a locally tested remedy; complete native recovery remains unverified. The [bounded recovery plan](docs/lifecycle-recovery-test-plan.md) is prepared, not executed. Offline checks passed 34 tests across four existing suites; passing those suites does not cover the newly reproduced defects.
+
 ## What 1.0 still needs
 
 | # | Priority | Item | Who |
 |---|---|---|---|
 | 1 | P0 | Artifact/migration and bounded native rc.17 identity observed; finish remaining D0 to D4/client scope | Target machine; a fresh official-client check is separate from desktop proof |
-| 2 | P0 | Re-triage cold-review F7 to F15 against current source; fix reproduced boundary/lifecycle blockers before hosted acceptance | Preparing maintainer; rc.17's F13 remedy still needs target evidence |
+| 2 | P0 | Current triage complete: fix F8/F7/F15/F11 before hosted acceptance; resolve F9 before elicitation coverage | Preparing maintainer; rc.17's F13 remedy still needs target evidence |
 | 3 | P0 | Bounded native review, controlled correction and narrow coordinator-tool product edit passed; finish broader D5 to D17 and D21 to D24, including native D14, D16, D22 | Target machine, a person at the keyboard for desktop steps |
 | 4 | P0 | D18 hosted soak after readiness: two pilot reviews, then 60 reviews, 30 edits, 10 ACP runs | Target machine; provisional estimate about 2 hours, USD 2 to 4, to calibrate from pilots rather than treat as an allowance |
 | 5 | P0 | D20 install on a clean macOS user account | Target machine |
