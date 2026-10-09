@@ -103,7 +103,7 @@ Reconnect the desktop and verify the actual server handshake/version and catalog
 
 **Owner:** coordinator and Vibe. **Coverage:** D5–D7 and current desktop review visibility.
 
-First use a small tracked synthetic fixture with a known correctness defect and independent oracle. A second eligible task is the finished, sanitized UARoute S5 report; do not fabricate missing account evidence to prepare it. Freeze the supplied files and hashes.
+First use a small tracked synthetic fixture with a known correctness defect and independent oracle, plus a clean control. The [updated UARoute S5 evidence](history/reviews/uaroute-s5-adoption-update-2026-10-09.md) records a completed rc.12 review under an expected rc.15 installation; do not repeat that finished review merely to obtain a newer version label. Vibe missed a P2 combined-query/channel-total ambiguity subsequently corrected and accepted by Luna. Choose a new narrow review scope and freeze the supplied files/hashes; compute those hashes independently rather than crediting the worker's echo of them.
 
 Provide a concise objective, available file tools, exact readable paths, acceptance questions and final-answer requirement. Set the authorized cumulative turn/time ceilings before launch; prompt guidance cannot guarantee reserved turns. Use bounded waits and cursors, accounting for client deadlines.
 
