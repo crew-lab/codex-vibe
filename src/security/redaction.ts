@@ -12,6 +12,66 @@ const patterns: readonly RegExp[] = [
   /\b(?<keep>api\s+key\s*(?:[:=]|\bis\b)\s*)["']?[A-Za-z0-9_-]{16,}["']?/gi,
 ];
 
+const highConfidencePatterns: readonly RegExp[] = [
+  /\bBearer\s+[A-Za-z0-9._~+\/-]{20,}=*/,
+  /\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/,
+  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/,
+  /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/,
+];
+
+const credentialAssignment = /\b[\w.-]*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret)["']?\s*[:=]\s*(?:(["'`])([^"'`\n]*)\1|([^\s,;"'`)]+))/gi;
+const authHeader = /\b(?:x-api-key|authorization|proxy-authorization|cookie|set-cookie)["']?[ \t]*:[ \t]*([^\r\n]*)/gi;
+const placeholderValue = /^(?:\$\{[^}]*\}|\$(?:[A-Z][A-Z0-9_]*|[a-z][a-z_]*)|%[^%\s]+%|<[^>]*>|\{\{.*\}\}|[xX]+|\*+|(?:[Yy]our|[Ee]xample|[Pp]laceholder|[Cc]hange[Mm]e|[Dd]ummy|[Rr]edacted|[Ss]ample|YOUR|EXAMPLE|PLACEHOLDER|CHANGEME|DUMMY|REDACTED|SAMPLE)\b.*)$/;
+const separatedWords = /^[A-Za-z]+(?:[_.-][A-Za-z]+)+$/;
+const lettersOnly = /^[A-Za-z]+$/;
+const unquotedSecretShape = /^[A-Za-z0-9+\/_=@#%^&*!~:-]{6,}$/;
+const propertyChain = /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+$/;
+const authScheme = /^(Basic|Bearer|Token|Digest)\s+(\S+)$/i;
+
+function quotedLooksSecret(value: string): boolean {
+  if (value.length < 8 || value.includes('${')) return false;
+  return !placeholderValue.test(value) && !separatedWords.test(value);
+}
+
+function unquotedLooksSecret(value: string): boolean {
+  return unquotedSecretShape.test(value) && /\d/.test(value) && !placeholderValue.test(value);
+}
+
+function headerLooksSecret(raw: string): boolean {
+  const value = raw.replace(/^["'`]+/, '').replace(/[\s"'`,;)}]+$/, '');
+  if (value.length < 8 || value.includes('${') || value.includes('(') || placeholderValue.test(value)) return false;
+  const scheme = authScheme.exec(value);
+  if (scheme) {
+    const token = scheme[2] ?? '';
+    if (token.includes('$') || !/^[A-Za-z0-9+\/._~=-]{8,}$/.test(token) || placeholderValue.test(token)) return false;
+    return scheme[1]!.toLowerCase() === 'basic' || !lettersOnly.test(token);
+  }
+  if (/\s/.test(value)) return value.split(/\s+/).some((part) => /=\S{6,}/.test(part) && !part.includes('$'));
+  return !/^[A-Za-z_.-]+$/.test(value) && !propertyChain.test(value);
+}
+
+export function addedPatchLines(patch: string): string {
+  const added: string[] = [];
+  let inHunk = false;
+  for (const line of patch.split('\n')) {
+    if (line.startsWith('diff --git ')) { inHunk = false; continue; }
+    if (line.startsWith('@@')) { inHunk = true; continue; }
+    if (inHunk && line.startsWith('+')) added.push(line.slice(1));
+  }
+  return added.join('\n');
+}
+
+export function patchContainsCredential(patch: string, sentinels: readonly string[] = []): boolean {
+  const added = addedPatchLines(patch);
+  for (const sentinel of sentinels) if (sentinel.length >= 4 && added.includes(sentinel)) return true;
+  if (highConfidencePatterns.some((pattern) => pattern.test(added))) return true;
+  for (const match of added.matchAll(credentialAssignment)) {
+    if (match[2] !== undefined ? quotedLooksSecret(match[2]) : unquotedLooksSecret(match[3] ?? '')) return true;
+  }
+  for (const match of added.matchAll(authHeader)) if (headerLooksSecret(match[1] ?? '')) return true;
+  return false;
+}
+
 const PEM_BEGIN = /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/;
 const PEM_END = /-----END (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/;
 

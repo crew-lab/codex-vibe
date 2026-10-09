@@ -34,6 +34,7 @@ async function handle(message) {
     return;
   }
   if (message.method === 'session/new') {
+    if (mode === 'new-hang') return;
     if (mode === 'wrong-mode') { reply(message.id, { sessionId, modes: { currentModeId: 'accept-edits' }, _meta: { workspace_trust: { status: 'untrusted' } } }); return; }
     reply(message.id, { sessionId, modes: { currentModeId: process.env.FAKE_ACP_MODE ?? 'plan' }, _meta: { workspace_trust: { status: 'untrusted' } } });
     return;

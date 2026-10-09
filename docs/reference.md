@@ -30,7 +30,7 @@ The backend comes only from the configuration. There is no cancel tool (`vibe_cl
 | | `max_turns` | integer 1 to 50 | `limits.max_turns_review` |
 | | `timeout_seconds` | integer 30 to 7200 | `limits.review_timeout_seconds` |
 | | `wait_seconds` | integer 0 to 300 | 0 |
-| `vibe_edit_start` | `task`, `cwd`, `max_turns`, `timeout_seconds`, `wait_seconds` | as above | edit limits `limits.max_turns_edit`, `limits.edit_timeout_seconds` |
+| `vibe_edit_start` | `task`, `cwd`, `max_turns`, `timeout_seconds`, `wait_seconds` | as above, except that `cwd` must be the root of a Git repository (a subdirectory is refused with `VSUP_WORKSPACE_INVALID` before any worktree is created) | edit limits `limits.max_turns_edit`, `limits.edit_timeout_seconds` |
 | | `base_ref` | string, 1 to 512 characters, an existing Git ref | `HEAD` |
 | `vibe_status` | `run_id` | UUID | required |
 | | `after_seq` | integer 0 or more | 0 |

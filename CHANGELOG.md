@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- An edit run's patch is checked for credentials in added lines only, with stricter shapes: Bearer, `sk-`, GitHub and AWS tokens, private-key blocks, secrets the supervisor itself holds, values assigned to password, secret, token or API-key names (quoted literals, and unquoted values that contain a digit) and literal `Authorization`, `Cookie` and `x-api-key` headers. Placeholders, `${...}` templates, type names and lookups such as `password: string`, `secret: SecretString` or `process.env.SECRET` are accepted, so ordinary code, and anything in context or removed lines, no longer fails the run and strands its worktree.
+- A worker is registered with its run as soon as it is spawned, so `vibe_close`, cancellation and the run deadline kill an ACP worker that is still negotiating, and its concurrency slot is released only after it exits. ACP negotiation is bounded by 60 seconds when that is shorter than the run's timeout (otherwise the run deadline applies) and fails with `VSUP_ACP_INIT_FAILED` naming the step that did not finish. A worker whose start returns after its run already ended is cancelled and closed instead of being attached.
+- `vibe_edit_start` refuses a `cwd` that is not the root of its Git repository with `VSUP_WORKSPACE_INVALID`, before any worktree is created; an edit worktree always contains the whole repository, so a subdirectory could not bound the worker. Reviews still accept any allowlisted directory.
+- A worker that asks for something outside policy, and a refused `vibe_respond`, now fail with `VSUP_PERMISSION_DENIED`; an option that was not offered or an answer of the wrong kind is `VSUP_INVALID_ARGUMENT`. `VSUP_PERMISSION_REQUIRED` and `VSUP_INPUT_REQUIRED` now mean a request is pending, and `vibe_continue` returns them while one is.
+- A missing `context_files` entry, a workspace with a project `.vibe` or `.agents` directory or a symlinked `.vibeignore`, and a path with glob characters are refused at start with `VSUP_WORKSPACE_INVALID` and a specific message, instead of `VSUP_INTERNAL` or a generic `VSUP_BACKEND_ERROR` after the run was accepted.
+- `doctor` looks up a bare `paths.vibe` or `paths.vibe_acp` name on `PATH` only and rejects a relative path, so it never runs an executable from the current directory.
+- Documentation: the `VSUP_TIMEOUT` meaning and the diagnostic remedies in `docs/errors.md`, the tool-inventory wording in `docs/compatibility.md` and the ADRs, what export and cleanup actually verify in `docs/security.md`, and the README's install, verification and edit-example text are corrected.
+
 ## 0.9.0-rc.9
 
 - A run whose worker shows no activity for `limits.worker_progress_timeout_seconds` (default 600, 0 disables) while running now fails with the new `VSUP_NO_PROGRESS` and a diagnostic event, instead of waiting for its full deadline. Waiting for a permission or input answer, queued runs and idle completed ACP sessions are not watched. Activity is any ACP notification or request (tool calls, usage updates, thought chunks that are otherwise dropped, permission requests), any complete programmatic stdout line and any stderr output; the `no_progress` diagnostic records the seconds since the last activity and its kind. The timer is disarmed when a deadline, cancel, close, settling state or shutdown begins, so it cannot mislabel or cancel a run that is already ending. Prompted by a real edit that stayed silent for 15 minutes in the rc.8 soak.
@@ -46,7 +56,7 @@ Surface:
 - `next_action` offers `vibe_continue` from the run's own backend, so a programmatic run reached through `backend = "auto"` is no longer told to continue.
 - Failures are classified authentication first, and a rate limit needs an explicit 429 or "too many requests" in the final error (not `x-ratelimit-*` headers or retry log lines); a missing executable or interpreter is reported before either.
 - `allow` and `setup` say that a running MCP server must be restarted (reconnected for `--isolated`) to read a changed allowlist; the `VSUP_WORKSPACE_INVALID` remedy says so too. They keep one owner-only `config.toml.bak-<timestamp>` copy before rewriting an existing file (comments and layout are not preserved), compare `~`-prefixed roots as the same directory, and `setup` validates the Codex config before writing anything.
-- A tag `v<version>` builds, verifies and attaches the tarball, checksums, SBOM and acceptance report to a GitHub Release; nothing is published to npm.
+- A release workflow that builds, verifies and attaches the tarball, checksums, SBOM and acceptance report to a GitHub Release on a `v<version>` tag was prepared on a separate branch; it is not in the tree yet, and candidates are built locally with `npm run package:rc`. Nothing is published to npm.
 
 Documentation and package contents:
 

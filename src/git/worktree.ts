@@ -4,7 +4,7 @@ import { copyFile, mkdtemp, open, lstat, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createPrivateDir } from '../security/paths.js';
-import { environmentSecrets, redactSecrets, redactedTail } from '../security/redaction.js';
+import { environmentSecrets, patchContainsCredential, redactedTail } from '../security/redaction.js';
 
 const MAX_GIT_OUTPUT = 100 * 1024 * 1024;
 const MAX_GIT_RUNTIME_MS = 30_000;
@@ -166,7 +166,7 @@ async function writeArtifact(file: string, data: Buffer): Promise<void> {
 export async function exportDirtySnapshot(source: string, artifactDir: string, baseRef = 'HEAD'): Promise<DirtySnapshot & { patchPath: string; statPath: string }> {
   const snapshot = await captureDirtySnapshot(source, baseRef);
   const patchText = snapshot.patch.toString('utf8');
-  if (redactSecrets(patchText) !== patchText) {
+  if (patchContainsCredential(patchText, environmentSecrets())) {
     throw Object.assign(new Error('Patch appears to contain a recognized secret; export was refused and the worktree was retained.'), { code: 'VSUP_ARTIFACT_ERROR' });
   }
   const dir = path.resolve(artifactDir);

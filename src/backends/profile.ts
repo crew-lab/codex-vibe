@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { lstat } from 'node:fs/promises';
 import type { RunMode, StartRunInput } from '../contracts.js';
-import { createPrivateDir, createPrivateFile } from '../security/paths.js';
+import { WorkspacePathError, createPrivateDir, createPrivateFile } from '../security/paths.js';
 import { stringify } from 'smol-toml';
 import { buildChildEnvironment, ORIGINAL_HOME_ENV } from '../security/environment.js';
 
@@ -16,8 +16,8 @@ const STOCK_GREP_EXCLUDE_PATTERNS = [
   '.DS_Store', 'Thumbs.db', '*.env', '*.env.*', '*.envrc', '*.envrc.*', '*.pem', '*.key', '*.p12', '*.pfx',
 ];
 
-function assertSimpleGlobRoot(root: string): void {
-  if (/[\*?\[\]]/.test(root)) throw new Error('Workspace path contains glob characters and cannot be safely encoded for Vibe');
+export function assertSimpleGlobRoot(root: string): void {
+  if (/[\*?\[\]]/.test(root)) throw new WorkspacePathError(`Workspace path contains glob characters (* ? [ ]) and cannot be safely encoded for Vibe: ${root}`);
 }
 
 function setToolPathPolicy(env: NodeJS.ProcessEnv, name: string, root: string, permission: 'never' | 'always' | 'ask'): void {
@@ -53,7 +53,7 @@ export async function assertNoProjectVibeExtensions(root: string): Promise<void>
     try {
       const info = await lstat(path.join(canonical, rel));
       if (info.isSymbolicLink() || info.isDirectory() || info.isFile()) {
-        throw new Error(`Workspace contains project Vibe configuration at ${rel}; this profile cannot prove it inactive`);
+        throw new WorkspacePathError(`Workspace ${canonical} contains project Vibe configuration at ${rel}; this profile cannot prove it inactive. Remove it or use a workspace without it.`);
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
@@ -62,7 +62,7 @@ export async function assertNoProjectVibeExtensions(root: string): Promise<void>
   const ignore = path.join(canonical, '.vibeignore');
   try {
     const info = await lstat(ignore);
-    if (info.isSymbolicLink() || !info.isFile()) throw new Error('Workspace .vibeignore must be a regular, non-symlink file');
+    if (info.isSymbolicLink() || !info.isFile()) throw new WorkspacePathError(`Workspace ${canonical} has a .vibeignore that is a symlink or not a regular file; replace it with a regular file or remove it.`);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }

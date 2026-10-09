@@ -27,6 +27,7 @@ const PROTOCOL_VERSION = ACP_PROTOCOL_VERSION;
 const MAX_WIRE_BYTES = 1024 * 1024;
 const CANCEL_TURN_GRACE_MS = 500;
 const DEFAULT_RECOVER_TIMEOUT_MS = 30_000;
+const DEFAULT_START_TIMEOUT_MS = 60_000;
 const RECOVER_STDERR_CHARS = 4096;
 const EXITED_MID_TURN = 'Vibe ACP exited before the turn finished.';
 
@@ -65,6 +66,7 @@ interface AcpState {
   exited: boolean;
   readySettled: boolean;
   sessionReady: boolean;
+  negotiationPhase?: string;
   failureReported: boolean;
   released: boolean;
   toolCalls: Map<string, Record<string, unknown>>;
@@ -148,8 +150,10 @@ export class AcpBackend implements SupervisorBackend {
   readonly kind = 'acp' as const;
   readonly supportsContinue = true;
   private readonly recoverTimeoutMs: number;
-  constructor(private readonly config: SupervisorConfig, private readonly dataDirectory = config.paths?.dataDir, options: { recoverTimeoutMs?: number } = {}) {
+  private readonly startTimeoutMs: number;
+  constructor(private readonly config: SupervisorConfig, private readonly dataDirectory = config.paths?.dataDir, options: { recoverTimeoutMs?: number; startTimeoutMs?: number } = {}) {
     this.recoverTimeoutMs = options.recoverTimeoutMs ?? DEFAULT_RECOVER_TIMEOUT_MS;
+    this.startTimeoutMs = options.startTimeoutMs ?? DEFAULT_START_TIMEOUT_MS;
   }
   private readonly probeCache = new ProbeCache();
   protected executable(): string { return this.config.paths?.vibeAcp ?? 'vibe-acp'; }
@@ -240,6 +244,17 @@ export class AcpBackend implements SupervisorBackend {
       state.ready.reject(cause);
       return cause;
     })();
+    callbacks.onSpawn?.({ runId: input.runId, backend: 'acp', opaque: state });
+    const negotiationMs = this.startTimeoutMs;
+    if (negotiationMs < input.limits.timeoutSeconds * 1000) {
+      const negotiationTimer = setTimeout(() => {
+        if (state.readySettled) return;
+        const seconds = negotiationMs / 1000;
+        failStart(supervisorError('VSUP_ACP_INIT_FAILED', `Vibe ACP did not finish ${state.negotiationPhase ?? 'initialize'} within ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`)).catch(reportFailure('acp-start-timeout'));
+      }, negotiationMs);
+      negotiationTimer.unref?.();
+      state.ready.promise.then(() => clearTimeout(negotiationTimer), () => clearTimeout(negotiationTimer));
+    }
     state.connected = this.connect(state, launch.env.MISTRAL_API_KEY);
     state.connected.catch(async (error: unknown) => {
       state.closed = true;
@@ -326,6 +341,7 @@ export class AcpBackend implements SupervisorBackend {
     const stream = ndJsonStream(Writable.toWeb(state.process.child.stdin!) as WritableStream<Uint8Array>, Readable.toWeb(state.process.child.stdout!) as ReadableStream<Uint8Array>, { maxMessageBytes: MAX_WIRE_BYTES });
     await app.connectWith(stream, async (cx: ClientContext) => {
       state.context = cx;
+      state.negotiationPhase = 'initialize';
       const init = await cx.request('initialize', { protocolVersion: PROTOCOL_VERSION, clientCapabilities: { elicitation: { form: {} } }, clientInfo: { name: 'vibe-supervisor', version: APP_VERSION } });
       const agentVersion = init.agentInfo?.version;
       if (agentVersion !== SUPPORTED_VIBE) throw versionUnsupported('acp', agentVersion ?? 'unknown');
@@ -337,14 +353,17 @@ export class AcpBackend implements SupervisorBackend {
       if (state.recovering) {
         const capabilities = init.agentCapabilities as unknown as Record<string, unknown> | undefined;
         if (capabilities?.loadSession !== true || !state.sessionId) throw supervisorError('VSUP_SESSION_NOT_RESUMABLE', 'Vibe ACP does not advertise loading this persisted session');
+        state.negotiationPhase = 'session/load';
         const response = await cx.request('session/load', { sessionId: state.sessionId, cwd: state.input.workerWorkspace, additionalDirectories: [], mcpServers: [] });
         sessionId = state.sessionId; modes = response.modes; sessionMeta = response._meta;
         state.suppressReplay = false;
       } else {
+        state.negotiationPhase = 'session/new';
         const response = await cx.request('session/new', { cwd: state.input.workerWorkspace, additionalDirectories: [], mcpServers: [] });
         sessionId = response.sessionId; modes = response.modes; sessionMeta = response._meta;
         state.sessionId = sessionId;
       }
+      state.negotiationPhase = 'session/set_config_option';
       await cx.request('session/set_config_option', { sessionId, configId: 'max_turns', value: String(state.input.limits.maxTurns) });
       const expected = expectedAgent(state.input.mode);
       if (!modes || modes.currentModeId !== expected) throw supervisorError('VSUP_ACP_PROTOCOL_ERROR', `Vibe selected mode ${modes?.currentModeId ?? 'unknown'}, expected ${expected}`);
