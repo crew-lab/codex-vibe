@@ -10,6 +10,10 @@ license: MIT
 
 Use for an ACP implementation/review/test/correction loop or explicit continuation of an existing run. The coordinator owns scope, independent checks and acceptance. Do NOT use for deployment, credentials, unbounded shell/network execution or out-of-root work. Use [vibe-supervisor](../vibe-supervisor/SKILL.md) for connection, baseline, start/wait and cleanup preflight.
 
+## Current candidate limitations
+
+The rc.18 candidate retains known lifecycle issues in denial-option selection, response/completion ordering, saved-worktree ownership and late worktree creation. Do not launch hosted recovery/soak campaigns until the corresponding fixes and regressions are verified in the connected artifact. Earlier bounded rc.17 edit success does not clear these gates. Use the source Handoff and lifecycle triage for the exact prerequisites; initialization is not hosted acceptance.
+
 ## Inputs To Collect First
 
 1. Outcome, acceptance oracle, exact owned/excluded files and reviewed prepared source/base hashes.

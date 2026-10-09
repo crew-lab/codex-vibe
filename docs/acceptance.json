@@ -303,6 +303,31 @@
       "D25": "NOT_RUN: stale desktop connection",
       "next_prerequisite": "Complete desktop restart and fresh connection version verification",
       "evidence": "history/reviews/rc17-desktop-preflight-2026-10-09.md"
+    },
+    {
+      "date": "2026-10-09",
+      "version": "0.9.0-rc.17",
+      "name": "bounded-native-preparation-followup",
+      "status": "PASS_SCOPED",
+      "run_ids": [
+        "28883627-0d4d-4528-9dbf-dcac8c83727d",
+        "5b204221-8935-47ed-92ff-cc3e2f01defc"
+      ],
+      "scope": "controlled edit/correction and narrow coordinator-tool product edit; independent verification while open, fresh export, supported cleanup",
+      "full_lifecycle": "UNVERIFIED",
+      "evidence": "history/reviews/rc17-preparation-followup-2026-10-09.md"
     }
-  ]
+  ],
+  "current_candidate": {
+    "version": "0.9.0-rc.18",
+    "status": "PRERELEASE",
+    "lifecycle_blockers": [
+      "F8",
+      "F7",
+      "F15",
+      "F11"
+    ],
+    "hosted_recovery": "BLOCKED_PENDING_FIXES",
+    "release_receipt": "history/reviews/rc18-release-installation-2026-10-09.md"
+  }
 }
