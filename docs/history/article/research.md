@@ -43,3 +43,18 @@ Mistral Vibe 2.0 (January 2026) is available on Le Chat Pro and Team plans with 
 - [Sentry blog writing guide](https://github.com/getsentry/skills/blob/main/skills/blog-writing-guide/SKILL.md)
 - [Mistral Vibe 2.0 announcement](https://mistral.ai/fr/news/mistral-vibe-2-0) and [mistral-vibe on PyPI](https://pypi.org/project/mistral-vibe/)
 - [codex-subagents-mcp](https://github.com/leonardsellem/codex-subagents-mcp)
+
+## Development-interest recheck (2026-10-09)
+
+Goal: attract useful technical discussion and participation in development through a specific firsthand failure story and reproducible evidence. This is an editorial objective, not a prediction of traffic, stars or contributions.
+
+Primary sources re-read:
+
+- [DEV Team: choosing and framing topics](https://dev.to/devteam/best-practices-for-writing-on-dev-topics-1d0j): bring a distinctive experience, give a clear takeaway, choose relevant tag communities, and consider a series when there are many takeaways. Applied: the failed first soak is the hook; the three outcome questions organize the argument; implementation history moves to the evidence and planned follow-up.
+- [DEV Team: high-quality posts](https://dev.to/devteam/how-to-write-a-high-quality-post-on-dev-3me0) and [showdev guidelines](https://dev.to/t/showdev): useful original material and community-oriented project discussion. Applied: replace broad try/star requests and unsupported competitor comparisons with specific design questions and minimal reproductions. No claim about an engagement algorithm, optimal posting hour or guaranteed reach is made.
+- [Editor guide](https://dev.to/p/editor_guide): up to four tags, accessible headings/images, supported card and details blocks, and a 1000 × 420 cover recommendation. Applied: retain four relevant tags and seven numbered checks; put optional installation in a details block. Actual DEV rendering still needs editor preview; inspecting Markdown is not preview evidence.
+- [AI-assisted article guidelines](https://dev.to/guidelines-for-ai-assisted-articles-on-dev) and [new disclosure announcement](https://dev.to/devteam/introducing-ai-disclosure-on-dev-tools-for-nuance-clarity-and-better-feeds-34mk): the author remains accountable for accuracy; the editor supports Hand Written, AI-Assisted and Fully Autonomous tiers. The older page still says AI-assisted articles should not "Promote any business, program, or course (including your own)." The newer announcement says disclosure does not override community standards and does not explicitly withdraw that restriction. Do not infer an open-source exception or policy clearance. The author should inspect current wording before publication and choose a tier reflecting actual human direction, review and authorship; a closing disclosure sentence does not select the editor tier.
+
+The revised article teaches observed failure modes rather than promising savings or superiority. Repository/evidence links support scrutiny. The ending asks for review-integrity, candidate-verification and stale-session/recovery designs, with concrete expected feedback. It does not request funding or automated engagement. Installation is optional, version-pinned and marked as incompletely validated on a clean account.
+
+Follow-up editorial ideas: one article on process ownership and crash recovery, and one on separate lifecycle/task-quality evaluation after recorded tests. These are topic proposals; no tests, publication schedule or contributor commitment is implied. No comments, messages or publishing actions were performed.

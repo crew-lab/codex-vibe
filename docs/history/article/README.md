@@ -5,7 +5,7 @@ Everything for the launch article lives here. It is not part of the npm package 
 | File | What it holds |
 |---|---|
 | [plan.md](plan.md) | Goal, reader, story, title and tags, outline, assets, what blocks publishing, open questions |
-| [final.md](final.md) | The publishable text for release candidate 0.9.0-rc.8, DEV front matter included, no placeholders |
+| [final.md](final.md) | Revised rc.17 article, with DEV front matter, an evidence-based failure story and open engineering questions |
 | [draft.md](draft.md) | Draft 2 with `[author]` and `[...]` placeholders, the base for a 1.0 version once Phase D has numbers |
 | [evidence.md](evidence.md) | Every benefit and number the article may use, with its conditions and source; the claims it must never make |
 | [research.md](research.md) | DEV's publishing and AI-disclosure rules, writing practice, the landscape, sources |
@@ -14,9 +14,10 @@ Everything for the launch article lives here. It is not part of the npm package 
 
 ## Status (2026-10-09)
 
-- [final.md](final.md) is the publishable text for release candidate 0.9.0-rc.17. Since the rc.8 version it adds the progress watchdog, the cold-review fixes to patch export and subdirectory edits, the pilot whose answer misreported its own read count, the rc.13 same-session correction loop and the run closed too early, the shutdown deadline and retention fixes, a section on what was removed for stability, and the free-account cost (the author's account shows a monthly credit of 8.50 in euros, 1.20 used through rc.8). Every new claim is in [evidence.md](evidence.md#rc9-to-rc17-2026-10-08-to-2026-10-09).
-- The title, tags and the rule against cross-model quality claims are unchanged. The soak has still not passed and the article says so; rc.17 has no hosted runs yet.
-- Before posting: fix the GitHub repository description, read it once in your own voice (the post is AI-Assisted under DEV's rules), set the AI-Assisted label in the editor, and optionally add a cover (1000 × 420) and a GIF.
+- [final.md](final.md) now opens with the failed soak and separates supervision, task completion and independent acceptance. The title is "My first agent delegation soak test failed on run 1". The architecture and full correction workflow appear early; release chronology is shortened. The closing names three concrete design questions for developers, including people without a provider account.
+- The seven checks remain, with corrected snapshot limitations, coordinator verification risks, prompt-injection boundaries, explicit changed soak criteria, conservative measurements and the stale rc.12 desktop connection observed during rc.17 preflight. New source-grounded points are in [evidence.md](evidence.md#development-focused-revision-2026-10-09). Recommendations are labelled as design work, not implemented capabilities or new hosted results.
+- Tags remain `showdev, mcp, ai, security`. Full hosted soak and current rc.17 native acceptance remain open. Optional installation steps are pinned to reviewed main commit `87c6bf217add26cd34989b0526899e12ae5eabb7` and stop at setup dry-run.
+- DEV recommendations and policy caveats were rechecked on 2026-10-09: see [research.md](research.md#development-interest-recheck-2026-10-09). The older AI guideline still restricts promotion of a program; the newer disclosure announcement does not explicitly remove that wording. No open-source exception is assumed. This revision centers engineering lessons and requests for evidence, but this is not a moderation clearance. Before posting, the author must review the current policy and disclosure tier, verify the article in their own voice, confirm public repository links/description, and preview the Liquid formatting. Optional cover size is 1000 × 420.
 - At 1.0, rebuild from draft.md with the Phase D numbers: the soak results, the D21 check, the install from the GitHub Release, and a clean-account install.
 
 ## Working rules

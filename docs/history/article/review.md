@@ -67,3 +67,22 @@ What changed:
 6. **Cuts.** The supervisor-overhead table left the post (its headline number is promised for Part 2), the trade-offs list became one paragraph, and the alternatives sentence was shortened. Prose (cards and block quote included; front matter, table of contents, code and tables excluded) is about 2,400 words, roughly 100 over the 2,300 target; `wc -w` on the whole file is about 2,750. The next cut, if one is wanted, is the second half of check 4 or the config snippet's paragraph.
 
 Still unsupported by evidence, and therefore not in the text: any claim that Vibe finds what Codex misses, any soak figure, any Codex CLI test, any client other than Codex, and token or cost savings. The `next_action` and warning strings in the JSON snippet are illustrative and labelled so; the real warning starts "Vibe stopped with stop reason" per `docs/reference.md`.
+
+## Revision to invite development discussion (2026-10-09)
+
+User direction: build interest in the development, using DEV recommendations and the prior expert review. Edited from merged main `87c6bf217add26cd34989b0526899e12ae5eabb7` in a separate managed checkout; the older primary checkout and its local changes were preserved. No commit, push, publication, installation or hosted inference was performed.
+
+Changes:
+
+1. The title and opening use the first failed soak, with its existing 27.4-second evidence. The central distinction is supervision vs task completion vs independent acceptance.
+2. Architecture precedes implementation detail, and a complete verification/correction/close workflow replaces scattered instructions. The rc.13 early-close failure remains concrete.
+3. Read-only claims now describe observations and blind spots, including the metadata optimization for Git-visible files. Worker shell restriction is a chosen boundary; coordinator-run tests introduce a separate execution risk.
+4. Cumulative turn accounting, correct partial classification, source/worker prompt-injection risks and the stale rc.12 native process during rc.17 preflight are explicit. Fake-backend coverage is labelled near the watchdog/shutdown claims.
+5. The changed soak acceptance contract is disclosed. Earlier failed pilots stay failed. Lifecycle reliability, task compliance and output correctness are separate evaluation questions; ten ACP jobs are not a migration proof for ninety programmatic jobs.
+6. Release chronology, unsupported alternatives comparisons and free-credit predictions were removed. Existing dated timing/account observations keep their limits. No new benchmark or efficiency claim appears.
+7. The ending names three bounded design areas and a concrete report format. Developers can inspect source and use fake tests without a provider account. Optional installation is collapsed, pinned, names `uv` and ends at setup dry-run.
+8. Research and evidence records were updated. DEV's current AI-promotion restriction is preserved as a prepublication policy consideration, not asserted as resolved by an educational framing.
+
+Before publication: author voice/accountability review; current DEV policy and truthful disclosure selection; public-link/repository-description confirmation; real editor preview of cards/details; refresh version/evidence if the candidate changes. Static Markdown checks do not establish rendering or installation. The full hosted soak, current native acceptance, callbacks, Intel and clean-account gates remain open.
+
+Validation performed for this revision: git diff --check passed; all 48 local link targets and their heading fragments in the five edited documents resolved; four distinct pinned GitHub file/directory targets were validated against local Git objects; published: false, four tags, JSON parsing, code fences and paired card/details blocks passed static checks. Word count including front matter/code: 3,722 to 2,445 (34.3% reduction). No application tests, installed-package checks, hosted inference or actual DEV editor preview were run.
