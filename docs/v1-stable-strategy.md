@@ -258,3 +258,13 @@ Record the actual hosted allowance and task limits before dispatch. No historica
 - Earlier dirty-checkout proposals: docs/reviews/efficiency-roadmap.md and docs/reviews/deployment-acp-lessons-2026-10-08.md. Their reliability, bounded waiting, compact results, session preservation and measurement ideas are incorporated where applicable. They are historical proposals, not current runtime specifications.
 
 Verification of this strategy is documentation-only: local links and whitespace are checked separately. No fresh release, hosted, soak or platform PASS is claimed by this document.
+
+## Preparation follow-up: 2026-10-09
+
+The [follow-up record](history/reviews/rc17-preparation-followup-2026-10-09.md) reconciles the later UARoute security evidence. Native rc.17 bounded read-only review was observed, with an independently confirmed finding and supported close. The old stale-connection attempts stay historical; each new gate must still establish its own run identity.
+
+The next implementation increment adds stable sanitized preparation diagnostics and actual dry-run/create regressions. Default sensitive-file refusal remains; explicit hash-bound root `.env.example` support requires restrictive content checks and preserves runtime tool/allowlist boundaries. Scripts remain coordinator source tools, outside the installed npm package.
+
+After preparation checks pass: controlled native edit and deliberate same-session correction, exact separate verification and independent review while open, fresh export and verified cleanup; then one narrow product change. Product acceptance, fixture correction and full reliability are separate gates. Do not jump to soak or repeat accepted UARoute changes to manufacture worker success.
+
+The two authorized native follow-up runs passed their bounded scopes: controlled edit plus deliberate same-session correction, then a narrow coordinator-tool product edit with an actual regression-driven correction. Both exact candidates were independently reviewed before supported cleanup; original sources remained unchanged. This closes those specific adoption blockers, not the full Phase D/recovery/soak/platform gate set. The next hosted work is targeted remaining lifecycle acceptance after current-source cold-review triage.

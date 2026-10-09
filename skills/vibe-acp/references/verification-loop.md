@@ -58,3 +58,11 @@ Prepare selected reviewed overlays before inference with the coordinator script 
 Use the baseline script only with explicit existing allowed source/output roots and an owner-private manifest of selected operations/hashes/modes; dry-run precedes creation. Keep original-source provenance with the coordinator. An edit worktree is not a place for dependency installs or test caches.
 
 The optional audit scope JSON is an owner-private array of 1–64 unique repository-relative strings, each at most 1024 characters. Reject absolute/traversal/dot/empty/leading-dash segments, backslashes, controls and colons. `argument_scope` checks call arguments only; `declared_scope` remains unverified until independent candidate/export checks. Assistant messages, tool calls, failed updates and provider requests/billing are different measurements.
+
+## Preparation diagnostics and public templates
+
+Use the source checkout's documented preparation prerequisites; these scripts are not shipped with the installed package. Record source/script hashes and the explicitly selected compiled runtime/configuration identity. Do not substitute a default legacy configuration for the active native session configuration.
+
+On refusal, preserve the sanitized diagnostic code/stage and any private retained-output receipt. Diagnose the failed stage before changing inputs; never weaken guards or reconstruct the baseline through a worker. An old manifest becomes stale when reviewed bytes change.
+
+Only an explicitly reviewed, hash-bound root `.env.example` can use the public-template exception. Default refusal remains; real environment/credential files, unsafe content, paths and ownership stay blocked. Verify the effective snapshot bytes independently before inference. The exception changes coordinator preparation only, not worker tool permissions.

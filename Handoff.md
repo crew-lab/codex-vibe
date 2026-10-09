@@ -28,7 +28,7 @@ Behaviour is specified in [docs/functionality.md](docs/functionality.md), the in
 
 The goal for 1.0 is a supervisor that works stably, so new surface waits until the remaining gates pass. Historical sessions provide version-bound evidence for policy refusals, exports and cleanup; they also record reporting defects, driver failures, incomplete model results and a premature coordinator close. Do not generalize those observations into a current-build stability pass. One silent 15-minute stall is unexplained; the progress watchdog (600 s) is designed to end such a run with `VSUP_NO_PROGRESS`, before Vibe's own 720 s read timeout ([analysis](docs/history/reviews/vibe-2.25.8-silent-stall-analysis-2026-10-08.md)). This does not establish the original stall's cause.
 
-Hosted evidence below comes from the target machine on macOS arm64 through the official MCP client and synthetic repositories. Native desktop evidence exists for the older patched rc.2 scope in [compatibility](docs/compatibility.md#unverified-gates); current-build desktop coverage remains unverified.
+Hosted evidence below comes from the target machine on macOS arm64 through the official MCP client and synthetic repositories. Native desktop evidence exists for the older patched rc.2 scope and a later bounded rc.17 read-only review; complete current-build edit/lifecycle coverage remains open ([compatibility](docs/compatibility.md#unverified-gates)).
 
 | Version | Passed | Failed or open |
 | --- | --- | --- |
@@ -43,17 +43,17 @@ Changes since rc.10 have automated coverage; their hosted verification is limite
 - **rc.16**: settings keys from before rc.6 and the unused options `limits.mcp_result_format`, `max_queued_runs` (fixed at 8), `retention.preserve_failed_runs` and `paths.data_dir` are rejected like any unknown key.
 - **rc.17**: retention sweeps run directories whose record cannot be loaded (only a missing or non-JSON record is deleted, never one that still owns a worktree); shutdown on disconnect has a 10 s deadline, then terminates the supervisor's own worker process groups and releases the owner lock; an undeliverable automatic policy denial resolves the ACP permission request instead of hanging the turn; both skills carry the target machine's verification guidance ([receipt](docs/history/reviews/rc15-skills-refresh-2026-10-09.md)).
 
-The target machine's historical "rc.15" was built from rc.14 plus the skills; it is not main's rc.15 and still has `auto` and removed CLI commands. It is retained. On 2026-10-09 the target installed an offline rc.17 rebuild from ac81280, migrated obsolete settings without changing its ACP backend, five roots or declared limits, and linked the refreshed skills. A fresh official MCP client confirmed rc.17 and seven tools. The subsequent [native desktop preflight](docs/history/reviews/rc17-desktop-preflight-2026-10-09.md) created a read-only run whose creator was still **rc.12** despite the correct rc17 registration; it was closed and execution stopped before editing. A complete desktop restart and fresh connection are the next prerequisite. Native rc.17 hosted acceptance remains unverified. See the [exact installation receipt](docs/history/reviews/rc17-local-installation-2026-10-09.md); its archive hash differs from the preparing-machine artifact below.
+The target machine's historical "rc.15" was built from rc.14 plus the skills; it is not main's rc.15 and still has `auto` and removed CLI commands. It is retained. On 2026-10-09 the target installed an offline rc.17 rebuild from ac81280, migrated obsolete settings without changing its ACP backend, five roots or declared limits, and linked the refreshed skills. A fresh official MCP client confirmed rc.17 and seven tools. The subsequent [native desktop preflight](docs/history/reviews/rc17-desktop-preflight-2026-10-09.md) created a read-only run whose creator was still **rc.12** despite the correct rc17 registration; it was closed and execution stopped before editing. A complete desktop restart and fresh connection are the next prerequisite. A later UARoute native run confirmed rc.17 bounded read-only inference; complete edit acceptance remains open. See the [exact installation receipt](docs/history/reviews/rc17-local-installation-2026-10-09.md); its archive hash differs from the preparing-machine artifact below.
 
 Upgrading any other install to rc.17: `backend = "auto"` becomes `programmatic` or `acp`; anything that called `init`, `configure-codex` or `test-acp` calls `setup` or `doctor`; a configuration that still sets a removed key fails validation, and `vibe-supervisor doctor` names the key.
 
 ## Confirmed issues and next verification
 
-The confirmed integration issue is a stale native desktop connection: both the expected-rc.15 S5 review and the expected-rc.17 preflight created rc.12 runs. Correct on-disk registration and matching tool schemas did not prove a refreshed process. Restart Codex completely and use a fresh chat/connection; record the actual connected version and bind new-run creator metadata to the installed artifact. Do not reinstall or change guards merely to mask this mismatch. The precise desktop refresh failure mechanism has not been established.
+The historical integration issue was a stale native desktop connection: both the expected-rc.15 S5 review and the expected-rc.17 preflight created rc.12 runs. Correct on-disk registration and matching tool schemas did not prove a refreshed process. The subsequent UARoute security review recorded creator rc.17 and pinned Vibe 2.25.8. Bind every new test to its actual creator/artifact; the older mismatch remains historical evidence. Do not reinstall or change guards merely to mask this mismatch. The precise desktop refresh failure mechanism has not been established.
 
 Two confirmed workflow defects have updated coordinator guidance: worker-driven baseline reconstruction consumed the rc.12 edit budget, and final-answer acceptance missed a real S5 reporting ambiguity. Prepare exact baseline/context bytes before delegation and independently verify correctness and hashes. These observations do not establish new rc.17 runtime defects. Reproduce cold-review F7–F15 against current source before selecting code fixes; preserve old failure evidence and distinguish implemented remedies from verified hosted behavior.
 
-The next verification sequence is:
+The verification sequence, with newly observed scopes recorded in the follow-up, is:
 
 1. **Identity:** verify the refreshed native version, seven ACP schemas, installed archive/source identity and skill hashes. A fresh official-client initialization remains separate from native desktop proof.
 2. **Review accuracy:** use a new small tracked fixture with a known defect and a clean control. Independently judge findings by location, trigger and consequence. Report accuracy separately from lifecycle/integrity; do not repeat the completed S5 review to obtain a newer version label.
@@ -61,15 +61,17 @@ The next verification sequence is:
 4. **Lifecycle:** exercise explicit expected outcomes for limits, timeout, cancellation, disconnect/recovery and retained worktrees, with current-source triage resolved before hosted acceptance. Never force-delete retained work or replay an uncertain task.
 5. **Reliability:** after those gates pass, calibrate bounded pilots, run the planned soak, and demonstrate clean-account installation.
 
-Offline rc.17 release/install checks have passed. Current rc.17 native hosted execution, product acceptance and hosted reliability remain unverified. This sequence records the agreed next work; no additional hosted runs, runtime fixes or larger budgets were performed or authorized by this documentation update.
+Offline rc.17 release/install checks and a bounded native rc.17 read-only review have been observed. The [preparation follow-up](docs/history/reviews/rc17-preparation-followup-2026-10-09.md) passed a bounded native controlled edit/correction and a narrow coordinator-tool product edit with independent verification and cleanup. Broader lifecycle and hosted reliability remain open. The follow-up records the two newly authorized native runs. No larger budget, runtime version cut or global configuration change occurred.
+
+The [preparation follow-up](docs/history/reviews/rc17-preparation-followup-2026-10-09.md) reconciles the UARoute security bundle, public-template policy, diagnostics and new edit-gate evidence.
 
 ## What 1.0 still needs
 
 | # | Priority | Item | Who |
 |---|---|---|---|
-| 1 | P0 | Identify the exact rc.17 artifact, migrate removed settings and verify installation, skills and the actual desktop connection (D0 to D4) | Target machine; a fresh official-client check is separate from desktop proof |
+| 1 | P0 | Artifact/migration and bounded native rc.17 identity observed; finish remaining D0 to D4/client scope | Target machine; a fresh official-client check is separate from desktop proof |
 | 2 | P0 | Re-triage cold-review F7 to F15 against current source; fix reproduced boundary/lifecycle blockers before hosted acceptance | Preparing maintainer; rc.17's F13 remedy still needs target evidence |
-| 3 | P0 | Bounded desktop review and complete D25 acceptance, then remaining D5 to D17 and D21 to D24; include native D14, D16, D22 | Target machine, a person at the keyboard for desktop steps |
+| 3 | P0 | Bounded native review, controlled correction and narrow coordinator-tool product edit passed; finish broader D5 to D17 and D21 to D24, including native D14, D16, D22 | Target machine, a person at the keyboard for desktop steps |
 | 4 | P0 | D18 hosted soak after readiness: two pilot reviews, then 60 reviews, 30 edits, 10 ACP runs | Target machine; provisional estimate about 2 hours, USD 2 to 4, to calibrate from pilots rather than treat as an allowance |
 | 5 | P0 | D20 install on a clean macOS user account | Target machine |
 | 6 | P0 | Review and push the release workflow (local branch `claude/release-workflow`; push permissions required); authorize `v1.0.0` only after gates pass, then check Release assets | User and preparing maintainer |
