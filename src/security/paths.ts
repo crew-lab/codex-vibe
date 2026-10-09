@@ -39,6 +39,19 @@ export async function assertPathWithinRoot(root: string, candidate: string): Pro
   return canonicalCandidate;
 }
 
+export async function resolveContextFile(root: string, file: string): Promise<string> {
+  const candidate = path.resolve(root, file);
+  let canonical: string;
+  try { canonical = await realpath(candidate); }
+  catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') throw new WorkspacePathError(`context_files entry does not exist: ${file}`);
+    throw error;
+  }
+  if (!isPathWithinRoot(await realpath(root), canonical)) throw new WorkspacePathError(`context_files entry resolves outside the workspace: ${file}`);
+  return canonical;
+}
+
 export async function createPrivateDir(dir: string): Promise<void> {
   const absolute = path.resolve(dir);
   let current = path.parse(absolute).root;

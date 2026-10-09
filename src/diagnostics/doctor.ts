@@ -13,14 +13,27 @@ import { environmentSecrets, redactSecrets } from '../security/redaction.js';
 export interface DoctorCheck { name: string; ok: boolean; status?: 'ok' | 'missing' | 'unverified'; version?: string; message: string; stderr_tail?: string }
 export interface DoctorReport { ok: boolean; generatedAt: string; checks: DoctorCheck[] }
 
-function findExecutable(name: string, configPath?: string): string | undefined {
-  if (configPath) return path.resolve(configPath);
+type ExecutableLookup = { path?: string; rejected?: string };
+
+function searchPath(name: string): string | undefined {
   const extensions = process.platform === 'win32' ? (process.env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';') : [''];
   for (const directory of executableSearchPath()) for (const extension of extensions) {
     const candidate = path.join(directory, `${name}${extension}`);
     try { requireAccess(candidate); return candidate; } catch { /* keep searching */ }
   }
   return undefined;
+}
+
+function findExecutable(name: string, configPath?: string): ExecutableLookup {
+  if (!configPath) { const found = searchPath(name); return found ? { path: found } : {}; }
+  if (path.isAbsolute(configPath)) return { path: configPath };
+  if (/[\\/]/.test(configPath)) return { rejected: configPath };
+  const found = searchPath(configPath);
+  return found ? { path: found } : {};
+}
+
+function rejectedMessage(label: string, configured: string): string {
+  return `The configured ${label} path ${JSON.stringify(configured)} is relative; use an absolute path or a bare command name that resolves through PATH.`;
 }
 
 function requireAccess(file: string): void {
@@ -60,7 +73,7 @@ export async function runDoctor(config: SupervisorConfig): Promise<DoctorReport>
   const tmpRoot = await mkdtemp(path.join(await realpath(os.tmpdir()), 'vsup-doctor-'));
   try {
     await createPrivateDir(tmpRoot);
-    const git = findExecutable('git');
+    const git = findExecutable('git').path;
     if (git) {
       try { const version = await probe(git, ['--version'], tmpRoot); checks.push({ name: 'git', ok: true, version, message: 'Git is available.' }); }
       catch { checks.push({ name: 'git', ok: false, message: 'Git could not be probed.' }); }
@@ -69,8 +82,10 @@ export async function runDoctor(config: SupervisorConfig): Promise<DoctorReport>
       try { checks.push({ name: 'macos', ok: true, version: await probe('/usr/bin/sw_vers', ['-productVersion'], tmpRoot), message: 'macOS version detected.' }); }
       catch { checks.push({ name: 'macos', ok: false, message: 'macOS version could not be detected with sw_vers.' }); }
     }
-    const vibe = findExecutable('vibe', config.paths?.vibe);
-    if (vibe) {
+    const vibeLookup = findExecutable('vibe', config.paths?.vibe);
+    const vibe = vibeLookup.path;
+    if (vibeLookup.rejected) checks.push({ name: 'vibe', ok: false, message: rejectedMessage('Vibe', vibeLookup.rejected) });
+    else if (vibe) {
       try {
         const version = await probe(vibe, ['--version'], tmpRoot);
         const match = version.match(/\b(\d+)\.(\d+)\.(\d+)/);
@@ -79,8 +94,10 @@ export async function runDoctor(config: SupervisorConfig): Promise<DoctorReport>
       }
       catch { checks.push({ name: 'vibe', ok: false, message: 'Vibe was found but its bounded version probe failed.' }); }
     } else checks.push({ name: 'vibe', ok: false, message: 'Vibe was not found on PATH or in configuration.' });
-    const acp = findExecutable('vibe-acp', config.paths?.vibeAcp);
-    if (acp) {
+    const acpLookup = findExecutable('vibe-acp', config.paths?.vibeAcp);
+    const acp = acpLookup.path;
+    if (acpLookup.rejected) checks.push({ name: 'vibe-acp', ok: false, message: rejectedMessage('Vibe ACP', acpLookup.rejected) });
+    else if (acp) {
       try { const version = await probe(acp, ['--version'], tmpRoot); checks.push({ name: 'vibe-acp', ok: true, version, message: 'Vibe ACP is available.' }); }
       catch { checks.push({ name: 'vibe-acp', ok: false, message: 'Vibe ACP was found but its bounded version probe failed.' }); }
     } else checks.push({ name: 'vibe-acp', ok: false, message: 'Vibe ACP was not found on PATH or in configuration.' });
@@ -100,7 +117,7 @@ export async function runDoctor(config: SupervisorConfig): Promise<DoctorReport>
         checks.push({ name: 'acp-initialize', ok: false, message: 'ACP initialization probe failed; inspect local diagnostics and the Vibe ACP version.' });
       }
     } else checks.push({ name: 'acp-initialize', ok: false, status: 'unverified', message: 'ACP initialization was not attempted because Vibe ACP is unavailable.' });
-    const codex = findExecutable('codex');
+    const codex = findExecutable('codex').path;
     if (codex) {
       try { const version = await probe(codex, ['--version'], tmpRoot); checks.push({ name: 'codex', ok: true, version, message: 'Codex CLI is available.' }); }
       catch { checks.push({ name: 'codex', ok: false, message: 'Codex CLI was found but its bounded version probe failed.' }); }

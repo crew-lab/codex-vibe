@@ -17,7 +17,7 @@ This is an application-level policy boundary, **not an operating-system sandbox*
 
 ## Install
 
-From a GitHub Release (see the [releases page](https://github.com/crew-lab/codex-vibe/releases)), download the tarball and `SHA256SUMS` into one directory, then:
+From a release tarball (built locally with `npm run package:rc`, which writes the tarball and `SHA256SUMS` under `release/`; no automated GitHub Release exists yet), keep both files in one directory, then:
 
 ```sh
 shasum -a 256 -c SHA256SUMS
@@ -56,7 +56,9 @@ First review:
 
 First edit:
 
-> Use Vibe to fix the input validation bug in `/absolute/path/to/repo/src/validate.ts` in an isolated worktree from `HEAD`. Show me the patch and run the tests yourself before I apply anything.
+> Use Vibe to fix the input validation bug in `src/validate.ts` of the repository at `/absolute/path/to/repo`, in an isolated worktree from `HEAD`. Show me the patch and run the tests yourself before I apply anything.
+
+An edit run must start at the root of the Git repository: the worker receives a checkout of the whole repository, so `vibe_edit_start` refuses a subdirectory `cwd` with `VSUP_WORKSPACE_INVALID` that names the root. Reviews may start in any allowed subdirectory.
 
 The coordinator starts the run with `wait_seconds`, calls `vibe_status` with `wait_seconds` until the result appears, then calls `vibe_close`. A result contains:
 
@@ -78,7 +80,7 @@ ln -s "$(npm root -g)/vibe-supervisor/skills/vibe-supervisor" "$skills_dir/vibe-
 ln -s "$(npm root -g)/vibe-supervisor/skills/vibe-acp" "$skills_dir/vibe-acp"
 ```
 
-From a clone, link `skills/vibe-supervisor` and `skills/vibe-acp` from the repository root instead. Do not create `.agents/` or `.vibe/` inside a delegated workspace: the supervisor refuses workspaces that contain them.
+From a clone, link `skills/vibe-supervisor` and `skills/vibe-acp` from the repository root instead. Do not create `.agents/` or `.vibe/` inside a delegated workspace: the supervisor refuses workspaces that contain them, and refuses a symlinked `.vibeignore` or a path with glob characters (`* ? [ ]`), with `VSUP_WORKSPACE_INVALID` when the run is started.
 
 ## Troubleshooting
 
@@ -101,7 +103,7 @@ The supervisor accepts only canonical workspaces under an explicit allowlist (em
 
 ## Status and plugin scaffold
 
-Desktop registration and hosted review and edit runs are verified on macOS arm64. Hosted ACP lifecycle, soak, Intel, clean-account installation and plugin installation are not; the single list is in [docs/compatibility.md](docs/compatibility.md#unverified-gates). `.codex-plugin/` and `.mcp.json` in the repository are a scaffold only and are not part of the package.
+Native Codex desktop registration and hosted review and edit runs were verified on macOS arm64 with a locally patched rc.2 build, plus scoped runs of rc.7; native desktop use of the current build is not verified. Hosted ACP lifecycle, soak, Intel, clean-account installation and plugin installation are not; the single list is in [docs/compatibility.md](docs/compatibility.md#unverified-gates). `.codex-plugin/` and `.mcp.json` in the repository are a scaffold only and are not part of the package.
 
 ## Documentation
 

@@ -136,6 +136,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
     }
     const opaque = { process: child, done: false, home: profile.home, vibeHome: profile.vibeHome, get summary() { return latestSummary; } };
     const handle: ProgrammaticHandle = { runId: input.runId, backend: this.kind, opaque };
+    callbacks.onSpawn?.(handle);
     const processRecord = { ...(child.child.pid === undefined ? {} : { pid: child.child.pid }), executable: launch.command, version: SUPPORTED_VIBE };
     await callbacks.onState('running', { process: processRecord });
     child.done.then(async ({ code, signal }) => {

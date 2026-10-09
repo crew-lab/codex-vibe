@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { open, readFile, readdir, rename, rm, lstat } from "node:fs/promises";
+import { open, readFile, readdir, realpath, rename, rm, lstat } from "node:fs/promises";
 import path from "node:path";
 import type {
   BackendCallbacks, BackendCapabilities, BackendKind, BackendRespondInput, BackendRunHandle,
@@ -14,12 +14,13 @@ import { readNdjsonRecovering } from "../persistence/ndjson.js";
 import { EventLog } from "../persistence/event-log.js";
 import { asStorageError, storageErrorDetails } from "../persistence/storage-error.js";
 import { describeFailure, reportBackgroundFailure } from "../diagnostics/background.js";
-import { createPrivateDir, resolveCanonicalRoot, isPathWithinRoot, assertPathWithinRoot } from "../security/paths.js";
+import { createPrivateDir, resolveCanonicalRoot, resolveContextFile, isPathWithinRoot } from "../security/paths.js";
 import { redactSecrets } from "../security/redaction.js";
 import { assertNotSupervisorChild } from "../security/environment.js";
-import { createDetachedWorktree, exportDirtySnapshot, removeVerifiedWorktree } from "../git/worktree.js";
+import { createDetachedWorktree, exportDirtySnapshot, removeVerifiedWorktree, resolveGitRoot } from "../git/worktree.js";
 import { SUPPORTED_VIBE } from "../backends/pinned.js";
 import { interpreterMissingMessage } from "../backends/launcher.js";
+import { assertNoProjectVibeExtensions, assertSimpleGlobRoot } from "../backends/profile.js";
 import { eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
 import { changedSinceSnapshot, parseManifest, serializeManifest, snapshotWorkspace } from "./workspace-snapshot.js";
@@ -34,6 +35,7 @@ interface Runtime {
   task: string;
   contextFiles: string[];
   handle?: BackendRunHandle;
+  starting?: Promise<unknown>;
   backend?: SupervisorBackend;
   events: SupervisorEvent[];
   eventSeq: number;
@@ -236,10 +238,14 @@ export class RunManager {
     await this.ready();
     if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
     const source = await resolveCanonicalRoot(cwd, this.config.allowedWorkspaceRoots);
-    for (const file of options.contextFiles ?? []) await assertPathWithinRoot(source, path.resolve(source, file));
+    for (const file of options.contextFiles ?? []) await resolveContextFile(source, file);
+    if (mode === "edit") await assertEditAtRepositoryRoot(source);
     const id = randomUUID();
     const now = new Date().toISOString();
     const workerWorkspace = mode === "edit" ? path.join(this.dataDir, "worktrees", id) : source;
+    assertSimpleGlobRoot(source);
+    assertSimpleGlobRoot(workerWorkspace);
+    await assertNoProjectVibeExtensions(source);
     const backendGuess: BackendKind = this.config.backend === "programmatic" ? "programmatic" : "acp";
     const limits: RunLimits = {
       timeoutSeconds: options.timeoutSeconds,
@@ -326,7 +332,8 @@ export class RunManager {
     const supportsContinue = backend.supportsContinue ?? (await backend.probe()).supportsContinue;
     if (!supportsContinue) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "The active backend does not support continuing this session.");
     if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
-    if (record.pendingRequest || !CONTINUABLE_STATES.has(record.state)) throw codedError("VSUP_INVALID_STATE", "This run cannot accept a continuation in its current state.");
+    if (record.pendingRequest) throw codedError(record.pendingRequest.kind === "permission" ? "VSUP_PERMISSION_REQUIRED" : "VSUP_INPUT_REQUIRED", "Answer the pending request with vibe_respond before continuing.");
+    if (!CONTINUABLE_STATES.has(record.state)) throw codedError("VSUP_INVALID_STATE", "This run cannot accept a continuation in its current state.");
     const raised = input.max_turns;
     const spent = record.result?.stopReason === "max_turn_requests";
     if (raised !== undefined && raised < record.limits.maxTurns) throw codedError("VSUP_INVALID_ARGUMENT", "max_turns on vibe_continue is the session's cumulative ceiling and cannot be lowered.");
@@ -433,23 +440,23 @@ export class RunManager {
     if (!runtime.backend) throw codedError("VSUP_SESSION_NOT_RESUMABLE", "No live backend session is available to receive this response.");
     if (input.kind === "permission" && pending.kind === "permission") {
       const policy = await this.policy.evaluate(runtime.record.mode, runtime.record.workerWorkspace, pending);
-      if (policy.kind === "deny" && this.policy.offeredDenyOption(pending) !== input.option_id) throw codedError("VSUP_PERMISSION_REQUIRED", "This permission is outside the configured safety policy.");
+      if (policy.kind === "deny" && this.policy.offeredDenyOption(pending) !== input.option_id) throw codedError("VSUP_PERMISSION_DENIED", "This permission is outside the configured safety policy.");
     }
     const response: BackendRespondInput = input.kind === "permission"
       ? (() => {
-        if (pending.kind !== "permission" || !pending.options.some((option) => option.optionId === input.option_id)) throw codedError("VSUP_PERMISSION_REQUIRED", "option_id must match an option actually offered by Vibe.");
-        if (!this.policy.userChoiceAllowed(pending, input.option_id)) throw codedError("VSUP_PERMISSION_REQUIRED", "This permission is outside the configured safety policy.");
+        if (pending.kind !== "permission" || !pending.options.some((option) => option.optionId === input.option_id)) throw codedError("VSUP_INVALID_ARGUMENT", "option_id must match an option actually offered by Vibe.");
+        if (!this.policy.userChoiceAllowed(pending, input.option_id)) throw codedError("VSUP_PERMISSION_DENIED", "This permission is outside the configured safety policy.");
         return { requestId: input.request_id, kind: "permission", optionId: input.option_id };
       })()
       : (() => {
-        if (pending.kind !== "elicitation") throw codedError("VSUP_INPUT_REQUIRED", "This request is not an elicitation.");
+        if (pending.kind !== "elicitation") throw codedError("VSUP_INVALID_ARGUMENT", "This request is not an elicitation.");
         validateElicitation(pending.schema, input.action, input.content);
         return { requestId: input.request_id, kind: "elicitation", action: input.action, ...(input.content ? { content: input.content } : {}) };
       })();
     if (pending.kind === "permission") {
       const latest = await this.policy.evaluate(runtime.record.mode, runtime.record.workerWorkspace, pending);
-      if (latest.kind === "deny" && this.policy.offeredDenyOption(pending) !== response.optionId) throw codedError("VSUP_PERMISSION_REQUIRED", "This permission is outside the configured safety policy.");
-      if (!this.policy.userChoiceAllowed(pending, response.optionId ?? "")) throw codedError("VSUP_PERMISSION_REQUIRED", "This permission is outside the configured safety policy.");
+      if (latest.kind === "deny" && this.policy.offeredDenyOption(pending) !== response.optionId) throw codedError("VSUP_PERMISSION_DENIED", "This permission is outside the configured safety policy.");
+      if (!this.policy.userChoiceAllowed(pending, response.optionId ?? "")) throw codedError("VSUP_PERMISSION_DENIED", "This permission is outside the configured safety policy.");
     }
     if (runtime.handle) await runtime.backend.respond(runtime.handle, response);
     else runtime.deferredResponses.push(response);
@@ -779,7 +786,16 @@ export class RunManager {
         limits
       };
       await this.setState(runtime, "negotiating");
-      const result = await backend.start(input, this.callbacks(runtime));
+      if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
+      const starting = backend.start(input, this.callbacks(runtime));
+      runtime.starting = starting.catch(() => undefined);
+      const result = await starting;
+      if (runtime.cancelRequested || isTerminal(runtime.record.state) || runtime.record.state === "closing") {
+        if (runtime.handle === result.handle) delete runtime.handle;
+        await backend.cancel(result.handle).catch(() => undefined);
+        await backend.close(result.handle).catch(() => undefined);
+        return;
+      }
       runtime.handle = result.handle;
       if (result.process) runtime.record.process = result.process;
       if (result.acp) runtime.record.acp = result.acp;
@@ -841,6 +857,14 @@ export class RunManager {
         return this.serial(runtime, async () => this.appendEvent(runtime, event)).catch((error: unknown) => this.noteEventFailure(runtime, error));
       },
       onActivity: (kind) => { this.noteActivity(runtime, kind); },
+      onSpawn: (handle) => {
+        const backend = runtime.backend;
+        if (runtime.cancelRequested || isTerminal(runtime.record.state) || runtime.record.state === "closing") {
+          if (backend) backend.cancel(handle).catch((error: unknown) => this.reportBackground(runtime, "spawn-cancel", error));
+          return;
+        }
+        runtime.handle ??= handle;
+      },
       onPendingRequest: (pending) => {
         if (this.stopping) return undefined;
         this.noteActivity(runtime, "permission_request");
@@ -948,7 +972,7 @@ export class RunManager {
           setImmediate(() => { Promise.resolve().then(() => runtime.backend?.respond(runtime.handle!, response)).catch(() => undefined); });
         }
       } else {
-        const outcome = this.requestOutcome(runtime, { state: "failed", error: supervisorError("VSUP_PERMISSION_REQUIRED", "The requested tool action is outside the configured safety policy.") });
+        const outcome = this.requestOutcome(runtime, { state: "failed", error: supervisorError("VSUP_PERMISSION_DENIED", "The requested tool action is outside the configured safety policy.") });
         const sessionBackend = runtime.backend; const sessionHandle = runtime.handle;
         if (sessionHandle && sessionBackend) {
           delete runtime.handle;
@@ -990,9 +1014,11 @@ export class RunManager {
 
   private async cancelBackendSession(runtime: Runtime): Promise<void> {
     const backend = runtime.backend; const handle = runtime.handle;
-    if (!backend || !handle) return;
-    delete runtime.handle;
-    await backend.cancel(handle).catch((error: unknown) => this.reportBackground(runtime, "backend-cancel", error));
+    if (backend && handle) {
+      delete runtime.handle;
+      await backend.cancel(handle).catch((error: unknown) => this.reportBackground(runtime, "backend-cancel", error));
+    }
+    await runtime.starting;
   }
 
   private async settle(runtime: Runtime, requested: SettleOutcome): Promise<void> {
@@ -1616,12 +1642,19 @@ function isWriteEvidence(event: SupervisorEvent): boolean {
   return [event.data.title, event.data.name].some((value) => typeof value === "string" && /^\s*(?:write_file|edit)(?![a-z0-9])/i.test(value));
 }
 
+async function assertEditAtRepositoryRoot(source: string): Promise<void> {
+  let root: string;
+  try { root = await realpath(await resolveGitRoot(source)); }
+  catch { return; }
+  if (root !== source) throw codedError("VSUP_WORKSPACE_INVALID", `Edit runs must start at the git repository root because the worker receives the whole repository; use cwd ${root} instead of ${source}.`);
+}
+
 function validateElicitation(schema: Record<string, unknown> | undefined, action: "accept" | "decline" | "cancel", content?: Record<string, unknown>): void {
   if (action !== "accept") {
     if (content !== undefined) throw codedError("VSUP_INVALID_ARGUMENT", "Declined elicitation responses must not include content.");
     return;
   }
-  if (!schema || !content) throw codedError("VSUP_INPUT_REQUIRED", "The elicitation requires a supported schema and response content.");
+  if (!schema || !content) throw codedError("VSUP_INVALID_ARGUMENT", "The elicitation requires a supported schema and response content.");
   let encoded: string;
   try { encoded = JSON.stringify(content); } catch { throw codedError("VSUP_INVALID_ARGUMENT", "Elicitation response must contain JSON values only."); }
   if (Buffer.byteLength(encoded) > 16_384 || Object.keys(content).length > 100) throw codedError("VSUP_INVALID_ARGUMENT", "Elicitation response exceeds its size limit.");

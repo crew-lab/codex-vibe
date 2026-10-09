@@ -95,7 +95,7 @@ const base: Scenario[] = [
   { name: 'the user cancels a queued run', blocker: true, end: async ({ manager }, id) => { await manager.cancel({ run_id: id }); }, state: 'cancelled', launched: false, handleReleased: false },
   { name: 'the deadline expires', fakeTimers: true, timeout: 30, end: async () => { await vi.advanceTimersByTimeAsync(31_000); }, state: 'failed', errorCode: 'VSUP_TIMEOUT', launched: true, handleReleased: true },
   { name: 'the transcript limit is reached', config: { limits: { ...DEFAULT_CONFIG.limits, maxTranscriptBytes: 8 } }, end: async ({ backend }, id) => { await backend.callbacks.get(id)?.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: 'this text is longer than the limit' } }); }, state: 'failed', errorCode: 'VSUP_OUTPUT_LIMIT', launched: true, handleReleased: true },
-  { name: 'a permission request violates the policy and offers no rejection', end: async ({ backend }, id) => { await backend.callbacks.get(id)?.onPendingRequest(EXECUTE_WITHOUT_REJECT); }, state: 'failed', errorCode: 'VSUP_PERMISSION_REQUIRED', launched: true, handleReleased: true },
+  { name: 'a permission request violates the policy and offers no rejection', end: async ({ backend }, id) => { await backend.callbacks.get(id)?.onPendingRequest(EXECUTE_WITHOUT_REJECT); }, state: 'failed', errorCode: 'VSUP_PERMISSION_DENIED', launched: true, handleReleased: true },
   { name: 'artifact finalization fails a completed turn', config: { limits: { ...DEFAULT_CONFIG.limits, maxArtifactBytes: 10 } }, end: async ({ backend }, id) => { await backend.callbacks.get(id)?.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: 'findings that exceed ten bytes' } }); await backend.callbacks.get(id)?.onState('completed', { result: { summary: 'done' } }); }, state: 'failed', errorCode: 'VSUP_OUTPUT_LIMIT', launched: true, handleReleased: true },
   { name: 'a failure is reported after the run already completed', end: async ({ backend }, id) => { await backend.callbacks.get(id)?.onState('completed', { result: { summary: 'done' } }); await backend.callbacks.get(id)?.onState('failed', { error: supervisorError('VSUP_BACKEND_CRASHED', 'late') }); }, state: 'completed', launched: true, handleReleased: true },
   { name: 'the supervisor shuts down under a running run', shutdown: true, end: async ({ manager }) => { await manager.shutdown(); }, state: 'recoverable', launched: true, handleReleased: true },
@@ -184,7 +184,7 @@ describe('settle with a real ACP process', () => {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       const status = await waitFor(() => manager.status({ run_id: started.run_id }), (value) => SETTLED.has(String(value.state)));
       expect(status.state).toBe('failed');
-      expect(status.error).toMatchObject({ code: 'VSUP_PERMISSION_REQUIRED' });
+      expect(status.error).toMatchObject({ code: 'VSUP_PERMISSION_DENIED' });
       const result = await readResultFile(data, started.run_id);
       expect(result?.state).toBe('failed');
       expect(result?.integrity?.status).toBe('verified');

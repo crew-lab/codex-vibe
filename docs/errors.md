@@ -10,20 +10,20 @@ An error carries `code`, `message`, `remediation`, `retryable` and sometimes `de
 | `VSUP_VIBE_NOT_FOUND` | The vibe executable was not found on PATH or at paths.vibe. | Install Vibe or set paths.vibe to its executable. | no |
 | `VSUP_VIBE_ACP_NOT_FOUND` | The vibe-acp executable was not found on PATH or at paths.vibe_acp. | Install Vibe ACP or set paths.vibe_acp to its executable. | no |
 | `VSUP_VIBE_VERSION_UNSUPPORTED` | The installed Vibe is not the pinned version. | Install exactly the supported Vibe version (for example `uv tool install mistral-vibe==2.25.8`) or point paths.vibe and paths.vibe_acp at a pinned install. | no |
-| `VSUP_ACP_INIT_FAILED` | The ACP connection failed before the session was ready. | Check the Vibe ACP executable and its stderr log, then retry. | no |
+| `VSUP_ACP_INIT_FAILED` | The ACP connection failed before the session was ready. | Check the Vibe ACP executable and the run's diagnostic events, then retry. | no |
 | `VSUP_ACP_VERSION_UNSUPPORTED` | Vibe ACP negotiated an unsupported ACP protocol version. | Upgrade Vibe ACP to a supported ACP version. | no |
 | `VSUP_ACP_PROTOCOL_ERROR` | The ACP connection failed after the session was ready. | Check ACP diagnostics and retry with a compatible Vibe release. | no |
 | `VSUP_AUTH_REQUIRED` | Vibe reported a missing or rejected credential (401, unauthorized, missing API key). | Sign in to Vibe or configure its supported authentication. | no |
-| `VSUP_WORKSPACE_INVALID` | The workspace does not exist, is not a directory or lies outside every allowed root. | Provide an existing workspace directory under an allowed_workspace_roots entry; after vibe-supervisor allow, restart the Codex MCP server (reconnect when it uses --isolated) so it reads the new list. | no |
+| `VSUP_WORKSPACE_INVALID` | The workspace or a context file does not exist or lies outside every allowed root, contains project .vibe or .agents, a symlinked .vibeignore or glob characters in its path, or an edit run did not start at the git repository root. | Provide an existing workspace directory under an allowed_workspace_roots entry (the git repository root for an edit, without project .vibe or .agents and without glob characters in the path), and existing context files inside it; after vibe-supervisor allow, restart the Codex MCP server (reconnect when it uses --isolated) so it reads the new list. | no |
 | `VSUP_WORKTREE_CREATE_FAILED` | git worktree add failed for the edit run; details.stderr_tail and details.operation say why. | Check the repository state and worktree path, then retry. | no |
 | `VSUP_GIT_REQUIRED` | The git executable is missing. | Install Git and use a Git repository for edit runs. | no |
-| `VSUP_PERMISSION_REQUIRED` | The run is waiting for a permission decision. | Respond to the pending permission request before continuing. | no |
-| `VSUP_INPUT_REQUIRED` | The run is waiting for input. | Respond to the pending input request before continuing. | no |
+| `VSUP_PERMISSION_REQUIRED` | A permission decision is pending; the action cannot proceed until it is answered. | Answer the pending permission request with vibe_respond before continuing. | no |
+| `VSUP_INPUT_REQUIRED` | An input request is pending; the action cannot proceed until it is answered. | Answer the pending input request with vibe_respond before continuing. | no |
 | `VSUP_REQUEST_EXPIRED` | The permission or input request is no longer pending, for example after a restart. | Start a new run because the pending request has expired. | no |
 | `VSUP_SESSION_NOT_RESUMABLE` | The saved backend session cannot be continued or reloaded. | Start a new run; this backend session cannot be resumed. | no |
 | `VSUP_BACKEND_UNAVAILABLE` | No backend could be selected, or the launcher interpreter is missing. | Install or configure an available backend and retry. | no |
-| `VSUP_BACKEND_CRASHED` | The Vibe process exited before the turn finished. | Inspect the backend stderr log and start a new run. | no |
-| `VSUP_TIMEOUT` | The run deadline elapsed, or a session load did not answer in time. | Increase the timeout or simplify the task, then start a new run. | no |
+| `VSUP_BACKEND_CRASHED` | The Vibe process exited before the turn finished. | Inspect the run's diagnostic events and start a new run. | no |
+| `VSUP_TIMEOUT` | The run deadline elapsed. | Increase the timeout or simplify the task, then start a new run. | no |
 | `VSUP_RATE_LIMITED` | Vibe or its provider answered with HTTP 429. | Wait for the service rate limit to clear and retry. | yes |
 | `VSUP_CANCELLED` | The run was cancelled, or it never started because the supervisor stopped first. | Start another run if more work is needed. | no |
 | `VSUP_OUTPUT_LIMIT` | The run exceeded an event, transcript or artifact byte limit. | Reduce the requested output or increase the configured limit. | no |
@@ -32,7 +32,7 @@ An error carries `code`, `message`, `remediation`, `retryable` and sometimes `de
 | `VSUP_NOT_FOUND` | No run with that ID exists. | Check the run ID and try again. | no |
 | `VSUP_BACKEND_ERROR` | The backend reported a failure that has no more specific code. | Inspect backend diagnostics and retry if the problem is transient. | no |
 | `VSUP_LIMIT_EXCEEDED` | No run slot or queue capacity is free. | Wait for capacity or increase the configured limit. | no |
-| `VSUP_PERMISSION_DENIED` | A permission request was denied by policy or by the caller. | Review the requested action and grant only if appropriate. | no |
+| `VSUP_PERMISSION_DENIED` | The worker asked for an action outside the safety policy, or a chosen permission option was refused; no decision is pending. | The action is outside the supervisor's safety policy and cannot be granted; narrow the task to read and search (or to edits inside the worktree) and start a new run. | no |
 | `VSUP_NO_PROGRESS` | A running worker emitted no event for limits.worker_progress_timeout_seconds, so the supervisor ended the run. | The worker produced no output for the configured limits.worker_progress_timeout_seconds; inspect the run diagnostics and events, then start a new run deliberately; the task is never replayed. | no |
 | `VSUP_TURN_LIMIT_REACHED` | The run's last turn ended at Vibe's cumulative turn limit and the continuation did not raise it. | Vibe counts turns cumulatively per session: pass max_turns greater than the current limit when it is below 50, otherwise start a new run from a deliberate base; the task is never replayed. | no |
 | `VSUP_INVALID_STATE` | The action is not valid in the run state, or the data directory is owned by another supervisor. | Check the run status and use an action valid for its current state. | no |

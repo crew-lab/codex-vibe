@@ -200,6 +200,7 @@ export interface BackendCallbacks {
   onEvent(event: Omit<SupervisorEvent, "schemaVersion" | "seq" | "timestamp" | "runId" | "backend">): void | Promise<void>;
   onPendingRequest(request: PendingRequest | undefined): void | Promise<void>;
   onActivity?(kind: string): void;
+  onSpawn?(handle: BackendRunHandle): void;
   onState(state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "acp">>): void | Promise<void>;
 }
 
@@ -256,19 +257,19 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_VIBE_NOT_FOUND: "Install Vibe or set paths.vibe to its executable.",
   VSUP_VIBE_ACP_NOT_FOUND: "Install Vibe ACP or set paths.vibe_acp to its executable.",
   VSUP_VIBE_VERSION_UNSUPPORTED: `Install exactly the supported Vibe version (for example \`uv tool install mistral-vibe==${SUPPORTED_VIBE}\`) or point paths.vibe and paths.vibe_acp at a pinned install.`,
-  VSUP_ACP_INIT_FAILED: "Check the Vibe ACP executable and its stderr log, then retry.",
+  VSUP_ACP_INIT_FAILED: "Check the Vibe ACP executable and the run's diagnostic events, then retry.",
   VSUP_ACP_VERSION_UNSUPPORTED: "Upgrade Vibe ACP to a supported ACP version.",
   VSUP_ACP_PROTOCOL_ERROR: "Check ACP diagnostics and retry with a compatible Vibe release.",
   VSUP_AUTH_REQUIRED: "Sign in to Vibe or configure its supported authentication.",
-  VSUP_WORKSPACE_INVALID: "Provide an existing workspace directory under an allowed_workspace_roots entry; after vibe-supervisor allow, restart the Codex MCP server (reconnect when it uses --isolated) so it reads the new list.",
+  VSUP_WORKSPACE_INVALID: "Provide an existing workspace directory under an allowed_workspace_roots entry (the git repository root for an edit, without project .vibe or .agents and without glob characters in the path), and existing context files inside it; after vibe-supervisor allow, restart the Codex MCP server (reconnect when it uses --isolated) so it reads the new list.",
   VSUP_WORKTREE_CREATE_FAILED: "Check the repository state and worktree path, then retry.",
   VSUP_GIT_REQUIRED: "Install Git and use a Git repository for edit runs.",
-  VSUP_PERMISSION_REQUIRED: "Respond to the pending permission request before continuing.",
-  VSUP_INPUT_REQUIRED: "Respond to the pending input request before continuing.",
+  VSUP_PERMISSION_REQUIRED: "Answer the pending permission request with vibe_respond before continuing.",
+  VSUP_INPUT_REQUIRED: "Answer the pending input request with vibe_respond before continuing.",
   VSUP_REQUEST_EXPIRED: "Start a new run because the pending request has expired.",
   VSUP_SESSION_NOT_RESUMABLE: "Start a new run; this backend session cannot be resumed.",
   VSUP_BACKEND_UNAVAILABLE: "Install or configure an available backend and retry.",
-  VSUP_BACKEND_CRASHED: "Inspect the backend stderr log and start a new run.",
+  VSUP_BACKEND_CRASHED: "Inspect the run's diagnostic events and start a new run.",
   VSUP_TIMEOUT: "Increase the timeout or simplify the task, then start a new run.",
   VSUP_RATE_LIMITED: "Wait for the service rate limit to clear and retry.",
   VSUP_CANCELLED: "Start another run if more work is needed.",
@@ -278,7 +279,7 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_NOT_FOUND: "Check the run ID and try again.",
   VSUP_BACKEND_ERROR: "Inspect backend diagnostics and retry if the problem is transient.",
   VSUP_LIMIT_EXCEEDED: "Wait for capacity or increase the configured limit.",
-  VSUP_PERMISSION_DENIED: "Review the requested action and grant only if appropriate.",
+  VSUP_PERMISSION_DENIED: "The action is outside the supervisor's safety policy and cannot be granted; narrow the task to read and search (or to edits inside the worktree) and start a new run.",
   VSUP_NO_PROGRESS: "The worker produced no output for the configured limits.worker_progress_timeout_seconds; inspect the run diagnostics and events, then start a new run deliberately; the task is never replayed.",
   VSUP_TURN_LIMIT_REACHED: "Vibe counts turns cumulatively per session: pass max_turns greater than the current limit when it is below 50, otherwise start a new run from a deliberate base; the task is never replayed.",
   VSUP_INVALID_STATE: "Check the run status and use an action valid for its current state.",

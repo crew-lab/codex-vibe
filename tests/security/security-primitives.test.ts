@@ -156,9 +156,9 @@ describe('dirty git snapshot', () => {
     };
     run(['init', '-q']); run(['config', 'user.email', 'test@example.invalid']); run(['config', 'user.name', 'Test']);
     await writeFile(path.join(repo, 'tracked'), 'safe\n'); run(['add', 'tracked']); run(['commit', '-qm', 'base']);
-    await writeFile(path.join(repo, 'tracked'), 'api_key=knownsecret\n');
+    await writeFile(path.join(repo, 'tracked'), 'api_key = "knownsecret12345"\n');
     await expect(exportDirtySnapshot(repo, path.join(dir, 'artifacts'))).rejects.toMatchObject({ code: 'VSUP_ARTIFACT_ERROR' });
-    await expect(readFile(path.join(repo, 'tracked'), 'utf8')).resolves.toBe('api_key=knownsecret\n');
+    await expect(readFile(path.join(repo, 'tracked'), 'utf8')).resolves.toBe('api_key = "knownsecret12345"\n');
   });
 
   it('removes a cleanly verified worktree after export', async () => {
