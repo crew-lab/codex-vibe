@@ -206,3 +206,6 @@ export async function removeVerifiedWorktree(source: string, record: { path: str
   if (status.toString('utf8').split('\0').some((line) => line.startsWith('!!'))) throw new Error('Ignored files remain in worktree; refusing cleanup');
   await git(root, ['worktree', 'remove', '--force', '--', target]);
 }
+
+/** Internal bounded Git primitive for coordinator-owned baseline preparation. */
+export { git as preparationGit };

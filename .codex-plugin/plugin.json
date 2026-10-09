@@ -1,6 +1,6 @@
 {
   "name": "vibe-supervisor",
-  "version": "0.9.0-rc.10",
+  "version": "0.9.0-rc.14",
   "description": "Local MCP tools for supervised Vibe review and isolated edit runs.",
   "license": "MIT",
   "skills": "./skills/",

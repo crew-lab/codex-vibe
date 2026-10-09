@@ -1,6 +1,34 @@
 # Implementation handoff
 
-Status as of **2026-10-09**: implemented release candidate 0.9.0-rc.10, not a production 1.0 certification. rc.8 was tested on the target machine on 2026-10-08 (see [Phase D results](#phase-d-results)): D1, D21 and the D18 soak failed and were followed up, D22 to D24 passed through the official client; the remaining gates are the [Phase D test plan](#phase-d-test-plan). Sections superseded by later work, including the rc.2 target-machine results, the 2026-10-05 cold review, the B1 to B3 blockers and the original field plan, are in [handoff history](docs/history/handoff-2026-10-05.md). Repository: this Git repository (GitHub `crew-lab/codex-vibe`); paths below are repository-relative unless marked as from the original verification machine. Package: `vibe-supervisor@0.9.0-rc.10`, ESM, `private: true`, MIT. Existing Git history and the original MIT license (`Copyright (c) 2026 crew-lab`) were preserved during migration.
+## Current delivery — 2026-10-09, rc.14
+
+`vibe-supervisor@0.9.0-rc.14` is implemented and installed locally. Source delivery is on `codex/project-agents-isolation`, based on `8da1c7d`; the dirty primary checkout is preserved. The user authorized committing and pushing this delivery. The package remains private, unpublished, ESM and MIT; no production 1.0 certification or deployment is claimed.
+
+The delivery retains rc.11 project-discovery isolation and rc.12 creator-version provenance, and adds reviewed-baseline preparation, settled edit-run audits, optional private audit scope input and the delegation protocol. Source files/index/refs are preserved by preparation; explicit snapshot commits belong only to a new disposable repository. Canonical allowlists, pinned Vibe 2.25.8, private homes, disabled shell/network and the existing MCP tool interface remain intact.
+
+| Evidence | Actual result |
+| --- | --- |
+| rc.14 offline release verification | 790 tests passed, two skipped; Python checks, lint/typecheck/build, acceptance, secret scan, SBOM and installed-package smoke passed |
+| rc.14 installation and fresh official MCP client | Installed CLI and connection identify rc.14; seven tools; prior versions, allowlists and unrelated settings preserved |
+| rc.13 prepared hosted edit/correction pilot | PASS: two end_turn/final-answer rounds in one session, independent candidate checks/review, fresh exports and verified cleanup |
+| rc.13 narrow product increment | Original candidate rejected for nested/lone dash paths; coordinator correction tested and reviewed, included in rc.14. Vibe product acceptance gate remains PARTIAL |
+| Native desktop reload / rc.14 hosted inference | UNVERIFIED / NOT RUN |
+
+See [delivery evaluation](docs/history/reviews/rc13-worker-adoption-2026-10-09.md), [adoption contract and status](docs/vibe-worker-adoption-plan-2026-10-09.md), and [pilot protocol](docs/acp-edit-pilot-2026-10-09.md). Live public diagnostic fields and runtime intervention on repeated edit failures were not added.
+
+## Next test and remaining gates
+
+Reconnect the desktop MCP integration or use a fresh chat and verify its actual version/catalog before dispatch. Keep the completed worker session open through independent tests and read-only review; send any correction in that session within the existing cumulative budget, then obtain a fresh export and perform verified close/cleanup. The next product test must prove this complete acceptance sequence; the earlier premature close is recorded as a coordinator deviation, not a Supervisor success or a passed product gate.
+
+Do not replay accepted UARoots work, raise budgets automatically, weaken guards or substitute synthetic checks for hosted gates. Full D8/D18/soak, restart/recovery, callbacks, native desktop, Intel and clean-account gates remain unverified. Billing/quota and shared focused-hour balance remain unknown.
+
+## Prior milestones
+
+rc.11 accepted a real project `.agents` directory while disabling pinned Vibe project discovery, after validating harness source/signatures; `.agents` instructions/skills remain unavailable to worker tools. Root `.vibe`, unsafe `.agents` paths and unsafe `.vibeignore` remain refused. The hosted read-only result and its limits are in [the isolation report](docs/history/reviews/project-agents-isolation-2026-10-09.md).
+
+rc.12 records the creating Supervisor version without relabeling legacy/recovered runs and prepared the bounded edit pilot. Its failed SEO run is analyzed in [the worker review](docs/history/reviews/rc12-seo-worker-adoption-2026-10-09.md). Earlier failures remain separate evidence; rc.13 subsequently passed the prepared pilot, and rc.14 is the currently installed candidate.
+
+The rc.10/2026-10-08 sections below are a historical baseline. Their release versions, account observations and planned target-machine steps are not current installation or gate results; use the current delivery table above and preserve their original evidence. Existing Git history and MIT copyright are unchanged. The former rc.2 and 2026-10-05 handoff is in [handoff history](docs/history/handoff-2026-10-05.md).
 
 ## Where the project stands and what comes next (2026-10-08)
 
@@ -37,7 +65,7 @@ Root `AGENTS.md` and `Handoff.md` are not in the npm `files` allowlist; the form
 
 ## Implemented surface
 
-Strict-schema MCP tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result` and `vibe_close` always, plus `vibe_continue` and `vibe_respond` when the configured backend is `acp` or `auto` (five or seven tools). There is no cancel tool; `vibe_close` cancels a live run. The official stdio transport has protocol-only stdout, bounded/redacted structured results, annotations, and stable supervisor errors. The CLI has `setup`, `allow`, `init`, `doctor` (with `--config`), `configure-codex`, `serve`, `runs list|show|tail|cleanup` and version/help; `test-acp` and `config validate` remain as aliases.
+Strict-schema MCP tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result` and `vibe_close` always, plus `vibe_continue` and `vibe_respond` when the configured backend is `acp` or `auto` (five or seven tools). There is no cancel tool; `vibe_close` cancels a live run. The official stdio transport has protocol-only stdout, bounded/redacted structured results, annotations, and stable supervisor errors. The CLI also has `baseline prepare` (dry-run by default, explicit disposable creation) and `audit-edit` (optional private `--files` argument scope). The CLI has `setup`, `allow`, `init`, `doctor` (with `--config`), `configure-codex`, `serve`, `runs list|show|tail|cleanup` and version/help; `test-acp` and `config validate` remain as aliases.
 
 Reviews read/search an allowed source workspace and check integrity. Edits create detached Git worktrees from a selected base and export changes without applying them to the source. There is no automatic patch application, commit, merge, or push. Default execution is programmatic; ACP is opt-in and supports correlated permission callbacks, form input, same-session continuation, cancellation, and conditional session loading.
 
@@ -53,10 +81,10 @@ Reviews read/search an allowed source workspace and check integrity. Edits creat
 | Backends | `src/backends/programmatic.ts`, `acp.ts`: process/SDK adapters and capability checks; `pinned.ts`: the Vibe version pin; `probe-cache.ts`: availability probes; `worker-deadline.ts`: the deadline file the launcher watchdog re-reads. |
 | Launch profile | `src/backends/profile.ts`, `launcher.ts`, `runtime/vibe_supervisor_launcher.py`: isolated homes, filtered tools/environment, installed Python runtime, persistence shim/watchdog. |
 | Security primitives | `src/security/`: canonical paths, private filesystem objects, child environment, streaming redaction. |
-| Git | `src/git/worktree.ts`: detached worktrees, safe snapshot/export, cleanup verification. |
+| Git | `src/git/worktree.ts`: detached worktrees, safe export/cleanup; `reviewed-baseline.ts`: explicit hash-bound reviewed snapshot preparation. |
 | Process management | `src/process/managed.ts`: bounded output and managed process-group termination. |
 | Storage | `src/persistence/`: atomic private writes and NDJSON recovery. |
-| Public interfaces | `src/mcp/`, `src/cli.ts`, `src/cli/` (`setup.ts`, `codex.ts`, `diagnose.ts`), `src/diagnostics/doctor.ts`. |
+| Public interfaces | `src/mcp/`, `src/cli.ts`, `src/cli/` (`setup.ts`, `codex.ts`, `diagnose.ts`), `src/diagnostics/doctor.ts`, `edit-run-audit.ts`: local diagnostics and sanitized settled-edit evidence. |
 | Packaging and tools | `scripts/`: runtime asset copy, acceptance, secret scan, SPDX inventory, checksums, install smoke, RC packaging, error docs, `compat-probe.mjs`, the hosted `soak.mjs` driver. |
 | Tests | `tests/`: schemas/config/CLI, core and official MCP integration, security/process/Git, fake ACP subprocess integration. |
 | Skills and plugin scaffold | `skills/vibe-supervisor`, `skills/vibe-acp` (shipped); `.codex-plugin/plugin.json` and `.mcp.json` stay in the repository only and are out of scope for 1.0. |

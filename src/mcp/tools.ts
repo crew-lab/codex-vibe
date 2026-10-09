@@ -136,7 +136,7 @@ function emergency(object: JsonRecord, reduced: JsonRecord, fields: string[], ma
     compact[key] = value;
     if (JSON.stringify(compact).length > maxChars) delete compact[key];
   };
-  for (const key of ['error', 'warnings', 'integrity', 'patch_path', 'pending_request', 'next_action']) tryAdd(key, reduced[key] ?? nested[key]);
+  for (const key of ['supervisor_version', 'error', 'warnings', 'integrity', 'patch_path', 'pending_request', 'next_action']) tryAdd(key, reduced[key] ?? nested[key]);
   if (typeof object.next_after_seq === 'number') {
     const events = Array.isArray(object.events) ? object.events : [];
     const first = eventSeq(events[0]);

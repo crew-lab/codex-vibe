@@ -2,7 +2,7 @@
 
 A local MCP server that lets Codex delegate code reviews and isolated edits to Mistral Vibe. Reviews are read-only. Edits run in a detached Git worktree and come back as a patch that you apply yourself.
 
-This is an application-level policy boundary, **not an operating-system sandbox**: it validates workspaces, filters the worker's environment and tools and bounds its output, but a delegated run still executes with your account's permissions and permitted file content goes to Mistral. The package is a private, unpublished release candidate (MIT licensed).
+This is an application-level policy boundary, **not an operating-system sandbox**: it validates workspaces, filters the worker's environment and tools and bounds its output, but a delegated run still executes with your account's permissions and permitted file content goes to Mistral. The current package is `0.9.0-rc.14`, a private, unpublished release candidate (MIT licensed).
 
 ## Prerequisites
 
@@ -60,7 +60,7 @@ First edit:
 
 An edit run must start at the root of the Git repository: the worker receives a checkout of the whole repository, so `vibe_edit_start` refuses a subdirectory `cwd` with `VSUP_WORKSPACE_INVALID` that names the root. Reviews may start in any allowed subdirectory.
 
-The coordinator starts the run with `wait_seconds`, calls `vibe_status` with `wait_seconds` until the result appears, then calls `vibe_close`. A result contains:
+The coordinator starts the run with `wait_seconds`, calls `vibe_status` with `wait_seconds` until the result appears, verifies the exact candidate and any correction while the session is still open, then calls `vibe_close`. A result contains:
 
 - `state` and `stop_reason`: a `completed` run whose `stop_reason` is not `end_turn` stopped early and may be partial.
 - `summary`, `warnings` and, for reviews, `integrity`: whether the source workspace changed during the review.
@@ -80,7 +80,7 @@ ln -s "$(npm root -g)/vibe-supervisor/skills/vibe-supervisor" "$skills_dir/vibe-
 ln -s "$(npm root -g)/vibe-supervisor/skills/vibe-acp" "$skills_dir/vibe-acp"
 ```
 
-From a clone, link `skills/vibe-supervisor` and `skills/vibe-acp` from the repository root instead. Do not create `.agents/` or `.vibe/` inside a delegated workspace: the supervisor refuses workspaces that contain them, and refuses a symlinked `.vibeignore` or a path with glob characters (`* ? [ ]`), with `VSUP_WORKSPACE_INVALID` when the run is started.
+From a clone, link `skills/vibe-supervisor` and `skills/vibe-acp` from the repository root instead. A real project `.agents/` directory is supported: the pinned launcher disables project configuration and instruction discovery, and file tools still deny `.agents` paths. Your project skills remain on disk for Codex but are not inherited by Vibe. A root `.vibe`, a symlink or non-directory `.agents`, a symlinked `.vibeignore`, or a path with glob characters (`* ? [ ]`) is still refused with `VSUP_WORKSPACE_INVALID`.
 
 ## Troubleshooting
 
@@ -92,7 +92,7 @@ From a clone, link `skills/vibe-supervisor` and `skills/vibe-acp` from the repos
 | Tools absent in Codex | Restart Codex; check `[mcp_servers.vibe-supervisor]` in `~/.codex/config.toml` and the client's startup log. |
 | `VSUP_INVALID_STATE` naming a lock | Another supervisor owns the data directory. Stop it, or register with `--isolated`; never delete a live lock. |
 | `vibe_continue` or `vibe_respond` missing | They exist only when `backend` is `acp` or `auto` in the config. |
-| Run ended early | Read `stop_reason` and `warnings`; raise `max_turns` or `timeout_seconds`, or narrow the task. |
+| Run ended early | Read `stop_reason` and `warnings`; retain artifacts and reassess scope. Increasing a budget or starting a replacement requires authorization in the execution plan. |
 | Worktree not removed on close | The patch no longer matches the worktree or residual files exist; inspect `worktree_retained_reason`. |
 
 Every code has a remedy in [docs/errors.md](docs/errors.md).
@@ -103,7 +103,7 @@ The supervisor accepts only canonical workspaces under an explicit allowlist (em
 
 ## Status and plugin scaffold
 
-Native Codex desktop registration and hosted review and edit runs were verified on macOS arm64 with a locally patched rc.2 build, plus scoped runs of rc.7; native desktop use of the current build is not verified. Hosted ACP lifecycle, soak, Intel, clean-account installation and plugin installation are not; the single list is in [docs/compatibility.md](docs/compatibility.md#unverified-gates). `.codex-plugin/` and `.mcp.json` in the repository are a scaffold only and are not part of the package.
+Historical native desktop and hosted results are version-bound. The rc.13 prepared ACP edit/correction pilot passed with independent checks and verified cleanup; the narrow product run required a coordinator correction and remains a partial Vibe gate. rc.14 passed offline release/install verification and a fresh seven-tool MCP check; rc.14 hosted inference and native desktop reload are unverified. Full lifecycle/callback, soak, Intel, clean-account and plugin gates remain open in [docs/compatibility.md](docs/compatibility.md#unverified-gates). `.codex-plugin/` and `.mcp.json` in the repository are a scaffold only and are not part of the package.
 
 ## Documentation
 
@@ -111,3 +111,13 @@ Native Codex desktop registration and hosted review and edit runs were verified 
 - [How it works](docs/functionality.md): lifecycle, recovery, storage and isolation.
 - [Error codes](docs/errors.md), [security](docs/security.md), [compatibility](docs/compatibility.md), [changelog](CHANGELOG.md).
 - [Contributor instructions](https://github.com/crew-lab/codex-vibe/blob/main/AGENTS.md) and [implementation handoff](https://github.com/crew-lab/codex-vibe/blob/main/Handoff.md) in the repository.
+
+## Reviewed baseline preflight
+
+A detached edit starts at base_ref; dirty source changes are not copied. The coordinator prepares reviewed changes before inference with `vibe-supervisor baseline prepare /absolute/private/manifest.json` (dry-run), then an explicit `--create` to make a disposable snapshot repository and local snapshot commits. It preserves source files/index/refs and requires existing canonical allowlist roots. Use the returned source_workspace/base_ref and bind the original reviewed baseline by hashes. Never ask the model to recreate baseline files from pasted diffs, nor modify a live worker worktree.
+
+Delegate one bounded increment with the real read_file/grep/write_file/edit inventory and file ownership. After an edit-match error re-read the current file; after a second repeated match error reassess from artifacts. This is coordinator guidance, not an automatic runtime stop. Reserve correction capacity within the cumulative ceiling; no automatic limit increase or task replay. Tests/dependencies/builds remain in a separate exact candidate copy.
+
+After a settled ACP edit use `vibe-supervisor audit-edit /canonical/private/home run-id`, optionally with `--files /absolute/private/scope.json` for argument-path evidence only. The sanitized audit distinguishes assistant messages, unique tool calls, failed updates and unique failures. It classifies only proven failed formats; Unknown tool is distinct from Supervisor policy denial. Unsafe/incomplete/unsupported records remain unverified. Native histories, arguments, commands and reasoning stay private. Only independently verified deltas are manually integrated; fetch a fresh export before verified close/cleanup.
+
+For edits, keep the session open through independent tests and review. If a usable candidate needs correction, use the same session within its remaining cumulative budget, recheck the fresh export, and only then close. A final answer is candidate readiness, not acceptance.
