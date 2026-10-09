@@ -9,3 +9,7 @@ tmp/
 !.env.example
 .vibe-supervisor/
 vibe-supervisor.local.toml
+
+# Generated Python runtime/test bytecode
+__pycache__/
+*.py[cod]

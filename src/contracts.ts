@@ -106,6 +106,8 @@ export type SupervisorErrorCode =
   | "VSUP_TURN_LIMIT_REACHED" | "VSUP_NO_PROGRESS" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR" | "VSUP_RECOVERY_ERROR" | "VSUP_INTERNAL";
 
 export interface RunRecord {
+  /** Release that created the run; absent on legacy records. */
+  supervisorVersion?: string;
   schemaVersion: typeof SCHEMA_VERSION;
   runId: string;
   backend: BackendKind;
@@ -261,7 +263,7 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_ACP_VERSION_UNSUPPORTED: "Upgrade Vibe ACP to a supported ACP version.",
   VSUP_ACP_PROTOCOL_ERROR: "Check ACP diagnostics and retry with a compatible Vibe release.",
   VSUP_AUTH_REQUIRED: "Sign in to Vibe or configure its supported authentication.",
-  VSUP_WORKSPACE_INVALID: "Provide an existing workspace directory under an allowed_workspace_roots entry (the git repository root for an edit, without project .vibe or .agents and without glob characters in the path), and existing context files inside it; after vibe-supervisor allow, restart the Codex MCP server (reconnect when it uses --isolated) so it reads the new list.",
+  VSUP_WORKSPACE_INVALID: "Provide an existing workspace directory under an allowed_workspace_roots entry (the git repository root for an edit, without project .vibe, unsafe .agents paths or glob characters), and existing context files inside it; a real .agents directory is supported without inheriting its content. After vibe-supervisor allow, restart the Codex MCP server (reconnect when it uses --isolated) so it reads the new list.",
   VSUP_WORKTREE_CREATE_FAILED: "Check the repository state and worktree path, then retry.",
   VSUP_GIT_REQUIRED: "Install Git and use a Git repository for edit runs.",
   VSUP_PERMISSION_REQUIRED: "Answer the pending permission request with vibe_respond before continuing.",

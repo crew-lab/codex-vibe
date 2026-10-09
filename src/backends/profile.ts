@@ -49,7 +49,7 @@ export interface VibeChildProfile {
 
 export async function assertNoProjectVibeExtensions(root: string): Promise<void> {
   const canonical = path.resolve(root);
-  for (const rel of ['.vibe', '.agents']) {
+  for (const rel of ['.vibe']) {
     try {
       const info = await lstat(path.join(canonical, rel));
       if (info.isSymbolicLink() || info.isDirectory() || info.isFile()) {
@@ -58,6 +58,14 @@ export async function assertNoProjectVibeExtensions(root: string): Promise<void>
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
+  }
+  // The pinned launcher disables project discovery before either entrypoint.
+  // Keep this path reserved to file tools; only a real directory is supported.
+  try {
+    const info = await lstat(path.join(canonical, '.agents'));
+    if (info.isSymbolicLink() || !info.isDirectory()) throw new WorkspacePathError(`Workspace ${canonical} has a .agents path that is not a regular non-symlink directory.`);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
   const ignore = path.join(canonical, '.vibeignore');
   try {

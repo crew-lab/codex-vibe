@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.9.0-rc.14
+
+- Add optional owner-private scope files to the offline audit CLI, retaining argument-only scope evidence and unverified candidate acceptance.
+- Reject dash-prefixed scope segments at every depth; add private-input and path regressions.
+
+## 0.9.0-rc.13
+
+- Add explicit dry-run/creation of reviewed baseline snapshots in a separate private repository with hash-bound manifests and unchanged source/index/refs.
+- Add safe offline ACP edit audits distinguishing messages, unique calls, failed updates, unavailable tools and known failures; incomplete evidence remains unverified.
+- Add installed CLI baseline preparation and edit-audit commands; retain the seven-tool MCP interface and existing permissions.
+
+## 0.9.0-rc.12
+
+- Record the creating Supervisor release in persisted run records and public run responses; legacy releases remain unknown after restart.
+- Prepare a bounded detached-edit/correction/cleanup pilot with tracked project-discovery canaries and explicit fresh-connection requirements.
+
+## 0.9.0-rc.11
+
+- Support real project `.agents` directories without inheriting their content. The pinned Python launcher disables project discovery for all harness-manager instances before either backend starts, including session copies and reload; exact source-hash and property-signature checks fail closed on drift before credential lookup. Reserved-path file denials, grep exclusions, private homes, untrusted state, and disabled shell/network tools remain unchanged. Root `.vibe`, symlink or non-directory `.agents`, and unsafe `.vibeignore` paths remain refused.
+- Add fail-closed/startup-order regressions, tracked and untracked `.agents` lifecycle coverage, and no-network installed-Vibe tests for project discovery and file permissions.
+
 ## 0.9.0-rc.10
 
 - An edit run's patch is checked for credentials in added lines only, with stricter shapes: Bearer, `sk-`, GitHub and AWS tokens, private-key blocks, secrets the supervisor itself holds, values assigned to password, secret, token or API-key names (quoted literals, and unquoted values that contain a digit) and literal `Authorization`, `Cookie` and `x-api-key` headers. Placeholders, `${...}` templates, type names and lookups such as `password: string`, `secret: SecretString` or `process.env.SECRET` are accepted, so ordinary code, and anything in context or removed lines, no longer fails the run and strands its worktree.

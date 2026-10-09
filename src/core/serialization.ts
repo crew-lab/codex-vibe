@@ -19,6 +19,7 @@ export function runToWire(run: RunRecord): JsonObject {
   } : undefined;
   return {
     schema_version: run.schemaVersion,
+    ...(run.supervisorVersion === undefined ? {} : { supervisor_version: run.supervisorVersion }),
     run_id: run.runId,
     backend: run.backend,
     mode: run.mode,
@@ -74,9 +75,11 @@ export function eventFromWire(value: unknown): SupervisorEvent {
 
 export function runFromWire(value: unknown): RunRecord {
   if (!isObject(value) || value.schema_version !== 1 || typeof value.run_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.run_id) || typeof value.backend !== "string" || (value.backend !== "acp" && value.backend !== "programmatic") || typeof value.mode !== "string" || (value.mode !== "review" && value.mode !== "edit") || typeof value.state !== "string" || !RUN_STATES.has(value.state as RunRecord["state"])) throw new TypeError("Invalid persisted run record");
+  if (value.supervisor_version !== undefined && (typeof value.supervisor_version !== "string" || value.supervisor_version.length > 128 || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(value.supervisor_version))) throw new TypeError("Invalid persisted supervisor version");
   const limits = asObject(value.limits);
   const run: RunRecord = {
     schemaVersion: 1,
+    ...(typeof value.supervisor_version === "string" ? { supervisorVersion: value.supervisor_version } : {}),
     runId: value.run_id,
     backend: value.backend,
     mode: value.mode,

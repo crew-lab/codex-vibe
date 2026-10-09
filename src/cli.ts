@@ -12,6 +12,7 @@ import { APP_VERSION } from './version.js';
 import { applyCodexPlan, planCodexConfig, type CodexScope } from './cli/codex.js';
 import { doctorCommand, testAcpCommand } from './cli/diagnose.js';
 import { fail } from './cli/fail.js';
+import { baselineCommand, auditEditCommand } from './cli/worker-tools.js';
 import { allowCommand, initialConfigText, setupCommand } from './cli/setup.js';
 import { createPrivateDir, createPrivateFile } from './security/paths.js';
 import { installProcessGuards } from './diagnostics/background.js';
@@ -139,7 +140,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   try {
     if (command === '--version' || command === '-v') { print(APP_VERSION); return; }
     if (command === 'help' || command === '--help' || command === '-h' || !command) {
-      print('Usage: vibe-supervisor <setup --workspace <dir> [--codex user|project] [--isolated] [--yes]|allow <dir>|doctor [--json] [--config <path>]|serve --stdio [--isolated]|init|configure-codex --user|--project [--path <dir>] [--dry-run] [--isolated]|runs list|show|tail|cleanup [run-id]|--version>'); return;
+      print('Usage: vibe-supervisor <setup --workspace <dir> [--codex user|project] [--isolated] [--yes]|allow <dir>|doctor [--json] [--config <path>]|serve --stdio [--isolated]|init|configure-codex --user|--project [--path <dir>] [--dry-run] [--isolated]|runs list|show|tail|cleanup [run-id]|baseline prepare manifest.json [--create]|audit-edit private-home run-id [--files /absolute/private/scope.json]|--version>'); return;
     }
     if (command === 'init') { if (args.length) fail('init accepts no options.', 2); return await initConfig(); }
     if (command === 'config' && args[0] === 'validate') {
@@ -160,6 +161,8 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
       const scope: CodexScope = args.includes('--project') ? 'project' : 'user';
       return await configureCodex(scope, args.includes('--dry-run'), pathIndex >= 0 ? args[pathIndex + 1] : process.cwd(), args.includes('--isolated'));
     }
+    if (command === 'baseline') { print(await baselineCommand(args)); return; }
+    if (command === 'audit-edit') { const report = await auditEditCommand(args); print(report); if ((report as { status?: string }).status !== 'validated') process.exitCode = 1; return; }
     if (command === 'doctor') return await doctorCommand(args);
     if (command === 'setup') return await setupCommand(args);
     if (command === 'allow') return await allowCommand(args);

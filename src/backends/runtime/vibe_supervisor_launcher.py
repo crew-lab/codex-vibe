@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import atexit
+import hashlib
 import inspect
 import json
 import sysconfig
@@ -18,6 +19,8 @@ import time
 from typing import Any, Callable, Optional
 
 EXPECTED_VERSION = "2.25.8"
+# Published/installed 2.25.8 harness manager, normalized by inspect.getsource.
+PROJECT_DISCOVERY_SOURCE_SHA256 = "43fc21e2d1a7359ac896ab41e902d927d363ba4ef8f989909af8bcca4b82cbac"
 # Set restrictive permissions before importing Vibe or creating its state.
 os.umask(0o077)
 ENTRYPOINTS = {
@@ -284,6 +287,39 @@ def _redact(value: Any) -> Any:
             value = pattern.sub("[REDACTED]", value)
         return value
     return value
+
+
+def _patch_project_discovery(manager_module: Any = None) -> None:
+    """Disable project configuration discovery in every manager/session copy.
+
+    Merely keeping the cwd untrusted is insufficient: session workspace roots
+    can enter project_roots independently of trust. Private user roots remain
+    available for the supervisor's own Plan/Accept Edits definitions.
+    """
+    if manager_module is None:
+        from vibe.core.config.harness_files import _harness_manager as manager_module
+    try:
+        source = inspect.getsource(manager_module)
+    except (OSError, TypeError) as exc:
+        raise RuntimeError("Unsupported Vibe project discovery: source unavailable") from exc
+    if hashlib.sha256(source.encode("utf-8")).hexdigest() != PROJECT_DISCOVERY_SOURCE_SHA256:
+        raise RuntimeError("Unsupported Vibe project discovery: source drift")
+    manager = manager_module.HarnessFilesManager
+    for name in ("project_source_enabled", "project_roots"):
+        member = vars(manager).get(name)
+        if not isinstance(member, property) or member.fget is None or list(inspect.signature(member.fget).parameters) != ["self"]:
+            raise RuntimeError(f"Unsupported Vibe project discovery property: {name}")
+
+    def project_disabled(self: Any) -> bool:
+        return False
+
+    def no_project_roots(self: Any) -> list:
+        return []
+
+    # Patch the class, not only the global singleton: for_session/moved_to and
+    # direct instances must retain the boundary, including session/load.
+    manager.project_source_enabled = property(project_disabled)
+    manager.project_roots = property(no_project_roots)
 
 
 def _patch_session_logger() -> None:
@@ -568,6 +604,7 @@ def main() -> None:
         raise SystemExit("A prompt file is only valid for the programmatic entrypoint")
     if diagnostics:
         diagnostics.stage("prompt_consumption")
+    _patch_project_discovery()
     _patch_session_logger()
     if diagnostics:
         diagnostics.stage("persistence_setup")

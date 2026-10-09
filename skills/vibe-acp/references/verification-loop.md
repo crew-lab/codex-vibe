@@ -44,3 +44,7 @@ Explain what changed and anything still unresolved.
 | Repeated failures | Narrow the task and identify the shared cause; reassess budget and harness before more model calls. |
 | New worker changes after verification | Prior patch hashes and check results are stale; export/review again. |
 | Missing real MCP tools | Report visibility separately from standalone-client discovery; do not invent tool availability. |
+
+## Baseline, scope and closure
+
+Prepare selected reviewed overlays before inference with the coordinator baseline CLI; use the returned immutable snapshot/ref and verify file hashes. Optional audit scope files describe tool-call argument paths only. Tests/builds run in a separate exact candidate copy. Keep the session open until independent checks and reviewer acceptance, including any same-session correction within the authorized cumulative ceiling; obtain a fresh export before cleanup. A premature close followed by coordinator correction is a partial worker gate, not a passed same-session implementation loop.

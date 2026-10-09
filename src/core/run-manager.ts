@@ -7,6 +7,7 @@ import type {
   RespondToolInput, ResultToolInput, WaitOptions, CancelToolInput, CloseToolInput, RunLimits, RunMode, RunRecord, RunState, SupervisorBackend,
   ReviewIntegrity, SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent
 } from "../contracts.js";
+import { APP_VERSION } from "../version.js";
 import { SCHEMA_VERSION, supervisorError } from "../contracts.js";
 import { MAX_TURNS_LIMIT, cancelSchema, closeSchema, continueSchema, editStartSchema, resultSchema, reviewStartSchema, respondSchema, statusSchema } from "../mcp/schemas.js";
 import { atomicWriteJson, sanitizeForPersistence } from "../persistence/atomic.js";
@@ -76,6 +77,7 @@ type SettleOutcome = { state: "completed" | "failed" | "cancelled" | "recoverabl
 type RequestedOutcome = { state: "failed" | "cancelled"; error?: SupervisorError };
 
 type StartResult = {
+  supervisor_version: string | null;
   run_id: string;
   state: RunState;
   backend: BackendKind;
@@ -256,6 +258,7 @@ export class RunManager {
     };
     const record: RunRecord = {
       schemaVersion: SCHEMA_VERSION,
+      supervisorVersion: APP_VERSION,
       runId: id,
       backend: backendGuess,
       mode,
@@ -284,7 +287,7 @@ export class RunManager {
     }
     if (slot) this.launch(runtime).catch((error: unknown) => this.reportBackground(runtime, "launch", error));
     return {
-      run_id: id, state: runtime.record.state, backend: runtime.record.backend, mode,
+      supervisor_version: runtime.record.supervisorVersion ?? null, run_id: id, state: runtime.record.state, backend: runtime.record.backend, mode,
       source_workspace: source, worker_workspace: workerWorkspace, created_at: now,
       next_action: this.nextAction(runtime.record, runtime.record.state),
       ...(mode === "edit" ? { base_ref: options.baseRef ?? "HEAD" } : {})
@@ -307,7 +310,7 @@ export class RunManager {
     }));
     const nextAfterSeq = events.at(-1)?.seq ?? input.after_seq;
     const body = {
-      run_id: runtime.record.runId, state: runtime.record.state, backend: runtime.record.backend,
+      supervisor_version: runtime.record.supervisorVersion ?? null, run_id: runtime.record.runId, state: runtime.record.state, backend: runtime.record.backend,
       last_seq: runtime.eventSeq, next_after_seq: nextAfterSeq, events,
       next_action: this.nextAction(runtime.record, runtime.record.state, nextAfterSeq),
       ...(runtime.record.pendingRequest ? { pending_request: pendingToWire(runtime.record.pendingRequest) } : {}),
@@ -395,7 +398,7 @@ export class RunManager {
   }
 
   private continueReply(runtime: Runtime): Record<string, unknown> {
-    return { run_id: runtime.record.runId, state: runtime.record.state, next_action: this.nextAction(runtime.record, "running", runtime.eventSeq) };
+    return { supervisor_version: runtime.record.supervisorVersion ?? null, run_id: runtime.record.runId, state: runtime.record.state, next_action: this.nextAction(runtime.record, "running", runtime.eventSeq) };
   }
 
   private async recoverHandle(runtime: Runtime, backend: SupervisorBackend): Promise<RecoverOutcome> {
@@ -463,7 +466,7 @@ export class RunManager {
     delete runtime.record.pendingRequest;
     await this.persist(runtime);
     await this.setState(runtime, "running");
-    return { run_id: runtime.record.runId, state: runtime.record.state, next_action: this.nextAction(runtime.record, runtime.record.state) };
+    return { supervisor_version: runtime.record.supervisorVersion ?? null, run_id: runtime.record.runId, state: runtime.record.state, next_action: this.nextAction(runtime.record, runtime.record.state) };
   }
 
   async result(value: ResultToolInput): Promise<Record<string, unknown>> {
@@ -474,9 +477,9 @@ export class RunManager {
     const result = record.result;
     if (input.detail === "compact") return this.compactResult(runtime, input.include_transcript);
     const next_action = this.nextAction(record, record.state);
-    if (!result) return { run_id: record.runId, state: record.state, backend: record.backend, summary: "Run has not produced a result yet.", artifacts: [], changed_files: [], warnings: [], ...(record.error ? { error: record.error } : {}), next_action };
+    if (!result) return { supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: record.state, backend: record.backend, summary: "Run has not produced a result yet.", artifacts: [], changed_files: [], warnings: [], ...(record.error ? { error: record.error } : {}), next_action };
     const output: Record<string, unknown> = {
-      schema_version: 1, run_id: record.runId, state: record.state, backend: record.backend,
+      schema_version: 1, supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: record.state, backend: record.backend,
       ...(result.stopReason ? { stop_reason: result.stopReason } : {}),
       summary: result.summary ?? "",
       workspace: { source: record.sourceWorkspace, worker: record.workerWorkspace },
@@ -496,7 +499,7 @@ export class RunManager {
 
   private async compactResult(runtime: Runtime, includeTranscript: boolean, reserveChars = 0): Promise<Record<string, unknown>> {
     const record = runtime.record; const result = record.result;
-    const output: Record<string, unknown> = { run_id: record.runId, state: record.state, backend: record.backend };
+    const output: Record<string, unknown> = { supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: record.state, backend: record.backend };
     if (!result) {
       output.summary = "Run has not produced a result yet.";
       output.warnings = [];
@@ -549,12 +552,12 @@ export class RunManager {
 
   async cancel(value: CancelToolInput): Promise<Record<string, unknown>> {
     const input = parseInput(cancelSchema, value); const runtime = this.requireRun(input.run_id);
-    if (isTerminal(runtime.record.state) || runtime.record.state === "completed" || runtime.record.state === "closing") return { run_id: input.run_id, state: runtime.record.state, next_action: this.nextAction(runtime.record, runtime.record.state) };
+    if (isTerminal(runtime.record.state) || runtime.record.state === "completed" || runtime.record.state === "closing") return { supervisor_version: runtime.record.supervisorVersion ?? null, run_id: input.run_id, state: runtime.record.state, next_action: this.nextAction(runtime.record, runtime.record.state) };
     const outcome = this.requestOutcome(runtime, { state: "cancelled" });
     this.removeFromPending(runtime);
     await this.cancelBackendSession(runtime);
     await this.serial(runtime, () => this.settle(runtime, outcome));
-    return { run_id: input.run_id, state: runtime.record.state, next_action: this.nextAction(runtime.record, runtime.record.state) };
+    return { supervisor_version: runtime.record.supervisorVersion ?? null, run_id: input.run_id, state: runtime.record.state, next_action: this.nextAction(runtime.record, runtime.record.state) };
   }
 
   async close(value: CloseToolInput): Promise<Record<string, unknown>> {
@@ -593,7 +596,7 @@ export class RunManager {
   }
 
   private closeOutcome(runtime: Runtime, cleanup: WorktreeCleanup): Record<string, unknown> {
-    return { run_id: runtime.record.runId, state: runtime.record.state, next_action: this.nextAction(runtime.record, runtime.record.state), worktree_removed: cleanup.removed, ...(cleanup.reason ? { worktree_retained_reason: cleanup.reason } : {}) };
+    return { supervisor_version: runtime.record.supervisorVersion ?? null, run_id: runtime.record.runId, state: runtime.record.state, next_action: this.nextAction(runtime.record, runtime.record.state), worktree_removed: cleanup.removed, ...(cleanup.reason ? { worktree_retained_reason: cleanup.reason } : {}) };
   }
 
   async runsList(): Promise<Record<string, unknown>[]> {
@@ -1134,7 +1137,7 @@ export class RunManager {
   private resultWire(runtime: Runtime, resultState: RunState): Record<string, unknown> {
     const record = runtime.record; const result = record.result;
     return {
-      schema_version: 1, run_id: record.runId, state: resultState, backend: record.backend,
+      schema_version: 1, supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: resultState, backend: record.backend,
       ...(result?.stopReason ? { stop_reason: result.stopReason } : {}),
       summary: result?.summary ?? "",
       workspace: { source: record.sourceWorkspace, worker: record.workerWorkspace },
