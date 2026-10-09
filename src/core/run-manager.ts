@@ -14,7 +14,7 @@ import { atomicWriteJson, sanitizeForPersistence } from "../persistence/atomic.j
 import { readNdjsonRecovering } from "../persistence/ndjson.js";
 import { EventLog } from "../persistence/event-log.js";
 import { asStorageError, storageErrorDetails } from "../persistence/storage-error.js";
-import { describeFailure, reportBackgroundFailure } from "../diagnostics/background.js";
+import { describeFailure, reportBackgroundFailure, writeDiagnostic } from "../diagnostics/background.js";
 import { createPrivateDir, resolveCanonicalRoot, resolveContextFile, isPathWithinRoot } from "../security/paths.js";
 import { redactSecrets } from "../security/redaction.js";
 import { assertNotSupervisorChild } from "../security/environment.js";
@@ -107,6 +107,8 @@ const MAX_QUEUED_RUNS = 8;
 const DAY_MS = 86_400_000;
 const RETENTION_FIRST_DELAY_MS = 5000;
 const RETENTION_INTERVAL_MS = DAY_MS;
+const SHUTDOWN_DEADLINE_MS = 10_000;
+const SHUTDOWN_TERMINATE_MS = 10_000;
 const CLEANABLE_STATES: ReadonlySet<RunState> = new Set<RunState>(["failed", "cancelled", "closed"]);
 const STATUS_TEXT_EVENT_TYPES: ReadonlySet<string> = new Set(["diagnostic", "review_integrity", "timeout", "permission_denied_by_policy"]);
 const STATUS_TEXT_CHARS = 400;
@@ -129,6 +131,8 @@ export class RunManager {
   private completionCounter = 0;
   private retentionTimer: NodeJS.Timeout | undefined;
   private retentionRun: Promise<void> = Promise.resolve();
+  private readonly unverifiedWorktrees = new Map<string, string>();
+  private readonly unreadableRecords = new Set<string>();
 
   constructor(private readonly config: SupervisorConfig, private readonly dataDir: string, backends: readonly SupervisorBackend[] = [], preAcquiredLock?: OwnerLock) {
     this.ownerLock = preAcquiredLock;
@@ -614,7 +618,9 @@ export class RunManager {
       const cleanup = await this.cleanupWorktree(runtime);
       return { run_id: runId, worktree_removed: cleanup.removed, ...(cleanup.reason ? { worktree_retained_reason: cleanup.reason } : {}) };
     }
-    return { removed_run_ids: await this.pruneRuns(false) };
+    const removed = await this.pruneRuns(false);
+    const unverified = [...this.unverifiedWorktrees].map(([run_id, worktreePath]) => ({ run_id, path: worktreePath }));
+    return { removed_run_ids: removed, ...(unverified.length ? { unverified_worktrees: unverified } : {}) };
   }
 
   startAutomaticRetention(options: { firstDelayMs?: number; intervalMs?: number } = {}): void {
@@ -642,6 +648,42 @@ export class RunManager {
       try { if (await this.pruneRun(runtime, cutoff, closeCompleted)) removed.push(runtime.record.runId); }
       catch (error) { if (!onError) throw error; onError(error); }
     }
+    if (!(this.stopping && closeCompleted)) {
+      try { removed.push(...await this.pruneUnloadedRuns(cutoff)); }
+      catch (error) { if (!onError) throw error; onError(error); }
+    }
+    return removed;
+  }
+
+  private async pruneUnloadedRuns(cutoff: number): Promise<string[]> {
+    const removed: string[] = [];
+    const owner = typeof process.getuid === "function" ? process.getuid() : undefined;
+    for (const entry of await readdir(this.runRoot, { withFileTypes: true })) {
+      if (this.stopping) break;
+      if (!entry.isDirectory() || !UUID_V4.test(entry.name) || this.runs.has(entry.name)) continue;
+      const directory = path.join(this.runRoot, entry.name);
+      const info = await lstat(directory).catch(() => undefined);
+      if (!info || info.isSymbolicLink() || !info.isDirectory() || (owner !== undefined && info.uid !== owner) || (info.mode & 0o077) !== 0) continue;
+      if (info.mtimeMs > cutoff) continue;
+      if (!await isDiscardableRecord(path.join(directory, "meta.json"))) {
+        if (!this.unreadableRecords.has(entry.name)) writeDiagnostic(`run ${entry.name} has a record this release cannot load; it was left in place`);
+        this.unreadableRecords.add(entry.name);
+        continue;
+      }
+      const worktree = path.join(this.dataDir, "worktrees", entry.name);
+      const owned = await lstat(worktree).then(() => true, (error: NodeJS.ErrnoException) => error.code !== "ENOENT");
+      if (owned) {
+        if (!this.unverifiedWorktrees.has(entry.name)) writeDiagnostic(`run ${entry.name} has an unreadable record and still owns the worktree ${worktree}; it was left in place and must be removed manually`);
+        this.unverifiedWorktrees.set(entry.name, worktree);
+        continue;
+      }
+      this.unverifiedWorktrees.delete(entry.name);
+      await rm(directory, { recursive: true, force: false });
+      removed.push(entry.name);
+    }
+    for (const runId of [...this.unverifiedWorktrees.keys()]) {
+      if (!await lstat(path.join(this.dataDir, "worktrees", runId)).then(() => true, () => false)) this.unverifiedWorktrees.delete(runId);
+    }
     return removed;
   }
 
@@ -667,7 +709,36 @@ export class RunManager {
     return true;
   }
 
-  async shutdown(): Promise<void> {
+  async shutdown(deadlineMs = SHUTDOWN_DEADLINE_MS): Promise<{ timedOut: boolean }> {
+    const graceful = this.shutdownGracefully();
+    graceful.catch(() => undefined);
+    let timer: NodeJS.Timeout | undefined;
+    const expired = new Promise<"expired">((resolve) => { timer = setTimeout(() => resolve("expired"), deadlineMs); });
+    try {
+      const winner = await Promise.race([graceful.then(() => "done" as const), expired]);
+      if (winner === "done") return { timedOut: false };
+    } finally { if (timer) clearTimeout(timer); }
+    writeDiagnostic(`shutdown exceeded ${deadlineMs} ms; terminating owned workers and releasing the storage lock, interrupted runs stay recoverable`);
+    await this.terminateOwnedWorkers();
+    await this.releaseOwnerLock();
+    return { timedOut: true };
+  }
+
+  private async terminateOwnedWorkers(): Promise<void> {
+    const terminations = [...this.runs.values()].flatMap((runtime) => {
+      const backend = runtime.backend; const handle = runtime.handle;
+      if (runtime.timer) clearTimeout(runtime.timer);
+      if (runtime.progressTimer) clearTimeout(runtime.progressTimer);
+      if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
+      if (!backend || !handle) return [];
+      return [Promise.resolve().then(() => (backend.terminateNow ? backend.terminateNow(handle) : backend.cancel(handle)))];
+    });
+    let timer: NodeJS.Timeout | undefined;
+    const cap = new Promise<void>((resolve) => { timer = setTimeout(resolve, SHUTDOWN_TERMINATE_MS); });
+    try { await Promise.race([Promise.allSettled(terminations), cap]); } finally { if (timer) clearTimeout(timer); }
+  }
+
+  private async shutdownGracefully(): Promise<void> {
     this.stopping = true;
     if (this.retentionTimer) clearTimeout(this.retentionTimer);
     this.retentionTimer = undefined;
@@ -806,7 +877,7 @@ export class RunManager {
         await backend.close(result.handle).catch(() => undefined);
         return;
       }
-      for (const response of runtime.deferredResponses.splice(0)) await backend.respond(result.handle, response).catch(() => undefined);
+      for (const response of runtime.deferredResponses.splice(0)) await backend.respond(result.handle, response).catch((error: unknown) => this.refuseUndelivered(runtime, backend, result.handle, response.requestId, error));
       if (!isTerminal(runtime.record.state) && runtime.record.state === "negotiating") await this.setState(runtime, result.initialState === "starting" ? "running" : result.initialState, { startedAt: runtime.record.startedAt ?? new Date().toISOString() });
     } catch (error) {
       await snapshotTask;
@@ -957,7 +1028,8 @@ export class RunManager {
         runtime.deferredResponses.push(response);
         if (runtime.handle && runtime.backend) {
           runtime.deferredResponses.splice(runtime.deferredResponses.indexOf(response), 1);
-          setImmediate(() => { Promise.resolve().then(() => runtime.backend?.respond(runtime.handle!, response)).catch(() => undefined); });
+          const denyBackend = runtime.backend; const denyHandle = runtime.handle;
+          setImmediate(() => { Promise.resolve().then(() => denyBackend.respond(denyHandle, response)).catch((error: unknown) => this.refuseUndelivered(runtime, denyBackend, denyHandle, pending.requestId, error)); });
         }
       } else {
         const outcome = this.requestOutcome(runtime, { state: "failed", error: supervisorError("VSUP_PERMISSION_DENIED", "The requested tool action is outside the configured safety policy.") });
@@ -969,6 +1041,12 @@ export class RunManager {
         await this.settle(runtime, outcome);
       }
     });
+  }
+
+  private async refuseUndelivered(runtime: Runtime, backend: SupervisorBackend, handle: BackendRunHandle, requestId: string, cause: unknown): Promise<void> {
+    let refused = false;
+    try { refused = await backend.refusePending?.(handle, requestId) ?? false; } catch (error) { this.reportBackground(runtime, "policy-refuse", error); }
+    await this.serial(runtime, () => this.appendEvent(runtime, { source: "supervisor", type: "permission_deny_undelivered", severity: "warning", data: { request_id: requestId, refused_directly: refused, message: describeFailure(cause) } }, true)).catch(() => undefined);
   }
 
   private async applyBackendState(runtime: Runtime, state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "acp">>): Promise<void> {
@@ -1449,6 +1527,19 @@ function hasText(value: string | undefined): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+async function isDiscardableRecord(file: string): Promise<boolean> {
+  let text: string;
+  try {
+    const info = await lstat(file);
+    if (!info.isFile() || info.size > MAX_DISCARDABLE_RECORD_BYTES) return false;
+    text = await readFile(file, "utf8");
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT";
+  }
+  if (!text.trim()) return true;
+  try { JSON.parse(text); return false; } catch { return true; }
+}
+
 async function pathExists(file: string): Promise<boolean> {
   try { await lstat(file); return true; }
   catch (error) { return (error as NodeJS.ErrnoException).code !== "ENOENT"; }
@@ -1477,6 +1568,7 @@ function hasReusableSession(record: RunRecord): boolean {
   return record.acp?.sessionId !== undefined && record.acp.capabilities?.loadSession === true;
 }
 
+const MAX_DISCARDABLE_RECORD_BYTES = 1024 * 1024;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function parseInput<T>(schema: { parse(value: unknown): T }, value: unknown): T {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0-rc.17
+
+Stability fixes (Phase 2 of the 2026-10-09 simplification plan) and the refreshed skills.
+
+- Retention now also sweeps run directories whose record cannot be loaded. One older than `retention.days` is removed only when its `meta.json` is missing, empty or not JSON; a record that is valid JSON but unloadable (another release, a file system error) is kept with a diagnostic. A directory whose worktree still exists is never removed: `runs cleanup` lists it as `unverified_worktrees` for manual removal.
+- Shutdown on client disconnect has a 10 s deadline. On expiry the supervisor terminates the worker process groups it started, releases the owner lock and exits with status 1; interrupted runs keep their saved state and are recovered on the next start, so a stuck run no longer blocks the next Codex start with `VSUP_INVALID_STATE`.
+- When an automatic policy denial cannot be delivered to an ACP worker, the pending permission request is resolved with the refusal and a `permission_deny_undelivered` warning event is recorded, instead of the turn hanging until the progress watchdog.
+- Both skills are refreshed from the target machine's skills work: separate verifier copies for tests, explicit cumulative turn budgets, acceptance and a fresh export before close. They describe the `acp` backend only and point to the coordinator scripts for baseline preparation and edit audits.
+
 ## 0.9.0-rc.16
 
 Simplification, completing Phase 1 of the 2026-10-09 review. No change to the MCP tools, allowlists, worktree model, launcher shim or permission handling.

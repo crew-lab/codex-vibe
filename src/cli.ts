@@ -18,11 +18,11 @@ import { supervisorError, type SupervisorErrorCode } from './contracts.js';
 import { environmentSecrets, redactSecrets } from './security/redaction.js';
 
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
-async function getManager(ownerLock?: OwnerLock): Promise<{ manager: RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<void> }; config: Awaited<ReturnType<typeof loadConfig>>; dataDir: string }> {
+async function getManager(ownerLock?: OwnerLock): Promise<{ manager: RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> }; config: Awaited<ReturnType<typeof loadConfig>>; dataDir: string }> {
   const config = await loadConfig({ createDataDir: true });
   const dataDir = getDataDir();
   const { RunManager } = await import('./core/run-manager.js');
-  const manager = new RunManager(config, dataDir, [], ownerLock) as RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<void> };
+  const manager = new RunManager(config, dataDir, [], ownerLock) as RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> };
   await manager.initialize();
   return { manager, config, dataDir };
 }
@@ -38,7 +38,8 @@ async function serve(ownerLock?: OwnerLock): Promise<void> {
   const close = async (): Promise<void> => {
     if (closing) return; closing = true;
     await handle.close().catch(() => {});
-    await manager.shutdown().catch((error) => process.stderr.write(`Shutdown failed: ${String((error as Error).message)}\n`));
+    const outcome = await manager.shutdown().catch((error) => { process.stderr.write(`Shutdown failed: ${String((error as Error).message)}\n`); return undefined; });
+    if (outcome?.timedOut) process.stderr.write('', () => process.exit(1));
   };
   installProcessGuards({ shutdown: close });
   process.stdin.once('end', () => { void close(); });

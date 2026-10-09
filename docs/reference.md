@@ -139,7 +139,7 @@ Installed use is `vibe-supervisor <command>`.
 | `doctor [--json] [--config <path>]` | Report local prerequisites without a model request; `--config` validates that file. Its `acp-initialize` check negotiates ACP without a prompt. |
 | `serve --stdio [--isolated]` | Run the MCP server. The client owns stdin and stdout. |
 | `runs list`, `runs show <id>`, `runs tail <id>` | Inspect saved runs. |
-| `runs cleanup [run-id]` | Retention sweep, or safe cleanup of one `failed`, `cancelled` or `closed` run. Stop the server first: storage has one owner. |
+| `runs cleanup [run-id]` | Retention sweep (lists any `unverified_worktrees` it left in place), or safe cleanup of one `failed`, `cancelled` or `closed` run. Stop the server first: storage has one owner. |
 | `--version` | Print the version. |
 
 The reviewed-baseline and edit-audit coordinator tools are repository scripts, not commands (see `scripts/README.md`). Exit status is 0 on success, 2 for usage errors and 1 otherwise; errors print `CODE: message remedy` on stderr.
