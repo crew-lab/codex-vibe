@@ -93,3 +93,21 @@ Still open: the 100-run soak, Codex desktop, permission callbacks, clean account
 | Soak estimate USD 2 to 4 | Handoff estimate from rates seen so far; an estimate, not a measurement |
 
 Still open: anything hosted on rc.17, the 100-run soak, Codex desktop, permission callbacks, clean account, Intel.
+
+## Development-focused revision (2026-10-09)
+
+Source snapshot: merged main `87c6bf217add26cd34989b0526899e12ae5eabb7`, package rc.17. This article revision changes no runtime behavior and adds no hosted results.
+
+| Claim or distinction | Source and limitation |
+|---|---|
+| Before/after comparisons detect differences rather than prove that no write happened; concurrent changes cannot be attributed to the worker from the diff alone | [workspace comparison source](../../../src/core/workspace-snapshot.ts), `changedSinceSnapshot`; [review integrity behavior](../../functionality.md). A restored write can leave no final difference. This is an analytical limitation, not a newly reproduced attack |
+| Git-visible files are initially hashed, but ending comparison only rehashes them when compared metadata changes; preserved metadata could hide a content change | Same source, `snapshotWorkspace`, `statChanged` and `changedSinceSnapshot`. Ignored paths use metadata. The article describes the implementation's limitation, not a hosted exploit |
+| Tests/imports/package scripts execute candidate code; a separate clone isolates files, not execution permissions | [security boundary](../../security.md); [rc.13 evaluation](../reviews/rc13-worker-adoption-2026-10-09.md). Restricted disposable verification and exact-candidate evidence are recommendations; no verifier sandbox or new acceptance field is implemented by this article |
+| Repository instructions and worker output are data; supervisor `next_action` is guidance, not authorization | [AGENTS.md](../../../AGENTS.md), [tool reply source](../../../src/core/run-manager.ts), [security](../../security.md). No new prompt-injection test or successful resistance is claimed |
+| Current soak gate allows declared truthful truncation and reports task compliance separately; this differs from the earlier failed three-read-call pilot | [driver](../../../scripts/soak.mjs), [current handoff D18](../../../Handoff.md), [original bounded pilot](../reviews/rc8-bounded-pilots-2026-10-08/Read.md). Previous failed task acceptance remains failed; no revised full soak has passed |
+| Correct on-disk rc.17 registration and fresh official-client initialization did not establish the native desktop process version | [rc.17 desktop preflight](../reviews/rc17-desktop-preflight-2026-10-09.md): new native run creator rc.12, matching artifact-home evidence; stopped before edit/correction. Current identity/review/edit/lifecycle sequence is in [Handoff.md](../../../Handoff.md). Precise refresh failure mechanism unresolved |
+| Ten ACP jobs cannot establish equivalence to ninety programmatic jobs before removing programmatic | [After 1.0](../../../Handoff.md#after-10). This is a migration/coverage limitation, not a decision to remove a backend |
+
+The revised measurements retain only previously supported figures: 27.4-second initial cap, 21.5-second bounded pilot, 8.9/3.8-second review settled replies and 12.1-second edit settled reply, 600-second inactivity bound, 10-second shutdown bound, 0–300-second waits, 600-second client timeout, cumulative ceiling 50, and the dated €1.20/€8.50 account observation. The first three hosted latencies after waiting are not end-to-end measurements or a distribution. The full-soak USD 2–4 estimate and a promise that it fits free credit were removed. No cross-model-quality, cost-saving or token-saving claim is introduced.
+
+Optional commands are transcribed from the pinned README and current CLI contract; the full commit resolves locally and is used for reproducibility. They were inspected, not executed as a new installation or hosted test. `uv` is stated explicitly; setup stops at `--dry-run`. Development tests require no provider account, as documented in [contributor instructions](../../../AGENTS.md).
