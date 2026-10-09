@@ -1,0 +1,52 @@
+{
+  "version": "0.9.0-rc.18",
+  "release_source": "88bb58c8340815ca78f95ab90252a284c229072e",
+  "archive_sha256": "d22acd05ef2fa5c4f697d76cf4ef26d70973699cf668200076daa2a79baebd28",
+  "release_verification": "PASS",
+  "checks_summary": [
+    "Test Files  69 passed (69)",
+    "Tests  771 passed | 2 skipped (773)"
+  ],
+  "installed_files_verified": 119,
+  "installed_cli": "PASS",
+  "official_mcp": {
+    "hosted_inference": "NOT_RUN",
+    "native_desktop_reload": "UNVERIFIED",
+    "server": {
+      "name": "vibe-supervisor",
+      "version": "0.9.0-rc.18"
+    },
+    "tools": [
+      "vibe_close",
+      "vibe_continue",
+      "vibe_edit_start",
+      "vibe_respond",
+      "vibe_result",
+      "vibe_review_start",
+      "vibe_status"
+    ],
+    "catalog_sha256": "90f0eb2c8b7d97472a28ac7ca5b32fbeb85794b0c181d1af3587c60c63949963",
+    "edit_fields": [
+      "task",
+      "cwd",
+      "base_ref",
+      "max_turns",
+      "timeout_seconds",
+      "wait_seconds"
+    ],
+    "status": "PASS",
+    "saved_runs": 0,
+    "owner_locks": 0
+  },
+  "backend_roots_limits_preserved": true,
+  "hosted_inference": "NOT_RUN",
+  "native_desktop_creator": "UNVERIFIED",
+  "lifecycle_blockers": [
+    "F8",
+    "F7",
+    "F15",
+    "F11"
+  ],
+  "published_assets": "PASS: downloaded assets byte-identical and SHA256SUMS verified",
+  "release_url": "https://github.com/crew-lab/codex-vibe/releases/tag/v0.9.0-rc.18"
+}

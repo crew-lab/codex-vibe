@@ -163,8 +163,10 @@ Target-machine housekeeping: the managed checkout is `/Users/roman/.codex/worktr
 
 ## Release artifacts
 
-The current source candidate is **0.9.0-rc.18**. Its release/install receipt is [here](docs/history/reviews/rc18-release-installation-2026-10-09.md). The package remains npm-private, ESM and MIT; distribution is a GitHub prerelease archive, not an npm registry publication. Source-only preparation scripts and dated evidence remain excluded from the npm archive.
+The current source candidate is **0.9.0-rc.18**, published as a GitHub prerelease and installed locally. Its release/install receipt is [here](docs/history/reviews/rc18-release-installation-2026-10-09.md). The package remains npm-private, ESM and MIT; distribution is a GitHub prerelease archive, not an npm registry publication. Source-only preparation scripts and dated evidence remain excluded from the npm archive.
 
 rc.18 includes preparation follow-up documentation and refreshed skills; the four reproduced runtime lifecycle blockers remain unresolved. No new hosted recovery/soak acceptance is claimed. The earlier [rc.17 installation receipt](docs/history/reviews/rc17-local-installation-2026-10-09.md) and preparing-machine hashes remain historical identities, not rc.18 bytes.
 
 Use the attached SHA256SUMS before installation. Keep rc.17 and existing session/provider directories for rollback. A fresh official-client handshake does not refresh or attest an already running native desktop connection; new hosted gates must record their actual creator and artifact.
+
+Final rc.18 packaging passed 771 tests with two optional skips, Python checks and installed-package smoke. Published asset bytes were independently downloaded and verified; local runtime/skill bytes and a fresh seven-tool rc.18 official-client handshake passed. The active native desktop creator remains unverified; no new hosted inference occurred. The release receipt distinguishes the immutable tag/archive from the later outcome documentation.

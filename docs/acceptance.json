@@ -316,6 +316,27 @@
       "scope": "controlled edit/correction and narrow coordinator-tool product edit; independent verification while open, fresh export, supported cleanup",
       "full_lifecycle": "UNVERIFIED",
       "evidence": "history/reviews/rc17-preparation-followup-2026-10-09.md"
+    },
+    {
+      "date": "2026-10-09",
+      "version": "0.9.0-rc.18",
+      "source_commit": "88bb58c8340815ca78f95ab90252a284c229072e",
+      "name": "rc18-github-release-local-installation",
+      "status": "PASS_SCOPED",
+      "archive_sha256": "d22acd05ef2fa5c4f697d76cf4ef26d70973699cf668200076daa2a79baebd28",
+      "release_verification": "PASS: 771 tests, two skips; Python suite, lint/typecheck/build, installed smoke",
+      "published_assets": "PASS: independently downloaded byte-identical",
+      "installation": "PASS: 119 runtime/skill files match",
+      "fresh_official_mcp": "PASS: rc.18, seven ACP tools; initialization only",
+      "native_desktop_reload": "UNVERIFIED",
+      "hosted_inference": "NOT_RUN",
+      "lifecycle_blockers": [
+        "F8",
+        "F7",
+        "F15",
+        "F11"
+      ],
+      "evidence": "history/reviews/rc18-release-installation-2026-10-09.md"
     }
   ],
   "current_candidate": {
