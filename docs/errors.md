@@ -21,7 +21,7 @@ An error carries `code`, `message`, `remediation`, `retryable` and sometimes `de
 | `VSUP_INPUT_REQUIRED` | An input request is pending; the action cannot proceed until it is answered. | Answer the pending input request with vibe_respond before continuing. | no |
 | `VSUP_REQUEST_EXPIRED` | The permission or input request is no longer pending, for example after a restart. | Start a new run because the pending request has expired. | no |
 | `VSUP_SESSION_NOT_RESUMABLE` | The saved backend session cannot be continued or reloaded. | Start a new run; this backend session cannot be resumed. | no |
-| `VSUP_BACKEND_UNAVAILABLE` | No backend could be selected, or the launcher interpreter is missing. | Install or configure an available backend and retry. | no |
+| `VSUP_BACKEND_UNAVAILABLE` | The configured backend is not available, or the launcher interpreter is missing. | Install or configure an available backend and retry. | no |
 | `VSUP_BACKEND_CRASHED` | The Vibe process exited before the turn finished. | Inspect the run's diagnostic events and start a new run. | no |
 | `VSUP_TIMEOUT` | The run deadline elapsed. | Increase the timeout or simplify the task, then start a new run. | no |
 | `VSUP_RATE_LIMITED` | Vibe or its provider answered with HTTP 429. | Wait for the service rate limit to clear and retry. | yes |

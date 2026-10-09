@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { open, readFile, readdir, realpath, rename, rm, lstat } from "node:fs/promises";
 import path from "node:path";
 import type {
-  BackendCallbacks, BackendCapabilities, BackendKind, BackendRespondInput, BackendRunHandle,
+  BackendCallbacks, BackendKind, BackendRespondInput, BackendRunHandle,
   PendingRequest, ReviewStartToolInput, EditStartToolInput, StatusToolInput, ContinueToolInput,
   RespondToolInput, ResultToolInput, WaitOptions, CancelToolInput, CloseToolInput, RunLimits, RunMode, RunRecord, RunState, SupervisorBackend,
   ReviewIntegrity, SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent
@@ -19,8 +19,6 @@ import { createPrivateDir, resolveCanonicalRoot, resolveContextFile, isPathWithi
 import { redactSecrets } from "../security/redaction.js";
 import { assertNotSupervisorChild } from "../security/environment.js";
 import { createDetachedWorktree, exportDirtySnapshot, removeVerifiedWorktree, resolveGitRoot } from "../git/worktree.js";
-import { SUPPORTED_VIBE } from "../backends/pinned.js";
-import { interpreterMissingMessage } from "../backends/launcher.js";
 import { assertNoProjectVibeExtensions, assertSimpleGlobRoot } from "../backends/profile.js";
 import { eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
@@ -112,7 +110,6 @@ const CLEANABLE_STATES: ReadonlySet<RunState> = new Set<RunState>(["failed", "ca
 const STATUS_TEXT_EVENT_TYPES: ReadonlySet<string> = new Set(["diagnostic", "review_integrity", "timeout", "permission_denied_by_policy"]);
 const STATUS_TEXT_CHARS = 400;
 const MAX_RETAINED_REASON_CHARS = 400;
-const MAX_PROBE_REASON_CHARS = 300;
 const DEFAULT_REMEDIATION = "Inspect the run status and supervisor diagnostics, then retry if safe.";
 const NO_SESSION_MESSAGE = "No live backend session is available for continuation.";
 
@@ -775,7 +772,7 @@ export class RunManager {
         await this.persist(runtime);
       }
       if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
-      const backend = await this.selectBackend();
+      const backend = this.selectBackend();
       runtime.backend = backend; runtime.record.backend = backend.kind;
       await snapshotTask;
       if (snapshotTask) await this.persist(runtime);
@@ -833,23 +830,10 @@ export class RunManager {
     }
   }
 
-  private async selectBackend(): Promise<SupervisorBackend> {
-    const kind = this.config.backend;
-    const candidates = kind === "auto" ? ["acp", "programmatic"] as const : [kind];
-    if (kind !== "auto") {
-      const backend = this.backends.get(kind);
-      if (!backend) throw backendUnavailableError([]);
-      return backend;
-    }
-    const failures: ProbeFailure[] = [];
-    for (const candidate of candidates) {
-      const backend = this.backends.get(candidate);
-      if (!backend) continue;
-      const capability = await backend.probe();
-      if (capability.available) return backend;
-      failures.push({ backend: candidate, capability });
-    }
-    throw backendUnavailableError(failures);
+  private selectBackend(): SupervisorBackend {
+    const backend = this.backends.get(this.config.backend);
+    if (!backend) throw codedError("VSUP_BACKEND_UNAVAILABLE", `The ${this.config.backend} backend is not available.`);
+    return backend;
   }
 
   private callbacks(runtime: Runtime): BackendCallbacks {
@@ -1478,38 +1462,7 @@ function statusText(event: SupervisorEvent): { text?: string } {
   return {};
 }
 
-interface ProbeFailure { backend: BackendKind; capability: BackendCapabilities }
 interface WorktreeCleanup { removed: boolean; reason?: string }
-
-function probeReason(capability: BackendCapabilities): string {
-  const details = capability.details ?? {};
-  const reason = typeof details.reason === "string" ? details.reason : typeof details.error === "string" ? details.error : "The availability probe did not pass.";
-  return redactSecrets(reason).slice(0, MAX_PROBE_REASON_CHARS);
-}
-
-function backendUnavailableError(failures: ProbeFailure[]): Error {
-  const candidates = failures.map(({ backend, capability }) => {
-    const details = capability.details ?? {};
-    return {
-      backend, reason: probeReason(capability),
-      ...(typeof details.detected_version === "string" ? { detected_version: details.detected_version } : {}),
-      ...(typeof details.stderr_tail === "string" ? { stderr_tail: details.stderr_tail } : {})
-    };
-  });
-  const mismatch = failures.find(({ capability }) => typeof capability.details?.detected_version === "string" && capability.details.detected_version !== SUPPORTED_VIBE);
-  if (mismatch) return codedError("VSUP_VIBE_VERSION_UNSUPPORTED", `Found Vibe ${String(mismatch.capability.details?.detected_version)} (${mismatch.backend} backend); this release supports exactly Vibe ${SUPPORTED_VIBE}.`, { candidates });
-  if (failures.length > 0 && failures.every(({ capability }) => capability.details?.executable_missing === true)) {
-    return failures[0]?.backend === "acp"
-      ? codedError("VSUP_VIBE_ACP_NOT_FOUND", "The vibe-acp executable was not found.", { candidates })
-      : codedError("VSUP_VIBE_NOT_FOUND", "The vibe executable was not found.", { candidates });
-  }
-  const interpreter = failures.find(({ capability }) => capability.details?.interpreter_missing === true);
-  if (interpreter) {
-    const name = interpreter.capability.details?.interpreter;
-    return codedError("VSUP_BACKEND_UNAVAILABLE", interpreterMissingMessage(interpreter.backend, name), { candidates });
-  }
-  return codedError("VSUP_BACKEND_UNAVAILABLE", "No configured backend passed its availability probe.", { candidates });
-}
 
 function describeUnreadableLog(error: unknown): NonNullable<Runtime["logUnavailable"]> {
   const code = (error as { code?: unknown } | null | undefined)?.code;

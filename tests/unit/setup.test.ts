@@ -335,60 +335,48 @@ describe('doctor --config and command aliases', () => {
     await runCli(['doctor', '--config']);
     expect(process.exitCode).toBe(2);
   });
-
-  it('config validate prints a pointer to doctor on stderr and still validates', async () => {
-    const box = await sandbox(); capture();
-    await mkdir(box.data, { recursive: true });
-    const good = path.join(box.data, 'good.toml'); await writeFile(good, 'version = 1\n');
-    await runCli(['config', 'validate', good]);
-    expect(errors.join('')).toMatch(/doctor --config/);
-    expect(output.join('')).toContain('"valid": true');
-    expect(process.exitCode).toBeUndefined();
-    errors.length = 0;
-    const bad = path.join(box.data, 'bad.toml'); await writeFile(bad, 'version = 2\n');
-    await runCli(['config', 'validate', bad]);
-    expect(errors.join('')).toMatch(/doctor --config/);
-    expect(process.exitCode).toBe(1);
-  });
-
-  it('test-acp prints a pointer to doctor on stderr and keeps its exit code', async () => {
-    const box = await sandbox(); capture();
-    await mkdir(box.data, { recursive: true });
-    await writeFile(box.config, `version = 1\n\n[paths]\nvibe_acp = ${JSON.stringify(path.join(box.bin, 'vibe-acp'))}\n`);
-    await runCli(['test-acp']);
-    expect(errors.join('')).toMatch(/doctor/);
-    expect(process.exitCode).toBe(1);
-  }, 30_000);
 });
 
-describe('init template', () => {
-  it('writes only version, backend, allowed roots and an empty paths table without comments', async () => {
+describe('setup config template and dry run', () => {
+  it('writes only version, backend, allowed roots and paths without comments', async () => {
     const box = await sandbox(); capture();
-    await runCli(['init']);
+    await runCli(['setup', '--workspace', box.workspace]);
     const source = await readFile(box.config, 'utf8');
     expect(source).not.toContain('#');
-    const parsed = parse(source);
-    expect(Object.keys(parsed).sort()).toEqual(['allowed_workspace_roots', 'backend', 'paths', 'version']);
-    expect(parsed.allowed_workspace_roots).toEqual([]);
-    expect(parsed.paths).toEqual({});
+    expect(Object.keys(parse(source)).sort()).toEqual(['allowed_workspace_roots', 'backend', 'paths', 'version']);
   });
-});
 
-describe('configure-codex arguments', () => {
-  it('rejects the removed --scope and --path= forms', async () => {
+  it('--dry-run previews the config and Codex change without writing anything or revealing unrelated Codex values', async () => {
+    const box = await sandbox(); capture();
+    await mkdir(path.dirname(box.codex));
+    await writeFile(box.codex, 'api_key = "UNRELATED_SECRET_SENTINEL"\n');
+    await runCli(['setup', '--workspace', box.workspace, '--dry-run']);
+    expect(process.exitCode).toBeUndefined();
+    expect(output.join('')).toContain('mcp_servers.vibe-supervisor');
+    expect(output.join('')).toContain('Would allow workspace');
+    expect(output.join('')).not.toContain('UNRELATED_SECRET_SENTINEL');
+    expect(await exists(box.config)).toBe(false);
+    expect(await readFile(box.codex, 'utf8')).toBe('api_key = "UNRELATED_SECRET_SENTINEL"\n');
+    expect((await readdir(path.dirname(box.codex))).length).toBe(1);
+  });
+
+  it('--dry-run honors --codex project and --isolated, and refuses --yes with --dry-run', async () => {
+    const box = await sandbox(); capture();
+    await runCli(['setup', '--workspace', box.workspace, '--codex', 'project', '--isolated', '--dry-run']);
+    expect(output.join('')).toContain(path.join(box.workspace, '.codex', 'config.toml'));
+    expect(output.join('')).toContain('--isolated');
+    expect(await exists(path.join(box.workspace, '.codex'))).toBe(false);
+    process.exitCode = undefined;
+    await runCli(['setup', '--workspace', box.workspace, '--yes', '--dry-run']);
+    expect(process.exitCode).toBe(2);
+  });
+
+  it('no longer accepts the removed commands', async () => {
     await sandbox(); capture();
-    for (const args of [['--scope', 'user'], ['--scope=user'], ['--project', '--path=/tmp']]) {
+    for (const args of [['init'], ['configure-codex', '--user'], ['test-acp'], ['config', 'validate']]) {
       process.exitCode = undefined;
-      await runCli(['configure-codex', ...args, '--dry-run']);
+      await runCli(args);
       expect(process.exitCode).toBe(2);
     }
-    expect(output.join('')).not.toContain('mcp_servers');
-  });
-
-  it('keeps --project --path <dir> for an explicit project directory', async () => {
-    const box = await sandbox(); capture();
-    await runCli(['configure-codex', '--project', '--path', box.workspace, '--dry-run']);
-    expect(process.exitCode).toBeUndefined();
-    expect(output.join('')).toContain(path.join(box.workspace, '.codex', 'config.toml'));
   });
 });

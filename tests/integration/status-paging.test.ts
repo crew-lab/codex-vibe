@@ -26,7 +26,7 @@ class FakeBackend implements SupervisorBackend {
   async recover(_record: RunRecord) { return undefined; }
 }
 
-async function harness(backend: 'auto' | 'programmatic') {
+async function harness(backend: 'programmatic') {
   const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-paging-')); roots.push(parent);
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data');
   await mkdir(source); await writeFile(path.join(source, 'tracked.txt'), 'original\n');
@@ -62,8 +62,8 @@ describe('vibe_status paging through the MCP size cap', () => {
 });
 
 describe('next_action follows the run backend', () => {
-  it('does not offer vibe_continue to a programmatic run started through backend auto', async () => {
-    const { manager, fake, runId } = await harness('auto');
+  it('does not offer vibe_continue to a programmatic run of the programmatic backend', async () => {
+    const { manager, fake, runId } = await harness('programmatic');
     try {
       await fake.callbacks.get(runId)!.onState('completed', { result: { stopReason: 'end_turn', summary: 'done' } });
       const status = await manager.status({ run_id: runId }) as { backend: string; next_action: string; result: { next_action: string } };

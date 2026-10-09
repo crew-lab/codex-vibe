@@ -2,7 +2,6 @@ import { resolve } from 'node:path';
 import { getConfigPath, loadConfig } from '../config/config.js';
 import { ignoredConfigKeys, validateConfig } from '../config/validation.js';
 import { formatDoctorCheck, runDoctor } from '../diagnostics/doctor.js';
-import { environmentSecrets, redactSecrets } from '../security/redaction.js';
 import type { SupervisorConfig } from '../contracts.js';
 import { configInvalid, fail } from './fail.js';
 import { readConfigDocument } from './setup.js';
@@ -41,19 +40,4 @@ export async function doctorCommand(args: string[]): Promise<void> {
   if (options.json) print({ ...report, warnings });
   else print([...report.checks.map(formatDoctorCheck), ...warnings.map((warning) => `WARN config: ${warning}`)].join('\n'));
   if (!report.ok) process.exitCode = 1;
-}
-
-export async function testAcpCommand(args: string[]): Promise<void> {
-  if (args.length) fail('test-acp accepts no options.', 2);
-  process.stderr.write('test-acp is now part of doctor: run "vibe-supervisor doctor" and read its acp-initialize check.\n');
-  const config = await loadConfig();
-  const backendModulePath = '../backends/acp.js';
-  const { AcpBackend } = await import(backendModulePath);
-  const report = await new AcpBackend(config).probe();
-  print(report);
-  if (!report.available) {
-    process.exitCode = 1;
-    const tail = report.details?.stderr_tail;
-    if (typeof tail === 'string' && tail) process.stderr.write(`vibe-acp stderr:\n${redactSecrets(tail, environmentSecrets())}\n`);
-  }
 }

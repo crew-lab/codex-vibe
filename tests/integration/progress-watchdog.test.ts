@@ -97,7 +97,7 @@ async function setup(progressSeconds: number, options: { git?: boolean; backend?
     await exec("git", ["commit", "-qm", "baseline"], { cwd: source });
   }
   const backend = options.backend?.(data, source, pidDir) ?? new ScriptedBackend();
-  const config: SupervisorConfig = { ...DEFAULT_CONFIG, backend: "auto", allowedWorkspaceRoots: [source], limits: { ...DEFAULT_CONFIG.limits, workerProgressTimeoutSeconds: progressSeconds }, ...options.config };
+  const config: SupervisorConfig = { ...DEFAULT_CONFIG, backend: backend.kind, allowedWorkspaceRoots: [source], limits: { ...DEFAULT_CONFIG.limits, workerProgressTimeoutSeconds: progressSeconds }, ...options.config };
   const manager = new RunManager(config, data, [backend]);
   return { parent, source, data, pidDir, backend, manager };
 }

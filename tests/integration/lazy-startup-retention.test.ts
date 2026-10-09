@@ -11,7 +11,11 @@ import { SCHEMA_VERSION } from '../../src/contracts.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { eventToWire, runToWire } from '../../src/core/serialization.js';
-import { runCli } from '../../src/cli.js';
+import { applyCodexPlan, planCodexConfig } from '../../src/cli/codex.js';
+async function configureCodex(): Promise<void> {
+  const plan = await planCodexConfig('user', process.cwd(), false);
+  if (plan.changed) await applyCodexPlan(plan);
+}
 
 const canonicalTmp = await realpath(tmpdir());
 const roots: string[] = [];
@@ -264,14 +268,12 @@ describe('Codex startup timeout', () => {
     const home = await mkdtemp(path.join(canonicalTmp, 'vsup-codex-')); roots.push(home);
     await mkdir(path.join(home, '.codex'));
     vi.stubEnv('HOME', home);
-    const written: string[] = [];
-    vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => { written.push(String(chunk)); return true; }) as typeof process.stdout.write);
-    await runCli(['configure-codex', '--user', '--dry-run']);
-    expect(written.join('')).toContain('startup_timeout_sec = 30');
-    expect(written.join('')).toContain('tool_timeout_sec = 600');
+    const preview = (await planCodexConfig('user', process.cwd(), false)).block;
+    expect(preview).toContain('startup_timeout_sec = 30');
+    expect(preview).toContain('tool_timeout_sec = 600');
     const file = path.join(home, '.codex', 'config.toml');
     await writeFile(file, '[mcp_servers.vibe-supervisor]\ncommand = "node"\nargs = ["x"]\ntool_timeout_sec = 600\n');
-    await runCli(['configure-codex', '--user']);
+    await configureCodex();
     const entry = (parse(readFileSync(file, 'utf8')) as { mcp_servers: Record<string, Record<string, unknown>> }).mcp_servers['vibe-supervisor']!;
     expect(entry).toMatchObject({ startup_timeout_sec: 30, tool_timeout_sec: 600 });
     const project = JSON.parse(readFileSync(fileURLToPath(new URL('../../.mcp.json', import.meta.url)), 'utf8')) as { mcpServers: Record<string, Record<string, unknown>> };

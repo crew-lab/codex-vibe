@@ -2,7 +2,7 @@
 
 A local MCP server that lets Codex delegate code reviews and isolated edits to Mistral Vibe. Reviews are read-only. Edits run in a detached Git worktree and come back as a patch that you apply yourself.
 
-This is an application-level policy boundary, **not an operating-system sandbox**: it validates workspaces, filters the worker's environment and tools and bounds its output, but a delegated run still executes with your account's permissions and permitted file content goes to Mistral. The current package is `0.9.0-rc.14`, a private, unpublished release candidate (MIT licensed).
+This is an application-level policy boundary, **not an operating-system sandbox**: it validates workspaces, filters the worker's environment and tools and bounds its output, but a delegated run still executes with your account's permissions and permitted file content goes to Mistral. The current package is `0.9.0-rc.15`, a private, unpublished release candidate (MIT licensed).
 
 ## Prerequisites
 
@@ -91,7 +91,7 @@ From a clone, link `skills/vibe-supervisor` and `skills/vibe-acp` from the repos
 | `VSUP_AUTH_REQUIRED` | Run `vibe` in a terminal and sign in again; never put a key in a task. |
 | Tools absent in Codex | Restart Codex; check `[mcp_servers.vibe-supervisor]` in `~/.codex/config.toml` and the client's startup log. |
 | `VSUP_INVALID_STATE` naming a lock | Another supervisor owns the data directory. Stop it, or register with `--isolated`; never delete a live lock. |
-| `vibe_continue` or `vibe_respond` missing | They exist only when `backend` is `acp` or `auto` in the config. |
+| `vibe_continue` or `vibe_respond` missing | They exist only when `backend` is `acp` in the config. |
 | Run ended early | Read `stop_reason` and `warnings`; retain artifacts and reassess scope. Increasing a budget or starting a replacement requires authorization in the execution plan. |
 | Worktree not removed on close | The patch no longer matches the worktree or residual files exist; inspect `worktree_retained_reason`. |
 
@@ -112,12 +112,6 @@ Historical native desktop and hosted results are version-bound. The rc.13 prepar
 - [Error codes](docs/errors.md), [security](docs/security.md), [compatibility](docs/compatibility.md), [changelog](CHANGELOG.md).
 - [Contributor instructions](https://github.com/crew-lab/codex-vibe/blob/main/AGENTS.md) and [implementation handoff](https://github.com/crew-lab/codex-vibe/blob/main/Handoff.md) in the repository.
 
-## Reviewed baseline preflight
+## Coordinator scripts
 
-A detached edit starts at base_ref; dirty source changes are not copied. The coordinator prepares reviewed changes before inference with `vibe-supervisor baseline prepare /absolute/private/manifest.json` (dry-run), then an explicit `--create` to make a disposable snapshot repository and local snapshot commits. It preserves source files/index/refs and requires existing canonical allowlist roots. Use the returned source_workspace/base_ref and bind the original reviewed baseline by hashes. Never ask the model to recreate baseline files from pasted diffs, nor modify a live worker worktree.
-
-Delegate one bounded increment with the real read_file/grep/write_file/edit inventory and file ownership. After an edit-match error re-read the current file; after a second repeated match error reassess from artifacts. This is coordinator guidance, not an automatic runtime stop. Reserve correction capacity within the cumulative ceiling; no automatic limit increase or task replay. Tests/dependencies/builds remain in a separate exact candidate copy.
-
-After a settled ACP edit use `vibe-supervisor audit-edit /canonical/private/home run-id`, optionally with `--files /absolute/private/scope.json` for argument-path evidence only. The sanitized audit distinguishes assistant messages, unique tool calls, failed updates and unique failures. It classifies only proven failed formats; Unknown tool is distinct from Supervisor policy denial. Unsafe/incomplete/unsupported records remain unverified. Native histories, arguments, commands and reasoning stay private. Only independently verified deltas are manually integrated; fetch a fresh export before verified close/cleanup.
-
-For edits, keep the session open through independent tests and review. If a usable candidate needs correction, use the same session within its remaining cumulative budget, recheck the fresh export, and only then close. A final answer is candidate readiness, not acceptance.
+Coordinator scripts for preparing a reviewed baseline and auditing a settled edit run live in the repository's `scripts/` directory (see `scripts/README.md`); they are not part of the package.

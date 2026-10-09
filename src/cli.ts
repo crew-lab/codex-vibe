@@ -1,20 +1,15 @@
 #!/usr/bin/env node
-import { lstat, open, readFile, readdir, realpath } from 'node:fs/promises';
+import { lstat, open, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { constants as fsConstants } from 'node:fs';
-import { parse } from 'smol-toml';
-import { configFileIgnoredKeys, getConfigPath, getDataDir, loadConfig } from './config/config.js';
-import { ignoredConfigKeys, validateConfig } from './config/validation.js';
+import { configFileIgnoredKeys, getDataDir, loadConfig } from './config/config.js';
 import type { OwnerLock } from './core/owner-lock.js';
 import { prepareIsolatedHome } from './config/isolated-home.js';
 import { APP_VERSION } from './version.js';
-import { applyCodexPlan, planCodexConfig, type CodexScope } from './cli/codex.js';
-import { doctorCommand, testAcpCommand } from './cli/diagnose.js';
+import { doctorCommand } from './cli/diagnose.js';
 import { fail } from './cli/fail.js';
-import { baselineCommand, auditEditCommand } from './cli/worker-tools.js';
-import { allowCommand, initialConfigText, setupCommand } from './cli/setup.js';
-import { createPrivateDir, createPrivateFile } from './security/paths.js';
+import { allowCommand, setupCommand } from './cli/setup.js';
 import { installProcessGuards } from './diagnostics/background.js';
 import { readNdjsonRecovering } from './persistence/ndjson.js';
 import { startMcpStdio } from './mcp/server.js';
@@ -23,33 +18,6 @@ import { supervisorError, type SupervisorErrorCode } from './contracts.js';
 import { environmentSecrets, redactSecrets } from './security/redaction.js';
 
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
-async function initConfig(): Promise<void> {
-  const dir = getDataDir(); await createPrivateDir(dir);
-  const config = getConfigPath();
-  try { await lstat(config); fail(`Config already exists at ${config}; edit it directly or back it up first.`, 2); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-  await createPrivateFile(config, initialConfigText());
-  print(`Created private config at ${config}`);
-}
-
-async function validateConfigFile(file: string): Promise<void> {
-  const source = await readFile(file, 'utf8');
-  if (Buffer.byteLength(source) > 1_048_576) fail('Config exceeds 1 MiB.', 2);
-  const raw = parse(source);
-  const config = validateConfig(raw);
-  const ignored = ignoredConfigKeys(raw);
-  if (ignored.length) process.stderr.write(`Ignored config keys (no effect): ${ignored.join(', ')}\n`);
-  print({ valid: true, config, ...(ignored.length ? { ignored_keys: ignored } : {}) });
-}
-
-async function configureCodex(scope: CodexScope, dryRun: boolean, projectPath = process.cwd(), isolated = false): Promise<void> {
-  const plan = await planCodexConfig(scope, projectPath, isolated);
-  if (!plan.changed) { print({ changed: false, file: plan.file, config: plan.block }); return; }
-  if (dryRun) { print({ changed: true, file: plan.file, preview: plan.block }); return; }
-  const { backup } = await applyCodexPlan(plan);
-  print({ changed: true, file: plan.file, backup });
-}
-
 async function getManager(ownerLock?: OwnerLock): Promise<{ manager: RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<void> }; config: Awaited<ReturnType<typeof loadConfig>>; dataDir: string }> {
   const config = await loadConfig({ createDataDir: true });
   const dataDir = config.paths?.dataDir ?? getDataDir();
@@ -140,29 +108,8 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   try {
     if (command === '--version' || command === '-v') { print(APP_VERSION); return; }
     if (command === 'help' || command === '--help' || command === '-h' || !command) {
-      print('Usage: vibe-supervisor <setup --workspace <dir> [--codex user|project] [--isolated] [--yes]|allow <dir>|doctor [--json] [--config <path>]|serve --stdio [--isolated]|init|configure-codex --user|--project [--path <dir>] [--dry-run] [--isolated]|runs list|show|tail|cleanup [run-id]|baseline prepare manifest.json [--create]|audit-edit private-home run-id [--files /absolute/private/scope.json]|--version>'); return;
+      print('Usage: vibe-supervisor <setup --workspace <dir> [--codex user|project] [--isolated] [--yes|--dry-run]|allow <dir>|doctor [--json] [--config <path>]|serve --stdio [--isolated]|runs list|show|tail|cleanup [run-id]|--version>'); return;
     }
-    if (command === 'init') { if (args.length) fail('init accepts no options.', 2); return await initConfig(); }
-    if (command === 'config' && args[0] === 'validate') {
-      if (args.length > 2) fail('Usage: vibe-supervisor config validate [path]', 2);
-      process.stderr.write('config validate is now part of doctor: run "vibe-supervisor doctor --config <path>".\n');
-      return await validateConfigFile(args[1] ?? getConfigPath());
-    }
-    if (command === 'configure-codex') {
-      const known = new Set(['--user', '--project', '--dry-run', '--isolated']);
-      for (let i = 0; i < args.length; i++) {
-        const arg = args[i] ?? '';
-        if (arg === '--path') { const next = args[i + 1]; if (!next || next.startsWith('--')) fail('--path requires a value.', 2); i++; continue; }
-        if (!known.has(arg)) fail(arg.startsWith('--') ? 'Unknown configure-codex option.' : `Unexpected configure-codex argument: ${arg}`, 2);
-      }
-      if (args.includes('--user') && args.includes('--project')) fail('Choose only one scope.', 2);
-      const pathIndex = args.indexOf('--path');
-      if (pathIndex >= 0 && !args.includes('--project')) fail('--path requires --project.', 2);
-      const scope: CodexScope = args.includes('--project') ? 'project' : 'user';
-      return await configureCodex(scope, args.includes('--dry-run'), pathIndex >= 0 ? args[pathIndex + 1] : process.cwd(), args.includes('--isolated'));
-    }
-    if (command === 'baseline') { print(await baselineCommand(args)); return; }
-    if (command === 'audit-edit') { const report = await auditEditCommand(args); print(report); if ((report as { status?: string }).status !== 'validated') process.exitCode = 1; return; }
     if (command === 'doctor') return await doctorCommand(args);
     if (command === 'setup') return await setupCommand(args);
     if (command === 'allow') return await allowCommand(args);
@@ -177,7 +124,6 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
       return await serve();
     }
     if (command === 'runs') return await runsCommand(args);
-    if (command === 'test-acp') return await testAcpCommand(args);
     fail(`Unknown command: ${command}`, 2);
   } catch (error) {
     const errorValue = error && typeof error === 'object' ? error as { code?: unknown; message?: unknown; supervisor?: unknown } : {};

@@ -1,14 +1,12 @@
-import { chmod, mkdtemp, mkdir, readFile, readdir, realpath, rm, utimes, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BackendCallbacks, BackendCapabilities, PendingRequest, StartRunInput } from '../../src/contracts.js';
+import type { BackendCallbacks, PendingRequest, StartRunInput } from '../../src/contracts.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { AcpBackend } from '../../src/backends/acp.js';
-import { ProgrammaticBackend } from '../../src/backends/programmatic.js';
-import { PROBE_FAILURE_TTL_MS } from '../../src/backends/probe-cache.js';
 import type { VibeChildProfile } from '../../src/backends/profile.js';
 import type { VibeLaunch } from '../../src/backends/launcher.js';
 
@@ -52,153 +50,6 @@ async function writeExecutable(file: string, body: string): Promise<void> {
   await writeFile(file, body);
   await chmod(file, 0o755);
 }
-
-const available: BackendCapabilities = { available: true, backend: 'acp', executable: 'x', version: '2.25.8', supportsContinue: true, supportsPermissionResponse: true };
-const unavailable: BackendCapabilities = { available: false, backend: 'acp', executable: 'x', supportsContinue: false, supportsPermissionResponse: false, details: { reason: 'nope' } };
-
-class ProbeCountingAcp extends AcpBackend {
-  runs = 0;
-  result: BackendCapabilities = available;
-  delayMs = 0;
-  constructor(private readonly script: string) { super({ ...DEFAULT_CONFIG, backend: 'acp', paths: { vibeAcp: script } }); }
-  protected override executable(): string { return this.script; }
-  protected override async runProbe(): Promise<BackendCapabilities> {
-    this.runs += 1;
-    if (this.delayMs) await new Promise((resolve) => setTimeout(resolve, this.delayMs));
-    return this.result;
-  }
-}
-
-describe('backend probe cache', () => {
-  async function acpScript() {
-    const root = await makeRoot();
-    const script = path.join(root, 'vibe-acp');
-    await writeExecutable(script, '#!/bin/sh\nexit 0\n');
-    return { root, script };
-  }
-
-  it('probes once for repeated calls', async () => {
-    const { script } = await acpScript();
-    const backend = new ProbeCountingAcp(script);
-    await backend.probe(); await backend.probe(); await backend.probe();
-    expect(backend.runs).toBe(1);
-  });
-
-  it('re-probes when the executable changes', async () => {
-    const { script } = await acpScript();
-    const backend = new ProbeCountingAcp(script);
-    await backend.probe();
-    const later = new Date(Date.now() + 60_000);
-    await utimes(script, later, later);
-    await backend.probe();
-    expect(backend.runs).toBe(2);
-    await writeExecutable(script, '#!/bin/sh\nexit 1\n');
-    await backend.probe();
-    expect(backend.runs).toBe(3);
-  });
-
-  it('re-probes when the launcher interpreter changes', async () => {
-    const root = await makeRoot();
-    const interpreter = path.join(root, 'python-like');
-    await writeExecutable(interpreter, '#!/bin/sh\nexit 0\n');
-    const script = path.join(root, 'vibe-acp');
-    await writeExecutable(script, `#!${interpreter}\n`);
-    const backend = new ProbeCountingAcp(script);
-    await backend.probe(); await backend.probe();
-    expect(backend.runs).toBe(1);
-    const later = new Date(Date.now() + 60_000);
-    await utimes(interpreter, later, later);
-    await backend.probe();
-    expect(backend.runs).toBe(2);
-  });
-
-  it('expires a successful probe after the success TTL', async () => {
-    const { script } = await acpScript();
-    const backend = new ProbeCountingAcp(script);
-    vi.useFakeTimers({ toFake: ['Date'] });
-    await backend.probe();
-    vi.advanceTimersByTime(9 * 60_000);
-    await backend.probe();
-    expect(backend.runs).toBe(1);
-    vi.advanceTimersByTime(2 * 60_000);
-    await backend.probe();
-    expect(backend.runs).toBe(2);
-  });
-
-  it('retries a failed probe after the short TTL only', async () => {
-    const { script } = await acpScript();
-    const backend = new ProbeCountingAcp(script);
-    backend.result = unavailable;
-    vi.useFakeTimers({ toFake: ['Date'] });
-    expect((await backend.probe()).available).toBe(false);
-    vi.advanceTimersByTime(10_000);
-    await backend.probe();
-    expect(backend.runs).toBe(1);
-    backend.result = available;
-    vi.advanceTimersByTime(55_000);
-    expect((await backend.probe()).available).toBe(true);
-    expect(backend.runs).toBe(2);
-  });
-
-  it('keeps a failed probe for sixty seconds', async () => {
-    const { script } = await acpScript();
-    const backend = new ProbeCountingAcp(script);
-    backend.result = unavailable;
-    vi.useFakeTimers({ toFake: ['Date'] });
-    await backend.probe();
-    vi.advanceTimersByTime(59_000);
-    await backend.probe();
-    expect(backend.runs).toBe(1);
-    vi.advanceTimersByTime(2_000);
-    await backend.probe();
-    expect(backend.runs).toBe(2);
-    expect(PROBE_FAILURE_TTL_MS).toBe(60_000);
-  });
-
-  it('shares one in-flight probe between concurrent callers', async () => {
-    const { script } = await acpScript();
-    const backend = new ProbeCountingAcp(script);
-    backend.delayMs = 100;
-    const results = await Promise.all(Array.from({ length: 8 }, () => backend.probe()));
-    expect(backend.runs).toBe(1);
-    expect(results.every((result) => result.available)).toBe(true);
-  });
-
-  it('bypasses the cache with fresh and refreshes the entry', async () => {
-    const { script } = await acpScript();
-    const backend = new ProbeCountingAcp(script);
-    await backend.probe();
-    await backend.probe({ fresh: true });
-    expect(backend.runs).toBe(2);
-    await backend.probe();
-    expect(backend.runs).toBe(2);
-  });
-
-  it('does not share the cache between backend instances', async () => {
-    const { script } = await acpScript();
-    const first = new ProbeCountingAcp(script); const second = new ProbeCountingAcp(script);
-    await first.probe(); await second.probe();
-    expect(first.runs + second.runs).toBe(2);
-  });
-
-  it('caches the programmatic version probe and honours executable changes and fresh', async () => {
-    const root = await makeRoot();
-    const counter = path.join(root, 'count');
-    const script = path.join(root, 'vibe');
-    await writeExecutable(script, `#!/bin/sh\necho x >> ${counter}\necho "vibe 2.25.8"\n`);
-    const backend = new ProgrammaticBackend({ ...DEFAULT_CONFIG, backend: 'programmatic', paths: { vibe: script } });
-    const spawns = async () => (await readFile(counter, 'utf8').catch(() => '')).split('\n').filter(Boolean).length;
-    expect((await backend.probe()).available).toBe(true);
-    await backend.probe();
-    expect(await spawns()).toBe(1);
-    await backend.probe({ fresh: true });
-    expect(await spawns()).toBe(2);
-    const later = new Date(Date.now() + 60_000);
-    await utimes(script, later, later);
-    await backend.probe();
-    expect(await spawns()).toBe(3);
-  });
-});
 
 class FixtureAcp extends AcpBackend {
   outcomeFile = '';

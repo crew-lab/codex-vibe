@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
-import { digest, prepareReviewedBaseline } from '../../src/git/reviewed-baseline.js';
+process.env.VIBE_SUPERVISOR_DIST_DIR ??= process.env.VIBE_SUPERVISOR_TEST_DIST;
+const { digest, prepareReviewedBaseline } = await import('../../scripts/prepare-reviewed-baseline.mjs');
 const exec=promisify(execFile);const roots:string[]=[];
 afterEach(async()=>{await Promise.all(roots.splice(0).map(p=>rm(p,{recursive:true,force:true})));});
 async function setup(){

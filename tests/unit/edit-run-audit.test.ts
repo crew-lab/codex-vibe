@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { auditEditRun, summarizeEditRun } from '../../src/diagnostics/edit-run-audit.js';
+process.env.VIBE_SUPERVISOR_DIST_DIR ??= process.env.VIBE_SUPERVISOR_TEST_DIST;
+const { auditEditRun, summarizeEditRun } = await import('../../scripts/audit-edit-run.mjs');
 const call=(id:string,name='edit',args:unknown={path:'a.py'})=>({id,function:{name,arguments:args}});
 const assistant=(...calls:ReturnType<typeof call>[])=>({role:'assistant',tool_calls:calls});
 const result=(id:string,text:string)=>({role:'tool',tool_call_id:id,content:text});

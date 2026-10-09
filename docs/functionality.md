@@ -16,11 +16,9 @@ Edits produce a patch for inspection. The supervisor does not apply patches to t
 
 The usual client loop is start with `wait_seconds`, `vibe_status` with `wait_seconds` until the compact `result` appears, then independent candidate verification and any same-session correction, followed by a fresh export and `vibe_close`. Keep the session open until acceptance or an explicit stop decision. See the [reference](reference.md#tools).
 
-## Coordinator preparation and offline audit
+## Coordinator guidance
 
-`baseline prepare` validates an explicitly selected reviewed overlay against an immutable Git base. It dry-runs by default; `--create` makes a separate owner-private snapshot repository with local commits and a hash-bound manifest. It does not change the original files, index, refs, configuration or allowlist. The worker starts from the returned source_workspace/base_ref, so it implements a new delta rather than recreating baseline changes. Bounds and refusal cases are in the [reference](reference.md#coordinator-baseline-and-audit-cli).
-
-`audit-edit` reads settled pinned-Vibe ACP edit evidence without inference. It reports sanitized counts, known failed-tool classes, creator version and structured stop reason. Optional `--files` supplies an owner-private JSON scope list for tool-argument evidence; actual candidate scope remains unverified until independently checked against the export. Unknown-tool failures are distinct from request-level policy denials. Missing, unsafe or incompatible evidence remains unverified. Raw native histories, arguments and reasoning stay private.
+Reviewed-baseline preparation and offline edit audits are coordinator scripts in the repository, not package commands; see `scripts/README.md`.
 
 Keep tests, dependencies, builds and caches in a separate exact candidate copy. Keep the worker session open through independent tests/review; send needed corrections within the existing cumulative budget before verified close. Re-read a file after an edit-match error and reassess after a second repeated failure. This is coordinator guidance, not an automatic runtime interruption.
 
@@ -70,9 +68,9 @@ An ACP process that exits with status 0 before the prompt response arrived does 
 
 Failure text is classified in a fixed order: version mismatch, a missing executable or interpreter, then authentication (`401`, `403`, unauthorized, forbidden, missing API key; `VSUP_AUTH_REQUIRED`), then rate limiting. A rate limit is an explicit HTTP 429 status or "too many requests" in the failure itself: header names such as `x-ratelimit-limit` and log lines such as "retrying after rate limit" do not count, and for a programmatic child only the last five non-empty stderr lines are read, so an earlier retry line followed by a crash stays `VSUP_BACKEND_CRASHED`. A rate-limit failure settles the run as `VSUP_RATE_LIMITED` with `retryable: true`. A workspace that does not exist or lies outside every allowed root is rejected with `VSUP_WORKSPACE_INVALID`; there is no separate denied code. The server reads the allowlist once when it starts (an `--isolated` server on each connection), so after `allow` or `setup` changes it, restart the Codex MCP server or reconnect; there is no live reload.
 
-`next_action` offers `vibe_continue` only for a run whose own backend is `acp`, so a programmatic run that `auto` fell back to is never told to continue.
+`next_action` offers `vibe_continue` only for a run whose own backend is `acp`, so a programmatic run is never told to continue.
 
-When the configured backend is `acp` or `programmatic` (not `auto`) there is no availability probe: the same version, executable and interpreter errors come from the real start (`VSUP_VIBE_VERSION_UNSUPPORTED` from ACP's `initialize` or the launcher shim's stderr message, with `detected_version` but no `details.candidates`). Only `auto` probes. Every launch failure appends a `diagnostic` supervisor event (`reason` `launch_failed`, a redacted `message` of at most 500 characters) before the run settles as `failed`. When no backend can be selected the error says why instead of a generic unavailability: `VSUP_VIBE_VERSION_UNSUPPORTED` names the detected and the supported version when a probe saw another one; `VSUP_VIBE_NOT_FOUND` or `VSUP_VIBE_ACP_NOT_FOUND` only when every probed executable itself does not exist; a launcher whose interpreter is missing (its shebang interpreter, or `python3` for `#!/usr/bin/env python3`) is reported as `VSUP_BACKEND_UNAVAILABLE` naming the interpreter; otherwise `VSUP_BACKEND_UNAVAILABLE`. All three carry `details.candidates`, one entry per probed backend with its `reason`, and `detected_version` or a redacted `stderr_tail` when known. A start that fails before its session is ready (spawn, initialization, wrong mode or trust state) forgets the cached successful probe, so the next run probes again instead of failing until the 10 minute cache expires.
+There is no availability probe before a run: the version, executable and interpreter errors come from the real start (`VSUP_VIBE_VERSION_UNSUPPORTED` from ACP's `initialize` or the launcher shim's stderr message, with `detected_version`). A launcher whose interpreter is missing (its shebang interpreter, or `python3` for `#!/usr/bin/env python3`) is reported as `VSUP_BACKEND_UNAVAILABLE` naming the interpreter, and `VSUP_VIBE_NOT_FOUND` or `VSUP_VIBE_ACP_NOT_FOUND` means the executable itself does not exist. Every launch failure appends a `diagnostic` supervisor event (`reason` `launch_failed`, a redacted `message` of at most 500 characters) before the run settles as `failed`.
 
 `vibe_status` events normally carry only `seq`, `type` and tool-call `title`, `kind` and `status`. Supervisor events of type `diagnostic`, `review_integrity`, `timeout` and `permission_denied_by_policy` also carry `text`, the event's own `text`, else `message`, else `reason`, redacted and at most 400 characters, so a failing run explains itself without reading `events.ndjson`. Events from Vibe or ACP never carry `text`, and no other event data is returned. A failed `doctor` ACP check prints the probe's redacted stderr tail (at most 1 KiB, also `stderr_tail` in the JSON). A connection error that happens after the ACP session is ready is `VSUP_ACP_PROTOCOL_ERROR`; before that it is `VSUP_ACP_INIT_FAILED`, and an authentication failure (401, unauthorized, missing API key) is `VSUP_AUTH_REQUIRED` in both phases.
 
@@ -121,8 +119,8 @@ A data directory has one supervisor owner. Independent desktop, CLI, or subagent
 For independent clients, initialize and validate the normal configuration, then preview and register opt-in isolation:
 
 ```sh
-vibe-supervisor configure-codex --user --isolated --dry-run
-vibe-supervisor configure-codex --user --isolated
+vibe-supervisor setup --workspace <dir> --isolated --dry-run
+vibe-supervisor setup --workspace <dir> --isolated --yes
 ```
 
 This registers `serve --stdio --isolated`. Each server claims an owner-only `mcp-sessions/session-*` directory beneath its configuration home. It adopts the most recently used existing directory whose owner lock is free (no lock file, or a lock held by a dead or reused PID, as the normal owner lock decides) and creates a new one only when every existing directory is held by a live supervisor. The directory is claimed by acquiring its owner lock during selection, and that held lock is handed to the run manager, so two starts racing for one free directory cannot both win: the loser moves on to the next candidate or creates a new directory. The stderr line names the private directory and says whether it was adopted or created. Only real, owner-only directories directly under `mcp-sessions/` that match the `session-` name pattern are candidates; symlinks, group- or world-accessible directories, foreign-owned directories and directories with an unsafe lock file are skipped with one stderr line and never modified or deleted.
@@ -135,7 +133,7 @@ Run IDs belong to the directory that holds them, and two live clients never shar
 
 Concurrency and queues apply per server, not globally. Retention runs inside each server over the directory it holds, automatically shortly after start and then daily, so a directory that no client ever reconnects to is not swept; it is adopted by the next start that finds no more recently used free directory.
 
-Without `--isolated`, startup retains the existing shared-directory behavior. Re-running `configure-codex` without that option restores direct shared storage; retain the option when upgrading an isolated installation. A custom local adapter is unnecessary with this release.
+Without `--isolated`, startup retains the existing shared-directory behavior. Re-running `setup` without that option restores direct shared storage; retain the option when upgrading an isolated installation. A custom local adapter is unnecessary with this release.
 
 ## Programmatic limits and saved errors
 

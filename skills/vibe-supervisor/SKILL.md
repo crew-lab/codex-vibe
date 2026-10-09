@@ -40,12 +40,6 @@ Every reply has `next_action`; follow it.
 
 - [README](../../README.md), [reference](../../docs/reference.md), [security](../../docs/security.md)
 
-## Reviewed baseline preflight
+## Coordinator scripts
 
-A detached edit starts at base_ref; dirty source changes are not copied. The coordinator prepares reviewed changes before inference with `vibe-supervisor baseline prepare /absolute/private/manifest.json` (dry-run), then an explicit `--create` to make a disposable snapshot repository and local snapshot commits. It preserves source files/index/refs and requires existing canonical allowlist roots. Use the returned source_workspace/base_ref and bind the original reviewed baseline by hashes. Never ask the model to recreate baseline files from pasted diffs, nor modify a live worker worktree.
-
-Delegate one bounded increment with the real read_file/grep/write_file/edit inventory and file ownership. After an edit-match error re-read the current file; after a second repeated match error reassess from artifacts. This is coordinator guidance, not an automatic runtime stop. Reserve correction capacity within the cumulative ceiling; no automatic limit increase or task replay. Tests/dependencies/builds remain in a separate exact candidate copy.
-
-After a settled ACP edit use `vibe-supervisor audit-edit /canonical/private/home run-id`, optionally with `--files /absolute/private/scope.json` for argument-path evidence. Actual candidate scope still requires export verification. The sanitized audit distinguishes assistant messages, unique tool calls, failed updates and unique failures. It classifies only proven failed formats; Unknown tool is distinct from Supervisor policy denial. Unsafe/incomplete/unsupported records remain unverified. Native histories, arguments, commands and reasoning stay private. Only independently verified deltas are manually integrated; fetch a fresh export before verified close/cleanup.
-
-Keep a usable completed edit session open through independent tests and read-only review. Send needed corrections in the same session within the remaining authorized cumulative budget, then fetch a fresh export and close. Premature close loses that correction path; do not classify a coordinator-corrected replacement as an accepted original worker candidate.
+Coordinator scripts for preparing a reviewed baseline and auditing a settled edit run live in the repository's `scripts/` directory (see `scripts/README.md`); they are not part of the package.

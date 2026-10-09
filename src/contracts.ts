@@ -4,7 +4,7 @@ import { SUPPORTED_VIBE } from "./backends/pinned.js";
 export const SCHEMA_VERSION = 1 as const;
 
 export type BackendKind = "acp" | "programmatic";
-export type BackendPreference = "auto" | BackendKind;
+export type BackendPreference = BackendKind;
 export type RunMode = "review" | "edit";
 export type RunState =
   | "queued" | "starting" | "negotiating" | "ready" | "running"

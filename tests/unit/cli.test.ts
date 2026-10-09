@@ -4,9 +4,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { parse } from 'smol-toml';
 import { runCli } from '../../src/cli.js';
+import { applyCodexPlan, planCodexConfig } from '../../src/cli/codex.js';
 
 const dirs: string[] = [];
 const output: string[] = [];
+async function configureCodex(isolated = false): Promise<void> {
+  const plan = await planCodexConfig('user', process.cwd(), isolated);
+  if (plan.changed) await applyCodexPlan(plan);
+}
 let writeSpy: ReturnType<typeof vi.spyOn> | undefined;
 async function tempDir(): Promise<string> {
   const dir = await realpath(await mkdtemp(path.join(await realpath(os.tmpdir()), 'vsup-cli-')));
@@ -30,7 +35,7 @@ describe('CLI local setup', () => {
     const original = 'title = "keep exactly"\n\n[mcp_servers.other]\ncommand = "other"\n\n[mcp_servers."vibe-supervisor"]\ncommand = "old"\nargs = ["old"]\n\n[projects]\n"repo" = "keep"\n';
     await writeFile(file, original);
     vi.stubEnv('HOME', home); captureOutput();
-    await runCli(['configure-codex', '--user']);
+    await configureCodex();
     const updated = await readFile(file, 'utf8');
     const parsed = parse(updated) as { title: string; mcp_servers: Record<string, { command: string; args: string[] }>; projects: Record<string, string> };
     expect(parsed.title).toBe('keep exactly');
@@ -41,7 +46,7 @@ describe('CLI local setup', () => {
     const names = await readdir(codex); const backups = names.filter((name) => name.startsWith('config.toml.bak-'));
     expect(backups).toHaveLength(1);
     expect((await stat(path.join(codex, backups[0]!))).mode & 0o777).toBe(0o600);
-    await runCli(['configure-codex', '--user']);
+    await configureCodex();
     expect(await readFile(file, 'utf8')).toBe(updated);
     expect((await readdir(codex)).filter((name) => name.startsWith('config.toml.bak-'))).toHaveLength(1);
   });
@@ -51,31 +56,12 @@ describe('CLI local setup', () => {
     const file = path.join(codex, 'config.toml');
     await writeFile(file, 'title = "keep"\n');
     vi.stubEnv('HOME', home); captureOutput();
-    await runCli(['configure-codex', '--user', '--isolated']);
+    await configureCodex(true);
     const source = await readFile(file, 'utf8');
     expect(parse(source)).toMatchObject({ title: 'keep', mcp_servers: { 'vibe-supervisor': { args: [expect.any(String), 'serve', '--stdio', '--isolated'], tool_timeout_sec: 600 } } });
-    await runCli(['configure-codex', '--user', '--isolated']);
+    await configureCodex(true);
     expect(await readFile(file, 'utf8')).toBe(source);
     expect((await readdir(codex)).filter(name => name.startsWith('config.toml.bak-'))).toHaveLength(1);
-  });
-
-  it('dry-run reveals only the new registration block, not unrelated config values', async () => {
-    const home = await tempDir(); const codex = path.join(home, '.codex'); await mkdir(codex);
-    await writeFile(path.join(codex, 'config.toml'), 'api_key = "UNRELATED_SECRET_SENTINEL"\n');
-    vi.stubEnv('HOME', home); captureOutput();
-    await runCli(['configure-codex', '--user', '--dry-run']);
-    expect(output.join('')).not.toContain('UNRELATED_SECRET_SENTINEL');
-    expect(output.join('')).toContain('mcp_servers.vibe-supervisor');
-    expect(await readFile(path.join(codex, 'config.toml'), 'utf8')).toContain('UNRELATED_SECRET_SENTINEL');
-  });
-
-  it('init creates a private default config without overwriting an existing one', async () => {
-    const data = await tempDir(); vi.stubEnv('VIBE_SUPERVISOR_HOME', data); captureOutput();
-    await runCli(['init']);
-    const config = path.join(data, 'config.toml');
-    expect((await stat(data)).mode & 0o777).toBe(0o700);
-    expect((await stat(config)).mode & 0o777).toBe(0o600);
-    expect(parse(await readFile(config, 'utf8'))).toMatchObject({ version: 1, backend: 'programmatic' });
   });
 });
 
@@ -114,16 +100,5 @@ describe('CLI diagnostics for a failing ACP probe', () => {
     await failingInstall();
     await runCli(['doctor']);
     expect(output.join('')).toMatch(/CHECK acp-initialize: .*\n {2}Vibe ACP stderr: .+/);
-  }, 30_000);
-
-  it('test-acp prints the stderr tail and exits non-zero when the probe fails', async () => {
-    await failingInstall();
-    await runCli(['test-acp']);
-    const report = JSON.parse(output.join('')) as { available: boolean; details?: { stderr_tail?: string } };
-    expect(report.available).toBe(false);
-    expect(report.details?.stderr_tail?.length).toBeGreaterThan(0);
-    expect(errors.join('')).toContain('vibe-acp stderr:');
-    expect(errors.join('')).toContain(report.details?.stderr_tail?.split('\n')[0] ?? 'missing');
-    expect(process.exitCode).toBe(1);
   }, 30_000);
 });

@@ -66,7 +66,7 @@ describe('stderr tails never carry a secret', () => {
     const source = path.join(root, 'source'); const data = path.join(root, 'data'); await mkdir(source);
     const script = await fakeVibeAcp(root, 'printf "fatal: cannot authenticate with %s during init\\n" "$MISTRAL_API_KEY" >&2\nexit 17');
     const config = { ...DEFAULT_CONFIG, backend: 'acp' as const, allowedWorkspaceRoots: [source], paths: { vibeAcp: script, dataDir: data } };
-    const probe = await new AcpBackend(config, data).probe({ fresh: true });
+    const probe = await new AcpBackend(config, data).probe();
     expect(probe.available).toBe(false);
     expect(probe.details?.stderr_tail).toEqual(expect.stringContaining('fatal: cannot authenticate'));
     await expectKeyAbsent('probe', KEY, [probe]);
@@ -95,7 +95,7 @@ describe('stderr tails never carry a secret', () => {
     expect(bearerText.length - 1024).toBeLessThan(501 + 'Bearer '.length + KEY.length);
     const script = await fakeVibeAcp(root, `cat ${JSON.stringify(text)} >&2\nexit 17`);
     const config = { ...DEFAULT_CONFIG, backend: 'acp' as const, allowedWorkspaceRoots: [source], paths: { vibeAcp: script, dataDir: data } };
-    const probe = await new AcpBackend(config, data).probe({ fresh: true });
+    const probe = await new AcpBackend(config, data).probe();
     expect(probe.available).toBe(false);
     expect(probe.details?.stderr_tail).toEqual(expect.stringContaining('qqqq'));
     expect(String(probe.details?.stderr_tail).length).toBeLessThanOrEqual(1024);
@@ -109,7 +109,7 @@ describe('stderr tails never carry a secret', () => {
     const root = await makeRoot();
     const vibe = path.join(root, 'vibe');
     await writeExecutable(vibe, '#!/bin/sh\necho "fatal: rejected credential $MISTRAL_API_KEY" >&2\nexit 1\n');
-    const probe = await new ProgrammaticBackend({ ...DEFAULT_CONFIG, backend: 'programmatic', paths: { vibe } }).probe({ fresh: true });
+    const probe = await new ProgrammaticBackend({ ...DEFAULT_CONFIG, backend: 'programmatic', paths: { vibe } }).probe();
     expect(probe.available).toBe(false);
     expect(String(probe.details?.error)).toContain('rejected credential');
     await expectKeyAbsent('programmatic probe', KEY, [probe]);

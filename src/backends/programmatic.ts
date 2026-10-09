@@ -14,8 +14,6 @@ import { assertNoProjectVibeExtensions, createVibeChildProfile } from './profile
 import { buildVibeLaunch, classifyFailureText, classifyStartFailure, describeMissing, removePromptFile, spawned, stderrTailText, versionMismatchOnStderr } from './launcher.js';
 import type { VibeLaunch } from './launcher.js';
 import { SUPPORTED_VIBE } from './pinned.js';
-import { executableProbeKey, ProbeCache } from './probe-cache.js';
-import type { ProbeOptions } from './probe-cache.js';
 import { environmentSecrets, redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { reportBackgroundFailure } from '../diagnostics/background.js';
 
@@ -38,15 +36,9 @@ function parsedVersion(stdout: string, stderr: string): string | undefined {
 export class ProgrammaticBackend implements SupervisorBackend {
   readonly kind = 'programmatic' as const;
   readonly supportsContinue = false;
-  private readonly probeCache = new ProbeCache();
   constructor(private readonly config: SupervisorConfig) {}
 
-  async probe(options: ProbeOptions = {}): Promise<BackendCapabilities> {
-    const key = await executableProbeKey(executable(this.config), { interpreter: false });
-    return this.probeCache.get(key, options.fresh === true, () => this.runProbe());
-  }
-
-  protected async runProbe(): Promise<BackendCapabilities> {
+  async probe(): Promise<BackendCapabilities> {
     const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'vibe-supervisor-probe-')));
     let secrets: string[] = [];
     try {
@@ -130,7 +122,6 @@ export class ProgrammaticBackend implements SupervisorBackend {
       try { await spawned(child); }
       catch (error) { child.done.catch(() => undefined); throw error; }
     } catch (error) {
-      this.probeCache.invalidate();
       await discardPromptFile().catch(() => undefined);
       throw await classifyStartFailure(this.kind, executable(this.config), error);
     }
