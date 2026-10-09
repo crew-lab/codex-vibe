@@ -47,6 +47,22 @@ The target machine's historical "rc.15" was built from rc.14 plus the skills; it
 
 Upgrading any other install to rc.17: `backend = "auto"` becomes `programmatic` or `acp`; anything that called `init`, `configure-codex` or `test-acp` calls `setup` or `doctor`; a configuration that still sets a removed key fails validation, and `vibe-supervisor doctor` names the key.
 
+## Confirmed issues and next verification
+
+The confirmed integration issue is a stale native desktop connection: both the expected-rc.15 S5 review and the expected-rc.17 preflight created rc.12 runs. Correct on-disk registration and matching tool schemas did not prove a refreshed process. Restart Codex completely and use a fresh chat/connection; record the actual connected version and bind new-run creator metadata to the installed artifact. Do not reinstall or change guards merely to mask this mismatch. The precise desktop refresh failure mechanism has not been established.
+
+Two confirmed workflow defects have updated coordinator guidance: worker-driven baseline reconstruction consumed the rc.12 edit budget, and final-answer acceptance missed a real S5 reporting ambiguity. Prepare exact baseline/context bytes before delegation and independently verify correctness and hashes. These observations do not establish new rc.17 runtime defects. Reproduce cold-review F7–F15 against current source before selecting code fixes; preserve old failure evidence and distinguish implemented remedies from verified hosted behavior.
+
+The next verification sequence is:
+
+1. **Identity:** verify the refreshed native version, seven ACP schemas, installed archive/source identity and skill hashes. A fresh official-client initialization remains separate from native desktop proof.
+2. **Review accuracy:** use a new small tracked fixture with a known defect and a clean control. Independently judge findings by location, trigger and consequence. Report accuracy separately from lifecycle/integrity; do not repeat the completed S5 review to obtain a newer version label.
+3. **Edit and correction:** use the prepared controlled fixture, test the exact exported candidate in a separate copy, obtain independent read-only review while the session remains open, perform same-session correction within the original cumulative ceiling, then verify a fresh export and supported cleanup. Follow with a separate narrow product increment; a synthetic pilot is not product acceptance.
+4. **Lifecycle:** exercise explicit expected outcomes for limits, timeout, cancellation, disconnect/recovery and retained worktrees, with current-source triage resolved before hosted acceptance. Never force-delete retained work or replay an uncertain task.
+5. **Reliability:** after those gates pass, calibrate bounded pilots, run the planned soak, and demonstrate clean-account installation.
+
+Offline rc.17 release/install checks have passed. Current rc.17 native hosted execution, product acceptance and hosted reliability remain unverified. This sequence records the agreed next work; no additional hosted runs, runtime fixes or larger budgets were performed or authorized by this documentation update.
+
 ## What 1.0 still needs
 
 | # | Priority | Item | Who |
