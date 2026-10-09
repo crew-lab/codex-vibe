@@ -254,6 +254,30 @@
       "owned_leaks": 0,
       "acp_scenarios": "NOT_REACHED",
       "evidence": "history/reviews/rc8-stall-diagnostics-2026-10-08/session.json"
+    },
+    {
+      "date": "2026-10-09",
+      "version": "0.9.0-rc.17",
+      "source_commit": "ac812802badde5d398a49fbe348038dbb39fc374",
+      "name": "rc17-local-offline-installation-and-mcp-initialization",
+      "status": "PARTIAL",
+      "artifact_kind": "local-offline-rebuild",
+      "archive_sha256": "e62458562e4d9f9602235b3f21800ab20cc63c96b9be8f0cdf1b59072176ccc2",
+      "release_verification": "PASS",
+      "typescript_tests": 761,
+      "skipped_tests": 2,
+      "python_checks": "PASS",
+      "installation": "PASS",
+      "config_migration": "PASS: obsolete keys removed; ACP, five roots and declared limits preserved",
+      "installed_skills": "PASS: three source-equal files",
+      "fresh_official_mcp": "PASS: server rc.17, seven ACP tools, initialization only",
+      "saved_runs": 0,
+      "owner_locks": 0,
+      "native_desktop_reload": "UNVERIFIED",
+      "hosted_inference": "NOT_RUN",
+      "hosted_soak": "NOT_RUN",
+      "remaining_gates": "UNVERIFIED",
+      "evidence": "history/reviews/rc17-local-installation-2026-10-09.md"
     }
   ]
 }
