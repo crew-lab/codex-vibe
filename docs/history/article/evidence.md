@@ -1,6 +1,6 @@
 # Claims and the evidence behind them
 
-The article claims only what this file supports on publishing day. Each number keeps its conditions. Update it after Phase D on rc.8; the [Vibe interactions under test](../Handoff.md#vibe-interactions-under-test) list says which gates are still open.
+The article claims only what this file supports on publishing day. Each number keeps its conditions. Update it after Phase D on rc.8; the [Vibe interactions under test](../handoff-rc15-2026-10-09.md#vibe-interactions-under-test) list says which gates are still open.
 
 ## Benefits
 
@@ -17,11 +17,11 @@ The article claims only what this file supports on publishing day. Each number k
 | Uses your own Vibe login, separate from Codex | Browser login, no API key | Hosted runs since 2026-10-05 used the browser login | Codex token savings were never measured: no savings claim |
 | Several Codex windows at once | `--isolated` gives each client its own data directory and reuses free ones | Two concurrent isolated clients in the installed-package smoke test; native desktop adoption is D14 | |
 | Everything is inspectable | `transcript.md`, `events.ndjson`, `diff.patch` per run; `runs list`, `show`, `tail` | Tests and hosted runs | |
-| Fails closed on version drift | Exact Vibe pin with version and signature checks and a remedy | Tests; [2.26.0 source comparison](../docs/history/reviews/vibe-2.26.0-source-diff-2026-10-08.md) | A trade-off: Vibe 2.26.0 is refused until it is revalidated |
+| Fails closed on version drift | Exact Vibe pin with version and signature checks and a remedy | Tests; [2.26.0 source comparison](../reviews/vibe-2.26.0-source-diff-2026-10-08.md) | A trade-off: Vibe 2.26.0 is refused until it is revalidated |
 
 ## Numbers
 
-Hosted, macOS arm64, Vibe 2.25.8 with `mistral-medium-3.5`, official MCP client, synthetic repository, rc.7, 2026-10-07 ([evidence](../docs/history/reviews/rc7-target-test-2026-10-07/Read.md)):
+Hosted, macOS arm64, Vibe 2.25.8 with `mistral-medium-3.5`, official MCP client, synthetic repository, rc.7, 2026-10-07 ([evidence](../reviews/rc7-target-test-2026-10-07/Read.md)):
 
 | Measure | Value |
 |---|---|
@@ -48,11 +48,11 @@ Still missing for the article: the 100-run hosted soak (failures by code, p50 an
 
 | Claim in the article | Source |
 |---|---|
-| The planted bug is an arithmetic bug: `src/nested/arithmetic.py` in the synthetic repository has an intentional subtraction bug | [rc.7 test record](../docs/history/reviews/rc7-target-test-2026-10-07/Read.md), "Environment" section and the D8 row |
+| The planted bug is an arithmetic bug: `src/nested/arithmetic.py` in the synthetic repository has an intentional subtraction bug | [rc.7 test record](../reviews/rc7-target-test-2026-10-07/Read.md), "Environment" section and the D8 row |
 | The soak plan was 60 programmatic reviews, 30 programmatic edits and 10 ACP runs | Same file, soak section ("Its requested mix was 60 programmatic reviews, 30 programmatic edits and 10 ACP runs") |
 | 50 is the supervisor's `max_turns` bound, not a Vibe limit | `MAX_TURNS_LIMIT = 50` in `src/mcp/schemas.ts`; write "the supervisor's maximum", never "Vibe's maximum" |
-| Node.js 20.19 or newer | [README.md](../README.md) prerequisites |
-| Reasoning: the supervisor does not persist the model's reasoning and filters it from Vibe's own session history | [docs/security.md](../docs/security.md): persisted events and JSON are sanitized and reasoning/private thought fields are omitted; the launcher shim removes reasoning fields before Vibe's native history writes. Do not write "not stored at all" |
+| Node.js 20.19 or newer | [README.md](../../../README.md) prerequisites |
+| Reasoning: the supervisor does not persist the model's reasoning and filters it from Vibe's own session history | [docs/security.md](../../security.md): persisted events and JSON are sanitized and reasoning/private thought fields are omitted; the launcher shim removes reasoning fields before Vibe's native history writes. Do not write "not stored at all" |
 
 ## Never write
 
@@ -64,15 +64,15 @@ Target machine, macOS arm64, Vibe 2.25.8 browser login, official MCP client, syn
 
 | Claim | Evidence |
 |---|---|
-| Turn-budget refusals (plain, equal, lower) send nothing to Vibe | Run `c20da652`: three refusals, `events.ndjson` unchanged at 12,545 bytes ([rc8-target-test](../docs/history/reviews/rc8-target-test-2026-10-08/Read.md)) |
-| First raised continuation (3 to 10) failed; message and ceiling delivered; worker resumed the old nine-file chain | Same report; diagnosis in [rc8-continuation-followup](../docs/history/reviews/rc8-continuation-followup-2026-10-08/Read.md) |
+| Turn-budget refusals (plain, equal, lower) send nothing to Vibe | Run `c20da652`: three refusals, `events.ndjson` unchanged at 12,545 bytes ([rc8-target-test](../reviews/rc8-target-test-2026-10-08/Read.md)) |
+| First raised continuation (3 to 10) failed; message and ceiling delivered; worker resumed the old nine-file chain | Same report; diagnosis in [rc8-continuation-followup](../reviews/rc8-continuation-followup-2026-10-08/Read.md) |
 | Raised continuation works live and after a restart when the objective fits or is explicitly cancelled | Runs `84d450f0`, `7eaac95c`, `ce82c536`: `end_turn`, expected file written |
 | One-shot turn limit reported as `completed` / `max_turn_requests` with matching saved result (D24) | Run `dee12e6e`, `max_turns: 2` |
 | Continued ACP session ends by the supervisor's deadline, not the launcher (D23) | Run `89b1295d`: `VSUP_TIMEOUT` after 61,268 ms |
 | Disconnect while running leaves `recoverable`; idle session's worker removed; closed sessions' servers exit in 3 to 5 ms (D22, official client only) | rc8-target-test and rc8-continuation-followup |
-| Edits: exact single-file write 23.223 s, add-file 10.782 s (60 s supervisor deadline) | [rc8-finding-fixes](../docs/history/reviews/rc8-finding-fixes-2026-10-08/Read.md) |
+| Edits: exact single-file write 23.223 s, add-file 10.782 s (60 s supervisor deadline) | [rc8-finding-fixes](../reviews/rc8-finding-fixes-2026-10-08/Read.md) |
 | Soak attempt 3: 19 passed, run 20 (edit) silent for the 900 s driver deadline; cause unknown, not recurred | rc8-continuation-followup |
-| Soak attempt 4: run 1 review, 16 `grep` and 4 `read_file` calls, `max_turn_requests` at 20 turns after 21.4 s; native cost $0.03486 (non-authoritative) | [rc8-stall-diagnostics](../docs/history/reviews/rc8-stall-diagnostics-2026-10-08/Read.md) |
-| Installed `npm link` command printed nothing until the realpath fix; smoke test missed it by starting Node directly | [rc8-cli-entry-fix](../docs/history/reviews/rc8-cli-entry-fix-2026-10-08/Read.md) |
+| Soak attempt 4: run 1 review, 16 `grep` and 4 `read_file` calls, `max_turn_requests` at 20 turns after 21.4 s; native cost $0.03486 (non-authoritative) | [rc8-stall-diagnostics](../reviews/rc8-stall-diagnostics-2026-10-08/Read.md) |
+| Installed `npm link` command printed nothing until the realpath fix; smoke test missed it by starting Node directly | [rc8-cli-entry-fix](../reviews/rc8-cli-entry-fix-2026-10-08/Read.md) |
 
 Still open: the 100-run soak, Codex desktop, permission callbacks, clean account, Intel.

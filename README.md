@@ -2,7 +2,7 @@
 
 A local MCP server that lets Codex delegate code reviews and isolated edits to Mistral Vibe. Reviews are read-only. Edits run in a detached Git worktree and come back as a patch that you apply yourself.
 
-This is an application-level policy boundary, **not an operating-system sandbox**: it validates workspaces, filters the worker's environment and tools and bounds its output, but a delegated run still executes with your account's permissions and permitted file content goes to Mistral. The current package is `0.9.0-rc.15`, a private, unpublished release candidate (MIT licensed).
+This is an application-level policy boundary, **not an operating-system sandbox**: it validates workspaces, filters the worker's environment and tools and bounds its output, but a delegated run still executes with your account's permissions and permitted file content goes to Mistral. The current package is `0.9.0-rc.16`, a private, unpublished release candidate (MIT licensed).
 
 ## Prerequisites
 

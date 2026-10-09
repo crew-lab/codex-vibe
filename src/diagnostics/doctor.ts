@@ -128,7 +128,7 @@ export async function runDoctor(config: SupervisorConfig): Promise<DoctorReport>
     try { const canonical = await realpath(root); if ((await stat(canonical)).isDirectory() && isPathWithinRoot(canonical, canonical)) validRoots++; } catch { /* invalid workspace roots are reported below */ }
   }
   checks.push({ name: 'workspace-roots', ok: config.allowedWorkspaceRoots.length > 0 && validRoots === config.allowedWorkspaceRoots.length, message: `${validRoots}/${config.allowedWorkspaceRoots.length} allowed workspace root(s) resolve to existing directories.` });
-  const dataDir = config.paths?.dataDir ?? getDataDir();
+  const dataDir = getDataDir();
   try {
     const entry = await lstat(dataDir);
     if (entry.isSymbolicLink()) throw new Error('Supervisor data directory must not be a symlink.');

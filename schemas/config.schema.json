@@ -10,11 +10,10 @@
     "backend": { "enum": ["acp", "programmatic"], "default": "programmatic" },
     "allowed_workspace_roots": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^(/|~$|~/)" }, "default": [] },
     "max_concurrent_runs": { "type": "integer", "minimum": 1, "maximum": 32, "default": 2 },
-    "max_queued_runs": { "type": "integer", "minimum": 0, "maximum": 256, "default": 8 },
     "worker_idle_ttl_seconds": { "type": "integer", "minimum": 0, "maximum": 86400, "default": 600 },
     "retention": {
       "type": "object", "additionalProperties": false,
-      "properties": { "days": { "type": "integer", "minimum": 0, "maximum": 3650, "default": 7 }, "preserve_failed_runs": { "type": "boolean", "default": true } }
+      "properties": { "days": { "type": "integer", "minimum": 0, "maximum": 3650, "default": 7 } }
     },
     "limits": {
       "type": "object", "additionalProperties": false,
@@ -27,12 +26,9 @@
         "max_transcript_bytes": { "type": "integer", "minimum": 1024, "maximum": 1073741824, "default": 10485760 },
         "max_artifact_bytes": { "type": "integer", "minimum": 1024, "maximum": 2147483648, "default": 104857600 },
         "worker_progress_timeout_seconds": { "oneOf": [{ "const": 0 }, { "type": "integer", "minimum": 60, "maximum": 7200 }], "default": 600, "description": "Fail a running worker that emits no event for this many seconds; 0 disables." },
-        "max_mcp_result_chars": { "type": "integer", "minimum": 1000, "maximum": 1000000, "default": 8000 },
-        "mcp_result_format": { "enum": ["text", "structured", "both"], "default": "text" }
+        "max_mcp_result_chars": { "type": "integer", "minimum": 1000, "maximum": 1000000, "default": 8000 }
       }
     },
-    "phase1": { "deprecated": true, "description": "Removed section; accepted and ignored." },
-    "security": { "deprecated": true, "description": "Removed section; accepted and ignored. Shell, network tools, raw ACP logging and reasoning persistence are always off." },
-    "paths": { "type": "object", "additionalProperties": false, "properties": { "vibe": { "type": "string", "minLength": 1, "pattern": "^(/|[^/]+$)" }, "vibe_acp": { "type": "string", "minLength": 1, "pattern": "^(/|[^/]+$)" }, "data_dir": { "type": "string", "minLength": 1, "pattern": "^/" } } }
+    "paths": { "type": "object", "additionalProperties": false, "properties": { "vibe": { "type": "string", "minLength": 1, "pattern": "^(/|[^/]+$)" }, "vibe_acp": { "type": "string", "minLength": 1, "pattern": "^(/|[^/]+$)" } } }
   }
 }

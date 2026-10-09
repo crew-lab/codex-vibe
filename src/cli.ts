@@ -3,7 +3,7 @@ import { lstat, open, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { constants as fsConstants } from 'node:fs';
-import { configFileIgnoredKeys, getDataDir, loadConfig } from './config/config.js';
+import { getDataDir, loadConfig } from './config/config.js';
 import type { OwnerLock } from './core/owner-lock.js';
 import { prepareIsolatedHome } from './config/isolated-home.js';
 import { APP_VERSION } from './version.js';
@@ -20,7 +20,7 @@ import { environmentSecrets, redactSecrets } from './security/redaction.js';
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
 async function getManager(ownerLock?: OwnerLock): Promise<{ manager: RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<void> }; config: Awaited<ReturnType<typeof loadConfig>>; dataDir: string }> {
   const config = await loadConfig({ createDataDir: true });
-  const dataDir = config.paths?.dataDir ?? getDataDir();
+  const dataDir = getDataDir();
   const { RunManager } = await import('./core/run-manager.js');
   const manager = new RunManager(config, dataDir, [], ownerLock) as RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<void> };
   await manager.initialize();
@@ -28,8 +28,6 @@ async function getManager(ownerLock?: OwnerLock): Promise<{ manager: RunManagerT
 }
 
 async function serve(ownerLock?: OwnerLock): Promise<void> {
-  const ignored = await configFileIgnoredKeys();
-  if (ignored.length) process.stderr.write(`Ignored config keys (no effect): ${ignored.join(', ')}\n`);
   let ready: Awaited<ReturnType<typeof getManager>>;
   try { ready = await getManager(ownerLock); }
   catch (error) { await ownerLock?.release(); throw error; }
@@ -55,7 +53,7 @@ function validRunId(id: string): boolean {
 async function runsCommand(args: string[]): Promise<void> {
   const [subcommand, id] = args;
   if (args.length !== (subcommand === 'list' ? 1 : subcommand === 'cleanup' ? (id ? 2 : 1) : 2)) fail('Usage: vibe-supervisor runs <list|show|tail|cleanup> [run-id]', 2);
-  const config = await loadConfig(); const dataDir = config.paths?.dataDir ?? getDataDir();
+  const config = await loadConfig(); const dataDir = getDataDir();
   const runsDir = path.join(dataDir, 'runs');
   if (subcommand === 'list') {
     let entries: string[];

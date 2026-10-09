@@ -57,7 +57,7 @@ async function initRepository(directory: string): Promise<void> {
 
 class HangingAcpBackend extends AcpBackend {
   constructor(dataDir: string, roots: string[], private readonly pidDir: string, startTimeoutMs?: number) {
-    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots: roots, paths: { vibeAcp: 'fake-acp', dataDir } }, dataDir, startTimeoutMs === undefined ? {} : { startTimeoutMs });
+    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots: roots, paths: { vibeAcp: 'fake-acp' } }, dataDir, startTimeoutMs === undefined ? {} : { startTimeoutMs });
   }
   protected override executable(): string { return 'fake-acp'; }
   protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {

@@ -103,6 +103,7 @@ const COMPACT_CHANGED_FILES = 50;
 const COORDINATOR_ACTION_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "failed", "cancelled", "closed", "waiting_permission", "waiting_input", "recoverable"]);
 const CONTINUABLE_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "ready", "recoverable"]);
 const SETTLED_RESULT_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "failed", "cancelled"]);
+const MAX_QUEUED_RUNS = 8;
 const DAY_MS = 86_400_000;
 const RETENTION_FIRST_DELAY_MS = 5000;
 const RETENTION_INTERVAL_MS = DAY_MS;
@@ -268,7 +269,7 @@ export class RunManager {
       limits
     };
     const slot = this.activeSlots < this.config.maxConcurrentRuns;
-    if (!slot && this.pending.length >= this.config.maxQueuedRuns) throw codedError("VSUP_LIMIT_EXCEEDED", "The active and queued run limits are full.");
+    if (!slot && this.pending.length >= MAX_QUEUED_RUNS) throw codedError("VSUP_LIMIT_EXCEEDED", "The active and queued run limits are full.");
     const runtime = this.makeRuntime(record, path.join(this.runRoot, id), task, options.contextFiles ?? []);
     runtime.slot = slot;
     if (mode === "edit") runtime.baseRef = options.baseRef ?? "HEAD";
@@ -655,7 +656,7 @@ export class RunManager {
     }
     const completedCutoff = Math.min(cutoff, Date.now() - DAY_MS);
     if (Date.parse(record.updatedAt) > (completed ? completedCutoff : cutoff) || record.worktree) return false;
-    if (record.state === "failed" && this.config.retention.preserveFailedRuns) return false;
+    if (record.state === "failed") return false;
     if (completed) {
       await this.close({ run_id: record.runId });
       if (!isTerminal(record.state) || record.worktree) return false;

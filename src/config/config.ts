@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { parse } from "smol-toml";
 import { DEFAULT_CONFIG } from "./defaults.js";
-import { ignoredConfigKeys, validateConfig } from "./validation.js";
+import { validateConfig } from "./validation.js";
 import { supervisorError } from "../contracts.js";
 import type { SupervisorConfig } from "../contracts.js";
 import { createPrivateDir } from "../security/paths.js";
@@ -57,9 +57,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Super
     if (!stat.isFile() || stat.size > 1_048_576) throw new Error("Config must be a regular file no larger than 1 MiB.");
     const source = await handle.readFile("utf8");
     const raw = parse(source);
-    const validated = validateConfig(raw);
-    if (validated.paths?.dataDir) return { ...validated, paths: { ...validated.paths, dataDir: resolve(validated.paths.dataDir) } };
-    return validated;
+    return validateConfig(raw);
   } catch (error) {
     if (error instanceof Error) {
       throw Object.assign(new Error(`Invalid supervisor configuration: ${error.message}`, { cause: error }), {
@@ -70,17 +68,6 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Super
   } finally {
     await handle.close();
   }
-}
-
-export async function configFileIgnoredKeys(env: NodeJS.ProcessEnv = process.env): Promise<string[]> {
-  let handle;
-  try {
-    handle = await open(getConfigPath(env), fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
-    const stat = await handle.stat();
-    if (!stat.isFile() || stat.size > 1_048_576) return [];
-    return ignoredConfigKeys(parse(await handle.readFile("utf8")));
-  } catch { return []; }
-  finally { await handle?.close(); }
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

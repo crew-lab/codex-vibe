@@ -6,7 +6,7 @@ import { parse, stringify } from 'smol-toml';
 import { resolveCommand } from '../backends/launcher.js';
 import { getConfigPath, getDataDir, loadConfig } from '../config/config.js';
 import { DEFAULT_CONFIG } from '../config/defaults.js';
-import { ignoredConfigKeys, validateConfig } from '../config/validation.js';
+import { validateConfig } from '../config/validation.js';
 import { formatDoctorCheck, runDoctor } from '../diagnostics/doctor.js';
 import { createPrivateDir, createPrivateFile, expandHome } from '../security/paths.js';
 import { applyCodexPlan, planCodexConfig, type CodexScope } from './codex.js';
@@ -24,8 +24,8 @@ export interface SetupOptions {
   confirm?: (question: string) => Promise<boolean>;
 }
 
-export interface WorkspaceUpdate { file: string; created: boolean; added: boolean; canonical: string; notes: string[]; warnings: string[]; backup?: string }
-export interface WorkspacePlan { file: string; created: boolean; added: boolean; canonical: string; notes: string[]; warnings: string[]; text?: string; changed: boolean }
+export interface WorkspaceUpdate { file: string; created: boolean; added: boolean; canonical: string; notes: string[]; backup?: string }
+export interface WorkspacePlan { file: string; created: boolean; added: boolean; canonical: string; notes: string[]; text?: string; changed: boolean }
 
 export const RELOAD_NOTE = 'Restart the Codex MCP server to apply the new allowlist (reconnect the client when it uses --isolated); a running server keeps the list it started with.';
 
@@ -111,7 +111,7 @@ export async function planWorkspaceConfig(canonical: string, options: { resolveE
   try { validateConfig(document); }
   catch (error) { throw configInvalid(`Invalid supervisor configuration; no changes were made: ${(error as Error).message}`); }
   const changed = created || added || pathsChanged;
-  return { file, created, added, canonical, notes, changed, warnings: ignoredConfigKeys(document).map((key) => `config: ignored key ${key}; it has no effect`), ...(changed ? { text: stringify(document) } : {}) };
+  return { file, created, added, canonical, notes, changed, ...(changed ? { text: stringify(document) } : {}) };
 }
 
 export async function applyWorkspacePlan(plan: WorkspacePlan): Promise<WorkspaceUpdate> {
@@ -169,7 +169,6 @@ export async function runSetup(options: SetupOptions): Promise<void> {
     say(`Dry run: ${configPlan.created ? 'would create private config' : 'would use config'} at ${configPlan.file}`);
     say(configPlan.added ? `Would allow workspace: ${canonical}` : `Workspace already allowed: ${canonical}`);
     for (const note of configPlan.notes) say(note);
-    for (const warning of configPlan.warnings) say(`WARN ${warning}`);
     say(plan.changed ? `Would change ${plan.file}:\n${plan.block}` : `Codex config is already up to date: ${plan.file}`);
     say('Nothing was written.');
     return;
@@ -179,7 +178,6 @@ export async function runSetup(options: SetupOptions): Promise<void> {
   say(update.added ? `Allowed workspace: ${update.canonical}` : `Workspace already allowed: ${update.canonical}`);
   for (const note of update.notes) say(note);
   reportUpdate(update);
-  for (const warning of update.warnings) say(`WARN ${warning}`);
   const report = await runDoctor(await loadConfig());
   const lines = report.checks.map(formatDoctorCheck).filter((line) => !line.startsWith('PASS '));
   say(lines.length ? `Doctor (non-PASS checks only):\n${lines.join('\n')}` : 'Doctor: all checks PASS.');
@@ -205,5 +203,4 @@ export async function allowCommand(args: string[]): Promise<void> {
   const update = await updateWorkspaceConfig(args[0], { resolveExecutables: false });
   say(update.added ? `Allowed workspace: ${update.canonical} (${update.file})` : `Workspace already allowed: ${update.canonical}`);
   reportUpdate(update);
-  for (const warning of update.warnings) say(`WARN ${warning}`);
 }

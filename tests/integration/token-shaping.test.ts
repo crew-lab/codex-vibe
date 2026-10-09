@@ -422,11 +422,10 @@ async function connect(manager: RunManagerTools, limits: Partial<SupervisorConfi
   return client;
 }
 
-describe("MCP result formats", () => {
-  it("defaults to the text format with an 8000 character cap", async () => {
-    expect(DEFAULT_CONFIG.limits.mcpResultFormat).toBe("text");
+describe("MCP result format", () => {
+  it("sends one JSON text block under an 8000 character cap", async () => {
     expect(DEFAULT_CONFIG.limits.maxMcpResultChars).toBe(8000);
-    expect(validateConfig({ version: 1 }).limits).toMatchObject({ mcpResultFormat: "text", maxMcpResultChars: 8000 });
+    expect(validateConfig({ version: 1 }).limits).toMatchObject({ maxMcpResultChars: 8000 });
     const client = await connect(stubManager());
     const result = await client.callTool({ name: "vibe_status", arguments: { run_id: RUN_ID } });
     expect(result.structuredContent).toBeUndefined();
@@ -434,37 +433,13 @@ describe("MCP result formats", () => {
     expect(JSON.parse((result.content as { text: string }[])[0]!.text)).toMatchObject({ run_id: RUN_ID, state: "running" });
   });
 
-  it("structured sends structuredContent plus a minimal pointer", async () => {
-    const client = await connect(stubManager(), { mcpResultFormat: "structured" });
-    const result = await client.callTool({ name: "vibe_status", arguments: { run_id: RUN_ID } });
-    expect(result.structuredContent).toMatchObject({ run_id: RUN_ID, state: "running", events: [{ seq: 1 }] });
-    const text = (result.content as { text: string }[])[0]!.text;
-    expect(JSON.parse(text)).toEqual({ run_id: RUN_ID, state: "running", see: "structuredContent" });
-  });
-
-  it("both keeps text and structuredContent", async () => {
-    const client = await connect(stubManager(), { mcpResultFormat: "both" });
-    const result = await client.callTool({ name: "vibe_status", arguments: { run_id: RUN_ID } });
-    const text = (result.content as { text: string }[])[0]!.text;
-    expect(JSON.parse(text)).toEqual(result.structuredContent);
-  });
-
-  it("errors follow the configured format", async () => {
+  it("errors are one JSON text block too", async () => {
     const failing = stubManager({ status: vi.fn(async () => { throw Object.assign(new Error("run missing"), { code: "VSUP_NOT_FOUND" }); }) });
-    const textClient = await connect(failing);
-    const asText = await textClient.callTool({ name: "vibe_status", arguments: { run_id: RUN_ID } });
+    const client = await connect(failing);
+    const asText = await client.callTool({ name: "vibe_status", arguments: { run_id: RUN_ID } });
     expect(asText.isError).toBe(true);
     expect(asText.structuredContent).toBeUndefined();
     expect((asText.content as { text: string }[])[0]!.text).toContain("VSUP_NOT_FOUND");
-    const structuredClient = await connect(failing, { mcpResultFormat: "structured" });
-    const asStructured = await structuredClient.callTool({ name: "vibe_status", arguments: { run_id: RUN_ID } });
-    expect(asStructured.isError).toBe(true);
-    expect(asStructured.structuredContent).toMatchObject({ error: { code: "VSUP_NOT_FOUND" } });
-    expect((asStructured.content as { text: string }[])[0]!.text.length).toBeLessThan(120);
-    const bothClient = await connect(failing, { mcpResultFormat: "both" });
-    const asBoth = await bothClient.callTool({ name: "vibe_status", arguments: { run_id: RUN_ID } });
-    expect(asBoth.structuredContent).toMatchObject({ error: { code: "VSUP_NOT_FOUND" } });
-    expect((asBoth.content as { text: string }[])[0]!.text).toContain("VSUP_NOT_FOUND");
   });
 
   it("passes the request abort signal to the manager and wait_seconds through", async () => {

@@ -57,7 +57,7 @@ describe('a missing interpreter is not reported as a missing Vibe executable', (
     const { root, source, data } = await makeRoot();
     const script = path.join(root, 'vibe-acp');
     await writeExecutable(script, '#!/nonexistent/dir/python3\n');
-    const config = { ...DEFAULT_CONFIG, backend: 'acp' as const, allowedWorkspaceRoots: [source], paths: { vibeAcp: script, dataDir: data } };
+    const config = { ...DEFAULT_CONFIG, backend: 'acp' as const, allowedWorkspaceRoots: [source], paths: { vibeAcp: script } };
     const probe = await new AcpBackend(config, data).probe();
     expect(probe.available).toBe(false);
     expect(probe.details).toMatchObject({ interpreter_missing: true, interpreter: '/nonexistent/dir/python3' });
@@ -76,7 +76,7 @@ describe('a missing interpreter is not reported as a missing Vibe executable', (
     await writeExecutable(script, '#!/usr/bin/env python3\n');
     const empty = path.join(root, 'empty-path'); await mkdir(empty);
     process.env.PATH = empty;
-    const config = { ...DEFAULT_CONFIG, backend: 'acp' as const, allowedWorkspaceRoots: [source], paths: { vibeAcp: script, dataDir: data } };
+    const config = { ...DEFAULT_CONFIG, backend: 'acp' as const, allowedWorkspaceRoots: [source], paths: { vibeAcp: script } };
     const probe = await new AcpBackend(config, data).probe();
     expect(probe.details).toMatchObject({ interpreter_missing: true, interpreter: 'python3' });
     expect(probe.details?.executable_missing).toBeUndefined();
@@ -90,7 +90,7 @@ describe('a missing interpreter is not reported as a missing Vibe executable', (
     const { root, source, data } = await makeRoot();
     const script = path.join(root, 'vibe');
     await writeExecutable(script, '#!/nonexistent/dir/python3\n');
-    const config = { ...DEFAULT_CONFIG, backend: 'programmatic' as const, allowedWorkspaceRoots: [source], paths: { vibe: script, dataDir: data } };
+    const config = { ...DEFAULT_CONFIG, backend: 'programmatic' as const, allowedWorkspaceRoots: [source], paths: { vibe: script } };
     const probe = await new ProgrammaticBackend(config).probe();
     expect(probe.details).toMatchObject({ interpreter_missing: true });
     expect(probe.details?.executable_missing).toBeUndefined();
@@ -103,7 +103,7 @@ describe('a missing interpreter is not reported as a missing Vibe executable', (
   it.each([['acp', 'VSUP_VIBE_ACP_NOT_FOUND'], ['programmatic', 'VSUP_VIBE_NOT_FOUND']] as const)('still reports a configured %s executable that does not exist as %s', async (kind, code) => {
     const { root, source, data } = await makeRoot();
     const missing = path.join(root, 'no-such-vibe');
-    const config = { ...DEFAULT_CONFIG, backend: kind, allowedWorkspaceRoots: [source], paths: kind === 'acp' ? { vibeAcp: missing, dataDir: data } : { vibe: missing, dataDir: data } };
+    const config = { ...DEFAULT_CONFIG, backend: kind, allowedWorkspaceRoots: [source], paths: kind === 'acp' ? { vibeAcp: missing } : { vibe: missing } };
     const backend = kind === 'acp' ? new AcpBackend(config, data) : new ProgrammaticBackend(config);
     const manager = new RunManager(config, data, [backend]);
     try {
@@ -116,7 +116,7 @@ describe('a missing interpreter is not reported as a missing Vibe executable', (
 
 class LabelBackend extends AcpBackend {
   constructor(private readonly testMode: string, dataDir: string, roots: string[], private readonly pidDir: string) {
-    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots: roots, paths: { vibeAcp: 'fake-acp', dataDir } }, dataDir);
+    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots: roots, paths: { vibeAcp: 'fake-acp' } }, dataDir);
   }
   protected override executable(): string { return 'fake-acp'; }
   protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {

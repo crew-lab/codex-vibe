@@ -1,6 +1,6 @@
 # Phase D target-machine evidence (template)
 
-Copy this directory to `docs/history/reviews/rc7-target-test-<YYYY-MM-DD>/` before the session and fill it in there; keep this template unchanged. The steps, expectations and ground rules are in the [Phase D test plan](../../../../Handoff.md#phase-d-test-plan). Record facts only: exact commands, versions, run IDs, timings and outcomes. Never paste credentials or task text that contains anything sensitive; `security` is only ever called without `-w`.
+Copy this directory to `docs/history/reviews/rc7-target-test-<YYYY-MM-DD>/` before the session and fill it in there; keep this template unchanged. The steps, expectations and ground rules are in the [Phase D test plan](../../handoff-rc15-2026-10-09.md#phase-d-test-plan). Record facts only: exact commands, versions, run IDs, timings and outcomes. Never paste credentials or task text that contains anything sensitive; `security` is only ever called without `-w`.
 
 Put raw evidence (redacted tool replies, `doctor --json`, timing logs, the soak `summary.json` and `runs.ndjson`) next to this file and reference it in the Evidence column by file name.
 

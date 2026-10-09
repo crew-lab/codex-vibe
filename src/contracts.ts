@@ -144,16 +144,13 @@ export interface SupervisorEvent {
   data: Record<string, unknown>;
 }
 
-export type McpResultFormat = "text" | "structured" | "both";
-
 export interface SupervisorConfig {
   version: 1;
   backend: BackendPreference;
   allowedWorkspaceRoots: string[];
   maxConcurrentRuns: number;
-  maxQueuedRuns: number;
   workerIdleTtlSeconds: number;
-  retention: { days: number; preserveFailedRuns: boolean };
+  retention: { days: number };
   limits: {
     reviewTimeoutSeconds: number;
     editTimeoutSeconds: number;
@@ -164,9 +161,8 @@ export interface SupervisorConfig {
     maxArtifactBytes: number;
     workerProgressTimeoutSeconds: number;
     maxMcpResultChars: number;
-    mcpResultFormat: McpResultFormat;
   };
-  paths?: { vibe?: string; vibeAcp?: string; dataDir?: string };
+  paths?: { vibe?: string; vibeAcp?: string };
 }
 
 export interface StartRunInput {

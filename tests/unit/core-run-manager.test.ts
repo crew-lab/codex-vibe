@@ -140,12 +140,14 @@ describe("RunManager core lifecycle", () => {
   it("enforces active and queued limits, then drains queued work", async () => {
     const { source, data, backend } = await setup();
     backend.gate = new Promise<void>((resolve) => { backend.releaseStart = resolve; });
-    const config = { ...DEFAULT_CONFIG, backend: "programmatic" as const, allowedWorkspaceRoots: [source], maxConcurrentRuns: 1, maxQueuedRuns: 1 };
+    const config = { ...DEFAULT_CONFIG, backend: "programmatic" as const, allowedWorkspaceRoots: [source], maxConcurrentRuns: 1 };
     const manager = new RunManager(config, data, [backend]);
     try {
       const first = await manager.reviewStart({ task: "first", cwd: source });
-      const second = await manager.reviewStart({ task: "second", cwd: source });
-      expect(second.state).toBe("queued");
+      const queued = [];
+      for (let index = 0; index < 8; index += 1) queued.push(await manager.reviewStart({ task: `queued ${index}`, cwd: source }));
+      const second = queued[0]!;
+      expect(queued.every((run) => run.state === "queued")).toBe(true);
       await expect(manager.reviewStart({ task: "overflow", cwd: source })).rejects.toMatchObject({ code: "VSUP_LIMIT_EXCEEDED" });
       backend.releaseStart?.();
       await waitFor(() => manager.status({ run_id: first.run_id }), (value) => value.state === "running");

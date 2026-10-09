@@ -116,7 +116,7 @@ describe('settle: every end-of-run path ends the run the same way', () => {
     const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-settle-')); roots.push(parent);
     const source = path.join(parent, 'source'); const data = path.join(parent, 'data'); await mkdir(source);
     const backend = new SettleBackend(); backend.reportsCancel = !scenario.silentCancel;
-    const manager = new RunManager({ ...DEFAULT_CONFIG, backend: 'programmatic', allowedWorkspaceRoots: [source], maxConcurrentRuns: 1, maxQueuedRuns: 4, workerIdleTtlSeconds: 600, ...scenario.config }, data, [backend]);
+    const manager = new RunManager({ ...DEFAULT_CONFIG, backend: 'programmatic', allowedWorkspaceRoots: [source], maxConcurrentRuns: 1, workerIdleTtlSeconds: 600, ...scenario.config }, data, [backend]);
     const state = (id: string) => manager.status({ run_id: id }).then((value) => value.state as string);
     const context: Context = { manager, backend, data };
     try {
@@ -162,7 +162,7 @@ describe('settle: every end-of-run path ends the run the same way', () => {
 
 class AcpPolicyBackend extends AcpBackend {
   constructor(dataDir: string, roots: string[], private readonly pidDir: string) {
-    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots: roots, paths: { vibeAcp: 'fake-acp', dataDir } }, dataDir);
+    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots: roots, paths: { vibeAcp: 'fake-acp' } }, dataDir);
   }
   protected override executable(): string { return 'fake-acp'; }
   protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {

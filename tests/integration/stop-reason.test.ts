@@ -15,6 +15,10 @@ import type { Transport, JSONRPCMessage } from "@modelcontextprotocol/server";
 import { PassThrough } from "node:stream";
 import { createSupervisorMcpServer } from "../../src/mcp/server.js";
 
+function structured(result: unknown): unknown {
+  return JSON.parse((result as { content: { text: string }[] }).content[0]!.text);
+}
+
 const fixture = fileURLToPath(new URL("../fixtures/fake-acp.mjs", import.meta.url));
 const canonicalTmp = await realpath(tmpdir());
 const roots: string[] = [];
@@ -71,7 +75,7 @@ class FakeBackend implements SupervisorBackend {
 
 class FakeAcpBackend extends AcpBackend {
   constructor(private readonly testMode: string, dataDir: string, allowedWorkspaceRoots: string[]) {
-    super({ ...DEFAULT_CONFIG, backend: "acp", allowedWorkspaceRoots, paths: { vibeAcp: "fake-acp", dataDir } }, dataDir);
+    super({ ...DEFAULT_CONFIG, backend: "acp", allowedWorkspaceRoots, paths: { vibeAcp: "fake-acp" } }, dataDir);
   }
   protected override executable(): string { return "fake-acp"; }
   protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {
@@ -179,20 +183,20 @@ describe("stop reason reporting", () => {
   it("surfaces the cap through the MCP compact result and a start-with-wait response", async () => {
     const { source, manager, backend } = await setup();
     const input = new PassThrough(); const output = new PassThrough();
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits, mcpResultFormat: "both" } } });
+    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits } } });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: "stop-reason-client", version: "1.0.0" }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
     try {
       backend.completeOnStart = { stopReason: "max_turn_requests" };
       const waited = await client.callTool({ name: "vibe_review_start", arguments: { task: "review", cwd: source, wait_seconds: 5 } });
-      const envelope = waited.structuredContent as { state: string; result: Record<string, unknown> };
+      const envelope = structured(waited) as { state: string; result: Record<string, unknown> };
       expect(envelope.state).toBe("completed");
       expect(envelope.result.stop_reason).toBe("max_turn_requests");
       expect(envelope.result.summary).toBe(TURN_LIMIT);
       expect(envelope.result.warnings).toEqual([expect.stringContaining("max_turn_requests")]);
-      const runId = (waited.structuredContent as { run_id: string }).run_id;
-      const compact = (await client.callTool({ name: "vibe_result", arguments: { run_id: runId } })).structuredContent as Record<string, unknown>;
+      const runId = (structured(waited) as { run_id: string }).run_id;
+      const compact = structured(await client.callTool({ name: "vibe_result", arguments: { run_id: runId } })) as Record<string, unknown>;
       expect(compact.stop_reason).toBe("max_turn_requests");
       expect(compact.summary).toBe(TURN_LIMIT);
       expect(compact.warnings).toEqual([expect.stringContaining("max_turn_requests")]);

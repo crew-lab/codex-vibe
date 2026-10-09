@@ -65,7 +65,7 @@ describe('stderr tails never carry a secret', () => {
     const root = await makeRoot();
     const source = path.join(root, 'source'); const data = path.join(root, 'data'); await mkdir(source);
     const script = await fakeVibeAcp(root, 'printf "fatal: cannot authenticate with %s during init\\n" "$MISTRAL_API_KEY" >&2\nexit 17');
-    const config = { ...DEFAULT_CONFIG, backend: 'acp' as const, allowedWorkspaceRoots: [source], paths: { vibeAcp: script, dataDir: data } };
+    const config = { ...DEFAULT_CONFIG, backend: 'acp' as const, allowedWorkspaceRoots: [source], paths: { vibeAcp: script } };
     const probe = await new AcpBackend(config, data).probe();
     expect(probe.available).toBe(false);
     expect(probe.details?.stderr_tail).toEqual(expect.stringContaining('fatal: cannot authenticate'));
@@ -94,7 +94,7 @@ describe('stderr tails never carry a secret', () => {
     expect(bearerText.length - 1024).toBeGreaterThan(501 + 'Bearer '.length);
     expect(bearerText.length - 1024).toBeLessThan(501 + 'Bearer '.length + KEY.length);
     const script = await fakeVibeAcp(root, `cat ${JSON.stringify(text)} >&2\nexit 17`);
-    const config = { ...DEFAULT_CONFIG, backend: 'acp' as const, allowedWorkspaceRoots: [source], paths: { vibeAcp: script, dataDir: data } };
+    const config = { ...DEFAULT_CONFIG, backend: 'acp' as const, allowedWorkspaceRoots: [source], paths: { vibeAcp: script } };
     const probe = await new AcpBackend(config, data).probe();
     expect(probe.available).toBe(false);
     expect(probe.details?.stderr_tail).toEqual(expect.stringContaining('qqqq'));

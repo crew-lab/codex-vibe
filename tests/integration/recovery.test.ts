@@ -31,7 +31,7 @@ afterEach(async () => {
 class FakeAcpBackend extends AcpBackend {
   pidDir: string | undefined;
   constructor(private readonly testMode: string, dataDir: string, allowedWorkspaceRoots: string[], recoverTimeoutMs?: number) {
-    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp', dataDir } }, dataDir, recoverTimeoutMs === undefined ? {} : { recoverTimeoutMs });
+    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp' } }, dataDir, recoverTimeoutMs === undefined ? {} : { recoverTimeoutMs });
   }
   protected override executable(): string { return 'fake-acp'; }
   protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {

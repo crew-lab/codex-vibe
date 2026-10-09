@@ -58,7 +58,7 @@ class FakeBackend implements SupervisorBackend {
 
 class FakeAcpBackend extends AcpBackend {
   constructor(dataDir: string, allowedWorkspaceRoots: string[]) {
-    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp', dataDir } }, dataDir);
+    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp' } }, dataDir);
   }
   protected override executable(): string { return 'fake-acp'; }
   protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {
@@ -74,7 +74,7 @@ async function harness(overrides: Partial<typeof DEFAULT_CONFIG> = {}) {
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data');
   await mkdir(source); await writeFile(path.join(source, 'file.txt'), 'content\n');
   const backend = new FakeBackend();
-  const manager = new RunManager({ ...DEFAULT_CONFIG, backend: 'programmatic', allowedWorkspaceRoots: [source], maxConcurrentRuns: 1, maxQueuedRuns: 4, workerIdleTtlSeconds: 600, ...overrides }, data, [backend]);
+  const manager = new RunManager({ ...DEFAULT_CONFIG, backend: 'programmatic', allowedWorkspaceRoots: [source], maxConcurrentRuns: 1, workerIdleTtlSeconds: 600, ...overrides }, data, [backend]);
   return { backend, manager, source, data };
 }
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0-rc.16
+
+Simplification, completing Phase 1 of the 2026-10-09 review. No change to the MCP tools, allowlists, worktree model, launcher shim or permission handling.
+
+- Settings keys removed before rc.6 (`phase1`, `security`) are no longer accepted with a warning; they are rejected like any unknown key with `VSUP_CONFIG_INVALID`, and `doctor` names the key.
+- Configuration options with no recorded use are removed and now rejected: `limits.mcp_result_format` (results are always one JSON text block), `max_queued_runs` (fixed at 8), `retention.preserve_failed_runs` (failed runs are always kept until retention) and `paths.data_dir` (the data directory is the platform default or `VIBE_SUPERVISOR_HOME`).
+- Handoff.md is reduced to the current state, the remaining 1.0 work and the rules; the full rc.15 handoff and the article drafts move to `docs/history/`.
+
 ## 0.9.0-rc.15
 
 Simplification; no change to the MCP tools, allowlists, worktree model, launcher shim or permission handling.
