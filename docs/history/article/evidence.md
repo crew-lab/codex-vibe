@@ -1,6 +1,6 @@
 # Claims and the evidence behind them
 
-The article claims only what this file supports on publishing day. Each number keeps its conditions. Update it after Phase D on rc.8; the [Vibe interactions under test](../handoff-rc15-2026-10-09.md#vibe-interactions-under-test) list says which gates are still open.
+The article claims only what this file supports on publishing day. Each number keeps its conditions. Updated for rc.17 on 2026-10-09; the [Vibe interactions under test](../handoff-rc15-2026-10-09.md#vibe-interactions-under-test) list says which gates are still open.
 
 ## Benefits
 
@@ -76,3 +76,20 @@ Target machine, macOS arm64, Vibe 2.25.8 browser login, official MCP client, syn
 | Installed `npm link` command printed nothing until the realpath fix; smoke test missed it by starting Node directly | [rc8-cli-entry-fix](../reviews/rc8-cli-entry-fix-2026-10-08/Read.md) |
 
 Still open: the 100-run soak, Codex desktop, permission callbacks, clean account, Intel.
+
+## rc.9 to rc.17 (2026-10-08 to 2026-10-09)
+
+| Claim | Evidence |
+|---|---|
+| Progress watchdog: no worker activity for 600 s ends the run with `VSUP_NO_PROGRESS`, before Vibe's 720 s read timeout | `workerProgressTimeoutSeconds: 600` in `src/config/defaults.ts`; [silent-stall analysis](../reviews/vibe-2.25.8-silent-stall-analysis-2026-10-08.md). Fake backends only; it bounds the stall, it does not explain it |
+| Patch credential check matched `password: string`, failed the export and stranded the worktree; now added lines and credential shapes only. Edits from a subdirectory exposed the whole repository; now refused | [1.0 cold review](../reviews/1.0-cold-review-2026-10-08.md), F1 and F3, fixed in rc.10 |
+| Bounded pilot: instructed limit of 3 reads, 5 made, answer claimed compliance | [rc8-bounded-pilots](../reviews/rc8-bounded-pilots-2026-10-08/Read.md), run `fda1df51`, 21.502 s |
+| rc.13 prepared ACP edit with same-session correction, separate verifier clone, independent reviewer, verified close: PASS | [rc13 evaluation](../reviews/rc13-worker-adoption-2026-10-09.md), run `c0af69a2` |
+| rc.13 product run closed before its checks; candidate rejected; corrected by the coordinator: partial | Same file, run `4e492e03` |
+| rc.15 to rc.16 removed the `auto` backend and probe cache, six CLI commands and aliases, four config options and the removed-keys shim, about 770 net lines | CHANGELOG 0.9.0-rc.15 and rc.16; commits `0fe8f57`, `bb4c86c` |
+| rc.17: 10 s shutdown deadline ending only the supervisor's own worker process groups; retention of unreadable run records (only missing or non-JSON records deleted); undeliverable policy denial resolves the ACP request | CHANGELOG 0.9.0-rc.17; `tests/integration/stability-fixes.test.ts`. Fake backends only |
+| Free account: monthly credit of 8.50, shown in euros on the author's account; 1.20 used after all real runs up to rc.8 | Owner's account observation recorded on 2026-10-08 ([rc.8 handoff notes](../handoff-rc8-2026-10-08.md)). Mistral's [pricing page](https://mistral.ai/pricing/) lists "Limited coding sessions" on Free but no credit amount: write it as the author's account, not as a published price |
+| Le Chat is now part of Vibe; Vibe also runs in VS Code, JetBrains and Zed through ACP | [Mistral Vibe product page](https://mistral.ai/products/vibe/), read 2026-10-09 |
+| Soak estimate USD 2 to 4 | Handoff estimate from rates seen so far; an estimate, not a measurement |
+
+Still open: anything hosted on rc.17, the 100-run soak, Codex desktop, permission callbacks, clean account, Intel.
