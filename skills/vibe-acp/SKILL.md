@@ -1,58 +1,73 @@
 ---
 name: vibe-acp
-description: "Use when delegating coding tasks to Mistral Vibe through the Vibe Supervisor ACP backend, verifying worker patches, sending correction requests, or continuing an existing ACP run. Covers the delegate-review-test-correct loop and safe session recovery. Do not use for generic ACP clients, unrestricted Vibe CLI execution, credential extraction, or automatic patch application."
+description: "Use when supervising Mistral Vibe ACP coding tasks, independently verifying worker patches, sending same-session corrections or recovering an existing session through Vibe Supervisor. Do not use for generic ACP clients, unrestricted Vibe CLI execution, credential extraction, deployment or automatic patch application."
 license: MIT
 ---
 
 # Vibe ACP
 
-Operate Vibe as an implementation worker. The coordinating agent owns scope, independent verification, correction requests and the final assessment. A completed prompt turn is a candidate result, not acceptance.
+## When To Use
 
-Start, wait, read and close follow the [vibe-supervisor](../vibe-supervisor/SKILL.md) loop; this skill adds only the correction loop. It needs `backend = "acp"` or `"auto"` in the supervisor config, which is what registers `vibe_continue` and `vibe_respond`. If they are absent, tell the user to change the config and restart Codex; do not substitute a backend, enable trust or loosen permissions. Do NOT use it for deployments, credential extraction, or work outside the allowed roots.
+Use for an ACP implementation/review/test/correction loop or explicit continuation of an existing run. The coordinator owns scope, independent checks and acceptance. Do NOT use for deployment, credentials, unbounded shell/network execution or out-of-root work. Use [vibe-supervisor](../vibe-supervisor/SKILL.md) for connection, baseline, start/wait and cleanup preflight.
 
-## Inputs to collect first
+## Inputs To Collect First
 
-1. The outcome, acceptance criteria, canonical workspace and Git base.
-2. File ownership, excluded files and changes to preserve.
-3. The checks you will run yourself, and the budget: reassess after three correction rounds unless the user set one.
-4. For continued work, the `run_id` and its artifacts. Distinguish the source checkout from the worker worktree.
+1. Outcome, acceptance oracle, exact owned/excluded files and reviewed prepared source/base hashes.
+2. Independent verifier location, relevant checks and read-only reviewer requirement.
+3. Authorized cumulative turns, deadline/waits and cleanup reserve; no automatic budget increase.
+4. Existing run_id, owning connection, state, current candidate artifacts and remaining budget when continuing.
+5. Any explicitly authorized fallback, with its acceptance and evidence reported separately.
 
-## Assign the task
+## Procedure
 
-Tell Vibe that it shares the codebase, must preserve other changes, cannot run shell checks and cannot commit, merge, push or apply its patch. Ask it to list any scratch files or plans it creates and to remove only those, inside its own worktree, before it finishes; it must keep the deliverables. Name the checks you will run and do not accept fabricated execution claims. Use the [templates](references/verification-loop.md#prompt-templates). Pass `wait_seconds` on the start call.
+### Step 1 — Verify ACP and the prepared baseline
 
-## Answer requests
+The configured backend must be acp/auto with observed vibe_continue and vibe_respond schemas. If missing, report the connection/config prerequisite rather than substituting a backend or weakening permissions. Distinguish connected version, installed version and recorded creator version; legacy creator absence remains unknown.
 
-On `waiting_permission` or `waiting_input`, read `pending_request` and answer with `vibe_respond` using the matching `request_id` and an offered `option_id` (or an elicitation `action`). Deny unknown, incomplete, stale, sensitive, out-of-root, shell or network requests; never grant blanket approval to unblock work. Missing user decisions stay pending. Do not send concurrent prompts.
+Follow the supervisor skill's reviewed-baseline preflight. Required files must exist with reviewed bytes before inference. Never hand baseline hydration to the model, copy into an active worktree or weaken canonical/private-path checks for a fixture. Use the [initial template](references/verification-loop.md#initial-task) for concise outcome/ownership/tool constraints; keep the complete oracle with the coordinator.
 
-## Verify, then correct
+### Step 2 — Dispatch one bounded increment
 
-1. Read the compact `result` and the full patch. Check `stop_reason` and `warnings` first.
-2. Run the relevant checks against the exact candidate in the worker worktree or a disposable checkout, and account for new files and the base. Use canonical private temporary paths; do not weaken a symlink check to fit a bad fixture.
-3. If checks fail, send a focused correction instead of reporting the first draft: the failing command with a short sanitized excerpt, the defect and expected behavior, the paths, and a regression criterion. Batch related findings; never send a vague "try again".
-4. Call `vibe_continue` with the same `run_id` and a `message`, only for a run in `completed`, `ready` or `recoverable` state. After `stop_reason` `max_turn_requests` the session's turn budget is spent: continue only deliberately, with a larger `max_turns`, or start a new run. Do not close the run between rounds; a failed or cancelled run is not eligible, and the programmatic backend has no continuation.
-5. After each correction, fetch fresh artifacts and repeat the review and affected checks; earlier patches and results are stale.
+Tell Vibe that it shares the codebase and must preserve others' changes. Only read_file/grep/write_file/edit are available; it cannot run shell checks, commit, merge, push or apply its patch to source. Do not create scratch unless the task requires it; request exact ownership/inventory and removal of only worker-owned scratch before final export. Declare checks the coordinator will run and request an actual concise final answer; do not accept fabricated execution claims.
 
-## Recovery
+Start/wait on the same owning connection with the declared bounded waits and status cursor. One worker and one prompt at a time. A soft early-answer instruction does not reserve turns; max_turns is cumulative per session, not a provider daily allowance.
 
-On `VSUP_TURN_LIMIT_REACHED`, keep artifacts and stop under the current ceiling. A larger cumulative `max_turns` or replacement run requires explicit authorization in the execution plan. On `VSUP_INVALID_STATE`, `VSUP_SESSION_NOT_RESUMABLE`, `VSUP_REQUEST_EXPIRED` or a process failure, inspect the status and saved artifacts before choosing an action ([errors](../../docs/errors.md)). A `recoverable` run reloads its saved session on `vibe_continue` and needs a free run slot. Never replay an uncertain task, restore pending grants or use saved PIDs as kill authority. A new run needs a deliberate base and a plan to preserve reviewed changes, since restarting from `HEAD` loses the candidate. If no safe recovery exists, keep the artifacts and report the blocker.
+### Step 3 — Inspect requests and settle safely
 
-## Accept and close
+For waiting_permission/input, inspect pending_request. Permission responses use the matching request_id and offered option_id; elicitation uses a schema-valid action/content. Refuse unknown, incomplete, stale, sensitive, out-of-root, shell or network requests; never grant blanket approval. Missing user decisions remain pending. Do not issue another prompt while running/waiting.
 
-Accept only when the final patch meets the outcome, the checks pass and the limitations are stated. Delegation alone does not authorize applying a patch, committing, merging or pushing. Before closing, check the final patch for scratch files the worker left; if any remain and the session is usable, send one short `vibe_continue` naming the exact paths to remove, then fetch fresh artifacts. Do not start a new run just to clean an old worktree; worktree, process and private-storage cleanup belong to the supervisor and to you. Close with `vibe_close`; request `cleanup_worktree: true` only after a fresh export matches the final worktree. Report the outcome, what was applied or retained, the checks actually run and what is unresolved, distinguishing "worker produced a patch" from "verified implementation delivered".
+Read stop_reason and warnings, then fresh full result/transcript and patch. Require end_turn and actual final answer for readiness. Failed/cancelled/closed runs are not candidates for assumed continuation. An unavailable-tool response is not proof of Supervisor policy denial or the terminal cause; preserve structured stop_reason separately from diagnostic reason.
+
+### Step 4 — Test, review and correct before closing
+
+Verify exact candidate bytes, changed/new files and base/export hashes in a separate verifier copy; keep tests, dependencies, builds and caches out of the Vibe worktree and original source. Explicitly supply any historical ignored evidence needed by the oracle, with provenance; never disable the oracle for an incomplete copy. Have the read-only reviewer inspect that exact candidate when required. Optional offline audit scope evidence covers arguments only, not candidate acceptance.
+
+Keep the usable worker session open. If checks/review fail, use the [correction template](references/verification-loop.md#correction-request) with concrete defect, expected behavior, owned paths and a short sanitized check excerpt. Batch related findings. Re-read an exact file after a match error; a second repeated failure triggers reassessment, not blind retry or shell escalation. Unless a different plan was agreed, reassess after three correction rounds; remaining authorized budget and deadlines always take precedence.
+
+Call vibe_continue(run_id,message) only from completed/ready/recoverable and within the authorized cumulative ceiling. With max_turn_requests, the ceiling is spent: retain artifacts and stop unless an explicit larger total/replacement is authorized. Never automatically increase max_turns. After correction, fetch fresh artifacts and repeat affected checks/review; previous candidate hashes and results are stale.
+
+### Step 5 — Handle recovery without replay
+
+For VSUP_INVALID_STATE, VSUP_SESSION_NOT_RESUMABLE, VSUP_REQUEST_EXPIRED or process failure, inspect state/artifacts before acting. Recoverable ACP loading needs advertised capability, validated supervisor-owned paths and a free slot; continue only explicitly. Do not replay an uncertain original task, restore pending permission grants or use saved PIDs as kill authority. Programmatic runs cannot continue in the same session. A replacement needs a deliberate reviewed base and explicit authorization; preserve failed evidence and report a blocker if no safe path exists.
+
+### Step 6 — Accept and close with fresh evidence
+
+Accept only the current tested/reviewed patch; validate unchanged original source before authorized manual integration. Identify and account for scratch/residual files. If the session can remove its exact owned scratch within budget, request that correction and verify again; otherwise retain/report it.
+
+Fetch a fresh export matching the final worktree, then close with cleanup_worktree:true. Record closed/worktree_removed and independently check filesystem absence. Never force-delete a retained worktree or start a new worker just to clean it. A final answer is not acceptance; a coordinator/fallback correction after premature close does not pass the original Vibe implementation gate. Report both provider outcomes honestly and leave soak/recovery/desktop/platform gates unverified unless actually exercised.
+
+## Completion Checks
+
+- [ ] Prepared baseline availability/hashes and the real ACP connection were checked.
+- [ ] One worker, declared ownership, disabled tools and cumulative budget were preserved.
+- [ ] Tests/reviewer inspected the exact candidate before close; corrections used fresh artifacts.
+- [ ] No uncertain task replay, restored grants, account rotation or automatic budget increase occurred.
+- [ ] Scratch, final export and cleanup are verified or explicitly retained/unverified.
+- [ ] Actual worker acceptance and any coordinator/fallback corrections are reported separately.
 
 ## References
 
-- [Verification loop and templates](references/verification-loop.md)
-- [How it works](../../docs/functionality.md), [reference](../../docs/reference.md), [security](../../docs/security.md), [compatibility](../../docs/compatibility.md)
-- [ACP v1 prompt turns](https://agentclientprotocol.com/protocol/v1/prompt-turn), [session loading](https://agentclientprotocol.com/protocol/v1/session-setup), [tool calls and permissions](https://agentclientprotocol.com/protocol/v1/tool-calls)
-
-## Reviewed baseline preflight
-
-A detached edit starts at base_ref; dirty source changes are not copied. The coordinator prepares reviewed changes before inference with `vibe-supervisor baseline prepare /absolute/private/manifest.json` (dry-run), then an explicit `--create` to make a disposable snapshot repository and local snapshot commits. It preserves source files/index/refs and requires existing canonical allowlist roots. Use the returned source_workspace/base_ref and bind the original reviewed baseline by hashes. Never ask the model to recreate baseline files from pasted diffs, nor modify a live worker worktree.
-
-Delegate one bounded increment with the real read_file/grep/write_file/edit inventory and file ownership. After an edit-match error re-read the current file; after a second repeated match error reassess from artifacts. This is coordinator guidance, not an automatic runtime stop. Reserve correction capacity within the cumulative ceiling; no automatic limit increase or task replay. Tests/dependencies/builds remain in a separate exact candidate copy.
-
-After a settled ACP edit use `vibe-supervisor audit-edit /canonical/private/home run-id`, optionally with `--files /absolute/private/scope.json` for argument-path evidence. Actual candidate scope still requires export verification. The sanitized audit distinguishes assistant messages, unique tool calls, failed updates and unique failures. It classifies only proven failed formats; Unknown tool is distinct from Supervisor policy denial. Unsafe/incomplete/unsupported records remain unverified. Native histories, arguments, commands and reasoning stay private. Only independently verified deltas are manually integrated; fetch a fresh export before verified close/cleanup.
-
-Keep a usable completed edit session open through independent tests and read-only review. Send needed corrections in the same session within the remaining authorized cumulative budget, then fetch a fresh export and close. Premature close loses that correction path; do not classify a coordinator-corrected replacement as an accepted original worker candidate.
+- [Vibe Supervisor preflight](../vibe-supervisor/SKILL.md)
+- [Verification loop, templates and state decisions](references/verification-loop.md)
+- [Reference](../../docs/reference.md), [behavior](../../docs/functionality.md), [errors](../../docs/errors.md), [security](../../docs/security.md), [compatibility](../../docs/compatibility.md)
+- [ACP prompt turns](https://agentclientprotocol.com/protocol/v1/prompt-turn), [session setup](https://agentclientprotocol.com/protocol/v1/session-setup), [tool calls](https://agentclientprotocol.com/protocol/v1/tool-calls)

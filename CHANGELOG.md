@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0-rc.15
+
+- Consolidate both Vibe skills into preflight, reviewed-baseline, verification/correction and cleanup procedures with completion checks.
+- Require verification outside the worker worktree, keep sessions open until acceptance, and remove conflicting automatic budget/replacement guidance.
+- Refresh local package delivery and version-bound handoff evidence; runtime permissions and pinned Vibe remain unchanged.
+
 ## 0.9.0-rc.14
 
 - Add optional owner-private scope files to the offline audit CLI, retaining argument-only scope evidence and unverified candidate acceptance.
