@@ -4,6 +4,8 @@ Status as of **2026-10-09**: release candidate `vibe-supervisor@0.9.0-rc.17` on 
 
 The [v1.0 stable development strategy](docs/v1-stable-strategy.md) consolidates adoption evidence, delivery priorities and acceptance criteria. Execute exact installation/connection checks and bounded desktop review/edit acceptance before the full soak; keep the release gates below.
 
+The [latest UARoute S5 adoption reconciliation](docs/history/reviews/uaroute-s5-adoption-update-2026-10-09.md) confirms another native rc.12 connection under an expected rc.15 install and a review defect missed by Vibe but caught by Luna. The next review must verify usefulness against an independent oracle, as well as lifecycle and exact runtime identity; do not rerun the completed S5 review for a new version label.
+
 ## What this is
 
 A local MCP stdio server that lets Codex delegate bounded code reviews and isolated edits to Mistral Vibe 2.25.8. Codex sees five tools (`vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, `vibe_close`) with the default `programmatic` backend, and seven (adding `vibe_continue`, `vibe_respond`) with `acp`. Reviews may only read and search an allowlisted workspace; edits run in a supervisor-created detached Git worktree and are exported as a patch, never applied, committed or pushed. Shell and network tools are off. This is an application policy boundary, not an OS sandbox.
