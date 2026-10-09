@@ -14,7 +14,7 @@ The delivery retains rc.11 project-discovery isolation and rc.12 creator-version
 | rc.13 narrow product increment | Original candidate rejected for nested/lone dash paths; coordinator correction tested and reviewed, included in rc.14. Vibe product acceptance gate remains PARTIAL |
 | Native desktop reload / rc.14 hosted inference | UNVERIFIED / NOT RUN |
 
-See [delivery evaluation](docs/history/reviews/rc13-worker-adoption-2026-10-09.md), [adoption contract and status](docs/vibe-worker-adoption-plan-2026-10-09.md), and [pilot protocol](docs/acp-edit-pilot-2026-10-09.md). Live public diagnostic fields and runtime intervention on repeated edit failures were not added.
+See [delivery evaluation](docs/history/reviews/rc13-worker-adoption-2026-10-09.md), [adoption contract and status](docs/history/vibe-worker-adoption-plan-2026-10-09.md), and [pilot protocol](docs/history/acp-edit-pilot-2026-10-09.md). Live public diagnostic fields and runtime intervention on repeated edit failures were not added.
 
 ## Next test and remaining gates
 

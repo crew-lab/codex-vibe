@@ -33,3 +33,20 @@ describe('edit evidence audit',()=>{
  });
  it('fails closed on unavailable and unsafe evidence',async()=>{expect(await auditEditRun('/private/tmp','bad')).toMatchObject({status:'unverified'});});
 });
+describe('edit evidence audit verdict',()=>{
+ it('does not validate a run whose writes fall outside the declared files',()=>{
+  const r=summarizeEditRun([assistant(call('1','edit',{path:'b.py'})),result('1','ok')],[],'/worker',['a.py']);
+  expect(r).toMatchObject({status:'unverified',argument_scope:'outside_declared_arguments'});
+ });
+ it('treats a successful call to a tool other than read, search or file edits as out of scope',()=>{
+  const r=summarizeEditRun([assistant(call('1','bash',{command:'true'})),result('1','ok')],[],'/worker',['a.py']);
+  expect(r).toMatchObject({status:'unverified',argument_scope:'outside_declared_arguments'});
+ });
+ it('validates a complete run that stays within the declared files',()=>{
+  expect(summarizeEditRun([assistant(call('1')),result('1','ok')],[],'/worker',['a.py']).status).toBe('validated');
+ });
+ it('links a backend permission denial to its tool call',()=>{
+  const r=summarizeEditRun([assistant(call('1')),result('1','denied')],[{type:'permission_denied',data:{toolCallId:'1',reason:'private'}}],'/worker');
+  expect(r).toMatchObject({policy_denial_events:1,failure_classes:{policy_denied:1}});
+ });
+});

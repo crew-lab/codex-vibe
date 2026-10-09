@@ -1,6 +1,6 @@
 # Bounded edit/correction pilot
 
-Status: **Executed successfully on rc.13; see [evaluation](history/reviews/rc13-worker-adoption-2026-10-09.md).** This is one edit session and one same-session correction. It does not certify soak, restart/load recovery, permission callbacks, native desktop shutdown, Intel, clean-account installation, or application product acceptance. Keep prior failed records separately.
+Status: **Executed successfully on rc.13; see [evaluation](reviews/rc13-worker-adoption-2026-10-09.md).** This is one edit session and one same-session correction. It does not certify soak, restart/load recovery, permission callbacks, native desktop shutdown, Intel, clean-account installation, or application product acceptance. Keep prior failed records separately.
 
 ## Fresh connection prerequisite
 

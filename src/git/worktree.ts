@@ -207,5 +207,4 @@ export async function removeVerifiedWorktree(source: string, record: { path: str
   await git(root, ['worktree', 'remove', '--force', '--', target]);
 }
 
-/** Internal bounded Git primitive for coordinator-owned baseline preparation. */
 export { git as preparationGit };

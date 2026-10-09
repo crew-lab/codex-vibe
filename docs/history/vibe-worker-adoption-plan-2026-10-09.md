@@ -2,11 +2,11 @@
 
 Date: 2026-10-09. Status: **Implemented in rc.14. Offline verification and the rc.13 hosted pilot passed; the product Vibe gate remains partial after coordinator correction.**
 
-Basis: [rc.12 SEO execution review](history/reviews/rc12-seo-worker-adoption-2026-10-09.md). Implementation starts from the preserved rc.12 source candidate in `codex/project-agents-isolation`, not the old dirty primary checkout or rc.10 HEAD alone. Record the full starting source patch/hash before any delegation. Preserve the existing rc.11/rc.12 work, installed versions, private failures and unrelated changes. The planning request did not authorize commit or push; the user subsequently authorized both for this delivery. Publication, provider changes and account rotation remain outside scope.
+Basis: [rc.12 SEO execution review](reviews/rc12-seo-worker-adoption-2026-10-09.md). Implementation starts from the preserved rc.12 source candidate in `codex/project-agents-isolation`, not the old dirty primary checkout or rc.10 HEAD alone. Record the full starting source patch/hash before any delegation. Preserve the existing rc.11/rc.12 work, installed versions, private failures and unrelated changes. The planning request did not authorize commit or push; the user subsequently authorized both for this delivery. Publication, provider changes and account rotation remain outside scope.
 
 ## Delivery status
 
-Steps 1–4 are implemented and release-verified in rc.14. Step 5 passed on rc.13 with one same-session correction and verified cleanup. Step 6 produced a narrow CLI candidate on rc.13, but the coordinator closed before independent checks; the original candidate was rejected and a tested/reviewed coordinator correction is included in rc.14. The Vibe product gate is PARTIAL, not complete. Keep future product sessions open through acceptance and correction before close. See [evaluation](history/reviews/rc13-worker-adoption-2026-10-09.md).
+Steps 1–4 are implemented and release-verified in rc.14. Step 5 passed on rc.13 with one same-session correction and verified cleanup. Step 6 produced a narrow CLI candidate on rc.13, but the coordinator closed before independent checks; the original candidate was rejected and a tested/reviewed coordinator correction is included in rc.14. The Vibe product gate is PARTIAL, not complete. Keep future product sessions open through acceptance and correction before close. See [evaluation](reviews/rc13-worker-adoption-2026-10-09.md).
 
 The sections below retain the acceptance contract and workflow rules; they do not claim unperformed hosted gates or guaranteed provider request counts.
 
@@ -114,4 +114,4 @@ The baseline helper safely produces an exact, provenance-bound starting state; t
 
 Implementation note: scope acceptance remains coordinator/export evidence. The offline audit deliberately reports `declared_scope: unverified`; optional argument-path evidence is labeled separately. Request-level policy denials are counted without guessing tool-call correlation. No live status/result fields or lifecycle intervention were added.
 
-Delivery evidence: [rc.13 hosted adoption evaluation](history/reviews/rc13-worker-adoption-2026-10-09.md). The original product candidate was retained and rejected; the independently reviewed coordinator correction is included in rc.14. No further hosted retry was made.
+Delivery evidence: [rc.13 hosted adoption evaluation](reviews/rc13-worker-adoption-2026-10-09.md). The original product candidate was retained and rejected; the independently reviewed coordinator correction is included in rc.14. No further hosted retry was made.

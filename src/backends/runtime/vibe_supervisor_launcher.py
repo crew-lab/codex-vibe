@@ -19,7 +19,6 @@ import time
 from typing import Any, Callable, Optional
 
 EXPECTED_VERSION = "2.25.8"
-# Published/installed 2.25.8 harness manager, normalized by inspect.getsource.
 PROJECT_DISCOVERY_SOURCE_SHA256 = "43fc21e2d1a7359ac896ab41e902d927d363ba4ef8f989909af8bcca4b82cbac"
 # Set restrictive permissions before importing Vibe or creating its state.
 os.umask(0o077)
@@ -290,12 +289,6 @@ def _redact(value: Any) -> Any:
 
 
 def _patch_project_discovery(manager_module: Any = None) -> None:
-    """Disable project configuration discovery in every manager/session copy.
-
-    Merely keeping the cwd untrusted is insufficient: session workspace roots
-    can enter project_roots independently of trust. Private user roots remain
-    available for the supervisor's own Plan/Accept Edits definitions.
-    """
     if manager_module is None:
         from vibe.core.config.harness_files import _harness_manager as manager_module
     try:
@@ -316,8 +309,6 @@ def _patch_project_discovery(manager_module: Any = None) -> None:
     def no_project_roots(self: Any) -> list:
         return []
 
-    # Patch the class, not only the global singleton: for_session/moved_to and
-    # direct instances must retain the boundary, including session/load.
     manager.project_source_enabled = property(project_disabled)
     manager.project_roots = property(no_project_roots)
 

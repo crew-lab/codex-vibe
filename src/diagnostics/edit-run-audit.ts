@@ -54,16 +54,18 @@ export function summarizeEditRun(messages: unknown[], events: unknown[], workerR
     if((e.type==='tool_call'||e.type==='tool_call_update')&&d.status==='failed'){
       if(typeof d.toolCallId!=='string'||!calls.has(d.toolCallId))throw new Error('uncorrelated_failure');failedUpdates.push(d.toolCallId);
     }
-    // Request-level denials are counted separately; no guessed call correlation.
-    if(e.type==='permission_denied_by_policy')policyDenialEvents++;
-    // Only an explicit supervisor denial event is policy denial evidence.
-    if(e.type==='permission_denied_by_policy'&&typeof d.tool_call_id==='string'&&calls.has(d.tool_call_id))policyDenied.add(d.tool_call_id);
+    if(e.type==='permission_denied_by_policy'||e.type==='permission_denied'){
+      policyDenialEvents++;
+      const deniedId=typeof d.toolCallId==='string'?d.toolCallId:d.tool_call_id;
+      if(typeof deniedId==='string'&&calls.has(deniedId))policyDenied.add(deniedId);
+    }
   }
   const failedIds=new Set(failedUpdates);
   const counts:Record<string,number>=Object.fromEntries([...names,'other'].map(n=>[n,0]));
   const roundCounts:Record<string,number>={};const failures:Record<string,number>={};let scope: 'within_declared_arguments'|'outside_declared_arguments'|'unverified'=declaredFiles?'within_declared_arguments':'unverified';
   for(const [id,c] of calls){
     const name=names.includes(c.name as typeof names[number])?c.name:'other';counts[name]=(counts[name]??0)+1;roundCounts[String(c.round)]=(roundCounts[String(c.round)]??0)+1;
+    if(declaredFiles&&!permitted.has(c.name)&&!failedIds.has(id))scope='outside_declared_arguments';
     if(declaredFiles&&['write_file','edit'].includes(c.name)){
       let args=c.args;if(typeof args==='string')try{args=JSON.parse(args);}catch{args=undefined;}
       const obj=object.safeParse(args);const candidate=obj.success?(obj.data.path??obj.data.file_path):undefined;
@@ -75,7 +77,6 @@ export function summarizeEditRun(messages: unknown[], events: unknown[], workerR
     const text=rawText?.startsWith(prefix)&&rawText.endsWith('</tool_error>')?rawText.slice(prefix.length,-13):rawText?.startsWith(unavailablePrefix)&&rawText.endsWith('</tool_error>')?rawText.slice(unavailablePrefix.length,-13):undefined;
     const failed=failedIds.has(id);
     let kind: string | undefined;
-    // Unknown-tool output cannot be produced by a successful unavailable tool.
     if(failed&&!permitted.has(c.name)&&text?.startsWith(`Unknown tool '${c.name}'`))kind='unavailable_tool';
     else if(failed){
       if(!text)kind='unknown';
@@ -86,7 +87,8 @@ export function summarizeEditRun(messages: unknown[], events: unknown[], workerR
     }
     if(kind)failures[kind]=(failures[kind]??0)+1;
   }
-  return {status:[...calls.keys()].some(id=>!results.has(id))?'unverified':'validated',assistant_messages:parsed.filter(m=>m.role==='assistant').length,unique_tool_calls:calls.size,tool_counts:counts,failed_updates:failedUpdates.length,unique_failed_calls:new Set(failedUpdates).size,failure_classes:failures,round_tool_calls:roundCounts,final_answer:final,declared_scope:'unverified',argument_scope:scope,policy_denial_events:policyDenialEvents,unresolved_calls:[...calls.keys()].filter(id=>!results.has(id)).length};
+  const outOfScope=declaredFiles!==undefined&&scope!=='within_declared_arguments';
+  return {status:outOfScope||[...calls.keys()].some(id=>!results.has(id))?'unverified':'validated',assistant_messages:parsed.filter(m=>m.role==='assistant').length,unique_tool_calls:calls.size,tool_counts:counts,failed_updates:failedUpdates.length,unique_failed_calls:new Set(failedUpdates).size,failure_classes:failures,round_tool_calls:roundCounts,final_answer:final,declared_scope:'unverified',argument_scope:scope,policy_denial_events:policyDenialEvents,unresolved_calls:[...calls.keys()].filter(id=>!results.has(id)).length};
 }
 export async function auditEditRun(home: string, runId: string, declaredFiles?: readonly string[]): Promise<RecordValue> {
   try {
@@ -101,6 +103,6 @@ export async function auditEditRun(home: string, runId: string, declaredFiles?: 
     const events=lines(await privateAuditRead(path.join(root,'events.ndjson')));
     const processRecord=object.safeParse(meta.process);if(!processRecord.success||processRecord.data.version!=='2.25.8')throw new Error('unsupported_vibe');
     const result=object.safeParse(meta.result);
-    return {...summarizeEditRun(messages,events,meta.worker_workspace,declaredFiles),supervisor_version:typeof meta.supervisor_version==='string'&&meta.supervisor_version.length<=128&&/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(meta.supervisor_version)?meta.supervisor_version:null,stop_reason:result.success&&['end_turn','max_turn_requests','cancelled'].includes(String(result.data.stop_reason))?result.data.stop_reason:null};
+    return {...summarizeEditRun(messages,events,meta.worker_workspace,declaredFiles),supervisor_version:typeof meta.supervisor_version==='string'&&meta.supervisor_version.length<=128&&/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(meta.supervisor_version)?meta.supervisor_version:null,stop_reason:result.success&&['end_turn','max_turn_requests','cancelled'].includes(String(result.data.stop_reason))?result.data.stop_reason:null};
   } catch {return {status:'unverified',reason:'unsafe_incomplete_or_unsupported_evidence'};}
 }
