@@ -19,6 +19,7 @@ import { reportBackgroundFailure } from '../diagnostics/background.js';
 
 const execFileAsync = promisify(execFile);
 const NO_FINAL_MESSAGE_WARNING = 'Vibe produced no final message.';
+const TRUST_WARNING_PATTERN = /^Warning: .+ is not trusted; project configuration \(.+\) will be ignored\. Re-run with --trust to trust this folder temporarily\.$/;
 
 interface ProgrammaticHandle extends BackendRunHandle {
   opaque: { process: ReturnType<typeof spawnManaged>; done: boolean; home: string; vibeHome: string; summary: string };
@@ -31,6 +32,15 @@ function executable(config: SupervisorConfig): string {
 function parsedVersion(stdout: string, stderr: string): string | undefined {
   const text = `${stdout}\n${stderr}`;
   return text.match(/\bvibe\s+(\d+\.\d+\.\d+(?:[-+][\w.-]+)?)/i)?.[1];
+}
+
+function isPinnedTurnLimitExit(code: number | null, signal: NodeJS.Signals | null, summary: string, stderr: string, maxTurns: number): boolean {
+  if (signal || summary.trim() !== `<vibe_stop_event>Turn limit of ${maxTurns} reached</vibe_stop_event>`) return false;
+  if (code === 1) return stderr.trim() === `<vibe_stop_event>Turn limit of ${maxTurns} reached</vibe_stop_event>`;
+  if (code !== 3) return false;
+  const lines = stderr.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.pop() !== 'Stopped: turn_limit') return false;
+  return lines.every((line) => TRUST_WARNING_PATTERN.test(line));
 }
 
 export class ProgrammaticBackend implements SupervisorBackend {
@@ -137,8 +147,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
       const diagnosticTail = stderrRedactor.flush();
       if (diagnosticTail) await callbacks.onEvent({ source: 'supervisor', type: 'diagnostic', severity: 'warning', data: { text: diagnosticTail } });
       const stderrText = redactSecrets(child.stderr.toString(), environmentSecrets(profile.env));
-      const turnLimitMarker = `<vibe_stop_event>Turn limit of ${input.limits.maxTurns} reached</vibe_stop_event>`;
-      const reachedTurnLimit = code === 1 && !signal && opaque.summary.trim() === turnLimitMarker && stderrText.trim() === turnLimitMarker;
+      const reachedTurnLimit = isPinnedTurnLimitExit(code, signal, opaque.summary, stderrText, input.limits.maxTurns);
       if (code === 0 || reachedTurnLimit) {
         await callbacks.onState('completed', { result: {
           stopReason: reachedTurnLimit ? 'max_turn_requests' : 'end_turn',
