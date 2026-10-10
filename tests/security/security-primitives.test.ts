@@ -269,11 +269,19 @@ describe('managed process', () => {
     } finally {
       process.kill = nativeKill;
     }
-    if (process.platform === 'linux') {
-      await proc.terminate(25);
+    // Normal group signaling can succeed on macOS too. If init has not
+    // reaped an orphan zombie within the bound, conservative failure is
+    // valid; the zombie can disappear immediately after that observation.
+    let retryError: unknown;
+    try { await proc.terminate(25); } catch (error) { retryError = error; }
+    if (retryError === undefined) {
       expect(proc.terminationVerified).toBe(true);
+      if (process.platform !== 'linux') {
+        expect(() => nativeKill(-proc.child.pid!, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
+      }
     } else {
-      await expect(proc.terminate(25)).rejects.toThrow('termination is unverified');
+      expect(process.platform).not.toBe('linux');
+      expect(String(retryError)).toContain('termination is unverified');
       expect(proc.terminationVerified).toBe(false);
     }
     expect(groupTargets.filter((target) => target.signal !== 0)).toEqual([{ pid: -proc.child.pid, signal: 'SIGTERM' }, { pid: -proc.child.pid, signal: 'SIGKILL' }]);

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "candidate": "0.9.0-rc.20",
+  "candidate": "0.9.0-rc.21",
   "scope": "Programmatic one-shot review and isolated edit; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work.",
   "deterministic": [
     { "name": "lint-typecheck-build-tests-python-acceptance-secret-scan-sbom", "status": "RUN_BY_verify:release" },
@@ -16,5 +16,5 @@
     { "name": "clean-macos-apple-silicon-account-install", "status": "UNVERIFIED", "evidence_required": "After authorization and a reviewable frozen tarball, execute the documented install/config/doctor/registration workflow in a fresh Apple silicon macOS account; record OS/architecture, Node, artifact hash, exact config/registration diff, rollback outcome, and cleanup." },
     { "name": "provider-authentication-for-this-candidate", "status": "UNVERIFIED", "evidence_required": "Observe authentication only during an authorized real run against the exact frozen candidate; doctor and initialize-only checks do not qualify." }
   ],
-  "historical_evidence": "Version-bound prior candidate reports remain in docs/history and do not establish acceptance of rc.20."
+  "historical_evidence": "Version-bound prior candidate reports remain in docs/history and do not establish acceptance of rc.21."
 }

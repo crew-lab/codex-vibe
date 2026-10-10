@@ -4,7 +4,7 @@ A local MCP server for one bounded Mistral Vibe review or isolated edit. The red
 
 This is an application policy boundary, **not an operating-system sandbox**. A delegated run uses your account's permissions, and permitted workspace content is sent to Mistral. Review [SECURITY.md](SECURITY.md) before use.
 
-The development candidate is `0.9.0-rc.20`, private, unpublished, and MIT licensed. No platform is currently certified for stable use. macOS Apple silicon is the intended first target; hosted inference, native desktop lifecycle, clean-account installation, and provider authentication remain unverified for this candidate. Linux and Windows are not claimed as supported platforms.
+The development candidate is `0.9.0-rc.21`, private, unpublished, and MIT licensed. No platform is currently certified for stable use. macOS Apple silicon is the intended first target; hosted inference, native desktop lifecycle, clean-account installation, and provider authentication remain unverified for this candidate. Linux and Windows are not claimed as supported platforms.
 
 ## Requirements
 
@@ -37,10 +37,12 @@ The starter workspace allowlist is empty. On a fresh source checkout, initialize
 CONFIG="$HOME/Library/Application Support/VibeSupervisor-oneshot/config.toml"
 node dist/cli.js allow --config "$CONFIG" "$PWD"
 node dist/cli.js doctor --config "$CONFIG" --json
-node dist/cli.js serve --stdio --config "$CONFIG"
+node dist/cli.js serve --stdio --isolated --config "$CONFIG"
 ```
 
 Replace `$PWD` with the intended canonical repository path if it is not the current directory. An explicit missing or invalid config fails for doctor/serve and never falls back. Without an override, the candidate uses `~/Library/Application Support/VibeSupervisor-oneshot` on macOS, `%APPDATA%/VibeSupervisor-oneshot` on Windows, or `${XDG_DATA_HOME:-~/.local/share}/vibe-supervisor-oneshot` on Linux. `VIBE_SUPERVISOR_HOME` explicitly selects another root. Do not point it at legacy `VibeSupervisor` data.
+
+Codex `setup` generates `--isolated` registrations by default. Each connection owns a separate private storage directory, so another chat can connect without competing for the same owner lock. Existing registrations need the flag added and the connection reloaded; setup previews that change before writing it. Each instance still permits one active run. Direct `serve` without `--isolated` remains available for a deliberately shared storage owner.
 
 Bind preparation, doctor, allow, and serve to the same explicit config. For a separately installed artifact, use its exact executable path and config for every command. Verify the live MCP handshake version and exact five-tool catalog on the connection that will own the run; an installed CLI or doctor result cannot identify a previously open desktop connection.
 

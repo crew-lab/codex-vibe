@@ -33,7 +33,7 @@ async function readPrivateInput(file) {
     if (current !== file) {
       const stickyRoot = info.uid === 0 && (info.mode & 0o1000) !== 0;
       if (!info.isDirectory() || ![0, process.getuid?.()].includes(info.uid) || (info.mode & 0o022 && !stickyRoot)) refuse('input');
-      ancestors.push({ path: current, ino: info.ino, dev: info.dev, ctimeMs: info.ctimeMs });
+      ancestors.push({ path: current, ino: info.ino, dev: info.dev, uid: info.uid, mode: info.mode });
     }
   }
   const before = await lstat(file);
@@ -43,7 +43,7 @@ async function readPrivateInput(file) {
     const opened = await handle.stat(); if (opened.ino !== before.ino || opened.dev !== before.dev) refuse('input');
     const bytes = await handle.readFile(); const after = await handle.stat(); const currentFile = await lstat(file);
     if (after.size !== before.size || bytes.length !== before.size || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs || currentFile.ino !== before.ino || currentFile.dev !== before.dev) refuse('input');
-    for (const parent of ancestors) { const info = await lstat(parent.path); if (info.isSymbolicLink() || info.ino !== parent.ino || info.dev !== parent.dev || info.ctimeMs !== parent.ctimeMs) refuse('input'); }
+    for (const parent of ancestors) { const info = await lstat(parent.path); if (info.isSymbolicLink() || !info.isDirectory() || info.ino !== parent.ino || info.dev !== parent.dev || info.uid !== parent.uid || info.mode !== parent.mode) refuse('input'); }
     if (await realpath(file) !== file) refuse('input');
     return bytes.toString('utf8');
   } finally { await handle.close(); }

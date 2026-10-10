@@ -142,7 +142,7 @@ function reportUpdate(update: WorkspaceUpdate): void {
 }
 
 export function parseSetupArgs(args: string[]): Omit<SetupOptions, 'interactive' | 'confirm'> {
-  let workspace: string | undefined; let configPath: string | undefined; let codex: CodexScope = 'user'; let isolated = false; let yes = false; let dryRun = false;
+  let workspace: string | undefined; let configPath: string | undefined; let codex: CodexScope = 'user'; let isolated = true; let yes = false; let dryRun = false;
   const seen = new Set<string>();
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
