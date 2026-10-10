@@ -4,15 +4,15 @@ These instructions apply to this repository and its descendants unless a more sp
 
 ## Project and orientation
 
-This is codex-vibe, a local MCP supervisor for Mistral Vibe review and isolated edit runs. The npm package is `vibe-supervisor`, version `0.9.0-rc.18`, ESM, private and unpublished. Preserve the existing MIT license and copyright notice.
+This is codex-vibe, a local MCP supervisor for one-shot Mistral Vibe reviews and isolated edits. The development candidate is `vibe-supervisor` `0.9.0-rc.20`, ESM, private and unpublished. Preserve the existing MIT license and copyright notice.
 
-Read [README.md](README.md) for installation and usage, [Handoff.md](Handoff.md) for implementation status and remaining work, [docs/reference.md](docs/reference.md) for tools, configuration and CLI, and [docs/functionality.md](docs/functionality.md) for behavior. Consult [docs/security.md](docs/security.md), [docs/compatibility.md](docs/compatibility.md) and the ADRs in `docs/adr/` before changing those boundaries. `docs/errors.md` is generated: run `npm run docs:errors` after changing a remedy. Dated evidence lives in `docs/history/` and is not shipped.
+Read [README.md](README.md) for usage, [Handoff.md](Handoff.md) for candidate scope and remaining work, [docs/reference.md](docs/reference.md) for tools/config/CLI, and [docs/functionality.md](docs/functionality.md) for behavior. Consult [docs/security.md](docs/security.md), [docs/compatibility.md](docs/compatibility.md), and the ADRs before changing those boundaries. `docs/errors.md` is generated: run `npm run docs:errors` after changing a remedy. Dated evidence lives in `docs/history/` and is not shipped.
 
 The user's implementation preference is GPT-6 Luna agents. When delegating implementation, use that model where available, assign clear file ownership, and tell workers they share the codebase and must preserve others' changes. Do not create user-owned chats for internal implementation subtasks. If that model is unavailable, report the limitation rather than silently claiming to use it.
 
 ## Development
 
-- Use the existing strict TypeScript contracts, pinned dependencies, official MCP/ACP SDKs, and lockfile. The current compiler is TypeScript 5.9.3; do not silently migrate versions.
+- Use the existing strict TypeScript contracts, pinned dependencies, official MCP SDKs, and lockfile. The current compiler is TypeScript 5.9.3; do not silently migrate versions or add replacement frameworks.
 - Edit source in `src/`, tests in `tests/`, documentation in the repository root or `docs/`, and scripts in `scripts/`. Do not edit generated `dist/`, `node_modules/`, or release tarballs as source.
 - Inspect current Git status before edits and preserve unrelated changes. Commit, push, publish, deploy, or change user-global configuration only within explicit user authorization.
 - Keep stdout reserved for MCP frames in server mode. Send diagnostics to stderr; redact sensitive data before logging or persistence.
@@ -23,10 +23,9 @@ The user's implementation preference is GPT-6 Luna agents. When delegating imple
 - Canonical workspace allowlists are required; the starter allowlist is empty. Reject invalid, unsafe, or out-of-root paths rather than broadening access.
 - Review profiles enable only read/search. Edits use supervisor-created detached Git worktrees. Do not automatically apply, commit, merge, or push worker changes.
 - Shell and network tools stay disabled. `allow_shell: true` is rejected. The application policy is not a kernel sandbox; do not describe it as one.
-- Keep private per-run HOME/VIBE_HOME, explicit child environment filtering, untrusted project state, disabled raw ACP logs, and reasoning/secret filtering. Do not inherit user/project tools, hooks, agents, skills, MCP servers, or trust records.
-- Vibe 2.25.8 and the Python persistence shim are pinned. Compatibility/version/signature drift must fail closed. Revalidate installed-source assumptions before supporting a different Vibe release.
-- Correlate permission requests to validated tool-call records and offered option IDs. Unknown, stale, incomplete, or unsafe requests fail closed; elicitation must satisfy its schema.
-- Never replay an uncertain original task during recovery, restore pending permission grants, or terminate an arbitrary PID from a saved record. ACP loading requires advertised capability and validated supervisor-owned paths.
+- Keep private per-run HOME/VIBE_HOME, explicit child environment filtering, untrusted project state, and reasoning/secret filtering. Do not inherit user/project tools, hooks, agents, skills, MCP servers, or trust records.
+- Vibe 2.26.1 and the Python persistence shim are pinned. Compatibility/version/signature drift must fail closed. Revalidate installed-source assumptions before supporting a different Vibe release; the recorded source review applies to the installed macOS/CPython 3.12 distribution and does not certify other builds.
+- One run owns each server/storage instance's active slot; a competing start fails immediately. A restart marks interrupted one-shot work failed and never launches Vibe, reloads a session, replays a task, restores grants, or signals a PID from saved data.
 - Preserve bounded deadlines, output limits, owner locking, retention, and process cleanup. Remove a worktree only after checking a fresh export against the saved artifact and accounting for residual files.
 - Do not copy credentials into docs, prompts, transcripts, reports, or committed files. Authentication belongs to the private provider runtime.
 
@@ -43,4 +42,4 @@ VIBE_SUPERVISOR_TEST_NPM_CACHE=/absolute/path/to/populated/npm-cache npm run pac
 
 For documentation-only changes, verify local links and `git diff --check`; a full test rerun is unnecessary without a behavioral change. Packaging should be regenerated when delivering an updated tarball.
 
-Report checks actually performed. Fake ACP fixtures and initialization-only probes do not prove hosted behavior. The gates in [docs/compatibility.md](docs/compatibility.md#unverified-gates) stay unverified until their evidence is recorded there; plugin manifests remain scaffolds until installation is demonstrated.
+Report checks actually performed. Fake Vibe fixtures and initialization-only probes do not prove hosted behavior. The gates in [docs/compatibility.md](docs/compatibility.md#unverified-gates) stay unverified until their evidence is recorded there.

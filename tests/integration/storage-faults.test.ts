@@ -1,14 +1,10 @@
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { RunManager } from '../../src/core/run-manager.js';
-import { AcpBackend } from '../../src/backends/acp.js';
-import type { VibeChildProfile } from '../../src/backends/profile.js';
-import type { VibeLaunch } from '../../src/backends/launcher.js';
 
 type Wire = { state?: string; result?: unknown; workspace_snapshot_sha256?: string; limits?: { max_turns?: number } };
 const fault = vi.hoisted(() => ({ code: 'ENOSPC', remaining: 0, when: (_wire: Wire) => false, fired: 0 }));
@@ -27,7 +23,6 @@ vi.mock('../../src/persistence/atomic.js', async (importOriginal) => {
   };
 });
 
-const fixture = fileURLToPath(new URL('../fixtures/fake-acp.mjs', import.meta.url));
 const canonicalTmp = await realpath(tmpdir());
 const roots: string[] = [];
 const restore: string[] = [];
@@ -43,30 +38,14 @@ afterEach(async () => {
 class FakeBackend implements SupervisorBackend {
   readonly kind = 'programmatic' as const;
   readonly callbacks = new Map<string, BackendCallbacks>();
-  async probe() { return { available: true, backend: this.kind, supportsContinue: true, supportsPermissionResponse: true }; }
+  async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     this.callbacks.set(input.runId, callbacks);
     return { handle: { runId: input.runId, backend: this.kind, opaque: {} }, initialState: 'running' };
   }
-  readonly continues: Array<{ maxTurns?: number }> = [];
-  async continue(_handle: BackendRunHandle, _message: string, options?: { maxTurns?: number }) { this.continues.push({ ...(options ?? {}) }); }
-  async respond() {}
   async cancel(handle: BackendRunHandle) { await this.callbacks.get(handle.runId)?.onState('cancelled'); }
-  async close() {}
+  async close(_handle: BackendRunHandle) {}
   async recover(_record: RunRecord) { return undefined; }
-}
-
-class FakeAcpBackend extends AcpBackend {
-  constructor(dataDir: string, allowedWorkspaceRoots: string[]) {
-    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp' } }, dataDir);
-  }
-  protected override executable(): string { return 'fake-acp'; }
-  protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {
-    return { command: process.execPath, args: [fixture], env: { ...profile.env, FAKE_ACP_CASE: 'normal' } };
-  }
-  override async probe() {
-    return { available: true, backend: 'acp' as const, executable: 'fake-acp', version: '2.25.8', supportsContinue: true, supportsPermissionResponse: true };
-  }
 }
 
 async function harness(overrides: Partial<typeof DEFAULT_CONFIG> = {}) {
@@ -74,7 +53,7 @@ async function harness(overrides: Partial<typeof DEFAULT_CONFIG> = {}) {
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data');
   await mkdir(source); await writeFile(path.join(source, 'file.txt'), 'content\n');
   const backend = new FakeBackend();
-  const manager = new RunManager({ ...DEFAULT_CONFIG, backend: 'programmatic', allowedWorkspaceRoots: [source], maxConcurrentRuns: 1, workerIdleTtlSeconds: 600, ...overrides }, data, [backend]);
+  const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], ...overrides }, data, [backend]);
   return { backend, manager, source, data };
 }
 
@@ -108,8 +87,7 @@ describe('storage faults', () => {
     const h = await harness();
     try {
       const runId = await runningWithTranscript(h);
-      const follow = await h.manager.reviewStart({ task: 'follow', cwd: h.source });
-      expect((await h.manager.status({ run_id: follow.run_id })).state).toBe('queued');
+      await expect(h.manager.reviewStart({ task: 'follow', cwd: h.source })).rejects.toMatchObject({ code: 'VSUP_LIMIT_EXCEEDED' });
       fault.remaining = 1; fault.when = (wire) => wire.state === 'running' && wire.result !== undefined;
       await h.backend.callbacks.get(runId)?.onState('completed', { result: { summary: 'done' } });
       const status = await h.manager.status({ run_id: runId });
@@ -119,9 +97,10 @@ describe('storage faults', () => {
       expect(JSON.stringify(status.error)).not.toContain(SECRET_TEXT);
       expect(JSON.parse(await readFile(path.join(h.data, 'runs', runId, 'meta.json'), 'utf8')).state).toBe('failed');
       expect(JSON.parse(await readFile(path.join(h.data, 'runs', runId, 'result.json'), 'utf8')).state).toBe('failed');
-      expect(await waitFor(() => h.manager.status({ run_id: follow.run_id }), (value) => value.state === 'running').then((value) => value.state)).toBe('running');
-      await h.manager.cancel({ run_id: follow.run_id });
       expect(activeSlots(h.manager)).toBe(0);
+      const follow = await h.manager.reviewStart({ task: 'follow', cwd: h.source });
+      expect((await waitFor(() => h.manager.status({ run_id: follow.run_id }), (value) => value.state === 'running')).state).toBe('running');
+      await h.manager.cancel({ run_id: follow.run_id });
       await new Promise((resolve) => setTimeout(resolve, 100));
       expect(collector.reasons.map(String)).toEqual([]);
     } finally { collector.stop(); await h.manager.shutdown(); }
@@ -151,22 +130,6 @@ describe('storage faults', () => {
     } finally { collector.stop(); await h.manager.shutdown(); }
   }, 30_000);
 
-  it('still sends the continuation when saving the raised turn limit hits a storage fault', async () => {
-    const h = await harness();
-    try {
-      const runId = await runningWithTranscript(h);
-      await h.backend.callbacks.get(runId)?.onState('completed', { result: { summary: 'done', stopReason: 'max_turn_requests' } });
-      fault.remaining = Infinity; fault.when = (wire) => wire.limits?.max_turns === 30;
-      const reply = await h.manager.continue({ run_id: runId, message: 'more', max_turns: 30 });
-      expect(reply.state).toBe('running');
-      expect(h.backend.continues).toEqual([{ maxTurns: 30 }]);
-      expect(fault.fired).toBeGreaterThan(0);
-      const status = await h.manager.status({ run_id: runId });
-      expect(status.state).toBe('running');
-      expect(String((status.warnings as string[])[0])).toMatch(/could not be saved/);
-    } finally { await h.manager.shutdown(); }
-  }, 30_000);
-
   it('lets the first persist of start() propagate VSUP_STORAGE_ERROR without creating a run', async () => {
     const h = await harness();
     try {
@@ -192,7 +155,7 @@ describe('storage faults', () => {
     const h = await harness();
     try {
       const runId = await runningWithTranscript(h);
-      const follow = await h.manager.reviewStart({ task: 'follow', cwd: h.source });
+      await expect(h.manager.reviewStart({ task: 'follow', cwd: h.source })).rejects.toMatchObject({ code: 'VSUP_LIMIT_EXCEEDED' });
       const runDirectory = path.join(h.data, 'runs', runId);
       await chmod(runDirectory, 0o500); restore.push(runDirectory);
       await h.backend.callbacks.get(runId)?.onState('completed', { result: { summary: 'done' } });
@@ -201,22 +164,25 @@ describe('storage faults', () => {
       expect(status.state).toBe('failed');
       expect(status.error).toMatchObject({ code: 'VSUP_STORAGE_ERROR', details: { code: 'EACCES' } });
       expect(JSON.stringify(status.error)).not.toContain(SECRET_TEXT);
-      expect(await waitFor(() => h.manager.status({ run_id: follow.run_id }), (value) => value.state === 'running').then((value) => value.state)).toBe('running');
-      await h.manager.cancel({ run_id: follow.run_id });
       expect(activeSlots(h.manager)).toBe(0);
+      const follow = await h.manager.reviewStart({ task: 'follow', cwd: h.source });
+      expect((await waitFor(() => h.manager.status({ run_id: follow.run_id }), (value) => value.state === 'running')).state).toBe('running');
+      await h.manager.cancel({ run_id: follow.run_id });
       await new Promise((resolve) => setTimeout(resolve, 100));
       expect(collector.reasons.map(String)).toEqual([]);
     } finally { collector.stop(); await h.manager.shutdown(); }
   }, 30_000);
 
-  it('does not reject an ACP session when recording an event fails', async () => {
+  it('does not reject a programmatic run when recording an event fails', async () => {
     const collector = collectUnhandledRejections();
-    const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-storage-acp-')); roots.push(parent);
-    const source = path.join(parent, 'source'); const data = path.join(parent, 'data'); await mkdir(source);
-    const manager = new RunManager({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots: [source], workerIdleTtlSeconds: 0 }, data, [new FakeAcpBackend(data, [source])]);
+    const h = await harness();
+    const manager = h.manager;
     const failing = vi.spyOn(manager as unknown as { appendEvent(...args: unknown[]): Promise<void> }, 'appendEvent').mockRejectedValue(Object.assign(new Error('write failed'), { code: 'ENOSPC' }));
     try {
-      const started = await manager.reviewStart({ task: 'review', cwd: source });
+      const started = await manager.reviewStart({ task: 'review', cwd: h.source });
+      await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
+      await h.backend.callbacks.get(started.run_id)?.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: 'progress' } });
+      await h.backend.callbacks.get(started.run_id)?.onState('completed');
       const status = await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'completed' || value.state === 'failed');
       expect(failing).toHaveBeenCalled();
       expect(status.state).toBe('completed');

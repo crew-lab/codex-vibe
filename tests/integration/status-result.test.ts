@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
+import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { bounded } from '../../src/mcp/tools.js';
@@ -18,17 +18,14 @@ class FakeBackend implements SupervisorBackend {
   readonly kind = 'programmatic' as const;
   readonly callbacks = new Map<string, BackendCallbacks>();
   files: Record<string, string> = {};
-  async probe() { return { available: true, backend: this.kind, supportsContinue: true, supportsPermissionResponse: true }; }
+  async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     this.callbacks.set(input.runId, callbacks);
     for (const [name, text] of Object.entries(this.files)) await writeFile(path.join(input.workerWorkspace, name), text);
     return { handle: { runId: input.runId, backend: this.kind, opaque: {} }, initialState: 'running' };
   }
-  async continue() {}
-  async respond() {}
   async cancel(handle: BackendRunHandle) { await this.callbacks.get(handle.runId)?.onState('cancelled'); }
   async close() {}
-  async recover(_record: RunRecord) { return undefined; }
 }
 
 async function harness(git = false) {
@@ -43,7 +40,7 @@ async function harness(git = false) {
     await exec('git', ['commit', '-qm', 'baseline'], { cwd: source });
   }
   const backend = new FakeBackend();
-  const manager = new RunManager({ ...DEFAULT_CONFIG, backend: 'programmatic', allowedWorkspaceRoots: [source], workerIdleTtlSeconds: 600 }, data, [backend]);
+  const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
   return { manager, backend, source };
 }
 

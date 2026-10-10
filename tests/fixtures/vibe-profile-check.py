@@ -33,14 +33,14 @@ from vibe.core.tools.utils import resolve_file_tool_permission
 from vibe.core.workspace import Workspace
 
 async def main():
-    assert vibe.__version__ == "2.25.8", "Wrong installed Vibe version"
+    assert vibe.__version__ == "2.26.1", "Wrong installed Vibe version"
     root = Path(sys.argv[1]).resolve()
     init_harness_files_manager('user', 'project')
     class Trusted:
         def is_trusted(self, path):
             return True
     harness = HarnessFilesManager(sources=('user', 'project'), cwd=root, trust_store=Trusted())
-    # Include the cwd and extra roots, as ACP session/load and movement do.
+    # Include the cwd, nested roots and moved workspace to verify isolation holds.
     variants = [harness, harness.for_session(root, workspace_roots=[root, root/'nested']), harness.moved_to(root/'nested')]
     for candidate in variants:
         assert candidate.project_source_enabled is False

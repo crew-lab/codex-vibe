@@ -21,7 +21,7 @@ afterEach(async () => { await rm(scratch, { recursive: true, force: true }); });
 
 describe('buildVibeLaunch prompt handoff', () => {
   it('writes the prompt to an owner-only file in the run directory and keeps it out of argv', async () => {
-    const launch = await buildVibeLaunch(vibe, 'programmatic', ['--agent', 'plan'], profile, scratch, { promptText: TASK });
+    const launch = await buildVibeLaunch(vibe, ['--agent', 'plan'], profile, scratch, { promptText: TASK });
     expect(JSON.stringify([launch.command, ...launch.args])).not.toContain(TASK);
     expect(launch.args).not.toContain('--prompt');
     const promptFile = launch.env[PROMPT_FILE_ENV];
@@ -32,15 +32,16 @@ describe('buildVibeLaunch prompt handoff', () => {
     expect(JSON.stringify(Object.entries(launch.env).filter(([key]) => key !== PROMPT_FILE_ENV))).not.toContain(TASK);
   });
 
-  it('does not create a prompt file for ACP and refuses one', async () => {
-    const launch = await buildVibeLaunch(vibe, 'acp', [], profile, scratch);
+  it('always hands a programmatic task through the private prompt file', async () => {
+    const launch = await buildVibeLaunch(vibe, [], profile, scratch);
     expect(launch.env[PROMPT_FILE_ENV]).toBeUndefined();
-    await expect(buildVibeLaunch(vibe, 'acp', [], profile, scratch, { promptText: TASK })).rejects.toThrow(/programmatic/);
+    await buildVibeLaunch(vibe, [], profile, scratch, { promptText: TASK });
+    expect(launch.env.VIBE_SUPERVISOR_ENTRYPOINT).toBeUndefined();
   });
 
   it('refuses to overwrite an existing prompt file', async () => {
-    await buildVibeLaunch(vibe, 'programmatic', [], profile, scratch, { promptText: TASK });
-    await expect(buildVibeLaunch(vibe, 'programmatic', [], profile, scratch, { promptText: 'other' })).rejects.toThrow();
+    await buildVibeLaunch(vibe, [], profile, scratch, { promptText: TASK });
+    await expect(buildVibeLaunch(vibe, [], profile, scratch, { promptText: 'other' })).rejects.toThrow();
   });
 });
 
@@ -60,23 +61,23 @@ describe('rate limit classification', () => {
   });
 
   it('reads a 401 before any rate-limit text', async () => {
-    expect(await classifyStartFailure('acp', 'vibe-acp', new Error('boom'), 'HTTP 401 Unauthorized\nx-ratelimit-limit: 100')).toMatchObject({ code: 'VSUP_AUTH_REQUIRED' });
+    expect(await classifyStartFailure('vibe', new Error('boom'), 'HTTP 401 Unauthorized\nx-ratelimit-limit: 100')).toMatchObject({ code: 'VSUP_AUTH_REQUIRED' });
   });
 
   it('reports a missing interpreter even when stderr mentions a 429', async () => {
     const orphan = path.join(scratch, 'orphan-vibe');
     await writeFile(orphan, '#!/nonexistent/interpreter\n');
     await chmod(orphan, 0o755);
-    const failure = await classifyStartFailure('programmatic', orphan, Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }), 'HTTP 429 Too Many Requests');
-    expect(failure).toMatchObject({ code: 'VSUP_BACKEND_UNAVAILABLE', details: { interpreter_missing: true, interpreter: '/nonexistent/interpreter' } });
+    const failure = await classifyStartFailure(orphan, Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }), 'HTTP 429 Too Many Requests');
+    expect(failure).toMatchObject({ code: 'VSUP_VIBE_NOT_FOUND', details: { interpreter_missing: true, interpreter: '/nonexistent/interpreter' } });
   });
 
   it('reports a missing executable even when stderr mentions a 429', async () => {
-    const failure = await classifyStartFailure('programmatic', path.join(scratch, 'absent'), Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }), 'HTTP 429 Too Many Requests');
+    const failure = await classifyStartFailure(path.join(scratch, 'absent'), Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }), 'HTTP 429 Too Many Requests');
     expect(failure).toMatchObject({ code: 'VSUP_VIBE_NOT_FOUND' });
   });
 
   it('classifies a start failure whose stderr reports a rate limit', async () => {
-    expect(await classifyStartFailure('acp', 'vibe-acp', new Error('boom'), 'error: HTTP 429 Too Many Requests')).toMatchObject({ code: 'VSUP_RATE_LIMITED', retryable: true });
+    expect(await classifyStartFailure('vibe', new Error('boom'), 'error: HTTP 429 Too Many Requests')).toMatchObject({ code: 'VSUP_RATE_LIMITED', retryable: true });
   });
 });

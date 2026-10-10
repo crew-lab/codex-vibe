@@ -108,8 +108,8 @@ class DiagnosticsTest(unittest.TestCase):
         self.recorder.stage('import')
         self.recorder.tick()
 
-    def test_disabled_or_acp_does_not_capture_frames(self):
-        for env in ({}, {LAUNCHER.DIAGNOSTICS_ENV: '1', 'VIBE_SUPERVISOR_ENTRYPOINT': 'acp'}):
+    def test_disabled_does_not_capture_frames(self):
+        for env in ({},):
             with patch.dict(os.environ, env, clear=True):
                 self.assertIsNone(LAUNCHER._start_diagnostics())
 

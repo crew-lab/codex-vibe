@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
+import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { RunManager } from '../../src/core/run-manager.js';
 
@@ -17,16 +17,13 @@ afterEach(async () => {
 class CompletingCancelBackend implements SupervisorBackend {
   readonly kind = 'programmatic' as const;
   readonly callbacks = new Map<string, BackendCallbacks>();
-  async probe() { return { available: true, backend: this.kind, supportsContinue: true, supportsPermissionResponse: true }; }
+  async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     this.callbacks.set(input.runId, callbacks);
     return { handle: { runId: input.runId, backend: this.kind, opaque: {} }, initialState: 'running' };
   }
-  async continue() {}
-  async respond() {}
   async cancel(handle: BackendRunHandle) { await this.callbacks.get(handle.runId)?.onState('completed', { result: { summary: 'finished anyway' } }); }
   async close() {}
-  async recover(_record: RunRecord) { return undefined; }
 }
 
 async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean, timeoutMs = 10_000): Promise<T> {
@@ -40,7 +37,7 @@ async function startRunning(timeoutSeconds?: number) {
   const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-requested-')); roots.push(parent);
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data'); await mkdir(source);
   const backend = new CompletingCancelBackend();
-  const manager = new RunManager({ ...DEFAULT_CONFIG, backend: 'programmatic', allowedWorkspaceRoots: [source], workerIdleTtlSeconds: 600 }, data, [backend]);
+  const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
   const started = await manager.reviewStart({ task: 'review', cwd: source, ...(timeoutSeconds ? { timeout_seconds: timeoutSeconds } : {}) });
   await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
   return { manager, runId: started.run_id, data };

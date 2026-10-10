@@ -36,10 +36,8 @@ async function sandbox(options: { withVibe?: boolean } = {}): Promise<Sandbox> {
   const data = path.join(root, 'data'); const home = path.join(root, 'home'); const bin = path.join(root, 'bin'); const workspace = path.join(root, 'work');
   await Promise.all([mkdir(home), mkdir(bin), mkdir(workspace)]);
   if (options.withVibe !== false) {
-    for (const name of ['vibe', 'vibe-acp']) {
-      await writeFile(path.join(bin, name), `#!/usr/bin/env python3\nprint("${name} 2.25.8")\n`);
-      await chmod(path.join(bin, name), 0o755);
-    }
+    await writeFile(path.join(bin, 'vibe'), '#!/usr/bin/env python3\nprint("vibe 2.26.1")\n');
+    await chmod(path.join(bin, 'vibe'), 0o755);
   }
   vi.stubEnv('VIBE_SUPERVISOR_HOME', data); vi.stubEnv('HOME', home);
   vi.stubEnv('PATH', options.withVibe === false ? bin : `${bin}${path.delimiter}${process.env.PATH ?? ''}`);
@@ -50,7 +48,7 @@ async function exists(file: string): Promise<boolean> {
   try { await lstat(file); return true; } catch { return false; }
 }
 
-type ParsedConfig = { allowed_workspace_roots: string[]; paths?: { vibe?: string; vibe_acp?: string }; retention?: { days: number } };
+type ParsedConfig = { allowed_workspace_roots: string[]; paths?: { vibe?: string }; retention?: { days: number } };
 
 describe('setup', () => {
   it('creates a private valid config with the canonical workspace and resolved paths and only previews Codex without --yes', async () => {
@@ -59,7 +57,7 @@ describe('setup', () => {
     expect((await stat(box.config)).mode & 0o777).toBe(0o600);
     const parsed = parse(await readFile(box.config, 'utf8')) as ParsedConfig;
     expect(parsed.allowed_workspace_roots).toEqual([box.workspace]);
-    expect(parsed.paths).toEqual({ vibe: path.join(box.bin, 'vibe'), vibe_acp: path.join(box.bin, 'vibe-acp') });
+    expect(parsed.paths).toEqual({ vibe: path.join(box.bin, 'vibe') });
     expect(output.join('')).toContain('[mcp_servers.vibe-supervisor]');
     expect(await exists(box.codex)).toBe(false);
     expect(await exists(path.join(box.home, '.codex'))).toBe(false);
@@ -75,7 +73,7 @@ describe('setup', () => {
     const box = await sandbox(); capture();
     await runCli(['setup', '--workspace', box.workspace, '--yes']);
     const codex = parse(await readFile(box.codex, 'utf8')) as { mcp_servers: Record<string, { args: string[] }> };
-    expect(codex.mcp_servers['vibe-supervisor']?.args.slice(-2)).toEqual(['serve', '--stdio']);
+    expect(codex.mcp_servers['vibe-supervisor']?.args.slice(-4)).toEqual(['serve', '--stdio', '--config', box.config]);
     const configBefore = await readFile(box.config, 'utf8'); const codexBefore = await readFile(box.codex, 'utf8');
     const backupsBefore = (await readdir(path.dirname(box.codex))).length;
     await runCli(['setup', '--workspace', box.workspace, '--yes']);
@@ -88,7 +86,7 @@ describe('setup', () => {
     const box = await sandbox(); capture();
     await runCli(['setup', '--workspace', box.workspace, '--yes', '--isolated']);
     const codex = parse(await readFile(box.codex, 'utf8')) as { mcp_servers: Record<string, { args: string[] }> };
-    expect(codex.mcp_servers['vibe-supervisor']?.args.slice(-3)).toEqual(['serve', '--stdio', '--isolated']);
+    expect(codex.mcp_servers['vibe-supervisor']?.args.slice(-5)).toEqual(['serve', '--stdio', '--isolated', '--config', box.config]);
   }, 60_000);
 
   it('writes the project Codex config inside the workspace for --codex project', async () => {
@@ -124,8 +122,24 @@ describe('setup', () => {
     expect(parsed.allowed_workspace_roots).toEqual([other, box.workspace]);
     expect(parsed.retention?.days).toBe(3);
     expect(parsed.paths?.vibe).toBe('/custom/vibe');
-    expect(parsed.paths?.vibe_acp).toBe(path.join(box.bin, 'vibe-acp'));
     expect((await stat(box.config)).mode & 0o777).toBe(0o600);
+  }, 60_000);
+
+  it('selects the explicit setup config over obsolete home keys and binds the registration to that file', async () => {
+    const box = await sandbox(); capture();
+    await mkdir(box.data, { recursive: true });
+    const explicitDir = path.join(path.dirname(box.data), 'artifact-config'); await mkdir(explicitDir);
+    const explicit = path.join(explicitDir, 'config.toml');
+    const obsolete = 'version = 1\nbackend = "acp"\n';
+    await writeFile(box.config, obsolete, { mode: 0o600 });
+    await runCli(['setup', '--workspace', box.workspace, '--config', explicit, '--yes']);
+    const parsed = parse(await readFile(explicit, 'utf8')) as ParsedConfig;
+    expect(parsed.allowed_workspace_roots).toEqual([box.workspace]);
+    expect(await readFile(box.config, 'utf8')).toBe(obsolete);
+    const codex = parse(await readFile(box.codex, 'utf8')) as { mcp_servers: Record<string, { args: string[] }> };
+    expect(codex.mcp_servers['vibe-supervisor']?.args.slice(-4)).toEqual(['serve', '--stdio', '--config', explicit]);
+    expect(output.join('')).toContain('Provenance:');
+    expect(output.join('')).toContain('config_fingerprint');
   }, 60_000);
 
   it('leaves paths absent and says so when vibe is not on PATH', async () => {
@@ -134,8 +148,7 @@ describe('setup', () => {
     const parsed = parse(await readFile(box.config, 'utf8')) as ParsedConfig;
     expect(parsed.allowed_workspace_roots).toEqual([box.workspace]);
     expect(parsed.paths?.vibe).toBeUndefined();
-    expect(parsed.paths?.vibe_acp).toBeUndefined();
-    expect(output.join('')).toMatch(/vibe-acp.*not found on PATH/);
+    expect(parsed.paths?.vibe).toBeUndefined();
     expect(output.join('')).toMatch(/vibe .*not found on PATH|vibe: not found on PATH/);
   }, 60_000);
 
@@ -165,14 +178,33 @@ describe('setup', () => {
     await runCli(['setup', '--workspace', '/tmp', '--bogus']); expect(process.exitCode).toBe(2); process.exitCode = undefined;
     await runCli(['setup', '--workspace', '/tmp', '--codex', 'global']); expect(process.exitCode).toBe(2);
   });
+
+  it('rejects repeated setup options before reading or changing config', async () => {
+    const box = await sandbox(); capture();
+    for (const args of [
+      ['--workspace', box.workspace, '--workspace', box.workspace],
+      ['--workspace', box.workspace, '--config', box.config, '--config', box.config],
+      ['--workspace', box.workspace, '--codex', 'user', '--codex', 'project'],
+      ['--workspace', box.workspace, '--isolated', '--isolated'],
+      ['--workspace', box.workspace, '--yes', '--yes'],
+      ['--workspace', box.workspace, '--dry-run', '--dry-run']
+    ]) {
+      process.exitCode = undefined;
+      await runCli(['setup', ...args]);
+      expect(process.exitCode).toBe(2);
+    }
+    expect(await exists(box.config)).toBe(false);
+  });
 });
 
 describe('allow', () => {
   it('adds one canonical root idempotently', async () => {
     const box = await sandbox(); capture();
     const sub = path.join(box.workspace, 'sub'); await mkdir(sub);
-    const roundabout = path.join(sub, '..', 'sub');
+    const roundabout = `${sub}${path.sep}..${path.sep}sub`;
     await runCli(['allow', roundabout]);
+    expect(process.exitCode).toBe(2);
+    process.exitCode = undefined;
     await runCli(['allow', sub]);
     const parsed = parse(await readFile(box.config, 'utf8')) as ParsedConfig;
     expect(parsed.allowed_workspace_roots).toEqual([sub]);
@@ -196,6 +228,15 @@ describe('allow', () => {
       await runCli(['allow', ...args]);
       expect(process.exitCode).toBe(2);
     }
+    expect(await exists(box.config)).toBe(false);
+  });
+
+  it('refuses broad roots consistently with direct config validation', async () => {
+    const box = await sandbox(); capture();
+    process.exitCode = undefined;
+    await runCli(['allow', os.tmpdir()]);
+    expect(process.exitCode).toBe(2);
+    expect(errors.join('')).toMatch(/too broad|unsafe/i);
     expect(await exists(box.config)).toBe(false);
   });
 });
@@ -319,7 +360,7 @@ describe('doctor --config and command aliases', () => {
     await runCli(['doctor', '--config', file]);
     expect(process.exitCode).toBe(1);
     expect(errors.join('')).toContain('VSUP_CONFIG_INVALID');
-    expect(errors.join('')).toContain('Invalid supervisor configuration');
+    expect(errors.join('')).toContain(`Invalid configuration file ${file}`);
   });
 
   it('doctor --config requires a value', async () => {
@@ -330,12 +371,12 @@ describe('doctor --config and command aliases', () => {
 });
 
 describe('setup config template and dry run', () => {
-  it('writes only version, backend, allowed roots and paths without comments', async () => {
+  it('writes only version, allowed roots and paths without comments', async () => {
     const box = await sandbox(); capture();
     await runCli(['setup', '--workspace', box.workspace]);
     const source = await readFile(box.config, 'utf8');
     expect(source).not.toContain('#');
-    expect(Object.keys(parse(source)).sort()).toEqual(['allowed_workspace_roots', 'backend', 'paths', 'version']);
+    expect(Object.keys(parse(source)).sort()).toEqual(['allowed_workspace_roots', 'paths', 'version']);
   });
 
   it('--dry-run previews the config and Codex change without writing anything or revealing unrelated Codex values', async () => {

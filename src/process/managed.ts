@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
+import { readdir, readFile } from 'node:fs/promises';
 import { StringDecoder } from 'node:string_decoder';
 import { buildChildEnvironment } from '../security/environment.js';
 
@@ -35,11 +36,10 @@ export interface ManagedProcess {
   stdout: BoundedCollector;
   stderr: BoundedCollector;
   done: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
-  /**
-   * True when group signaling was denied and only the direct child was signaled.
-   * Callers must report group/grandchild cleanup as unverified when this is true.
-   */
+  /** True if any attempt fell back to signaling the direct child; inspect terminationVerified for current proof. */
   readonly groupTerminationDegraded: boolean;
+  /** True only after the owned process group is proven absent (or child exit on Windows). */
+  readonly terminationVerified: boolean;
   terminate(graceMs?: number): Promise<void>;
 }
 
@@ -52,6 +52,7 @@ export function spawnManaged(executable: string, args: readonly string[], option
   const stderrDecoder = new StringDecoder('utf8');
   let limitTriggered = false;
   let groupTerminationDegraded = false;
+  let terminationVerified = false;
   const child = spawn(executable, [...args], {
     cwd: options.cwd,
     env: buildChildEnvironment(options.env ?? process.env, options.forwardEnv),
@@ -81,8 +82,10 @@ export function spawnManaged(executable: string, args: readonly string[], option
   });
   let terminating: Promise<void> | undefined;
   const terminate = (graceMs = 5000): Promise<void> => {
+    if (terminationVerified) return Promise.resolve();
     if (terminating) return terminating;
     terminating = (async () => {
+      terminationVerified = false;
       let directKillError: unknown;
       const killGroup = (signal: NodeJS.Signals): void => {
         if (!child.pid) return;
@@ -115,17 +118,61 @@ export function spawnManaged(executable: string, args: readonly string[], option
         if (timer) clearTimeout(timer);
         return completed;
       };
+      const waitForGroupExit = async (ms: number): Promise<boolean> => {
+        if (process.platform === 'win32') return waitBounded(ms);
+        const deadline = Date.now() + ms;
+        while (true) {
+          if (!child.pid) return false;
+          // Linux procfs can distinguish a zombie left by init from a process
+          // that can still run. Any incomplete scan remains unresolved.
+          if (process.platform === 'linux' && !await linuxGroupHasRunningMembers(child.pid)) return true;
+          try { process.kill(-child.pid, 0); }
+          catch (error) {
+            const code = (error as NodeJS.ErrnoException).code;
+            if (code === 'ESRCH') return true;
+            if (code === 'EPERM') return false;
+            throw error;
+          }
+          if (Date.now() >= deadline) return false;
+          await new Promise((resolve) => setTimeout(resolve, Math.min(20, deadline - Date.now())));
+        }
+      };
+      // A previous attempt or natural exit may already have removed this
+      // handle's group. Prove absence before signaling its numeric ID again.
+      if (await waitForGroupExit(0)) {
+        terminationVerified = true;
+        return;
+      }
       killGroup('SIGTERM');
       await waitBounded(Math.max(0, Math.min(graceMs, 60_000)));
       // The direct child may exit while grandchildren remain in its process group.
       killGroup('SIGKILL');
       const completed = await waitBounded(1500);
-      if (!completed) {
+      const groupGone = await waitForGroupExit(1500);
+      if (!completed || !groupGone) {
         const detail = directKillError instanceof Error ? ` Direct-child signal failed: ${directKillError.message}` : '';
-        throw new Error(`Managed process did not close within the termination deadline.${groupTerminationDegraded ? ' Process-group cleanup is unverified because only the direct child could be signaled.' : ''}${detail}`);
+        throw new Error(`Managed process termination is unverified: ${!completed ? 'the direct child did not close' : 'the owned process group may still be alive'}.${groupTerminationDegraded ? ' Process-group signaling was denied; only the direct child could be signaled.' : ''}${detail}`);
       }
+      terminationVerified = true;
     })();
+    terminating = terminating.catch((error: unknown) => { terminating = undefined; throw error; });
     return terminating;
   };
-  return { child, stdout, stderr, get groupTerminationDegraded() { return groupTerminationDegraded; }, done, terminate };
+  return { child, stdout, stderr, get groupTerminationDegraded() { return groupTerminationDegraded; }, get terminationVerified() { return terminationVerified; }, done, terminate };
+}
+
+async function linuxGroupHasRunningMembers(groupId: number): Promise<boolean> {
+  let entries: string[];
+  try { entries = await readdir('/proc'); } catch { return true; }
+  for (const entry of entries) {
+    if (!/^\d+$/.test(entry)) continue;
+    try {
+      const stat = await readFile(`/proc/${entry}/stat`, 'utf8');
+      const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+      if (Number(fields[2]) === groupId && fields[0] !== 'Z' && fields[0] !== 'X') return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return true;
+    }
+  }
+  return false;
 }

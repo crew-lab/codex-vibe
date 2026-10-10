@@ -1,151 +1,76 @@
 # Reference
 
-Tools, fields, results, configuration keys and CLI commands of `vibe-supervisor`. Behavior that is not reference material is in [How it works](functionality.md); error codes are in [errors.md](errors.md).
+The supervisor uses MCP over stdio. Standard output carries protocol frames; diagnostics go to standard error. Tool schemas reject unknown fields, including removed `backend`, `allow_shell`, `vibe_continue`, and `vibe_respond` fields. See [behavior](functionality.md), [security](security.md), and [errors](errors.md).
 
 ## Tools
 
-The server speaks MCP over stdio: frames on stdout, diagnostics on stderr. Inputs use strict schemas, so an unknown field (for example `allow_shell`, `backend` or `detail: "summary"`) is rejected with `VSUP_INVALID_ARGUMENT`. The schemas live in `src/mcp/schemas.ts`.
+Exactly five tools are registered in every server instance:
 
-| Tool | Registered | Purpose |
-|---|---|---|
-| `vibe_review_start` | always | Start a read-only review in an allowed workspace. |
-| `vibe_edit_start` | always | Start an edit in a detached Git worktree. |
-| `vibe_status` | always | Read state and bounded events; embeds the compact result once the run has settled. |
-| `vibe_result` | always | Read the full record or the transcript. |
-| `vibe_close` | always | Cancel the run if it is live, close it, optionally remove a verified worktree. |
-| `vibe_continue` | backend `acp` | Send a follow-up to a completed, ready or recoverable ACP run. |
-| `vibe_respond` | backend `acp` | Answer a pending permission or input request. |
+| Tool | Purpose |
+|---|---|
+| `vibe_review_start` | Start one read-only review in an allowed workspace. |
+| `vibe_edit_start` | Start one edit from an explicit Git base in a detached supervisor worktree. |
+| `vibe_status` | Read state and bounded events; includes compact result when settled. |
+| `vibe_result` | Read the compact/full record and optionally its transcript. |
+| `vibe_close` | Cancel live work, close the run, and optionally request verified worktree cleanup. |
 
-The backend comes only from the configuration. There is no cancel tool (`vibe_close` cancels), no shell switch and no tool-side backend selection. The usual loop is: start with `wait_seconds`, then `vibe_status` with `wait_seconds` until `result` appears, independent verification and any same-session correction, then a fresh export and `vibe_close`. Do not close a candidate session before deciding acceptance. Keep the client's tool timeout above 300 seconds; `setup` writes `tool_timeout_sec = 600` and `startup_timeout_sec = 30`.
+Each owning server/storage instance has one active run slot. A concurrent start is rejected immediately. The slot is released only after backend close verifies termination. A `vibe_close` response with `worker_termination_unverified: true` means the handle and slot remain owned, the run is still inspectable and its worktree is retained; do not report that the process is closed or start another run on that slot. A settled result is not independently accepted until the coordinator reviews it. On restart, an interrupted run is marked failed and never resumed or replayed.
 
-### Inputs
-
-`run_id` is always a UUID v4 returned by a start tool.
+All schemas are strict. `run_id` is a UUID v4. Unless noted, required fields have no default.
 
 | Tool | Field | Type and bounds | Default |
 |---|---|---|---|
-| `vibe_review_start` | `task` | string, 1 to 100000 characters | required |
-| | `cwd` | string, 1 to 4096 characters, a workspace under an allowed root | required |
-| | `context_files` | up to 50 strings of 1 to 4096 characters | `[]` |
-| | `max_turns` | integer 1 to 50 | `limits.max_turns_review` |
-| | `timeout_seconds` | integer 30 to 7200 | `limits.review_timeout_seconds` |
-| | `wait_seconds` | integer 0 to 300 | 0 |
-| `vibe_edit_start` | `task`, `cwd`, `max_turns`, `timeout_seconds`, `wait_seconds` | as above, except that `cwd` must be the root of a Git repository (a subdirectory is refused with `VSUP_WORKSPACE_INVALID` before any worktree is created) | edit limits `limits.max_turns_edit`, `limits.edit_timeout_seconds` |
-| | `base_ref` | string, 1 to 512 characters, an existing Git ref | `HEAD` |
-| `vibe_status` | `run_id` | UUID | required |
-| | `after_seq` | integer 0 or more | 0 |
-| | `max_events` | integer 0 to 100 | 10 |
-| | `wait_seconds` | integer 0 to 300 | 0 |
-| `vibe_continue` | `run_id`, `message`, `max_turns` | UUID; string 1 to 100000 characters; integer 1 to 50 | `run_id` and `message` required; `max_turns` has no default and a limit is never raised implicitly. It is the session's cumulative ceiling, not an increment: a value below the run's current limit fails with `VSUP_INVALID_ARGUMENT`. After a `max_turn_requests` stop it is required and must exceed the current limit, otherwise the call fails with `VSUP_TURN_LIMIT_REACHED` before anything reaches Vibe; at the maximum of 50 the session cannot be extended and a new run is needed. The new value becomes the run's limit and is sent with `session/set_config_option` before the prompt. |
-| `vibe_respond` | `run_id`, `request_id` | UUID; string 1 to 512 characters | required |
-| | `kind` | `permission` or `elicitation` | required |
-| | `option_id` | permission only: an offered option, 1 to 512 characters | required |
-| | `action` | elicitation only: `accept`, `decline` or `cancel` | required |
-| | `content` | elicitation only: object matching the request schema | none |
-| `vibe_result` | `run_id` | UUID | required |
+| `vibe_review_start` | `task` | string, 1–100,000 characters | required |
+| | `cwd` | absolute workspace path, 1–4096 characters, inside an allowed root | required |
+| | `context_files` | up to 50 paths, each 1–4096 characters | `[]` |
+| | `max_turns` | integer 1–50 | `limits.max_turns_review` |
+| | `timeout_seconds` | integer 30–7200 | `limits.review_timeout_seconds` |
+| | `wait_seconds` | integer 0–300 | `0` |
+| `vibe_edit_start` | `task`, `cwd` | as above; `cwd` must be the Git repository root | required |
+| | `base_ref` | existing Git ref, 1–512 characters | `HEAD` |
+| | `max_turns`, `timeout_seconds`, `wait_seconds` | same bounds as review | configured defaults, then `0` for wait |
+| `vibe_status` | `run_id` | UUID v4 | required |
+| | `after_seq` | integer ≥0 | `0` |
+| | `max_events` | integer 0–100 | `10` |
+| | `wait_seconds` | integer 0–300 | `0` |
+| `vibe_result` | `run_id` | UUID v4 | required |
 | | `detail` | `compact` or `full` | `compact` |
 | | `include_transcript` | boolean | `false` |
-| `vibe_close` | `run_id` | UUID | required |
+| `vibe_close` | `run_id` | UUID v4 | required |
 | | `cleanup_worktree` | boolean | `false` |
 
-### Waiting inside a call
+Start calls can wait until the run needs coordinator attention. For longer work, use cursor-based status calls and pass `next_after_seq` as the next `after_seq`; waits are bounded to 300 seconds. A completed run can carry a non-`end_turn` stop reason and partial-result warning. Read the stop reason before trusting its summary.
 
-With a positive `wait_seconds`, `vibe_status` returns as soon as any of these holds, or when the wait elapses: an event with `seq` above `after_seq` exists, the run state differs from its state at call time, a request is pending, or the run is in a state that needs the coordinator (`completed`, `failed`, `cancelled`, `closed`, `waiting_permission`, `waiting_input`, `recoverable`). A condition that already holds returns at once, so pass the reply's `next_after_seq` back as `after_seq`. The wait ends on MCP request cancellation and on shutdown.
+## Results and artifacts
 
-The start tools accept the same `wait_seconds` and wait until the run needs the coordinator; an intermediate change such as `starting` to `running` does not end the wait. A finished run returns its compact result inside the start reply.
+Compact results include state, stop reason, summary, warnings, error, next action, and review integrity or edit changes. Edits include changed paths, diff statistics, and an exact exported patch. Small patches may be inline; larger patches are returned by private artifact path. Full results add artifact digests, sizes and media types, usage, workspace paths, and transcript when requested. Replies are bounded by `limits.max_mcp_result_chars`.
 
-## Replies
-
-Every reply carries `next_action`, a one-sentence instruction for the next call.
-
-| Reply | Fields |
-|---|---|
-| Start | `run_id`, `state`, `backend`, `mode`, `source_workspace`, `worker_workspace`, `created_at`, `next_action`; `base_ref` for edits; `pending_request`, `error` and `result` when they apply. |
-| `vibe_status` | `run_id`, `state`, `backend`, `last_seq`, `next_after_seq`, `events`, `next_action`; `pending_request`, `error`, `warnings` when present; `result` once the run is `completed`, `failed` or `cancelled`. |
-| `vibe_continue`, `vibe_respond` | `run_id`, `state`, `next_action`. |
-| `vibe_close` | `run_id`, `state`, `next_action`, `worktree_removed`; `worktree_retained_reason` and `error` when cleanup was refused or a step failed. |
-
-`events` hold at most `max_events` entries of `seq`, `type` and, for tool calls, `title`, `kind` and `status`. Events of type `diagnostic`, `review_integrity`, `timeout` and `permission_denied_by_policy` also carry `text` (redacted, at most 400 characters). `last_seq` is the newest event in the run and may be ahead of the page; `next_after_seq` is the `seq` of the last delivered event, or `after_seq` when none was delivered.
-
-### Results
-
-`vibe_result` with `detail: "compact"` (and the `result` embedded in a settled `vibe_status` or start reply) returns:
-
-| Field | Meaning |
-|---|---|
-| `run_id`, `state`, `backend`, `next_action` | Identity, state and the next call. |
-| `stop_reason` | How the last turn ended. A `completed` run with a value other than `end_turn` (`max_tokens`, `max_turn_requests`, `refusal`, `cancelled` or an unknown string) stopped early; `warnings` then gains an entry starting "Vibe stopped with stop reason" and `summary` is derived from the reason unless the backend gave one. |
-| `summary`, `warnings`, `error` | Public summary, warnings and the failure, if any. |
-| `integrity` | Reviews only: see below. |
-| `changed_files`, `changed_files_total` | Up to 50 changed paths, with the total. Edits. |
-| `diff_stat` | At most 2000 characters. Edits. |
-| `patch` or `patch_path` and `patch_bytes` | The patch inline when it is at most 4000 bytes and the payload fits `limits.max_mcp_result_chars`; otherwise its path and size. |
-| `artifacts` | `{name, path}` per artifact: `transcript.md`, `events.ndjson`, and for edits `diff.patch`, `diff.stat`, `changed-files.json`. |
-| `worker` | Edits: the worker worktree. |
-| `transcript`, `transcript_truncated`, `transcript_path` | With `include_transcript`: the last 4000 characters. |
-
-`detail: "full"` adds workspace paths, per artifact SHA-256 digest, byte count and media type, usage and an inline transcript up to 32 KiB. A later turn replaces `stop_reason`, `summary` and the stop-reason warning; other warnings carry over.
-
-**Integrity.** Review results carry `integrity.status`: `verified` (nothing changed), `changed` (with `changed_paths`, up to 50 relative paths, `changed_paths_total` and a `reason`) or `unverified` (with a `reason`, for example when the workspace was too large to snapshot). `write_tool_observed` is true when the run issued a write-capable tool call. A changed workspace is a warning, not a failure; inspect the paths before trusting the review. Edit runs have no integrity record.
-
-### Result encoding and size
-
-A reply is one JSON text block, and error results use the same format. It is bounded to `limits.max_mcp_result_chars` (default 8000). When it is larger it is reduced in this order until it fits: the inline `patch` (keeping `patch_path` and `patch_bytes`), `transcript`, `diff_stat`, `changed_files` and `events` (totals are kept), then `summary` (head and tail kept). `run_id`, `state`, `error`, `warnings`, `integrity`, `pending_request`, `patch_path` and `next_action` are never dropped. A reduced reply carries `truncated: true` and `truncated_fields`. `events` are trimmed from the end so paging stays lossless: the reply's `next_after_seq` (and the `after_seq` in `next_action`) is the `seq` of the last event actually delivered, or just before the first event when none fit, and `events_total` counts the events before trimming.
-
-## Run states
-
-| State | Meaning |
-|---|---|
-| `queued`, `starting`, `negotiating`, `ready`, `running` | Waiting for a slot, launching, initializing, idle between turns, working. |
-| `waiting_permission`, `waiting_input` | ACP run paused for `vibe_respond`. |
-| `completed`, `failed`, `cancelled` | Terminal outcomes; the result is available. `completed` ACP runs can still be continued. |
-| `recoverable` | Found unfinished after a restart; ACP runs with a saved session can be continued. |
-| `closing`, `closed` | Closed by `vibe_close`; the run stays readable until retention. |
+Review integrity is `verified`, `changed`, or `unverified`. Inspect `changed_paths` and `reason` before relying on a review that changed during execution or could not be fully snapshotted. For edits, inspect the fresh patch and changed/residual files before close. Cleanup reports `worktree_removed` and, when cleanup is refused, a retained reason.
 
 ## Configuration
 
-Run `vibe-supervisor setup --workspace <dir>` to create the private config, then edit it. The location is `~/Library/Application Support/VibeSupervisor/config.toml` on macOS (`$XDG_DATA_HOME/vibe-supervisor` or `~/.local/share/vibe-supervisor` on Linux); `VIBE_SUPERVISOR_HOME` overrides the directory and must also reach the MCP server's environment. Validate with `vibe-supervisor doctor --config <path>`. A complete example is [examples/config.toml](../examples/config.toml), and the JSON schema is `schemas/config.schema.json`.
+The configuration is strict TOML. The starter allowlist is empty. Removed keys—including backend selection, concurrency, idle-session TTL, and ACP paths—are errors; do not reuse the old configuration unchanged.
 
-| Key | Default | Bounds |
-|---|---|---|
-| `version` | required | `1` |
-| `backend` | `programmatic` | `programmatic` or `acp`; `auto` is rejected. `acp` also registers `vibe_continue` and `vibe_respond` |
-| `allowed_workspace_roots` | `[]` (denies all work) | up to 100 directories, each an absolute path or one starting with `~/` (or `~`); relative paths are rejected, and each entry is canonicalized when a workspace is checked |
-| `max_concurrent_runs` | 2 | 1 to 32 |
-| `worker_idle_ttl_seconds` | 600 | 0 to 86400 |
-| `retention.days` | 7 | 0 to 3650 |
-| `limits.review_timeout_seconds` | 1800 | 30 to 7200 |
-| `limits.edit_timeout_seconds` | 2400 | 30 to 7200 |
-| `limits.max_turns_review` | 20 | 1 to 50 |
-| `limits.max_turns_edit` | 20 | 1 to 50 |
-| `limits.max_event_bytes` | 52428800 | 1024 to 1073741824 |
-| `limits.max_transcript_bytes` | 10485760 | 1024 to 1073741824 |
-| `limits.max_artifact_bytes` | 104857600 | 1024 to 2147483648 |
-| `limits.worker_progress_timeout_seconds` | 600 | `0` (disabled) or 60 to 7200; a running worker with no activity for this long (no vibe event, ACP notification or request, complete programmatic stdout line, or stderr output) fails with `VSUP_NO_PROGRESS` |
-| `limits.max_mcp_result_chars` | 8000 | 1000 to 1000000 |
-| `paths.vibe` | found on PATH | absolute path or a bare command name resolved from PATH (no other relative paths), up to 4096 characters |
-| `paths.vibe_acp` | found on PATH | absolute path or a bare command name resolved from PATH (no other relative paths), up to 4096 characters |
+| Key | Meaning |
+|---|---|
+| `version` | Required schema version `1`. |
+| `allowed_workspace_roots` | Up to 100 absolute or home-relative canonical workspace roots. Defaults to empty. |
+| `retention.days` | Bounded artifact retention age. |
+| `limits.review_timeout_seconds`, `limits.edit_timeout_seconds` | Default run deadlines. |
+| `limits.max_turns_review`, `limits.max_turns_edit` | Default one-shot turn limits, 1–50. |
+| `limits.max_event_bytes`, `limits.max_transcript_bytes`, `limits.max_artifact_bytes` | Bounded persisted output sizes. |
+| `limits.worker_progress_timeout_seconds` | No-progress watchdog, `0` disables or 60–7200 seconds. |
+| `limits.max_mcp_result_chars` | Maximum serialized MCP response size. |
+| `paths.vibe` | Absolute executable path or bare command resolved through `PATH`. |
 
-Unknown keys are rejected, including keys removed in earlier releases. Shell tools, network tools, raw ACP logging and reasoning persistence are always off and have no key. At most 8 runs wait for a free slot, failed runs are never removed by retention, and the data directory is the config directory selected by `VIBE_SUPERVISOR_HOME`.
+The exact defaults and bounds are in [`schemas/config.schema.json`](../schemas/config.schema.json). An explicit `--config` takes precedence over `VIBE_SUPERVISOR_HOME`, then the platform default. An explicit invalid or missing file fails without fallback. The reduced candidate's default data roots are `~/Library/Application Support/VibeSupervisor-oneshot` (macOS), `%APPDATA%/VibeSupervisor-oneshot` (Windows), and `${XDG_DATA_HOME:-~/.local/share}/vibe-supervisor-oneshot` (Linux). `VIBE_SUPERVISOR_HOME` is an explicit override. With `--isolated`, per-connection storage remains below the selected config parent.
 
 ## CLI
 
-Installed use is `vibe-supervisor <command>`.
+- `setup` writes a template and can plan a Codex registration; it does not silently rewrite unknown settings.
+- `allow <workspace>` creates a missing private config when needed, then adds that canonical workspace root. Initialize a fresh explicit `--config` path with `allow` before running doctor or serve against it.
+- `doctor [--json] [--config <path>]` reports local Node, Git, config, executable, pinned Vibe checks, and the exact `application_entrypoint` and `runtime_module` that produced the report. It makes no model request and does not prove provider authentication.
+- `serve --stdio [--config <path>] [--isolated]` runs the MCP server.
+- `runs list|show|tail|cleanup` inspects or cleans saved runs according to ownership and fresh-export checks.
 
-| Command | Purpose |
-|---|---|
-| `setup --workspace <dir> [--codex user\|project] [--isolated] [--yes\|--dry-run]` | Plan every change first (a malformed Codex config aborts before anything is written), then create the config if missing, add the canonical workspace, fill `[paths]` from PATH, run doctor (non-PASS lines only), then show the Codex change; written only with `--yes` or an interactive confirmation. `--dry-run` prints the planned config and Codex changes and writes nothing, so it also skips doctor. Refuses `/` and the home directory. Rewriting an existing `config.toml` drops its comments and layout and keeps a `config.toml.bak-<timestamp>` copy. A running MCP server must be restarted (reconnected for `--isolated`) to read a changed allowlist. |
-| `allow <dir>` | Add one canonical workspace root; idempotent, including for roots written with `~`. Symlinked or missing directories, `/` and the home directory are refused. A change rewrites `config.toml` (comments and layout are lost; the previous file is kept as `config.toml.bak-<timestamp>`) and needs a restart of the Codex MCP server, or a reconnect for `--isolated`, to take effect. |
-| `doctor [--json] [--config <path>]` | Report local prerequisites without a model request; `--config` validates that file. Its `acp-initialize` check negotiates ACP without a prompt. |
-| `serve --stdio [--isolated]` | Run the MCP server. The client owns stdin and stdout. |
-| `runs list`, `runs show <id>`, `runs tail <id>` | Inspect saved runs. |
-| `runs cleanup [run-id]` | Retention sweep (lists any `unverified_worktrees` it left in place), or safe cleanup of one `failed`, `cancelled` or `closed` run. Stop the server first: storage has one owner. |
-| `--version` | Print the version. |
-
-The reviewed-baseline and edit-audit coordinator tools are repository scripts, not commands (see `scripts/README.md`). Exit status is 0 on success, 2 for usage errors and 1 otherwise; errors print `CODE: message remedy` on stderr.
-
-Run records and private histories can contain source content despite filtering; keep the data directory private.
-
-## Run provenance
-
-New runs persist `supervisor_version`, the release that created the run. Start, status, result, continuation and close responses expose it. Existing runs retain their recorded creator release across restart or continuation; legacy records return `null` in public run responses and remain absent in persisted metadata. The MCP initialization server version identifies the currently connected executable separately. A diagnostic event `reason` is not the backend structured `stop_reason`; preserve the two fields separately.
+Use `vibe-supervisor <command> --help` for current options. The explicit selected config and the connection already open in a desktop client are separate facts; verify the live handshake version and five-tool catalog on the owning connection.

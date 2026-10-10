@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.9.0-rc.20 — onboarding and release-check candidate
+
+- Correct the fresh explicit-config workflow, document the reviewed-baseline manifest contract, and add a draft private installation/registration and rollback plan. No installation or Codex configuration change was performed.
+- Make the Node acceptance check enforce the declared minimum of 20.19.0; keep the Node, TypeScript, and dependency pins unchanged.
+- Record the current platform and hosted/native/clean-account acceptance limits. Vitest advisories are documented as development-only exposure notes; no dependency audit is claimed from offline metadata.
+- Pin Vibe 2.26.1 through the enforced legacy harness after source-level compatibility checks against the installed macOS/CPython 3.12 distribution. Other OS/interpreter builds and hosted/native behavior remain unverified.
+
+## 0.9.0-rc.19 — reduced one-shot candidate
+
+- Reduce the supported runtime to one-shot programmatic review and isolated edit with one active run per owning server/storage instance and exactly five MCP tools.
+- Remove ACP selection, continuation, interactive permission/input handling, session recovery, queued starts, idle-session support, and ACP-specific launcher/probe/profile paths. Interrupted one-shot runs are inspectable failures and are never replayed.
+- Keep the then-supported Vibe pin/signature checks, private child homes, filtered environment, prompt-file handoff, project isolation, secret/reasoning filtering, fixed watchdog, output/deadline bounds, owner locking, and verified worktree cleanup.
+- Remove the ACP skill, lifecycle probe, ACP audit/soak/pilot scripts, and unused ACP SDK. Preserve prior reports under `docs/history/` as version-bound evidence.
+- Use explicit configuration selection and a separate one-shot data root. Reviewed dirty-baseline preparation remains a coordinator-only source helper and completes before connecting.
+- Hosted candidate behavior, native desktop lifecycle, provider authentication, and clean macOS Apple silicon installation remain unverified.
+
 ## 0.9.0-rc.18
 
 - Reviewed-baseline coordinator tooling returns stable sanitized preparation diagnostics, supports explicitly reviewed hash-bound root `.env.example` templates under restrictive content validation, and covers actual dry-run/create refusals and file/directory transitions. These scripts remain source-only.
