@@ -42,7 +42,7 @@ describe('original HOME handoff to the launcher shim', () => {
     await writeFile(vibe, '#!/usr/bin/env python3\n');
     await chmod(vibe, 0o755);
     const profile = await createVibeChildProfile(input(runDirectory, workspace), 'review', { forwardOriginalHome: true });
-    const launch = await buildVibeLaunch(vibe, 'acp', [], profile, runDirectory);
+    const launch = await buildVibeLaunch(vibe, [], profile, runDirectory);
     expect(launch.env[ORIGINAL_HOME_ENV]).toBe(realHome);
     expect(launch.env.HOME).toBe(path.join(runDirectory, 'child-home'));
     expect(launch.env.VIBE_HOME).toBe(path.join(runDirectory, 'vibe-home'));

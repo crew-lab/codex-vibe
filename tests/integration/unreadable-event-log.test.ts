@@ -18,13 +18,10 @@ afterEach(async () => {
 
 class FakeBackend implements SupervisorBackend {
   readonly kind = 'programmatic' as const;
-  async probe() { return { available: true, backend: this.kind, supportsContinue: true, supportsPermissionResponse: true }; }
+  async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, _callbacks: BackendCallbacks): Promise<BackendStartResult> { return { handle: { runId: input.runId, backend: this.kind, opaque: {} }, initialState: 'running' }; }
-  async continue() {}
-  async respond() {}
   async cancel(_handle: BackendRunHandle) {}
-  async close() {}
-  async recover(_record: RunRecord) { return undefined; }
+  async close(_handle: BackendRunHandle) {}
 }
 
 const DAY = 86_400_000;
@@ -55,13 +52,13 @@ async function seedBroken(cause: Cause, state: RunState, ageDays = 0) {
   await writeFile(events, body, { mode: 0o600 });
   if (cause === 'unreadable') await chmod(events, 0o000);
   const before = cause === 'unreadable' ? undefined : await readFile(events);
-  return { source, data, runId, directory, events, before, config: { ...DEFAULT_CONFIG, backend: 'programmatic' as const, allowedWorkspaceRoots: [source], workerIdleTtlSeconds: 600 } };
+  return { source, data, runId, directory, events, before, config: { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] } };
 }
 
 const exists = (file: string) => stat(file).then(() => true, () => false);
 
 describe.each(causes)('a run whose event log is %s', (cause) => {
-  it('gives status, result and continue a coded error', async () => {
+  it('gives status and result a coded error', async () => {
     const { config, data, runId } = await seedBroken(cause, 'completed');
     const manager = new RunManager(config, data, [new FakeBackend()]);
     try {
@@ -69,7 +66,6 @@ describe.each(causes)('a run whose event log is %s', (cause) => {
       const expected = cause === 'unreadable' ? 'VSUP_STORAGE_ERROR' : 'VSUP_ARTIFACT_ERROR';
       await expect(manager.status({ run_id: runId })).rejects.toMatchObject({ code: expected, message: expect.stringMatching(/event log/i) });
       await expect(manager.result({ run_id: runId })).rejects.toMatchObject({ code: expected });
-      await expect(manager.continue({ run_id: runId, message: 'again' })).rejects.toMatchObject({ code: expected });
     } finally { await manager.shutdown(); }
   });
 
@@ -90,16 +86,6 @@ describe.each(causes)('a run whose event log is %s', (cause) => {
     try {
       await manager.initialize();
       await expect(manager.close({ run_id: runId })).resolves.toMatchObject({ state: 'closed' });
-      if (before) expect(Buffer.compare(await readFile(events), before)).toBe(0);
-    } finally { await manager.shutdown(); }
-  });
-
-  it('can still be cancelled while recoverable', async () => {
-    const { config, data, runId, events, before } = await seedBroken(cause, 'running');
-    const manager = new RunManager(config, data, [new FakeBackend()]);
-    try {
-      await manager.initialize();
-      await expect(manager.cancel({ run_id: runId })).resolves.toMatchObject({ state: 'cancelled' });
       if (before) expect(Buffer.compare(await readFile(events), before)).toBe(0);
     } finally { await manager.shutdown(); }
   });

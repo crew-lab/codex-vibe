@@ -3,7 +3,7 @@ import { lstat, open, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { constants as fsConstants } from 'node:fs';
-import { getDataDir, loadConfig } from './config/config.js';
+import { loadConfig, loadResolvedConfig } from './config/config.js';
 import type { OwnerLock } from './core/owner-lock.js';
 import { prepareIsolatedHome } from './config/isolated-home.js';
 import { APP_VERSION } from './version.js';
@@ -18,18 +18,18 @@ import { supervisorError, type SupervisorErrorCode } from './contracts.js';
 import { environmentSecrets, redactSecrets } from './security/redaction.js';
 
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
-async function getManager(ownerLock?: OwnerLock): Promise<{ manager: RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> }; config: Awaited<ReturnType<typeof loadConfig>>; dataDir: string }> {
-  const config = await loadConfig({ createDataDir: true });
-  const dataDir = getDataDir();
+async function getManager(ownerLock?: OwnerLock, configPath?: string): Promise<{ manager: RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> }; config: Awaited<ReturnType<typeof loadConfig>>; dataDir: string }> {
+  const resolved = await loadResolvedConfig({ createDataDir: true, ...(configPath ? { configPath } : {}) });
+  const { config, dataDir } = resolved;
   const { RunManager } = await import('./core/run-manager.js');
   const manager = new RunManager(config, dataDir, [], ownerLock) as RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> };
   await manager.initialize();
   return { manager, config, dataDir };
 }
 
-async function serve(ownerLock?: OwnerLock): Promise<void> {
+async function serve(ownerLock?: OwnerLock, configPath?: string): Promise<void> {
   let ready: Awaited<ReturnType<typeof getManager>>;
-  try { ready = await getManager(ownerLock); }
+  try { ready = await getManager(ownerLock, configPath); }
   catch (error) { await ownerLock?.release(); throw error; }
   const { manager, config } = ready;
   const handle = startMcpStdio(manager, { config, onError: (message) => process.stderr.write(`${message}\n`) });
@@ -52,9 +52,17 @@ function validRunId(id: string): boolean {
 }
 
 async function runsCommand(args: string[]): Promise<void> {
-  const [subcommand, id] = args;
-  if (args.length !== (subcommand === 'list' ? 1 : subcommand === 'cleanup' ? (id ? 2 : 1) : 2)) fail('Usage: vibe-supervisor runs <list|show|tail|cleanup> [run-id]', 2);
-  const config = await loadConfig(); const dataDir = getDataDir();
+  let configPath: string | undefined; const positional: string[] = [];
+  for (let index = 0; index < args.length; index++) {
+    if (args[index] === '--config') {
+      const value = args[++index];
+      if (!value || value.startsWith('--') || configPath) fail('runs --config requires one path.', 2);
+      configPath = path.resolve(value);
+    } else positional.push(args[index] as string);
+  }
+  const [subcommand, id] = positional;
+  if (positional.length !== (subcommand === 'list' ? 1 : subcommand === 'cleanup' ? (id ? 2 : 1) : 2)) fail('Usage: vibe-supervisor runs [--config <path>] <list|show|tail|cleanup> [run-id]', 2);
+  const resolved = await loadResolvedConfig(configPath ? { configPath } : {}); const config = resolved.config; const dataDir = resolved.dataDir;
   const runsDir = path.join(dataDir, 'runs');
   if (subcommand === 'list') {
     let entries: string[];
@@ -84,7 +92,7 @@ async function runsCommand(args: string[]): Promise<void> {
   }
   if (subcommand === 'cleanup') {
     if (id && !validRunId(id)) fail('runs cleanup run-id must be a valid UUID.', 2);
-    const { manager } = await getManager();
+    const { manager } = await getManager(undefined, configPath);
     try { print(await manager.cleanup(id)); } finally { await manager.shutdown(); }
     return;
   }
@@ -107,20 +115,32 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   try {
     if (command === '--version' || command === '-v') { print(APP_VERSION); return; }
     if (command === 'help' || command === '--help' || command === '-h' || !command) {
-      print('Usage: vibe-supervisor <setup --workspace <dir> [--codex user|project] [--isolated] [--yes|--dry-run]|allow <dir>|doctor [--json] [--config <path>]|serve --stdio [--isolated]|runs list|show|tail|cleanup [run-id]|--version>'); return;
+      print('Usage: vibe-supervisor <setup --workspace <dir> [--config <path>] [--codex user|project] [--isolated] [--yes|--dry-run]|allow [--config <path>] <dir>|doctor [--json] [--config <path>]|serve --stdio [--config <path>] [--isolated]|runs [--config <path>] list|show|tail|cleanup [run-id]|--version>'); return;
     }
     if (command === 'doctor') return await doctorCommand(args);
     if (command === 'setup') return await setupCommand(args);
     if (command === 'allow') return await allowCommand(args);
     if (command === 'serve') {
-      if (args[0] !== '--stdio' || args.length > 2 || (args.length === 2 && args[1] !== '--isolated')) fail('Usage: vibe-supervisor serve --stdio [--isolated]', 2);
-      if (args.includes('--isolated')) {
-        const { home, lock, adopted } = await prepareIsolatedHome();
+      if (!args.includes('--stdio')) fail('Usage: vibe-supervisor serve --stdio [--config <path>] [--isolated]', 2);
+      let isolated = false; let configPath: string | undefined; let stdio = false;
+      for (let index = 0; index < args.length; index++) {
+        const arg = args[index];
+        if (arg === '--stdio') { if (stdio) fail('Duplicate --stdio.', 2); stdio = true; continue; }
+        if (arg === '--isolated') { if (isolated) fail('Duplicate --isolated.', 2); isolated = true; continue; }
+        if (arg === '--config') {
+          const value = args[++index];
+          if (!value || value.startsWith('--') || configPath) fail('--config requires one path.', 2);
+          configPath = path.resolve(value); continue;
+        }
+        fail('Usage: vibe-supervisor serve --stdio [--config <path>] [--isolated]', 2);
+      }
+      if (isolated) {
+        const { home, lock, adopted } = await prepareIsolatedHome(process.env, undefined, configPath);
         process.env.VIBE_SUPERVISOR_HOME = home;
         process.stderr.write(`Vibe private session directory (${adopted ? 'adopted' : 'created'}): ${home}\n`);
         return await serve(lock);
       }
-      return await serve();
+      return await serve(undefined, configPath);
     }
     if (command === 'runs') return await runsCommand(args);
     fail(`Unknown command: ${command}`, 2);

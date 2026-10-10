@@ -1,10 +1,10 @@
-import { chmod, mkdtemp, mkdir, readFile, realpath, rm, unlink, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, realpath, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, StartRunInput, SupervisorBackend, SupervisorConfig } from "../../src/contracts.js";
+import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend, SupervisorConfig } from "../../src/contracts.js";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
 import { RunManager } from "../../src/core/run-manager.js";
 import { bounded } from "../../src/mcp/tools.js";
@@ -20,25 +20,22 @@ class FakeBackend implements SupervisorBackend {
   handle: BackendRunHandle | undefined;
   callbacks: BackendCallbacks | undefined;
   beforeReturn: ((input: StartRunInput) => Promise<void>) | undefined;
-  async probe() { return { available: true, backend: this.kind, supportsContinue: true, supportsPermissionResponse: true }; }
+  async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     this.callbacks = callbacks;
     this.handle = { runId: input.runId, backend: this.kind, opaque: {} };
     await this.beforeReturn?.(input);
     return { handle: this.handle, initialState: "running" };
   }
-  async continue() {}
-  async respond() {}
   async cancel() {}
   async close() {}
-  async recover(_record: RunRecord) { return this.handle; }
 }
 
 async function setup(backend = new FakeBackend(), overrides: Partial<SupervisorConfig> = {}) {
   const parent = await mkdtemp(join(canonicalTmp, "vsup-review-")); roots.push(parent);
   const source = join(parent, "source"); const data = join(parent, "data");
   await mkdir(source);
-  const config = { ...DEFAULT_CONFIG, backend: "programmatic" as const, allowedWorkspaceRoots: [source], workerIdleTtlSeconds: 0, ...overrides };
+  const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], ...overrides };
   const manager = new RunManager(config, data, [backend]);
   return { parent, source, data, manager, backend };
 }
@@ -64,8 +61,8 @@ async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean): 
   throw new Error("Timed out waiting for run-manager state");
 }
 
-async function runningReview(manager: RunManager, source: string) {
-  const started = await manager.reviewStart({ task: "review", cwd: source });
+async function runningReview(manager: RunManager, source: string, task = "review") {
+  const started = await manager.reviewStart({ task, cwd: source });
   await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
   return started.run_id;
 }
@@ -117,11 +114,27 @@ describe("review integrity", () => {
     } finally { await manager.shutdown(); }
   });
 
+  it("persists only owner-readable manifest metadata without copying task or file contents", async () => {
+    const { source, manager } = await prepared();
+    const privateText = "PRIVATE_SOURCE_CONTENT_7c54";
+    await writeFile(join(source, "private.txt"), privateText);
+    try {
+      const runId = await runningReview(manager, source, "PRIVATE_TASK_CONTENT_991a");
+      const manifestPath = join(runDirectory(manager, runId), "launch-manifest.json");
+      const raw = await readFile(manifestPath, "utf8");
+      const info = await stat(manifestPath);
+      expect(info.mode & 0o777).toBe(0o600);
+      expect(raw).toContain("private.txt");
+      expect(raw).not.toContain(privateText);
+      expect(raw).not.toContain("PRIVATE_TASK_CONTENT_991a");
+    } finally { await manager.shutdown(); }
+  });
+
   it("escalates a changed workspace when a write-kind tool call was observed", async () => {
     const { source, manager, backend } = await prepared();
     try {
       const runId = await runningReview(manager, source);
-      await backend.callbacks?.onEvent({ source: "acp", type: "tool_call", severity: "info", data: { toolCallId: "t1", kind: "edit", title: "Write file", status: "pending" } });
+      await backend.callbacks?.onEvent({ source: "vibe", type: "tool_call", severity: "info", data: { toolCallId: "t1", kind: "edit", title: "Write file", status: "pending" } });
       await writeFile(join(source, "a.txt"), "changed\n");
       await backend.callbacks?.onState("completed", { result: { summary: "Review done" } });
       const full = await manager.result({ run_id: runId, detail: "full" });
@@ -139,7 +152,7 @@ describe("review integrity", () => {
     const { source, manager, backend } = await prepared();
     try {
       const runId = await runningReview(manager, source);
-      await backend.callbacks?.onEvent({ source: "acp", type: "tool_call_update", severity: "info", data: { toolCallId: "t1", kind: "other", title: "write_file" } });
+      await backend.callbacks?.onEvent({ source: "vibe", type: "tool_call_update", severity: "info", data: { toolCallId: "t1", kind: "other", title: "write_file" } });
       await writeFile(join(source, "a.txt"), "changed\n");
       await backend.callbacks?.onState("completed", { result: { summary: "Review done" } });
       const full = await manager.result({ run_id: runId, detail: "full" });

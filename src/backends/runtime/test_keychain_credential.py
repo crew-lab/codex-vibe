@@ -293,6 +293,8 @@ class MainTest(HomeCase):
         with mock.patch.dict(os.environ, environ, clear=True), \
                 mock.patch.dict(sys.modules, {"vibe": mock.Mock(__version__=version)}), \
                 mock.patch.object(LAUNCHER, "_start_parent_watchdog"), \
+                mock.patch.object(LAUNCHER, "_start_diagnostics", return_value=None), \
+                mock.patch.object(LAUNCHER, "consume_prompt_file", side_effect=lambda env, argv, directory: argv), \
                 mock.patch.object(LAUNCHER, "_patch_project_discovery"), \
                 mock.patch.object(LAUNCHER, "_patch_session_logger", side_effect=validate_error), \
                 mock.patch.object(LAUNCHER, "__import__", create=True, return_value=entry), \
@@ -306,7 +308,7 @@ class MainTest(HomeCase):
         return outcome, entry
 
     def environ(self, **extra):
-        return {"VIBE_SUPERVISOR_ENTRYPOINT": "acp", ORIGINAL_HOME: self.home, **extra}
+        return {ORIGINAL_HOME: self.home, **extra}
 
     def test_unsupported_version_is_rejected_before_any_lookup(self) -> None:
         runner = Recorder([(0, CANARY.encode() + b"\n")])
@@ -315,11 +317,12 @@ class MainTest(HomeCase):
         self.assertEqual(runner.calls, [])
         entry.main.assert_not_called()
 
-    def test_unknown_entrypoint_is_rejected_before_any_lookup(self) -> None:
+    def test_previous_pin_is_rejected_before_any_lookup(self) -> None:
         runner = Recorder([(0, CANARY.encode() + b"\n")])
-        outcome, _ = self.run_main(LAUNCHER.EXPECTED_VERSION, self.environ(VIBE_SUPERVISOR_ENTRYPOINT="bogus"), runner)
+        outcome, entry = self.run_main("2.25.8", self.environ(), runner)
         self.assertIsInstance(outcome, SystemExit)
         self.assertEqual(runner.calls, [])
+        entry.main.assert_not_called()
 
     def test_failed_signature_validation_precedes_lookup(self) -> None:
         runner = Recorder([(0, CANARY.encode() + b"\n")])
@@ -358,7 +361,7 @@ class MainTest(HomeCase):
             runner = Recorder([(36, b""), (44, b"")])
             stderr = io.StringIO()
             with mock.patch.object(sys, "stderr", stderr):
-                self.run_main(LAUNCHER.EXPECTED_VERSION, {"VIBE_SUPERVISOR_ENTRYPOINT": "acp", ORIGINAL_HOME: original}, runner)
+                self.run_main(LAUNCHER.EXPECTED_VERSION, {ORIGINAL_HOME: original}, runner)
             self.assertIn(expected, stderr.getvalue())
 
     def test_explicit_credential_skips_lookup_and_diagnostic(self) -> None:

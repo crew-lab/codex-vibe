@@ -102,7 +102,7 @@ describe('reviewed baseline preparation',()=>{
   try{
    await expect(baselineCommand(['manifest.json'])).rejects.toMatchObject({code:'VSBASE_CONFIG_INVALID',stage:'config'});
    try{await exec('node',[path.resolve('scripts/prepare-reviewed-baseline.mjs'),'manifest.json'],{cwd:root,env:process.env});throw new Error('CLI unexpectedly succeeded');}
-   catch(error){const failure=error as {stderr?:string;stdout?:string};expect(failure.stdout).toBe('');expect(JSON.parse(failure.stderr??'')).toMatchObject({status:'preparation_failed',code:'VSBASE_CONFIG_INVALID',stage:'config',source_preserved:true});expect(failure.stderr).not.toContain(home);}
+   catch(error){const failure=error as {stderr?:string;stdout?:string};expect(failure.stdout).toBe('');expect(JSON.parse(failure.stderr??'')).toMatchObject({status:'preparation_failed',code:'VSBASE_CONFIG_INVALID',stage:'config',source_preserved:true,config_path:path.join(home,'config.toml')});expect(failure.stderr).not.toContain('invalid toml');}
   }finally{if(previous===undefined)delete process.env.VIBE_SUPERVISOR_HOME;else process.env.VIBE_SUPERVISOR_HOME=previous;}
   expect(new BaselinePreparationError('unexpected').message).not.toContain(home);
  });
@@ -111,8 +111,41 @@ describe('reviewed baseline preparation',()=>{
   await writeFile(configPath,config,{mode:0o600});await chmod(configPath,0o600);const manifest=path.join(root,'review.json');await writeFile(manifest,JSON.stringify(input),{mode:0o600});await chmod(manifest,0o600);
   const index=await readFile(path.join(source,'.git/index'));const status=await git('status','--porcelain');const ref=await git('rev-parse','HEAD');const configHash=digest(await readFile(configPath));const cli=path.resolve('scripts/prepare-reviewed-baseline.mjs');const env={...process.env,VIBE_SUPERVISOR_HOME:home};
   const dry=await exec('node',[cli,manifest],{cwd:root,env});const dryResult=JSON.parse(dry.stdout);expect(dry.stderr).toBe('');expect(dryResult.status).toBe('validated_dry_run');expect(await readdir(parent)).toEqual([]);
-  const created=await exec('node',[cli,manifest,'--create'],{cwd:root,env});const createResult=JSON.parse(created.stdout);expect(created.stderr).toBe('');expect(createResult.status).toBe('prepared');expect(await readFile(createResult.manifest_path,'utf8')).toContain('"status": "prepared"');
+  const created=await exec('node',[cli,manifest,'--create','--expect-manifest-sha256',dryResult.manifest_sha256],{cwd:root,env});const createResult=JSON.parse(created.stdout);expect(created.stderr).toBe('');expect(createResult.status).toBe('prepared');expect(await readFile(createResult.manifest_path,'utf8')).toContain('"status": "prepared"');
   expect(await readFile(path.join(source,'.git/index'))).toEqual(index);expect(await git('status','--porcelain')).toBe(status);expect(await git('rev-parse','HEAD')).toBe(ref);expect(digest(await readFile(configPath))).toBe(configHash);expect(await readFile(configPath,'utf8')).toBe(config);
+ });
+ it('uses the explicit artifact config for preparation despite obsolete default keys and needs no live connection',async()=>{
+  const {root,parent,input}=await setup();const legacy=path.join(root,'legacy');const artifact=path.join(root,'artifact');await mkdir(legacy,{mode:0o700});await mkdir(artifact,{mode:0o700});
+  const legacyBytes='version = 1\nbackend = "acp"\n';await writeFile(path.join(legacy,'config.toml'),legacyBytes,{mode:0o600});
+  const configPath=path.join(artifact,'config.toml');await writeFile(configPath,`version = 1\nallowed_workspace_roots = [${JSON.stringify(root)}]\n`,{mode:0o600});
+  const manifest=path.join(root,'review.json');await writeFile(manifest,JSON.stringify(input),{mode:0o600});const cli=path.resolve('scripts/prepare-reviewed-baseline.mjs');const env={...process.env,VIBE_SUPERVISOR_HOME:legacy,VIBE_SUPERVISOR_DIST_DIR:process.env.VIBE_SUPERVISOR_TEST_DIST};
+  const dry=await exec('node',[cli,manifest,'--config',configPath],{cwd:root,env});const result=JSON.parse(dry.stdout);expect(result.status).toBe('validated_dry_run');expect(result.configuration.config_source).toBe('explicit');expect(result.configuration.config_path).toBe(configPath);expect(result.configuration.config_fingerprint).toMatch(/^[a-f0-9]{64}$/);expect(result.source_invariants.head).toMatch(/^[a-f0-9]{40,64}$/);expect(await readdir(parent)).toEqual([]);
+  const created=await exec('node',[cli,manifest,'--config',configPath,'--create','--expect-manifest-sha256',result.manifest_sha256],{cwd:root,env});expect(JSON.parse(created.stdout).status).toBe('prepared');expect(await readFile(path.join(legacy,'config.toml'),'utf8')).toBe(legacyBytes);
+ });
+ it('allows an unrelated sibling creation while reading a private manifest without weakening path checks',async()=>{
+  const {root,input}=await setup();const home=path.join(root,'config');await mkdir(home,{mode:0o700});
+  const config=path.join(home,'config.toml');await writeFile(config,`version = 1\nallowed_workspace_roots = [${JSON.stringify(root)}]\n`,{mode:0o600});
+  const manifest=path.join(root,'review.json');await writeFile(manifest,JSON.stringify(input),{mode:0o600});
+  const sibling=path.join(root,'unrelated-sibling');const hook=path.join(root,'read-hook.mjs');
+  await writeFile(hook,`import fs from 'node:fs/promises'; import {syncBuiltinESMExports} from 'node:module'; const original=fs.open; fs.open=async(...args)=>{const h=await original(...args); if(args[0]===${JSON.stringify(manifest)}){const read=h.readFile.bind(h); h.readFile=async(...params)=>{await fs.mkdir(${JSON.stringify(sibling)}); return read(...params);};} return h;}; syncBuiltinESMExports();`);
+  const env={...process.env,VIBE_SUPERVISOR_DIST_DIR:process.env.VIBE_SUPERVISOR_TEST_DIST};
+  const result=await exec('node',['--import',hook,path.resolve('scripts/prepare-reviewed-baseline.mjs'),manifest,'--config',config],{cwd:root,env});
+  expect(JSON.parse(result.stdout).status).toBe('validated_dry_run');expect((await lstat(sibling)).isDirectory()).toBe(true);
+ });
+ it('names an explicit missing config and never falls back to a valid default home',async()=>{
+  const {root,parent,input}=await setup();const home=path.join(root,'legacy');await mkdir(home,{mode:0o700});const fallback='version = 1\nallowed_workspace_roots = ['+JSON.stringify(root)+']\n';await writeFile(path.join(home,'config.toml'),fallback,{mode:0o600});
+  const missing=path.join(root,'missing-artifact.toml');const manifest=path.join(root,'review.json');await writeFile(manifest,JSON.stringify(input),{mode:0o600});const cli=path.resolve('scripts/prepare-reviewed-baseline.mjs');const env={...process.env,VIBE_SUPERVISOR_HOME:home,VIBE_SUPERVISOR_DIST_DIR:process.env.VIBE_SUPERVISOR_TEST_DIST};
+  try{await exec('node',[cli,manifest,'--config',missing],{cwd:root,env});throw new Error('missing explicit config unexpectedly succeeded');}
+  catch(error){const failure=error as {stderr?:string;stdout?:string};expect(failure.stdout).toBe('');expect(JSON.parse(failure.stderr??'')).toMatchObject({status:'preparation_failed',code:'VSBASE_CONFIG_INVALID',stage:'config',config_path:missing});}
+  expect(await readFile(path.join(home,'config.toml'),'utf8')).toBe(fallback);expect(await readdir(parent)).toEqual([]);
+ });
+ it('refuses a stale dry-run manifest when source refs change before snapshot creation',async()=>{
+  const {root,parent,input,git}=await setup();const dry=await prepareReviewedBaseline(input,[root]);await git('tag','after-dry-run');
+  await expect(prepareReviewedBaseline(input,[root],true,dry.manifest_sha256)).rejects.toMatchObject({code:'VSBASE_SOURCE_CHANGED',stage:'stale_source'});expect(await readdir(parent)).toEqual([]);
+ });
+ it('records an absent Git index explicitly for clean bases',async()=>{
+  const {root,source,input}=await setup();await rm(path.join(source,'.git','index'));
+  const dry=await prepareReviewedBaseline(input,[root]);expect(dry.status).toBe('validated_dry_run');expect(dry.source_invariants.index_sha256).toBeNull();
  });
  it('writes a private sanitized failure receipt after a controlled late source hash change',async()=>{
   const {root,source,parent,input}=await setup();const bin=path.join(root,'bin');await mkdir(bin,{mode:0o700});const realGit=(await exec('which',['git'])).stdout.trim();const shim=path.join(bin,'git');
@@ -122,7 +155,7 @@ describe('reviewed baseline preparation',()=>{
    process.env.PATH=`${bin}${path.delimiter}${previousPath??''}`;let failure:Record<string,unknown>|undefined;try{await prepareReviewedBaseline(input,[root],true);}catch(error){failure=error as Record<string,unknown>;}
    expect(failure).toMatchObject({code:'VSBASE_HASH_MISMATCH',stage:'hash'});const outputId=String(failure?.retained_output_id);expect(outputId).toMatch(/^reviewed-baseline-/);
    const output=path.join(parent,outputId);const receipt=path.join(output,'failure.json');const report=JSON.parse(await readFile(receipt,'utf8'));
-   expect(report).toEqual({status:'preparation_failed',source_preserved:true,code:'VSBASE_HASH_MISMATCH',stage:'hash',retained_output_id:outputId});expect(JSON.stringify(report)).not.toContain(source);expect(JSON.stringify(report)).not.toContain(mutation);
+   expect(report).toEqual({status:'preparation_failed',source_preserved:true,code:'VSBASE_HASH_MISMATCH',stage:'hash',retained_output_id:outputId,retained_output_path:output,output_disposition:'retained'});expect(JSON.stringify(report)).not.toContain(source);expect(JSON.stringify(report)).not.toContain(mutation);
    const info=await lstat(receipt);expect(info.isFile()).toBe(true);expect(info.uid).toBe(process.getuid?.());expect(info.mode&0o077).toBe(0);
    expect(await readFile(path.join(source,'a.txt'),'utf8')).toBe(mutation+'\n');expect(await readFile(path.join(source,'.git/index'))).toEqual(beforeIndex);expect((await exec('git',['-C',source,'rev-parse','HEAD'])).stdout.trim()).toBe(beforeRef);
   }finally{if(previousPath===undefined)delete process.env.PATH;else process.env.PATH=previousPath;}

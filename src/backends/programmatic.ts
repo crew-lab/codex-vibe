@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import type {
-  BackendCapabilities, BackendRespondInput, BackendRunHandle, RunRecord,
+  BackendCapabilities, BackendRunHandle,
   StartRunInput, SupervisorBackend, BackendCallbacks
 } from '../contracts.js';
 import { supervisorError } from '../contracts.js';
@@ -35,7 +35,6 @@ function parsedVersion(stdout: string, stderr: string): string | undefined {
 
 export class ProgrammaticBackend implements SupervisorBackend {
   readonly kind = 'programmatic' as const;
-  readonly supportsContinue = false;
   constructor(private readonly config: SupervisorConfig) {}
 
   async probe(): Promise<BackendCapabilities> {
@@ -56,13 +55,11 @@ export class ProgrammaticBackend implements SupervisorBackend {
         backend: this.kind,
         executable: executable(this.config),
         ...(version ? { version } : {}),
-        supportsContinue: false,
-        supportsPermissionResponse: false,
         details: { ...(version ? { detected_version: version } : {}), reason: version === SUPPORTED_VIBE ? 'Exact tested Vibe build detected' : `Requires exactly Vibe ${SUPPORTED_VIBE}` }
       };
     } catch (error) {
       const missing = await describeMissing(executable(this.config), error);
-      return { available: false, backend: this.kind, executable: executable(this.config), supportsContinue: false, supportsPermissionResponse: false, details: { ...missing, reason: missing.interpreter_missing ? `The interpreter for the vibe launcher${typeof missing.interpreter === 'string' ? ` (${missing.interpreter})` : ''} was not found.` : 'The Vibe version probe failed.', error: redactSecrets(String(error), secrets) } };
+      return { available: false, backend: this.kind, executable: executable(this.config), details: { ...missing, reason: missing.interpreter_missing ? `The interpreter for the vibe launcher${typeof missing.interpreter === 'string' ? ` (${missing.interpreter})` : ''} was not found.` : 'The Vibe version probe failed.', error: redactSecrets(String(error), secrets) } };
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -98,7 +95,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
     let launch: VibeLaunch;
     let child: ReturnType<typeof spawnManaged>;
     try {
-      launch = await buildVibeLaunch(executable(this.config), 'programmatic', args, profile, input.runDirectory, { promptText: prompt });
+      launch = await buildVibeLaunch(executable(this.config), args, profile, input.runDirectory, { promptText: prompt });
       child = spawnManaged(launch.command, launch.args, {
         cwd: input.workerWorkspace, env: launch.env,
         forwardEnv: Object.keys(launch.env),
@@ -123,7 +120,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
       catch (error) { child.done.catch(() => undefined); throw error; }
     } catch (error) {
       await discardPromptFile().catch(() => undefined);
-      throw await classifyStartFailure(this.kind, executable(this.config), error);
+      throw await classifyStartFailure(executable(this.config), error);
     }
     const opaque = { process: child, done: false, home: profile.home, vibeHome: profile.vibeHome, get summary() { return latestSummary; } };
     const handle: ProgrammaticHandle = { runId: input.runId, backend: this.kind, opaque };
@@ -150,7 +147,7 @@ export class ProgrammaticBackend implements SupervisorBackend {
         } });
       } else {
         const exitMessage = `Vibe exited with code ${code ?? 'null'}${signal ? ` (${signal})` : ''}`;
-        const failure = versionMismatchOnStderr(this.kind, stderrText) ?? classifyFailureText(stderrTailText(stderrText), 'VSUP_BACKEND_CRASHED', exitMessage);
+        const failure = versionMismatchOnStderr(stderrText) ?? classifyFailureText(stderrTailText(stderrText), 'VSUP_BACKEND_CRASHED', exitMessage);
         await callbacks.onState('failed', { error: failure });
       }
     }).catch(async (error: unknown) => {
@@ -161,12 +158,6 @@ export class ProgrammaticBackend implements SupervisorBackend {
     return { handle, initialState: 'running' as const, process: processRecord };
   }
 
-  async continue(_handle: BackendRunHandle, _message: string): Promise<void> {
-    throw supervisorError('VSUP_SESSION_NOT_RESUMABLE', 'The programmatic Vibe command cannot continue an ACP session.');
-  }
-  async respond(_handle: BackendRunHandle, _response: BackendRespondInput): Promise<void> {
-    throw supervisorError('VSUP_INVALID_STATE', 'The programmatic Vibe command has no interactive permission or elicitation channel.');
-  }
   async cancel(handle: BackendRunHandle): Promise<void> {
     const state = handle.opaque as ProgrammaticHandle['opaque'];
     await state.process.terminate();
@@ -177,11 +168,10 @@ export class ProgrammaticBackend implements SupervisorBackend {
   }
   async close(handle: BackendRunHandle): Promise<void> {
     const state = handle.opaque as ProgrammaticHandle['opaque'];
-    if (!state.done) await state.process.terminate();
-    // Retain the private Vibe home until supervisor retention cleanup so
-    // filtered native session records remain available for diagnosis/recovery.
+    if (!state.process.terminationVerified) await state.process.terminate();
+    // Keep filtered private diagnostics available until supervisor retention cleanup.
   }
-  async recover(_record: RunRecord, _callbacks: BackendCallbacks): Promise<BackendRunHandle | undefined> { return undefined; }
+
 }
 
 function cleanPrivateFields(value: unknown): unknown {

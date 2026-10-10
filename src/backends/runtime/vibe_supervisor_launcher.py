@@ -6,7 +6,6 @@ import hashlib
 import inspect
 import json
 import sysconfig
-import math
 import os
 import re
 import selectors
@@ -18,18 +17,13 @@ import threading
 import time
 from typing import Any, Callable, Optional
 
-EXPECTED_VERSION = "2.25.8"
+EXPECTED_VERSION = "2.26.1"
 PROJECT_DISCOVERY_SOURCE_SHA256 = "43fc21e2d1a7359ac896ab41e902d927d363ba4ef8f989909af8bcca4b82cbac"
 # Set restrictive permissions before importing Vibe or creating its state.
 os.umask(0o077)
-ENTRYPOINTS = {
-    "acp": "vibe.acp.entrypoint",
-    "programmatic": "vibe.cli.entrypoint",
-}
+PROGRAMMATIC_ENTRYPOINT = "vibe.cli.entrypoint"
 PROMPT_FILE_ENV = "VIBE_SUPERVISOR_PROMPT_FILE"
 MAX_PROMPT_BYTES = 4 * 1024 * 1024
-WORKER_DEADLINE_FILE_ENV = "VIBE_SUPERVISOR_WORKER_DEADLINE_FILE"
-MAX_DEADLINE_FILE_BYTES = 64
 HARD_CAP_SECONDS = 48 * 3600
 ORIGINAL_HOME_ENV = "VIBE_SUPERVISOR_ORIGINAL_HOME"
 CREDENTIAL_ENV = "MISTRAL_API_KEY"
@@ -349,39 +343,11 @@ def _patch_session_logger() -> None:
     SessionLogger._persist_metadata_sync = staticmethod(persist_metadata)
 
 
-def read_worker_deadline(path: Optional[str], expected_directory: str, owner_uid: int) -> Optional[float]:
-    if not path or not os.path.isabs(path):
-        return None
-    try:
-        if os.path.realpath(os.path.dirname(path)) != os.path.realpath(expected_directory):
-            return None
-        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
-        descriptor = os.open(path, flags)
-        try:
-            info = os.fstat(descriptor)
-            if not stat.S_ISREG(info.st_mode) or info.st_uid != owner_uid or info.st_mode & 0o077:
-                return None
-            raw = os.read(descriptor, MAX_DEADLINE_FILE_BYTES + 1)
-        finally:
-            os.close(descriptor)
-        if len(raw) > MAX_DEADLINE_FILE_BYTES:
-            return None
-        value = float(raw.decode("ascii").strip())
-    except (OSError, ValueError, UnicodeDecodeError):
-        return None
-    if not math.isfinite(value) or value <= 0:
-        return None
-    return value
-
-
 class WorkerWatchdog:
     def __init__(
         self,
         parent_pid: int,
         timeout_seconds: int,
-        deadline_file: Optional[str],
-        expected_directory: str,
-        owner_uid: int,
         hard_cap_seconds: float,
         wall_clock: Callable[[], float],
         monotonic_clock: Callable[[], float],
@@ -389,9 +355,6 @@ class WorkerWatchdog:
         kill: Callable[[], None],
     ) -> None:
         self.parent_pid = parent_pid
-        self.deadline_file = deadline_file
-        self.expected_directory = expected_directory
-        self.owner_uid = owner_uid
         self.hard_cap_seconds = hard_cap_seconds
         self.wall_clock = wall_clock
         self.monotonic_clock = monotonic_clock
@@ -404,9 +367,6 @@ class WorkerWatchdog:
         if self.get_parent_pid() != self.parent_pid:
             self.kill()
             return True
-        latest = read_worker_deadline(self.deadline_file, self.expected_directory, self.owner_uid)
-        if latest is not None:
-            self.deadline = latest
         if self.monotonic_clock() - self.started >= self.hard_cap_seconds or self.wall_clock() >= self.deadline:
             self.kill()
             return True
@@ -431,9 +391,6 @@ def _start_parent_watchdog() -> None:
     watchdog = WorkerWatchdog(
         parent_pid=os.getppid(),
         timeout_seconds=timeout,
-        deadline_file=os.environ.pop(WORKER_DEADLINE_FILE_ENV, None),
-        expected_directory=os.path.dirname(os.path.realpath(__file__)),
-        owner_uid=os.getuid(),
         hard_cap_seconds=HARD_CAP_SECONDS,
         wall_clock=time.time,
         monotonic_clock=time.monotonic,
@@ -560,7 +517,7 @@ class WorkerDiagnostics:
 
 def _start_diagnostics() -> Optional[WorkerDiagnostics]:
     enabled = os.environ.pop(DIAGNOSTICS_ENV, None) == "1"
-    if not enabled or os.environ.get("VIBE_SUPERVISOR_ENTRYPOINT") != "programmatic":
+    if not enabled:
         return None
     try:
         recorder = WorkerDiagnostics(os.path.dirname(os.path.realpath(__file__)))
@@ -585,14 +542,7 @@ def main() -> None:
 
     if vibe.__version__ != EXPECTED_VERSION:
         raise SystemExit(f"Vibe privacy shim supports exactly {EXPECTED_VERSION}; found {vibe.__version__}")
-    kind = os.environ.get("VIBE_SUPERVISOR_ENTRYPOINT", "")
-    module_name = ENTRYPOINTS.get(kind)
-    if module_name is None:
-        raise SystemExit("VIBE_SUPERVISOR_ENTRYPOINT must be 'acp' or 'programmatic'")
-    if kind == "programmatic":
-        sys.argv = consume_prompt_file(os.environ, sys.argv, os.path.dirname(os.path.realpath(__file__)))
-    elif os.environ.pop(PROMPT_FILE_ENV, None) is not None:
-        raise SystemExit("A prompt file is only valid for the programmatic entrypoint")
+    sys.argv = consume_prompt_file(os.environ, sys.argv, os.path.dirname(os.path.realpath(__file__)))
     if diagnostics:
         diagnostics.stage("prompt_consumption")
     _patch_project_discovery()
@@ -611,7 +561,7 @@ def main() -> None:
     os.environ["LOG_LEVEL"] = "ERROR"
     if "--legacy-harness" not in sys.argv:
         sys.argv.append("--legacy-harness")
-    module = __import__(module_name, fromlist=["main"])
+    module = __import__(PROGRAMMATIC_ENTRYPOINT, fromlist=["main"])
     if diagnostics:
         diagnostics.stage("entrypoint_invocation")
     module.main()

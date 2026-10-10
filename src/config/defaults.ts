@@ -2,10 +2,7 @@ import type { SupervisorConfig } from "../contracts.js";
 
 export const DEFAULT_CONFIG: SupervisorConfig = {
   version: 1,
-  backend: "programmatic",
   allowedWorkspaceRoots: [],
-  maxConcurrentRuns: 2,
-  workerIdleTtlSeconds: 600,
   retention: { days: 7 },
   limits: {
     reviewTimeoutSeconds: 1800,
@@ -17,5 +14,6 @@ export const DEFAULT_CONFIG: SupervisorConfig = {
     maxArtifactBytes: 104_857_600,
     workerProgressTimeoutSeconds: 600,
     maxMcpResultChars: 8000
-  }
+  },
+  paths: {}
 };

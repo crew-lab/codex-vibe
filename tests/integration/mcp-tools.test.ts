@@ -41,25 +41,23 @@ const clients: Client[] = [];
 afterEach(async () => { await Promise.all(clients.splice(0).map((client) => client.close().catch(() => {}))); });
 
 describe('MCP stdio tool surface', () => {
-  it('serves seven strict tools and routes valid calls through the manager', async () => {
+  it('serves five strict tools and routes valid calls through the manager', async () => {
     const input = new PassThrough(); const output = new PassThrough();
     const manager = {
-      reviewStart: vi.fn(async (args) => ({ run_id: '123e4567-e89b-42d3-a456-426614174000', state: 'queued', received_task: args.task })),
-      editStart: vi.fn(async () => ({ run_id: 'edit-id', state: 'queued' })),
+      reviewStart: vi.fn(async (args) => ({ run_id: '123e4567-e89b-42d3-a456-426614174000', state: 'running', received_task: args.task })),
+      editStart: vi.fn(async () => ({ run_id: 'edit-id', state: 'running' })),
       status: vi.fn(async () => ({ state: 'running', events: [] })),
-      continue: vi.fn(async () => ({ accepted: true })),
-      respond: vi.fn(async () => ({ accepted: true })),
       result: vi.fn(async () => ({ run_id: '123e4567-e89b-42d3-a456-426614174000', artifacts: [{ name: 'diff.patch', path: '/private/runs/diff.patch', sha256: 'abc' }], summary: 'complete', reasoning_content: 'should never cross the MCP boundary' })),
       close: vi.fn(async () => ({ closed: true })),
     } satisfies RunManagerTools;
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, backend: 'acp', limits: { ...DEFAULT_CONFIG.limits, maxMcpResultChars: 500 } } });
+    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits, maxMcpResultChars: 500 } } });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(7);
+    expect(tools).toHaveLength(5);
     expect(tools.map((tool) => tool.name).sort()).toEqual([
-      'vibe_close', 'vibe_continue', 'vibe_edit_start', 'vibe_respond', 'vibe_result', 'vibe_review_start', 'vibe_status',
+      'vibe_close', 'vibe_edit_start', 'vibe_result', 'vibe_review_start', 'vibe_status',
     ]);
     expect(tools.find((tool) => tool.name === 'vibe_status')?.annotations?.readOnlyHint).toBe(true);
     expect(tools.find((tool) => tool.name === 'vibe_result')?.annotations?.readOnlyHint).toBe(true);
@@ -67,7 +65,7 @@ describe('MCP stdio tool surface', () => {
 
     const result = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp' } });
     expect(result.isError).toBeUndefined();
-    expect(structured(result)).toMatchObject({ state: 'queued', received_task: 'review' });
+    expect(structured(result)).toMatchObject({ state: 'running', received_task: 'review' });
     expect(manager.reviewStart).toHaveBeenCalledOnce();
     const got = await client.callTool({ name: 'vibe_result', arguments: { run_id: '123e4567-e89b-42d3-a456-426614174000', detail: 'full' } });
     expect(structured(got)).toMatchObject({ run_id: '123e4567-e89b-42d3-a456-426614174000' });
@@ -78,8 +76,7 @@ describe('MCP stdio tool surface', () => {
     const input = new PassThrough(); const output = new PassThrough();
     const manager = {
       reviewStart: vi.fn(async () => { throw Object.assign(new Error('run missing'), { code: 'VSUP_NOT_FOUND' }); }),
-      editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})), continue: vi.fn(async () => ({})),
-      respond: vi.fn(async () => ({})), result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
+      editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})), result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
     } satisfies RunManagerTools;
     const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits } } });
     await server.connect(new StdioServerTransport(input, output));
@@ -98,7 +95,7 @@ describe('MCP stdio tool surface', () => {
     const manager = {
       reviewStart: vi.fn(async () => ({})), editStart: vi.fn(async () => ({})),
       status: vi.fn(async () => { throw Object.assign(new Error('disk exploded while writing api_key=sk-abcdef1234567890xyz'), { code: 'EBADF' }); }),
-      continue: vi.fn(async () => ({})), respond: vi.fn(async () => ({})), result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
+      result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
     } satisfies RunManagerTools;
     const logged: string[] = [];
     const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits } }, onError: (message) => logged.push(message) });
@@ -119,8 +116,8 @@ describe('MCP stdio tool surface', () => {
     const input = new PassThrough(); const output = new PassThrough();
     const storage = Object.assign(new Error('The supervisor could not write to its data directory (ENOSPC).'), { code: 'VSUP_STORAGE_ERROR', details: { code: 'ENOSPC', directory: '/data/runs/abc' } });
     const manager = {
-      reviewStart: vi.fn(async () => { throw storage; }), editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})), continue: vi.fn(async () => ({})),
-      respond: vi.fn(async () => ({})), result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
+      reviewStart: vi.fn(async () => { throw storage; }), editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})),
+      result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
     } satisfies RunManagerTools;
     const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits } } });
     await server.connect(new StdioServerTransport(input, output));
@@ -130,31 +127,27 @@ describe('MCP stdio tool surface', () => {
     expect(errorText(failed)).toContain('VSUP_STORAGE_ERROR');
   });
 
-  async function listTools(backend: 'acp' | 'programmatic') {
+  async function listTools() {
     const input = new PassThrough(); const output = new PassThrough();
     const manager = {
-      reviewStart: vi.fn(async () => ({})), editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})), continue: vi.fn(async () => ({})),
-      respond: vi.fn(async () => ({})), result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
+      reviewStart: vi.fn(async () => ({})), editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})),
+      result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
     } satisfies RunManagerTools;
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, backend } });
+    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG } });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
     return { client, tools: (await client.listTools()).tools };
   }
 
-  it('registers continue and respond only when the configured backend can use them', async () => {
+  it('always registers exactly the supported five tools', async () => {
     const base = ['vibe_close', 'vibe_edit_start', 'vibe_result', 'vibe_review_start', 'vibe_status'];
-    const programmatic = await listTools('programmatic');
-    expect(programmatic.tools.map((tool) => tool.name).sort()).toEqual(base);
-    for (const backend of ['acp'] as const) {
-      const { tools } = await listTools(backend);
-      expect(tools.map((tool) => tool.name).sort()).toEqual([...base, 'vibe_continue', 'vibe_respond'].sort());
-    }
+    const { tools } = await listTools();
+    expect(tools.map((tool) => tool.name).sort()).toEqual(base);
   });
 
   it('rejects the removed inputs and never exposes vibe_cancel', async () => {
-    const { client, tools } = await listTools('acp');
+    const { client, tools } = await listTools();
     expect(tools.map((tool) => tool.name)).not.toContain('vibe_cancel');
     for (const extra of [{ allow_shell: false }, { backend: 'acp' }]) {
       const rejected = await client.callTool({ name: 'vibe_edit_start', arguments: { task: 'edit', cwd: '/tmp', ...extra } });
@@ -165,7 +158,7 @@ describe('MCP stdio tool surface', () => {
   });
 
   it('carries the essentials in the tool descriptions', async () => {
-    const { tools } = await listTools('acp');
+    const { tools } = await listTools();
     const descriptionOf = (name: string) => tools.find((tool) => tool.name === name)?.description ?? '';
     for (const name of ['vibe_review_start', 'vibe_edit_start', 'vibe_status']) expect(descriptionOf(name)).toMatch(/120.{1,4}300/);
     for (const name of ['vibe_review_start', 'vibe_edit_start', 'vibe_status', 'vibe_result']) {

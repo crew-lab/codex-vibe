@@ -48,18 +48,18 @@ async function legacyExport(exported: { patchPath: string; patch: Buffer }): Pro
 }
 
 describe('worktree cleanup verification', () => {
-  it('accepts a patch saved with tracked files before untracked ones', async () => {
+  it('accepts a reordered verified patch but retains its dirty worktree', async () => {
     const { repo, worktree, base, exported } = await setup();
     const legacy = await legacyExport(exported);
-    await removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, legacy);
-    await expect(stat(worktree)).rejects.toThrow();
+    await expect(removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, legacy, worktree)).rejects.toThrow(/uncommitted or untracked files/i);
+    await expect(stat(worktree)).resolves.toBeDefined();
   });
 
   it('still refuses a one-byte content change in the reordered patch comparison', async () => {
     const { repo, worktree, base, exported } = await setup();
     const legacy = await legacyExport(exported);
     await writeFile(path.join(worktree, 'a-new.txt'), 'untrackeX\n');
-    await expect(removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, legacy)).rejects.toThrow(/changed after export/);
+    await expect(removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, legacy, worktree)).rejects.toThrow(/changed after export/);
     expect(await readFile(path.join(worktree, 'a-new.txt'), 'utf8')).toBe('untrackeX\n');
   });
 
@@ -67,6 +67,6 @@ describe('worktree cleanup verification', () => {
     const { repo, worktree, base, exported } = await setup();
     const legacy = await legacyExport(exported);
     await writeFile(legacy.patchPath, Buffer.concat([await readFile(legacy.patchPath), Buffer.from('\n')]));
-    await expect(removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, legacy)).rejects.toThrow(/verification failed/);
+    await expect(removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, legacy, worktree)).rejects.toThrow(/verification failed/);
   });
 });
