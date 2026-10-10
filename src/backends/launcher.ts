@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPrivateFile } from '../security/paths.js';
 import { supervisorError } from '../contracts.js';
-import type { BackendKind, SupervisorError, SupervisorErrorCode } from '../contracts.js';
+import type { SupervisorError, SupervisorErrorCode } from '../contracts.js';
 import type { ManagedProcess } from '../process/managed.js';
 import { SUPPORTED_VIBE } from './pinned.js';
 import type { VibeChildProfile } from './profile.js';
@@ -71,17 +71,17 @@ export async function describeMissing(executable: string, error: unknown, env: N
   return { interpreter_missing: true, ...(interpreter ? { interpreter } : {}) };
 }
 
-export function interpreterMissingMessage(backend: BackendKind, interpreter: unknown): string {
-  return `The interpreter for the ${backend} Vibe launcher${typeof interpreter === 'string' ? ` (${interpreter})` : ''} was not found; install it or correct the launcher's shebang.`;
+export function interpreterMissingMessage(interpreter: unknown): string {
+  return `The interpreter for the Vibe launcher${typeof interpreter === 'string' ? ` (${interpreter})` : ''} was not found; install it or correct the launcher's shebang.`;
 }
 
-export function versionUnsupported(backend: BackendKind, detected: string): SupervisorError {
-  return supervisorError('VSUP_VIBE_VERSION_UNSUPPORTED', `Found Vibe ${detected} (${backend} backend); this release supports exactly Vibe ${SUPPORTED_VIBE}.`, { detected_version: detected });
+export function versionUnsupported(detected: string): SupervisorError {
+  return supervisorError('VSUP_VIBE_VERSION_UNSUPPORTED', `Found Vibe ${detected}; this release supports exactly Vibe ${SUPPORTED_VIBE}.`, { detected_version: detected });
 }
 
-export function versionMismatchOnStderr(backend: BackendKind, stderr: string): SupervisorError | undefined {
+export function versionMismatchOnStderr(stderr: string): SupervisorError | undefined {
   const detected = stderr.match(/supports exactly \S+; found (\S+)/)?.[1];
-  return detected ? versionUnsupported(backend, detected) : undefined;
+  return detected ? versionUnsupported(detected) : undefined;
 }
 
 const RATE_LIMIT_PATTERN = /\b(?:http|status(?: code)?|error|code)\W{0,3}429\b|\b429\W{1,3}(?:too many|rate)|\(429\)|\btoo many requests\b/i;
@@ -109,13 +109,13 @@ export function isCodedError(error: unknown): error is SupervisorError {
   return typeof error === 'object' && error !== null && typeof (error as { code?: unknown }).code === 'string' && (error as { code: string }).code.startsWith('VSUP_');
 }
 
-export async function classifyStartFailure(backend: BackendKind, executable: string, error: unknown, stderr = ''): Promise<unknown> {
-  const mismatch = versionMismatchOnStderr(backend, stderr);
+export async function classifyStartFailure(executable: string, error: unknown, stderr = ''): Promise<unknown> {
+  const mismatch = versionMismatchOnStderr(stderr);
   if (mismatch) return mismatch;
   if (isCodedError(error)) return error;
   const missing = await describeMissing(executable, error);
-  if (missing.executable_missing === true) return supervisorError(backend === 'acp' ? 'VSUP_VIBE_ACP_NOT_FOUND' : 'VSUP_VIBE_NOT_FOUND', backend === 'acp' ? 'The vibe-acp executable was not found.' : 'The vibe executable was not found.', missing);
-  if (missing.interpreter_missing === true) return supervisorError('VSUP_BACKEND_UNAVAILABLE', interpreterMissingMessage(backend, missing.interpreter), missing);
+  if (missing.executable_missing === true) return supervisorError('VSUP_VIBE_NOT_FOUND', 'The vibe executable was not found.', missing);
+  if (missing.interpreter_missing === true) return supervisorError('VSUP_VIBE_NOT_FOUND', interpreterMissingMessage(missing.interpreter), missing);
   const tail = stderrTailText(stderr);
   if (authFailureText(tail)) return supervisorError('VSUP_AUTH_REQUIRED', 'Vibe rejected the credentials (authentication failure).');
   return rateLimitFailure(tail) ?? error;
@@ -132,7 +132,6 @@ export function spawned(process: ManagedProcess): Promise<void> {
 /** Run the installed Vibe module through the pinned, redacting persistence shim. */
 export async function buildVibeLaunch(
   executable: string,
-  entrypoint: 'acp' | 'programmatic',
   args: readonly string[],
   profile: VibeChildProfile,
   runDirectory: string,
@@ -148,9 +147,8 @@ export async function buildVibeLaunch(
     const existing = await readFile(shim);
     if (!existing.equals(content)) throw new Error('Run directory contains a different Vibe launcher shim');
   }
-  const env: NodeJS.ProcessEnv = { ...profile.env, VIBE_SUPERVISOR_ENTRYPOINT: entrypoint };
+  const env: NodeJS.ProcessEnv = { ...profile.env };
   if (options.promptText !== undefined) {
-    if (entrypoint !== 'programmatic') throw new Error('Only the programmatic launch accepts a prompt file');
     const promptFile = path.join(runDirectory, PROMPT_FILE_NAME);
     await createPrivateFile(promptFile, options.promptText);
     env[PROMPT_FILE_ENV] = promptFile;

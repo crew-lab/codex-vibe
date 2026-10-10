@@ -1,20 +1,13 @@
 import type { RunState } from "../contracts.js";
 
 const transitions: Record<RunState, readonly RunState[]> = {
-  queued: ["starting", "cancelled", "failed"],
-  starting: ["queued", "negotiating", "ready", "running", "waiting_permission", "waiting_input", "completed", "failed", "cancelled", "recoverable", "closing"],
-  negotiating: ["ready", "running", "waiting_permission", "waiting_input", "completed", "failed", "cancelled", "recoverable", "closing"],
-  ready: ["running", "waiting_permission", "waiting_input", "completed", "failed", "cancelled", "recoverable", "closing"],
-  running: ["ready", "waiting_permission", "waiting_input", "completed", "failed", "cancelled", "recoverable", "closing"],
-  waiting_permission: ["running", "ready", "waiting_input", "completed", "failed", "cancelled", "recoverable", "closing"],
-  waiting_input: ["running", "ready", "waiting_permission", "completed", "failed", "cancelled", "recoverable", "closing"],
-  completed: ["starting", "running", "recoverable", "closing", "closed"],
+  starting: ["running", "completed", "failed", "cancelled", "closing"],
+  running: ["completed", "failed", "cancelled", "closing"],
+  completed: ["closing", "closed"],
   failed: ["closing", "closed"],
   cancelled: ["closing", "closed"],
   closing: ["closed", "failed"],
-  closed: [],
-  orphaned: ["recoverable", "starting", "failed", "closed"],
-  recoverable: ["starting", "running", "ready", "waiting_permission", "waiting_input", "completed", "failed", "cancelled", "closed"]
+  closed: []
 };
 
 export function canTransition(from: RunState, to: RunState): boolean { return from === to || transitions[from].includes(to); }

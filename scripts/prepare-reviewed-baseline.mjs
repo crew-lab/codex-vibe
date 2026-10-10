@@ -4,7 +4,6 @@ import { chmod, lstat, mkdir, mkdtemp, open, realpath, rm, rmdir, opendir } from
 import path from 'node:path';
 import { z } from 'zod';
 import { pathToFileURL } from 'node:url';
-import { privateAuditRead } from './audit-edit-run.mjs';
 
 const distRoot = process.env.VIBE_SUPERVISOR_DIST_DIR ? path.resolve(process.env.VIBE_SUPERVISOR_DIST_DIR) : path.resolve(import.meta.dirname, '..', 'dist');
 const load = (relative) => import(pathToFileURL(path.join(distRoot, relative)).href);
@@ -12,7 +11,9 @@ const { createPrivateFile, isPathWithinRoot, resolveCanonicalRoot } = await load
 const { environmentSecrets, patchContainsCredential } = await load('security/redaction.js');
 const { assertNoProjectVibeExtensions, assertSimpleGlobRoot } = await load('backends/profile.js');
 const { preparationGit: boundedGit, resolveBaseCommit, resolveGitRoot } = await load('git/worktree.js');
-const { loadConfig } = await load('config/config.js');
+const { loadResolvedConfig, resolveConfigSelection } = await load('config/config.js');
+const { APP_VERSION } = await load('version.js');
+const { SUPPORTED_VIBE } = await load('backends/pinned.js');
 
 const git = (cwd, args, codes = [0]) =>
   boundedGit(cwd, args, { PATH: process.env.PATH, HOME: process.env.HOME, LANG: process.env.LANG }, codes);
@@ -23,11 +24,36 @@ const publicTemplate = z.object({ path: z.literal('.env.example'), sha256: sha }
 export const baselineInputSchema = z.object({ source: z.string().min(1), baseRef: z.string().min(1).max(512), outputParent: z.string().min(1), entries: z.array(entry).min(1).max(64), publicTemplates: z.array(publicTemplate).max(1).optional() }).strict();
 const MAX_FILE = 2 * 1024 * 1024;
 const MAX_TREE = 100 * 1024 * 1024;
+async function readPrivateInput(file) {
+  if (path.resolve(file) !== file) refuse('input');
+  let current = path.parse(file).root; const ancestors = [];
+  for (const part of file.slice(current.length).split(path.sep)) {
+    current = path.join(current, part); const info = await lstat(current);
+    if (info.isSymbolicLink()) refuse('input');
+    if (current !== file) {
+      const stickyRoot = info.uid === 0 && (info.mode & 0o1000) !== 0;
+      if (!info.isDirectory() || ![0, process.getuid?.()].includes(info.uid) || (info.mode & 0o022 && !stickyRoot)) refuse('input');
+      ancestors.push({ path: current, ino: info.ino, dev: info.dev, ctimeMs: info.ctimeMs });
+    }
+  }
+  const before = await lstat(file);
+  if (!before.isFile() || before.uid !== process.getuid?.() || (before.mode & 0o077) !== 0 || before.nlink !== 1 || before.size > 8 * 1024 * 1024) refuse('input');
+  const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const opened = await handle.stat(); if (opened.ino !== before.ino || opened.dev !== before.dev) refuse('input');
+    const bytes = await handle.readFile(); const after = await handle.stat(); const currentFile = await lstat(file);
+    if (after.size !== before.size || bytes.length !== before.size || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs || currentFile.ino !== before.ino || currentFile.dev !== before.dev) refuse('input');
+    for (const parent of ancestors) { const info = await lstat(parent.path); if (info.isSymbolicLink() || info.ino !== parent.ino || info.dev !== parent.dev || info.ctimeMs !== parent.ctimeMs) refuse('input'); }
+    if (await realpath(file) !== file) refuse('input');
+    return bytes.toString('utf8');
+  } finally { await handle.close(); }
+}
 export const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const DIAGNOSTICS = Object.freeze({
   config: ['VSBASE_CONFIG_INVALID', 'config'], schema: ['VSBASE_SCHEMA_INVALID', 'schema'], input: ['VSBASE_INPUT_INVALID', 'input'],
   path: ['VSBASE_PATH_REFUSED', 'path'], sensitive_filename: ['VSBASE_SENSITIVE_FILENAME_REFUSED', 'sensitive_filename'],
   sensitive_content: ['VSBASE_SENSITIVE_CONTENT_REFUSED', 'sensitive_content'], hash: ['VSBASE_HASH_MISMATCH', 'hash'],
+  stale_source: ['VSBASE_SOURCE_CHANGED', 'stale_source'],
   output_ownership: ['VSBASE_OUTPUT_OWNERSHIP_FAILED', 'output_ownership'], unexpected: ['VSBASE_UNEXPECTED_FAILURE', 'unexpected'],
 });
 export class BaselinePreparationError extends Error {
@@ -137,6 +163,41 @@ async function validateReplacementDirectory(root, relative, entries) {
   await walk(relative);
   if (seenFiles.size !== expectedFiles.size) refuse('path');
 }
+
+async function sourceInvariants(source, entries) {
+  const head = (await git(source, ['rev-parse', '--verify', 'HEAD'])).toString('utf8').trim();
+  const indexPath = (await git(source, ['rev-parse', '--git-path', 'index'])).toString('utf8').trim();
+  const absoluteIndex = path.isAbsolute(indexPath) ? indexPath : path.resolve(source, indexPath);
+  let indexSha256 = null;
+  let indexInfo;
+  try {
+    indexInfo = await lstat(absoluteIndex);
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (indexInfo) {
+    if (!indexInfo.isFile() || indexInfo.isSymbolicLink() || indexInfo.size > 64 * 1024 * 1024) refuse('path');
+    const handle = await open(absoluteIndex, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const before = await handle.stat(); const bytes = await handle.readFile(); const after = await handle.stat(); const current = await lstat(absoluteIndex);
+      if (!before.isFile() || before.ino !== current.ino || before.dev !== current.dev || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs || bytes.length !== after.size) refuse('stale_source');
+      indexSha256 = digest(bytes);
+    } finally { await handle.close(); }
+  }
+  const refs = (await git(source, ['for-each-ref', '--format=%(refname) %(objectname)'])).toString('utf8').trim().split('\n').filter(Boolean).sort();
+  const selected = [];
+  for (const item of entries) {
+    if (item.operation === 'delete') {
+      let kind = 'missing';
+      try { const info = await lstat(path.join(source, item.path)); kind = info.isDirectory() ? 'directory' : info.isFile() ? 'file' : 'other'; }
+      catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error; }
+      selected.push({ path: item.path, operation: item.operation, kind, reviewed_sha256: null });
+    } else {
+      const bytes = await sourceBytes(source, item.path, item.path === '.env.example');
+      const info = await lstat(path.join(source, item.path));
+      selected.push({ path: item.path, operation: item.operation, kind: 'file', reviewed_sha256: digest(bytes), mode: (info.mode & 0o111) ? '100755' : '100644' });
+    }
+  }
+  return { head, index_sha256: indexSha256, refs_sha256: digest(Buffer.from(refs.join('\n'))), selected };
+}
 async function pruneSnapshotEmptyParents(repo, relative) {
   let directory = path.dirname(path.join(repo, relative));
   while (directory !== repo && isPathWithinRoot(repo, directory)) {
@@ -152,7 +213,7 @@ async function pruneSnapshotEmptyParents(repo, relative) {
     directory = path.dirname(directory);
   }
 }
-async function prepareReviewedBaselineInner(value, allowedRoots, create = false) {
+async function prepareReviewedBaselineInner(value, allowedRoots, create = false, expectedManifestSha256, configuration) {
   let input;
   try { input = baselineInputSchema.parse(value); } catch { refuse('schema'); }
   const templates = new Map((input.publicTemplates ?? []).map(template => [template.path, template.sha256]));
@@ -174,7 +235,7 @@ async function prepareReviewedBaselineInner(value, allowedRoots, create = false)
   if (list.length > 4096) refuse();
   const files = new Map(); const folded = new Set(); let total = 0;
   for (const record of list) {
-    const match = /^(100644|100755) blob ([a-f0-9]{40,64})\t(.+)$/.exec(record); if (!match) refuse('path');
+    const match = /^(100644|100755) blob ([a-f0-9]{40,64})\t([\s\S]+)$/.exec(record); if (!match) refuse('path');
     const name = match[3]; const isTemplate = templates.has(name); safePath(name, false, isTemplate);
     if (folded.has(name.toLowerCase())) refuse('path'); folded.add(name.toLowerCase());
     const bytes = await git(source, ['cat-file', 'blob', match[2]]); safeContent(bytes, false, isTemplate); total += bytes.length;
@@ -213,6 +274,8 @@ async function prepareReviewedBaselineInner(value, allowedRoots, create = false)
       else { if (digest(await sourceBytes(source, e.path)) !== e.reviewedSha256) refuse('hash'); const st = await lstat(path.join(source, e.path)); if (((st.mode & 0o111) ? '100755' : '100644') !== e.mode) refuse('input'); }
     }
   };
+  let sourceState;
+  try { sourceState = await sourceInvariants(source, input.entries); } catch (error) { if (error instanceof BaselinePreparationError) throw error; refuse('stale_source'); }
   const finalPaths = new Set(files.keys()); let finalSize = total;
   for (const e of input.entries) {
     finalSize -= files.get(e.path)?.bytes.length ?? 0;
@@ -222,9 +285,11 @@ async function prepareReviewedBaselineInner(value, allowedRoots, create = false)
   if (finalSize > MAX_TREE || finalPaths.size > 4096) refuse();
   for (const name of finalPaths) { const parts = name.split('/'); parts.pop(); while (parts.length) { if (finalPaths.has(parts.join('/'))) refuse(); parts.pop(); } }
   await checkSource();
-  const provenance = { schema_version: 1, original_source: source, original_base: base, entries: input.entries,
+  const provenance = { schema_version: 1, original_source: source, original_base: base, source_invariants: sourceState, entries: input.entries,
     ...(input.publicTemplates?.length ? { public_templates: input.publicTemplates.map(t => ({ path: t.path, sha256: t.sha256, opted_in: true })) } : {}) };
-  if (!create) return { status: 'validated_dry_run', ...provenance, manifest_sha256: digest(Buffer.from(JSON.stringify(provenance))), creates_snapshot_commit: true };
+  const manifestSha256 = digest(Buffer.from(JSON.stringify({ ...provenance, ...(configuration ? { configuration } : {}) })));
+  if (expectedManifestSha256 && expectedManifestSha256 !== manifestSha256) refuse('stale_source');
+  if (!create) return { status: 'validated_dry_run', ...provenance, ...(configuration ? { configuration } : {}), manifest_sha256: manifestSha256, creates_snapshot_commit: true };
   let output;
   try { output = await mkdtemp(path.join(parent, 'reviewed-baseline-')); } catch { refuse('output_ownership'); }
   const repo = path.join(output, 'repo');
@@ -252,46 +317,80 @@ async function prepareReviewedBaselineInner(value, allowedRoots, create = false)
     }
     await stage(input.entries.map(e => e.path)); await commit('Reviewed effective baseline');
     await checkSource();
+    const afterSourceState = await sourceInvariants(source, input.entries);
+    if (JSON.stringify(afterSourceState) !== JSON.stringify(sourceState)) refuse('stale_source');
+    const verifiedSnapshot = await resolveBaseCommit(repo);
     for (const f of files.values()) {
       const h = await open(path.join(repo, f.name), constants.O_RDONLY | constants.O_NOFOLLOW); try { const actual = await h.readFile(); if (digest(actual) !== digest(f.bytes)) refuse('output_ownership'); if (templates.has(f.name)) { if (digest(actual) !== templates.get(f.name)) refuse('hash'); validatePublicDotenv(actual); } } finally { await h.close(); }
     }
+    const snapshotTree = (await git(repo, ['ls-tree', '-r', '-z', verifiedSnapshot])).toString('utf8').split('\0').filter(Boolean).map(record => {
+      const match = /^(100644|100755) blob ([a-f0-9]{40,64})\t([\s\S]+)$/.exec(record); if (!match) refuse('output_ownership');
+      return { mode: match[1], oid: match[2], path: match[3] };
+    }).sort((a, b) => a.path.localeCompare(b.path));
+    const expectedTree = [...files.values()].map(f => ({ mode: f.mode, oid: null, path: f.name })).sort((a, b) => a.path.localeCompare(b.path));
+    if (snapshotTree.length !== expectedTree.length || snapshotTree.some((actual, index) => {
+      const expected = expectedTree[index]; if (!expected || actual.path !== expected.path || actual.mode !== expected.mode) return true;
+      return false;
+    })) refuse('output_ownership');
+    for (const actual of snapshotTree) {
+      const expected = files.get(actual.path); if (!expected) refuse('output_ownership');
+      const blob = await git(repo, ['cat-file', 'blob', actual.oid]);
+      if (digest(blob) !== digest(expected.bytes)) refuse('output_ownership');
+    }
     if ((await git(repo, ['status', '--porcelain'])).length) refuse();
-    const snapshot = await resolveBaseCommit(repo);
-    const body = { status: 'prepared', ...provenance, source_workspace: repo, base_ref: snapshot, files: [...files.values()].map(f => ({ path: f.name, sha256: digest(f.bytes), mode: f.mode })) };
+    const body = { status: 'prepared', ...provenance, ...(configuration ? { configuration } : {}), source_workspace: repo, base_ref: verifiedSnapshot, files: [...files.values()].map(f => ({ path: f.name, sha256: digest(f.bytes), mode: f.mode })) };
     const report = { ...body, manifest_sha256: digest(Buffer.from(JSON.stringify(body))) };
     await createPrivateFile(path.join(output, 'manifest.json'), JSON.stringify(report, null, 2) + '\n'); await chmod(path.join(output, 'manifest.json'), 0o400);
     return { ...report, manifest_path: path.join(output, 'manifest.json') };
   } catch (error) {
     const diagnostic = error instanceof BaselinePreparationError ? error : new BaselinePreparationError('unexpected');
     diagnostic.retained_output_id = path.basename(output);
-    await createPrivateFile(path.join(output, 'failure.json'), JSON.stringify({ status: 'preparation_failed', source_preserved: true, code: diagnostic.code, stage: diagnostic.stage, retained_output_id: diagnostic.retained_output_id }) + '\n').catch(() => undefined);
+    let receiptWritten = false;
+    diagnostic.retained_output_path = output;
+    try { await createPrivateFile(path.join(output, 'failure.json'), JSON.stringify({ status: 'preparation_failed', source_preserved: true, code: diagnostic.code, stage: diagnostic.stage, retained_output_id: diagnostic.retained_output_id, retained_output_path: output, output_disposition: 'retained' }) + '\n'); receiptWritten = true; } catch { /* report the retained resource even when the receipt itself could not be written */ }
+    diagnostic.output_disposition = receiptWritten ? 'retained_with_failure_receipt' : 'retained_without_failure_receipt';
     throw diagnostic;
   }
 }
 
-export async function prepareReviewedBaseline(value, allowedRoots, create = false) {
-  try { return await prepareReviewedBaselineInner(value, allowedRoots, create); }
+export async function prepareReviewedBaseline(value, allowedRoots, create = false, expectedManifestSha256, configuration) {
+  try { return await prepareReviewedBaselineInner(value, allowedRoots, create, expectedManifestSha256, configuration); }
   catch (error) { if (error instanceof BaselinePreparationError) throw error; throw new BaselinePreparationError('unexpected'); }
 }
 
-export const baselineUsage = 'Usage: prepare-reviewed-baseline.mjs manifest.json [--create]. Default: dry-run. --create writes a disposable snapshot repository with local commits, never source refs.';
+export const baselineUsage = 'Usage: prepare-reviewed-baseline.mjs manifest.json [--config <path>] [--create --expect-manifest-sha256 <dry-run-sha256>]. Default: dry-run. --create requires the matching dry-run receipt hash, then writes private snapshot commits in a disposable repository; it never stages, commits, or changes refs in the original source repository.';
 export async function baselineCommand(args) {
   if (args.length === 1 && args[0] === '--help') return { status: 'help', usage: baselineUsage };
   if (args[0] === '--help') throw new BaselinePreparationError('input');
-  const [file, flag, ...extra] = args;
-  if (!file || (flag !== undefined && flag !== '--create') || extra.length) throw new BaselinePreparationError('input');
-  let config;
+  const file = args[0]; let create = false; let configPath; let expectedManifest;
+  for (let index = 1; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--create') { if (create) throw new BaselinePreparationError('input'); create = true; }
+    else if (arg === '--config' || arg === '--expect-manifest-sha256') {
+      const value = args[++index]; if (!value || value.startsWith('--')) throw new BaselinePreparationError('input');
+      if (arg === '--config') { if (configPath) throw new BaselinePreparationError('input'); configPath = value; }
+      else { if (expectedManifest) throw new BaselinePreparationError('input'); expectedManifest = value; }
+    } else throw new BaselinePreparationError('input');
+  }
+  if (!file || (expectedManifest && !/^[a-f0-9]{64}$/.test(expectedManifest))) throw new BaselinePreparationError('input');
+  if ((expectedManifest && !create) || (create && !expectedManifest)) throw new BaselinePreparationError('input');
+  let resolved; let selectedConfigPath;
   try {
-    try { config = await loadConfig(); } catch { throw new BaselinePreparationError('config'); }
+    try {
+      const explicitPath = configPath ? path.resolve(configPath) : undefined;
+      selectedConfigPath = resolveConfigSelection(explicitPath).configPath;
+      resolved = await loadResolvedConfig(explicitPath ? { configPath: explicitPath } : {});
+    } catch { const error = new BaselinePreparationError('config'); if (selectedConfigPath) error.config_path = selectedConfigPath; throw error; }
     let raw;
-    try { raw = JSON.parse(await privateAuditRead(path.resolve(file))); } catch { throw new BaselinePreparationError('input'); }
-    return await prepareReviewedBaseline(raw, config.allowedWorkspaceRoots, flag === '--create');
+    try { raw = JSON.parse(await readPrivateInput(path.resolve(file))); } catch { throw new BaselinePreparationError('input'); }
+    const localProvenance = { executable: process.execPath, application_version: APP_VERSION, compiled_runtime: path.resolve(distRoot), config_path: resolved.configPath, config_source: resolved.source, config_fingerprint: resolved.fingerprint, data_directory: resolved.dataDir, vibe_configured_path: resolved.config.paths?.vibe ?? null, vibe_supported_version: SUPPORTED_VIBE };
+    return await prepareReviewedBaseline(raw, resolved.config.allowedWorkspaceRoots, create, expectedManifest, localProvenance);
   } catch (error) { if (error instanceof BaselinePreparationError) throw error; throw new BaselinePreparationError('unexpected'); }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
   try { console.log(JSON.stringify(await baselineCommand(process.argv.slice(2)), null, 2)); }
   catch (error) {
     const diagnostic = error instanceof BaselinePreparationError ? error : new BaselinePreparationError('unexpected');
-    console.error(JSON.stringify({ status: 'preparation_failed', code: diagnostic.code, stage: diagnostic.stage, source_preserved: true, ...(diagnostic.retained_output_id ? { retained_output_id: diagnostic.retained_output_id } : {}) })); process.exitCode = 1;
+    console.error(JSON.stringify({ status: 'preparation_failed', code: diagnostic.code, stage: diagnostic.stage, source_preserved: true, ...(diagnostic.config_path ? { config_path: diagnostic.config_path } : {}), ...(diagnostic.retained_output_id ? { retained_output_id: diagnostic.retained_output_id, retained_output_path: diagnostic.retained_output_path, output_disposition: diagnostic.output_disposition } : {}) })); process.exitCode = 1;
   }
 }
