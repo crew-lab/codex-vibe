@@ -69,11 +69,11 @@ describe('setup', () => {
     expect(output.join('')).not.toMatch(/^PASS /m);
   }, 60_000);
 
-  it('writes the Codex config with --yes and is idempotent on a second run', async () => {
+  it('registers isolated Codex storage by default and is idempotent on a second run', async () => {
     const box = await sandbox(); capture();
     await runCli(['setup', '--workspace', box.workspace, '--yes']);
     const codex = parse(await readFile(box.codex, 'utf8')) as { mcp_servers: Record<string, { args: string[] }> };
-    expect(codex.mcp_servers['vibe-supervisor']?.args.slice(-4)).toEqual(['serve', '--stdio', '--config', box.config]);
+    expect(codex.mcp_servers['vibe-supervisor']?.args.slice(-5)).toEqual(['serve', '--stdio', '--isolated', '--config', box.config]);
     const configBefore = await readFile(box.config, 'utf8'); const codexBefore = await readFile(box.codex, 'utf8');
     const backupsBefore = (await readdir(path.dirname(box.codex))).length;
     await runCli(['setup', '--workspace', box.workspace, '--yes']);
@@ -137,7 +137,7 @@ describe('setup', () => {
     expect(parsed.allowed_workspace_roots).toEqual([box.workspace]);
     expect(await readFile(box.config, 'utf8')).toBe(obsolete);
     const codex = parse(await readFile(box.codex, 'utf8')) as { mcp_servers: Record<string, { args: string[] }> };
-    expect(codex.mcp_servers['vibe-supervisor']?.args.slice(-4)).toEqual(['serve', '--stdio', '--config', explicit]);
+    expect(codex.mcp_servers['vibe-supervisor']?.args.slice(-5)).toEqual(['serve', '--stdio', '--isolated', '--config', explicit]);
     expect(output.join('')).toContain('Provenance:');
     expect(output.join('')).toContain('config_fingerprint');
   }, 60_000);

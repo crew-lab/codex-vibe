@@ -2,7 +2,7 @@
 
 ## Candidate scope
 
-The development candidate is `0.9.0-rc.20`, reduced to one-shot review and isolated edit through exactly Mistral Vibe 2.26.1 using the validated legacy programmatic harness. It exposes exactly five MCP tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. One active run is allowed per owning server/storage instance; another start is rejected immediately. A run has one task, bounded turns/deadline/output, no interactive grants or input, and no continuation. After restart, interrupted work is marked failed and never resumed or replayed.
+The development candidate is `0.9.0-rc.21`, reduced to one-shot review and isolated edit through exactly Mistral Vibe 2.26.1 using the validated legacy programmatic harness. It exposes exactly five MCP tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. One active run is allowed per owning server/storage instance; another start is rejected immediately. A run has one task, bounded turns/deadline/output, no interactive grants or input, and no continuation. After restart, interrupted work is marked failed and never resumed or replayed.
 
 Reviews use allowlisted workspaces and read/search tools. Edits require a Git repository root and explicit `base_ref`, then execute in a supervisor-created detached worktree and return a patch for review. The supervisor does not apply, commit, merge or push worker changes. Shell/network remain disabled. This is application policy, not an OS sandbox.
 
@@ -24,7 +24,7 @@ For code changes, run relevant focused tests, lint, typecheck and build. Local o
 
 ## Acceptance status
 
-`docs/acceptance.json` is the source of the candidate-specific machine-readable gates. Hosted review/edit, native five-tool lifecycle, provider authentication, and clean macOS Apple silicon account installation remain unverified until evidence is recorded against an exact frozen artifact. No successful earlier-release result certifies rc.20. Hosted acceptance is five total runs: one initial review, one initial edit, then three additional sequential review or edit runs. Stop at the first failure; no automatic retry, account rotation, or budget increase.
+`docs/acceptance.json` is the source of the candidate-specific machine-readable gates. Hosted review/edit, native five-tool lifecycle, provider authentication, and clean macOS Apple silicon account installation remain unverified until evidence is recorded against an exact frozen artifact. No successful earlier-release result certifies rc.21. Hosted acceptance is five total runs: one initial review, one initial edit, then three additional sequential review or edit runs. Stop at the first failure; no automatic retry, account rotation, or budget increase.
 
 Record the exact source/tree and archive hashes, config/runtime provenance, implementation stages, removed surface/dependencies, checks actually run, source invariants, hosted stop reasons/run IDs when authorized, independent patch review, and verified cleanup or explicit retention reasons. Remove a worktree only after fresh artifact and ownership checks establish it is pristine; retain a dirty or uncertain worktree with its path and reason for review. Report unknown authentication, connection identity, platform support and model outcomes as unknown. Do not publish private histories, credentials or reasoning.
 

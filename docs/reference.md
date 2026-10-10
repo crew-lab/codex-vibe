@@ -74,3 +74,7 @@ The exact defaults and bounds are in [`schemas/config.schema.json`](../schemas/c
 - `runs list|show|tail|cleanup` inspects or cleans saved runs according to ownership and fresh-export checks.
 
 Use `vibe-supervisor <command> --help` for current options. The explicit selected config and the connection already open in a desktop client are separate facts; verify the live handshake version and five-tool catalog on the owning connection.
+
+### Codex connection isolation
+
+`setup` registers `serve --stdio --isolated` by default. The optional `setup --isolated` flag remains accepted. Existing non-isolated registrations are updated through the normal reviewed setup flow; configuration backup and confirmation rules are unchanged. A direct non-isolated `serve` still requires exclusive storage ownership and competing connections fail closed. Isolation changes storage ownership, not workspace permissions.

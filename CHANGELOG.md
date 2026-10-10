@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0-rc.21 — multi-chat registration hotfix
+
+- Generate isolated Codex registrations by default and align the disabled MCP scaffold and connection instructions. Concurrent chats use distinct private storage owners instead of failing initialization against a shared lock. Existing registrations require a reviewed update and reconnect.
+- Make the restored-process-group signaling regression assert actual group absence or conservative unresolved state, instead of requiring macOS zombie-reaping timing.
+- Reject private-manifest ancestor replacement or permission changes while allowing unrelated sibling creation; this fixes concurrent preparation false refusals without changing file integrity checks.
+- Preserve owner locking, one active run per instance, canonical workspace allowlists, exact Vibe 2.26.1 and all dependency pins. This is a prerelease; native disconnect-during-run and clean-account acceptance remain unverified.
+
 ## 0.9.0-rc.20 — onboarding and release-check candidate
 
 - Correct the fresh explicit-config workflow, document the reviewed-baseline manifest contract, and add a draft private installation/registration and rollback plan. No installation or Codex configuration change was performed.
