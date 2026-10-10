@@ -72,6 +72,13 @@ function collectUnhandledRejections() {
 }
 
 const activeSlots = (manager: RunManager) => (manager as unknown as { activeSlots: number }).activeSlots;
+
+async function waitForLaunchManifest(manager: RunManager, runId: string): Promise<void> {
+  const runs = (manager as unknown as { runs: Map<string, { manifestWrite?: Promise<void> }> }).runs;
+  const write = runs.get(runId)?.manifestWrite;
+  expect(write).toBeDefined();
+  await write;
+}
 const SECRET_TEXT = 'findings-that-must-not-appear-in-storage-errors';
 
 async function runningWithTranscript(h: Awaited<ReturnType<typeof harness>>, task = 'review') {
@@ -156,6 +163,7 @@ describe('storage faults', () => {
     try {
       const runId = await runningWithTranscript(h);
       await expect(h.manager.reviewStart({ task: 'follow', cwd: h.source })).rejects.toMatchObject({ code: 'VSUP_LIMIT_EXCEEDED' });
+      await waitForLaunchManifest(h.manager, runId);
       const runDirectory = path.join(h.data, 'runs', runId);
       await chmod(runDirectory, 0o500); restore.push(runDirectory);
       await h.backend.callbacks.get(runId)?.onState('completed', { result: { summary: 'done' } });
