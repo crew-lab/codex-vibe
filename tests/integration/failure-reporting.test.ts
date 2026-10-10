@@ -115,6 +115,18 @@ describe('programmatic one-shot result reporting', () => {
 
   it.each([
     { label: 'a matching pinned turn-limit marker', code: 1, stdout: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview} reached</vibe_stop_event>`, stderr: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview} reached</vibe_stop_event>`, capped: true },
+    { label: 'the pinned legacy CLI turn-limit outcome after its workspace trust warning', code: 3, stdout: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview} reached</vibe_stop_event>`, stderr: `Warning: /workspace is not trusted; project configuration (AGENTS.md) will be ignored. Re-run with --trust to trust this folder temporarily.\nStopped: turn_limit`, capped: true },
+    { label: 'the pinned legacy CLI turn-limit outcome without a trust warning', code: 3, stdout: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview} reached</vibe_stop_event>`, stderr: 'Stopped: turn_limit', capped: true },
+    { label: 'a code-3 assistant-only marker without the runtime stop outcome', code: 3, stdout: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview} reached</vibe_stop_event>`, stderr: 'boom', capped: false },
+    { label: 'a code-3 stderr-only stop outcome', code: 3, stdout: 'Partial findings.', stderr: 'Stopped: turn_limit', capped: false },
+    { label: 'a code-3 turn limit with another stop outcome', code: 3, stdout: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview} reached</vibe_stop_event>`, stderr: 'Stopped: token_limit', capped: false },
+    { label: 'a code-3 turn limit with an unexpected diagnostic', code: 3, stdout: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview} reached</vibe_stop_event>`, stderr: 'unexpected diagnostic\nStopped: turn_limit', capped: false },
+    { label: 'a code-3 turn limit followed by an authentication error', code: 3, stdout: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview} reached</vibe_stop_event>`, stderr: 'Stopped: turn_limit\nError: 401 Unauthorized', capped: false },
+    { label: 'a code-3 turn limit followed by a version mismatch', code: 3, stdout: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview} reached</vibe_stop_event>`, stderr: 'Stopped: turn_limit\nVersion check supports exactly 2.26.1; found 2.25.8', capped: false },
+    { label: 'a code-3 turn limit with an authentication error before the stop outcome', code: 3, stdout: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview} reached</vibe_stop_event>`, stderr: 'Error: 401 Unauthorized\nStopped: turn_limit', capped: false },
+    { label: 'a code-3 turn limit with a version mismatch before the stop outcome', code: 3, stdout: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview} reached</vibe_stop_event>`, stderr: 'Version check supports exactly 2.26.1; found 2.25.8\nStopped: turn_limit', capped: false },
+    { label: 'a code-3 turn limit for another configured limit', code: 3, stdout: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview + 1} reached</vibe_stop_event>`, stderr: 'Stopped: turn_limit', capped: false },
+    { label: 'a signaled code-3 turn limit despite matching output markers', code: 3, stdout: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview} reached</vibe_stop_event>`, stderr: 'Stopped: turn_limit', signal: true, capped: false },
     { label: 'an assistant-only marker', code: 1, stdout: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview} reached</vibe_stop_event>`, stderr: 'boom', capped: false },
     { label: 'a stderr-only marker', code: 1, stdout: 'Partial findings.', stderr: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview} reached</vibe_stop_event>`, capped: false },
     { label: 'a marker for another turn limit', code: 1, stdout: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview + 1} reached</vibe_stop_event>`, stderr: `<vibe_stop_event>Turn limit of ${DEFAULT_CONFIG.limits.maxTurnsReview + 1} reached</vibe_stop_event>`, capped: false },
@@ -124,7 +136,8 @@ describe('programmatic one-shot result reporting', () => {
   ])('classifies $label safely', async (test) => {
     const { parent, source, data } = await makeParent();
     const entry = JSON.stringify({ type: 'message', role: 'assistant', content: [{ type: 'text', text: test.stdout }] });
-    const body = `process.stdout.write(${JSON.stringify(entry)}); process.stderr.write(${JSON.stringify(test.stderr + '\n')}); process.exitCode = ${test.code};`;
+    const exit = test.signal ? `process.kill(process.pid, 'SIGTERM');` : `process.exitCode = ${test.code};`;
+    const body = `process.stdout.write(${JSON.stringify(entry)}); process.stderr.write(${JSON.stringify(test.stderr + '\n')}); ${exit}`;
     const { backend } = await installFakeVibe(parent, body);
     const manager = managerFor(source, data, backend);
     try {
@@ -142,9 +155,38 @@ describe('programmatic one-shot result reporting', () => {
       } else if (test.code === 0) {
         expect(result).toMatchObject({ state: 'completed', stop_reason: 'end_turn' });
       } else {
-        expect(result).toMatchObject({ state: 'failed', error: { code: test.stderr.includes('401 Unauthorized') ? 'VSUP_AUTH_REQUIRED' : 'VSUP_BACKEND_CRASHED' } });
+        const errorCode = test.stderr.includes('401 Unauthorized') ? 'VSUP_AUTH_REQUIRED' : test.stderr.includes('supports exactly') ? 'VSUP_VIBE_VERSION_UNSUPPORTED' : 'VSUP_BACKEND_CRASHED';
+        expect(result).toMatchObject({ state: 'failed', error: { code: errorCode } });
         expect(result.stop_reason).toBeUndefined();
       }
+    } finally { await manager.shutdown(); }
+  });
+
+  it('persists the real code-3 turn-limit outcome as incomplete and releases its slot after close', async () => {
+    const { parent, source, data } = await makeParent();
+    const limit = DEFAULT_CONFIG.limits.maxTurnsReview;
+    const marker = `<vibe_stop_event>Turn limit of ${limit} reached</vibe_stop_event>`;
+    const { backend } = await installFakeVibe(parent, `
+      process.stdout.write(${JSON.stringify(JSON.stringify({ type: 'message', role: 'assistant', content: [{ type: 'text', text: marker }] }))});
+      process.stderr.write('Warning: /workspace is not trusted; project configuration (AGENTS.md) will be ignored. Re-run with --trust to trust this folder temporarily.\\nStopped: turn_limit\\n');
+      process.exitCode = 3;
+    `);
+    const manager = managerFor(source, data, backend);
+    try {
+      const { id, status } = await settled(manager, source);
+      expect(status.state).toBe('completed');
+      const result = await manager.result({ run_id: id });
+      expect(result).toMatchObject({ state: 'completed', stop_reason: 'max_turn_requests', warnings: [expect.stringContaining('max_turn_requests')] });
+      expect(result.summary).toContain('turn limit');
+      const saved = JSON.parse(await readFile(path.join(data, 'runs', id, 'result.json'), 'utf8'));
+      expect(saved).toMatchObject({ state: 'completed', stop_reason: 'max_turn_requests', warnings: [expect.stringContaining('max_turn_requests')] });
+      expect(saved.error).toBeUndefined();
+      expect((await manager.close({ run_id: id })).state).toBe('closed');
+      const next = await manager.reviewStart({ task: 'next review', cwd: source });
+      expect(next.run_id).toBeTruthy();
+      const nextStatus = await waitFor(() => manager.status({ run_id: next.run_id }), (value) => value.state === 'completed' || value.state === 'failed');
+      expect(nextStatus.state).toBe('completed');
+      expect(await manager.result({ run_id: next.run_id })).toMatchObject({ stop_reason: 'max_turn_requests', warnings: [expect.stringContaining('max_turn_requests')] });
     } finally { await manager.shutdown(); }
   });
 });
