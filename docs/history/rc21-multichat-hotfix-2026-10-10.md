@@ -10,7 +10,7 @@ Node 24.21.0, macOS Apple silicon; exact Vibe 2.26.1; no dependency upgrades. `p
 
 Package SHA-256: `5f4f4b4bef756137e0b86ffece38397a16428682f411931c575b7976ca020dc1`.
 
-Initial verification attempts exposed the process-test timing assumption and concurrent preparation refusal; those attempts are not passing candidate evidence. Final release verification passed after the targeted corrections.
+Initial verification attempts exposed the process-test timing assumption and concurrent preparation refusal; those attempts are not passing candidate evidence. Final release verification passed after the targeted corrections. The initial GitHub push check passed, while the pull-request check failed in the real-filesystem EACCES test. The test made its run directory unwritable while a background launch-manifest write could still restore its private permissions. The corrected test awaits that write before changing permissions; the EACCES, secret filtering and slot-release assertions remain intact. The focused storage suite passed all 11 tests under Node 24.21.0. Publication requires a fresh full package check and green GitHub checks on this correction.
 
 ## Remaining limits
 
