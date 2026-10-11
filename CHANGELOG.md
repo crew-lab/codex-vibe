@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.0-rc.23 — saved-run access after reconnect
+
+Isolated MCP connections can inspect and close a saved run by its UUID even when reconnect selects a different private session. Routing stays inside the selected configuration’s bounded private session namespace, acquires the original store’s exclusive owner lock, and refuses ambiguous, unsafe or live-owned records. No worker is launched or task replayed.
+
 ## 0.9.0-rc.22 — turn-limit reporting correction
 
 - Recognize the pinned Vibe 2.26.1 code-3 turn-limit outcome, with or without its known workspace trust warning, using the exact configured-limit assistant marker and runtime stop diagnostic. Report `max_turn_requests` with an incomplete-result warning.

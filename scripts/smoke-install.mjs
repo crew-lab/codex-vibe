@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, realpath, rm, access, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, rm, access, readFile, writeFile, utimes } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -64,8 +64,46 @@ try {
       }));
     } finally { await Promise.all(isolated.map(({ client }) => client.close())); }
 
+
+    // Reconnect can adopt a different free session. UUID routing must still find
+    // the original record through the actual installed CLI, without inference.
+    const sessions = path.join(env.VIBE_SUPERVISOR_HOME, 'mcp-sessions');
+    const savedHome = path.join(sessions, 'session-saved1');
+    const newerHome = path.join(sessions, 'session-newer1');
+    const savedId = '00000000-0000-4000-8000-000000000002';
+    const savedRun = path.join(savedHome, 'runs', savedId);
+    await mkdir(savedRun, { recursive: true, mode: 0o700 });
+    await mkdir(newerHome, { mode: 0o700 });
+    const now = new Date().toISOString();
+    const savedMeta = {
+      schema_version: 1, supervisor_version: manifest.version, run_id: savedId,
+      backend: 'programmatic', mode: 'review', state: 'completed',
+      source_workspace: packDir, worker_workspace: packDir,
+      created_at: now, updated_at: now, task_sha256: 'a'.repeat(64),
+      limits: { timeout_seconds: 120, max_turns: 6, max_event_bytes: 1048576,
+        max_transcript_bytes: 1048576, max_artifact_bytes: 8388608 }
+    };
+    await writeFile(path.join(savedRun, 'meta.json'), JSON.stringify(savedMeta), { mode: 0o600 });
+    await utimes(newerHome, new Date('2030-01-01'), new Date('2030-01-01'));
+    const reconnect = new Client({ name: 'saved-run-reconnect-smoke', version: manifest.version });
+    const reconnectTransport = new StdioClientTransport({ command: executable,
+      args: ['serve', '--stdio', '--isolated'], env, stderr: 'pipe' });
+    try {
+      await reconnect.connect(reconnectTransport);
+      for (const name of ['vibe_status', 'vibe_result', 'vibe_close', 'vibe_status']) {
+        const response = await reconnect.callTool({ name, arguments: { run_id: savedId } });
+        if (response.isError) throw new Error(`Saved-run reconnect ${name} failed: ${JSON.stringify(response)}`);
+        const body = JSON.parse(response.content.find(item => item.type === 'text').text);
+        if (body.run_id !== savedId) throw new Error('Reconnect returned a different run.');
+        if (name === 'vibe_status' && !['completed', 'closed'].includes(body.state)) throw new Error('Reconnect replayed or failed a completed run.');
+      }
+      const after = JSON.parse(await readFile(path.join(savedRun, 'meta.json'), 'utf8'));
+      if (after.state !== 'closed') throw new Error('Reconnect close was not persisted in the original session.');
+      if (after.process) throw new Error('Reconnect unexpectedly launched a worker.');
+    } finally { await reconnect.close(); }
+
   } finally {
     await client.close();
   }
-  process.stdout.write(JSON.stringify({ status: 'PASS', package: manifest.name, version: manifest.version, isolatedHome: true, installedCliExecutable: 'PASS', runtimeShim: 'present', installedMcpInitializeAndListTools: 'PASS', eofShutdown: 'PASS', concurrentIsolatedMcp: 'PASS' }) + '\n');
+  process.stdout.write(JSON.stringify({ status: 'PASS', package: manifest.name, version: manifest.version, isolatedHome: true, installedCliExecutable: 'PASS', runtimeShim: 'present', installedMcpInitializeAndListTools: 'PASS', eofShutdown: 'PASS', concurrentIsolatedMcp: 'PASS', savedRunReconnectMcp: 'PASS' }) + '\n');
 } finally { await rm(tmpRoot, { recursive: true, force: true }); }

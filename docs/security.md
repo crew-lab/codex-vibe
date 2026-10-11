@@ -17,6 +17,8 @@ Vibe is pinned to exactly 2.26.1 through the enforced `--legacy-harness` path. T
 
 Process ownership is released only after backend close verifies termination. A failed or timed-out close keeps the live handle, active slot, worktree and owner lock for inspection and bounded retries through that handle. Shutdown has no fixed overall exit guarantee while any owned worker remains unresolved. The supervisor never signals a PID from saved state.
 
+An isolated server can route status, result and close by UUID across sibling session directories only within its selected private `mcp-sessions` namespace. It validates the namespace and target paths, rejects duplicate matches, and acquires the target directory's owner lock before manager recovery. A live owner or unsafe/ambiguous path fails closed. The temporary manager receives the active server configuration; the route does not read historical config snapshots to expand workspace access.
+
 On macOS, the launcher can resolve the existing Vibe Keychain credential into the private child environment. The secret is removed from the supervisor-only handoff before Vibe starts. It remains available to Vibe's provider client. No credential belongs in task text, source files, logs, reports, or artifacts.
 
 Events, transcripts, results, and artifacts have bounded sizes and private permissions. Writes are atomic where supported. Child workers have bounded deadlines/output and a watchdog for parent death. Owner locking prevents a second manager from claiming the same storage. A restart makes interrupted one-shot runs inspectable and failed; it never loads a session, replays the task, restores a grant, or signals a saved PID.

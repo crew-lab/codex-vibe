@@ -1,20 +1,59 @@
 {
   "schema_version": 1,
-  "candidate": "0.9.0-rc.22",
+  "candidate": "0.9.0-rc.23",
   "scope": "Programmatic one-shot review and isolated edit; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work.",
   "deterministic": [
-    { "name": "lint-typecheck-build-tests-python-acceptance-secret-scan-sbom", "status": "RUN_BY_verify:release" },
-    { "name": "offline-installed-package-smoke-exact-five-tool-catalog", "status": "RUN_BY_smoke:install" },
-    { "name": "reviewed-baseline-source-invariants-and-snapshot-verification", "status": "RUN_BY_focused-tests" },
-    { "name": "single-slot-settlement-close-and-worktree-ownership", "status": "RUN_BY_focused-tests" },
-    { "name": "restart-marks-interrupted-runs-failed-without-replay", "status": "RUN_BY_focused-tests" }
+    {
+      "name": "lint-typecheck-build-tests-python-acceptance-secret-scan-sbom",
+      "status": "RUN_BY_verify:release"
+    },
+    {
+      "name": "offline-installed-package-smoke-exact-five-tool-catalog",
+      "status": "RUN_BY_smoke:install"
+    },
+    {
+      "name": "reviewed-baseline-source-invariants-and-snapshot-verification",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "single-slot-settlement-close-and-worktree-ownership",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "restart-marks-interrupted-runs-failed-without-replay",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "installed-mcp-saved-run-reconnect-status-result-close",
+      "status": "RUN_BY_smoke:install"
+    }
   ],
   "unverified": [
-    { "name": "node-20.19.0-minimum-runtime", "status": "UNVERIFIED", "evidence_required": "Release checks enforce the semantic floor, but the package/test suite has not run on Node 20.19.0 itself." },
-    { "name": "hosted-one-shot-review-and-edit", "status": "UNVERIFIED", "evidence_required": "Against one frozen artifact/config/baseline: five total sequential runs (one review, one edit, then three additional review or edit); stop on first failure; record run IDs, outcomes, exact artifact/source/config/baseline hashes, independent patch checks, usage where available, and cleanup receipts." },
-    { "name": "native-codex-five-tool-lifecycle", "status": "UNVERIFIED", "evidence_required": "On the intended client connection and exact frozen artifact, record handshake version, exact five tool names, one useful task, close, and client disconnect during an active run with process/owner-lock outcome." },
-    { "name": "clean-macos-apple-silicon-account-install", "status": "UNVERIFIED", "evidence_required": "After authorization and a reviewable frozen tarball, execute the documented install/config/doctor/registration workflow in a fresh Apple silicon macOS account; record OS/architecture, Node, artifact hash, exact config/registration diff, rollback outcome, and cleanup." },
-    { "name": "provider-authentication-for-this-candidate", "status": "UNVERIFIED", "evidence_required": "Observe authentication only during an authorized real run against the exact frozen candidate; doctor and initialize-only checks do not qualify." }
+    {
+      "name": "node-20.19.0-minimum-runtime",
+      "status": "UNVERIFIED",
+      "evidence_required": "Release checks enforce the semantic floor, but the package/test suite has not run on Node 20.19.0 itself."
+    },
+    {
+      "name": "hosted-one-shot-review-and-edit",
+      "status": "UNVERIFIED",
+      "evidence_required": "Against one frozen artifact/config/baseline: five total sequential runs (one review, one edit, then three additional review or edit); stop on first failure; record run IDs, outcomes, exact artifact/source/config/baseline hashes, independent patch checks, usage where available, and cleanup receipts."
+    },
+    {
+      "name": "native-codex-five-tool-lifecycle",
+      "status": "UNVERIFIED",
+      "evidence_required": "On the intended client connection and exact frozen artifact, record handshake version, exact five tool names, one useful task, close, and client disconnect during an active run with process/owner-lock outcome."
+    },
+    {
+      "name": "clean-macos-apple-silicon-account-install",
+      "status": "UNVERIFIED",
+      "evidence_required": "After authorization and a reviewable frozen tarball, execute the documented install/config/doctor/registration workflow in a fresh Apple silicon macOS account; record OS/architecture, Node, artifact hash, exact config/registration diff, rollback outcome, and cleanup."
+    },
+    {
+      "name": "provider-authentication-for-this-candidate",
+      "status": "UNVERIFIED",
+      "evidence_required": "Observe authentication only during an authorized real run against the exact frozen candidate; doctor and initialize-only checks do not qualify."
+    }
   ],
   "historical_evidence": "Version-bound prior candidate reports remain in docs/history and do not establish acceptance of rc.21."
 }
