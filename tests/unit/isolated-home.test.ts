@@ -21,7 +21,7 @@ async function template(source = 'version = 1\nallowed_workspace_roots = []\n'):
 
 describe('per-connection isolated storage', () => {
   it('allows simultaneous owners while preserving configuration and excluding source state', async () => {
-    const source = 'version = 1\nbackend = "acp"\nallowed_workspace_roots = []\nworker_idle_ttl_seconds = 120\n';
+    const source = 'version = 1\nallowed_workspace_roots = []\n';
     const root = await template(source);
     const env = { VIBE_SUPERVISOR_HOME: root };
     const shared = new RunManager(await loadConfig({ env }), root);
@@ -62,10 +62,21 @@ describe('per-connection isolated storage', () => {
     await rm(path.join(root, 'config.toml'));
     await expect(prepareIsolatedHome({ VIBE_SUPERVISOR_HOME: root })).rejects.toThrow();
   });
+
+  it('places isolated storage below an explicitly selected config parent and ignores the default home', async () => {
+    const root = await template('version = 1\nbackend = "acp"\n');
+    const artifact = path.join(root, 'artifact'); await mkdir(artifact, { mode: 0o700 });
+    const configPath = path.join(artifact, 'config.toml'); const config = 'version = 1\nallowed_workspace_roots = []\n';
+    await writeFile(configPath, config, { mode: 0o600 });
+    const prepared = await prepareIsolatedHome({ VIBE_SUPERVISOR_HOME: root }, undefined, configPath);
+    expect(prepared.home.startsWith(path.join(artifact, 'mcp-sessions'))).toBe(true);
+    expect(await readFile(path.join(prepared.home, 'config.toml'), 'utf8')).toBe(config);
+    await prepared.lock.release();
+  });
 });
 
 const CONFIG_V1 = 'version = 1\nallowed_workspace_roots = []\n';
-const CONFIG_V2 = 'version = 1\nallowed_workspace_roots = []\nworker_idle_ttl_seconds = 90\n';
+const CONFIG_V2 = 'version = 1\nallowed_workspace_roots = []\n\n[retention]\ndays = 2\n';
 
 async function sessionNames(root: string): Promise<string[]> {
   return (await readdir(path.join(root, 'mcp-sessions'))).sort();
@@ -157,7 +168,9 @@ describe('session directory reuse', () => {
     try {
       const second = await prepareIsolatedHome(env, line => messages.push(line));
       expect(second.adopted).toBe(false); expect(second.home).not.toBe(first.home);
-      expect(messages).toEqual([]);
+      // Restricted runners can forbid the bounded `ps` probe used to identify a live PID.
+      // In that case the candidate is still skipped fail-closed and a fresh directory is used.
+      expect(messages.length === 0 || messages.every(message => /spawn EPERM/.test(message))).toBe(true);
       await second.lock.release();
     } finally { await owner.shutdown(); }
   });

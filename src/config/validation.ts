@@ -1,5 +1,7 @@
 import path from "node:path";
+import { homedir } from "node:os";
 import { z } from "zod";
+import { assertWorkspaceRootScope } from "../security/paths.js";
 import type { SupervisorConfig } from "../contracts.js";
 import { MAX_TURNS_LIMIT } from "../mcp/schemas.js";
 
@@ -8,10 +10,7 @@ const rootString = pathString.refine((value) => path.isAbsolute(value) || value 
 const executableString = pathString.refine((value) => path.isAbsolute(value) || !/[\\/]/.test(value), "must be an absolute path or a bare command name");
 const configSchema = z.object({
   version: z.literal(1),
-  backend: z.enum(["programmatic", "acp"], { error: "backend must be \"programmatic\" or \"acp\"" }).default("programmatic"),
   allowed_workspace_roots: z.array(rootString).max(100).default([]),
-  max_concurrent_runs: z.number().int().min(1).max(32).default(2),
-  worker_idle_ttl_seconds: z.number().int().min(0).max(86_400).default(600),
   retention: z.object({
     days: z.number().int().min(0).max(3650).default(7)
   }).strict().prefault({}),
@@ -26,17 +25,18 @@ const configSchema = z.object({
     worker_progress_timeout_seconds: z.number().int().refine((value) => value === 0 || (value >= 60 && value <= 7200), "must be 0 or between 60 and 7200").default(600),
     max_mcp_result_chars: z.number().int().min(1000).max(1_000_000).default(8000)
   }).strict().prefault({}),
-  paths: z.object({ vibe: executableString.optional(), vibe_acp: executableString.optional() }).strict().optional()
+  paths: z.object({ vibe: executableString.optional() }).strict().optional()
 }).strict();
 
-export function validateConfig(input: unknown): SupervisorConfig {
+export function validateConfig(input: unknown, home = process.env.HOME ?? process.env.USERPROFILE ?? homedir()): SupervisorConfig {
   const parsed = configSchema.parse(input);
+  for (const root of parsed.allowed_workspace_roots) {
+    try { assertWorkspaceRootScope(root, home); }
+    catch (error) { throw new Error(`allowed_workspace_roots contains an unsafe root: ${(error as Error).message}`); }
+  }
   return {
     version: parsed.version,
-    backend: parsed.backend,
     allowedWorkspaceRoots: parsed.allowed_workspace_roots,
-    maxConcurrentRuns: parsed.max_concurrent_runs,
-    workerIdleTtlSeconds: parsed.worker_idle_ttl_seconds,
     retention: { days: parsed.retention.days },
     limits: {
       reviewTimeoutSeconds: parsed.limits.review_timeout_seconds,
@@ -49,9 +49,6 @@ export function validateConfig(input: unknown): SupervisorConfig {
       workerProgressTimeoutSeconds: parsed.limits.worker_progress_timeout_seconds,
       maxMcpResultChars: parsed.limits.max_mcp_result_chars
     },
-    ...(parsed.paths ? { paths: {
-      ...(parsed.paths.vibe === undefined ? {} : { vibe: parsed.paths.vibe }),
-      ...(parsed.paths.vibe_acp === undefined ? {} : { vibeAcp: parsed.paths.vibe_acp })
-    } } : {})
+    paths: parsed.paths ? { ...(parsed.paths.vibe === undefined ? {} : { vibe: parsed.paths.vibe }) } : {}
   };
 }

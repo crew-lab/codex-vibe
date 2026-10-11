@@ -65,40 +65,36 @@ describe('CLI local setup', () => {
   });
 });
 
-describe('CLI diagnostics for a failing ACP probe', () => {
+describe('CLI diagnostics for the programmatic runtime', () => {
   let errorSpy: ReturnType<typeof vi.spyOn> | undefined;
   const errors: string[] = [];
 
   afterEach(() => { errorSpy?.mockRestore(); errorSpy = undefined; errors.length = 0; });
 
-  async function failingInstall(): Promise<void> {
+  async function programmaticInstall(): Promise<void> {
     const data = await tempDir();
     const bin = path.join(data, 'bin'); await mkdir(bin);
     const script = (name: string) => path.join(bin, name);
-    for (const name of ['vibe', 'vibe-acp']) {
-      await writeFile(script(name), `#!/usr/bin/env python3\nprint("${name} 2.25.8")\n`);
-      await chmod(script(name), 0o755);
-    }
-    await writeFile(path.join(data, 'config.toml'), `version = 1\nallowed_workspace_roots = []\n\n[paths]\nvibe = ${JSON.stringify(script('vibe'))}\nvibe_acp = ${JSON.stringify(script('vibe-acp'))}\n`);
+    await writeFile(script('vibe'), '#!/usr/bin/env python3\nprint("vibe 2.26.1")\n');
+    await chmod(script('vibe'), 0o755);
+    await writeFile(path.join(data, 'config.toml'), `version = 1\nallowed_workspace_roots = []\n\n[paths]\nvibe = ${JSON.stringify(script('vibe'))}\n`);
     vi.stubEnv('VIBE_SUPERVISOR_HOME', data);
     captureOutput();
     errorSpy = vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: string | Uint8Array) => { errors.push(String(chunk)); return true; }) as typeof process.stderr.write);
   }
 
-  it('doctor --json carries the captured stderr tail on the failed acp-initialize check', async () => {
-    await failingInstall();
+  it('doctor --json verifies the pinned Vibe runtime without checking ACP', async () => {
+    await programmaticInstall();
     await runCli(['doctor', '--json']);
-    const report = JSON.parse(output.join('')) as { checks: Array<{ name: string; ok: boolean; stderr_tail?: string }> };
-    const check = report.checks.find((entry) => entry.name === 'acp-initialize');
-    expect(check?.ok).toBe(false);
-    expect(typeof check?.stderr_tail).toBe('string');
-    expect(check?.stderr_tail?.length).toBeGreaterThan(0);
-    expect(check?.stderr_tail?.length).toBeLessThanOrEqual(1024);
+    const report = JSON.parse(output.join('')) as { checks: Array<{ name: string; ok: boolean; version?: string }> };
+    expect(report.checks.find((entry) => entry.name === 'vibe')).toMatchObject({ ok: true, version: 'vibe 2.26.1' });
+    expect(report.checks.some((entry) => entry.name.includes('acp'))).toBe(false);
   }, 30_000);
 
-  it('doctor prints the stderr tail under the failed check', async () => {
-    await failingInstall();
+  it('doctor reports unknown authentication separately from local runtime checks', async () => {
+    await programmaticInstall();
     await runCli(['doctor']);
-    expect(output.join('')).toMatch(/CHECK acp-initialize: .*\n {2}Vibe ACP stderr: .+/);
+    expect(output.join('')).toMatch(/UNVERIFIED authentication: Vibe authentication was not inspected/);
+    expect(output.join('')).not.toMatch(/ACP/i);
   }, 30_000);
 });

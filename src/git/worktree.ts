@@ -191,20 +191,31 @@ function samePatchContent(saved: Buffer, fresh: Buffer): boolean {
 }
 
 /** Remove only a registered supervisor-created worktree after patch export was verified. */
-export async function removeVerifiedWorktree(source: string, record: { path: string; baseRef?: string; createdBySupervisor: boolean }, verifiedExport: { patchPath: string; sha256: string }): Promise<void> {
+export async function removeVerifiedWorktree(source: string, record: { path: string; baseRef?: string; createdBySupervisor: boolean }, verifiedExport: { patchPath: string; sha256: string }, expectedPath: string): Promise<void> {
   if (!record.createdBySupervisor) throw new Error('Refusing to remove a worktree not created by the supervisor');
   const patch = await import('node:fs/promises').then(({ readFile }) => readFile(verifiedExport.patchPath));
   if (createHash('sha256').update(patch).digest('hex') !== verifiedExport.sha256) throw new Error('Patch export verification failed; worktree retained');
-  const root = await resolveGitRoot(source);
+  const canonicalSource = await realpath(source);
+  const root = await resolveGitRoot(canonicalSource);
+  if (root !== canonicalSource) throw new Error('Saved source is not the canonical Git repository root; refusing cleanup');
   const target = await realpath(record.path);
+  if (path.resolve(expectedPath) !== target || path.resolve(record.path) !== path.resolve(expectedPath)) throw new Error('Worktree path does not match its supervisor-owned run path; refusing cleanup');
+  if (!record.baseRef) throw new Error('Worktree base reference is missing; refusing cleanup');
   if (await resolveGitRoot(target) !== target) throw new Error('Worktree path does not resolve to its own repository root; refusing cleanup');
   const registered = (await git(root, ['worktree', 'list', '--porcelain', '-z'])).toString('utf8').split('\0');
   if (!registered.includes(`worktree ${target}`)) throw new Error('Worktree is not registered with the expected source repository; refusing cleanup');
-  const fresh = await captureDirtySnapshot(record.path, record.baseRef ?? 'HEAD');
+  const expectedBase = await resolveBaseCommit(root, record.baseRef);
+  const actualHead = decodeTrimmed(await git(target, ['rev-parse', '--verify', 'HEAD^{commit}']));
+  if (actualHead !== expectedBase) throw new Error('Worktree HEAD no longer matches its recorded base; refusing cleanup');
+  const fresh = await captureDirtySnapshot(target, record.baseRef);
   if (fresh.sha256 !== verifiedExport.sha256 && !samePatchContent(patch, fresh.patch)) throw new Error('Worktree changed after export; refusing cleanup');
   const status = await git(record.path, ['status', '--porcelain=v1', '-z', '--ignored=matching', '--untracked-files=all', '--no-renames']);
-  if (status.toString('utf8').split('\0').some((line) => line.startsWith('!!'))) throw new Error('Ignored files remain in worktree; refusing cleanup');
-  await git(root, ['worktree', 'remove', '--force', '--', target]);
+  const statusLines = status.toString('utf8').split('\0').filter(Boolean);
+  if (statusLines.some((line) => line.startsWith('!!'))) throw new Error('Ignored files remain in worktree; refusing cleanup');
+  if (statusLines.length > 0) throw new Error('Uncommitted or untracked files remain after export; worktree retained');
+  // Without --force, Git refuses removal if anything changed after the checks.
+  // This preserves concurrent or residual files instead of deleting them.
+  await git(root, ['worktree', 'remove', '--', target]);
 }
 
 export { git as preparationGit };

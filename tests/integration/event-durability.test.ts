@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, RunState, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
+import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { RunManager } from '../../src/core/run-manager.js';
 
@@ -13,15 +13,13 @@ afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root,
 class FakeBackend implements SupervisorBackend {
   readonly kind = 'programmatic' as const;
   readonly callbacks = new Map<string, BackendCallbacks>();
-  async probe() { return { available: true, backend: this.kind, supportsContinue: true, supportsPermissionResponse: true }; }
+  async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     this.callbacks.set(input.runId, callbacks);
     return { handle: { runId: input.runId, backend: this.kind, opaque: {} }, initialState: 'running' };
   }
-  async continue() {}
-  async respond() {}
   async cancel(handle: BackendRunHandle) { await this.callbacks.get(handle.runId)?.onState('cancelled'); }
-  async close() {}
+  async close(_handle: BackendRunHandle) {}
   async recover(_record: RunRecord) { return undefined; }
 }
 
@@ -30,7 +28,7 @@ async function harness(overrides: Partial<typeof DEFAULT_CONFIG> = {}) {
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data');
   await mkdir(source); await writeFile(path.join(source, 'file.txt'), 'content\n');
   const backend = new FakeBackend();
-  const manager = new RunManager({ ...DEFAULT_CONFIG, backend: 'programmatic', allowedWorkspaceRoots: [source], workerIdleTtlSeconds: 600, ...overrides }, data, [backend]);
+  const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], ...overrides }, data, [backend]);
   const started = await manager.reviewStart({ task: 'review', cwd: source });
   for (let attempt = 0; attempt < 500 && (await manager.status({ run_id: started.run_id })).state !== 'running'; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
   return { manager, backend, runId: started.run_id, callbacks: backend.callbacks.get(started.run_id)!, eventsFile: path.join(data, 'runs', started.run_id, 'events.ndjson'), metaFile: path.join(data, 'runs', started.run_id, 'meta.json') };
@@ -47,7 +45,8 @@ describe('buffered event persistence', () => {
     try {
       const began = performance.now();
       for (let index = 1; index <= 1000; index += 1) await callbacks.onEvent({ source: 'vibe', type: 'tool_call', severity: 'info', data: { title: `call ${index}` } });
-      await callbacks.onState('ready');
+      await callbacks.onState('completed');
+      await manager.result({ run_id: runId });
       const elapsed = performance.now() - began;
       expect(elapsed).toBeLessThan(1500);
       const onDisk = await diskEvents(eventsFile);
@@ -64,17 +63,15 @@ describe('buffered event persistence', () => {
   it('never persists a state change ahead of the events that preceded it', async () => {
     const { manager, runId, callbacks, eventsFile, metaFile } = await harness();
     try {
-      const states: RunState[] = ['ready', 'running', 'ready', 'running'];
-      let expected = 0;
-      for (const state of states) {
-        await callbacks.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: `before ${state}` } });
-        await callbacks.onEvent({ source: 'vibe', type: 'tool_call', severity: 'info', data: { title: `again ${state}` } });
-        expected = (await manager.status({ run_id: runId })).last_seq as number;
-        await callbacks.onState(state);
-        const meta = JSON.parse(await readFile(metaFile, 'utf8')) as { state: string };
-        expect(meta.state).toBe(state);
-        expect((await diskEvents(eventsFile)).at(-1)?.seq).toBe(expected);
+      for (const title of ['before completion', 'final event']) {
+        await callbacks.onEvent({ source: 'vibe', type: 'tool_call', severity: 'info', data: { title } });
       }
+      const expected = (await manager.status({ run_id: runId })).last_seq as number;
+      await callbacks.onState('completed');
+      await manager.result({ run_id: runId });
+      const meta = JSON.parse(await readFile(metaFile, 'utf8')) as { state: string };
+      expect(meta.state).toBe('completed');
+      expect((await diskEvents(eventsFile)).at(-1)?.seq).toBe(expected);
     } finally { await manager.shutdown(); }
   });
 

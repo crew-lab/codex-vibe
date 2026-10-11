@@ -40,7 +40,7 @@ describe('doctor executable lookup', () => {
     const hit = await marker(dir, 'vibe');
     process.chdir(dir);
     process.env.PATH = empty;
-    const report = await runDoctor({ ...DEFAULT_CONFIG, backend: 'programmatic', paths: { vibe: 'vibe' } });
+    const report = await runDoctor({ ...DEFAULT_CONFIG, paths: { vibe: 'vibe' } });
     expect(report.checks.find((check) => check.name === 'vibe')).toMatchObject({ ok: false, message: expect.stringContaining('not found') });
     expect(existsSync(hit)).toBe(false);
   });
@@ -50,7 +50,7 @@ describe('doctor executable lookup', () => {
     const bin = path.join(dir, 'bin'); await mkdir(bin);
     const hit = await marker(bin, 'vibe');
     process.env.PATH = bin;
-    const report = await runDoctor({ ...DEFAULT_CONFIG, backend: 'programmatic', paths: { vibe: 'vibe' } });
+    const report = await runDoctor({ ...DEFAULT_CONFIG, paths: { vibe: 'vibe' } });
     expect(report.checks.find((check) => check.name === 'vibe')?.message).not.toContain('not found');
     await expect(readFile(hit, 'utf8')).resolves.toContain('hit');
   });
@@ -59,16 +59,15 @@ describe('doctor executable lookup', () => {
     const dir = await tempDir();
     const hit = await marker(dir, 'vibe');
     process.chdir(dir);
-    const report = await runDoctor({ ...DEFAULT_CONFIG, backend: 'programmatic', paths: { vibe: './vibe', vibeAcp: 'sub/vibe-acp' } });
+    const report = await runDoctor({ ...DEFAULT_CONFIG, paths: { vibe: './vibe' } });
     expect(report.checks.find((check) => check.name === 'vibe')).toMatchObject({ ok: false, message: expect.stringContaining('relative') });
-    expect(report.checks.find((check) => check.name === 'vibe-acp')).toMatchObject({ ok: false, message: expect.stringContaining('relative') });
     expect(existsSync(hit)).toBe(false);
   });
 
   it('uses an absolute configured path directly', async () => {
     const dir = await tempDir();
     const hit = await marker(dir, 'vibe');
-    const report = await runDoctor({ ...DEFAULT_CONFIG, backend: 'programmatic', paths: { vibe: path.join(dir, 'vibe') } });
+    const report = await runDoctor({ ...DEFAULT_CONFIG, paths: { vibe: path.join(dir, 'vibe') } });
     expect(report.checks.find((check) => check.name === 'vibe')?.version).toContain('0.0.0');
     expect(existsSync(hit)).toBe(true);
   });

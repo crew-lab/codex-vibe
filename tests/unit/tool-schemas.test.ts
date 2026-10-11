@@ -4,10 +4,9 @@ import { toolSchemas } from "../../src/mcp/schemas.js";
 const runId = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
 
 describe("MCP tool input schemas", () => {
-  it("exports the stable seven-tool surface", () => {
+  it("exports the stable five-tool surface", () => {
     expect(Object.keys(toolSchemas)).toEqual([
-      "vibe_review_start", "vibe_edit_start", "vibe_status", "vibe_continue",
-      "vibe_respond", "vibe_result", "vibe_close"
+      "vibe_review_start", "vibe_edit_start", "vibe_status", "vibe_result", "vibe_close"
     ]);
   });
 
@@ -26,10 +25,6 @@ describe("MCP tool input schemas", () => {
   it("rejects unknown fields and invalid bounds before dispatch", () => {
     expect(() => toolSchemas.vibe_edit_start.parse({ task: "x", cwd: "/repo", isolation: "same-working-tree" })).toThrow();
     expect(() => toolSchemas.vibe_review_start.parse({ task: "x", cwd: "/repo", context_files: Array(51).fill("x") })).toThrow();
-    expect(() => toolSchemas.vibe_continue.parse({ run_id: runId, message: "" })).toThrow();
-    expect(toolSchemas.vibe_continue.parse({ run_id: runId, message: "go" })).not.toHaveProperty("max_turns");
-    expect(toolSchemas.vibe_continue.parse({ run_id: runId, message: "go", max_turns: 50 }).max_turns).toBe(50);
-    for (const bad of [0, 51, 1.5]) expect(() => toolSchemas.vibe_continue.parse({ run_id: runId, message: "go", max_turns: bad })).toThrow();
     expect(() => toolSchemas.vibe_review_start.parse({ task: "x", cwd: "/repo", max_turns: 51 })).toThrow();
     expect(() => toolSchemas.vibe_edit_start.parse({ task: "x", cwd: "/repo", timeout_seconds: 29 })).toThrow();
   });
@@ -44,9 +39,4 @@ describe("MCP tool input schemas", () => {
     expect(toolSchemas.vibe_result.parse({ run_id: runId })).toMatchObject({ detail: "compact" });
   });
 
-  it("accepts only the offered-choice form of permission responses", () => {
-    expect(toolSchemas.vibe_respond.parse({ run_id: runId, request_id: "perm-1", kind: "permission", option_id: "allow-once" })).toMatchObject({ kind: "permission" });
-    expect(() => toolSchemas.vibe_respond.parse({ run_id: runId, request_id: "perm-1", kind: "permission", action: "accept" })).toThrow();
-    expect(() => toolSchemas.vibe_respond.parse({ run_id: runId, request_id: "perm-1", kind: "elicitation", option_id: "allow-once" })).toThrow();
-  });
 });

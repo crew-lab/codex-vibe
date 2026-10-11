@@ -33,34 +33,18 @@ export const statusSchema = z.object({
   wait_seconds: waitSeconds
 }).strict();
 
-export const continueSchema = z.object({ run_id: runId, message: task, max_turns: maxTurns }).strict();
-
-export const respondSchema = z.discriminatedUnion("kind", [
-  z.object({ run_id: runId, request_id: z.string().min(1).max(512), kind: z.literal("permission"), option_id: z.string().min(1).max(512) }).strict(),
-  z.object({
-    run_id: runId,
-    request_id: z.string().min(1).max(512),
-    kind: z.literal("elicitation"),
-    action: z.enum(["accept", "decline", "cancel"]),
-    content: z.record(z.string(), z.unknown()).optional()
-  }).strict()
-]);
-
 export const resultSchema = z.object({
   run_id: runId,
   detail: z.enum(["compact", "full"]).default("compact"),
   include_transcript: z.boolean().default(false)
 }).strict();
 
-export const cancelSchema = z.object({ run_id: runId }).strict();
 export const closeSchema = z.object({ run_id: runId, cleanup_worktree: z.boolean().default(false) }).strict();
 
 export const toolSchemas = {
   vibe_review_start: reviewStartSchema,
   vibe_edit_start: editStartSchema,
   vibe_status: statusSchema,
-  vibe_continue: continueSchema,
-  vibe_respond: respondSchema,
   vibe_result: resultSchema,
   vibe_close: closeSchema
 } as const;

@@ -1,14 +1,10 @@
 import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, StartRunInput, SupervisorBackend } from "../../src/contracts.js";
+import type { BackendCallbacks, BackendStartResult, StartRunInput, SupervisorBackend } from "../../src/contracts.js";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
 import { RunManager } from "../../src/core/run-manager.js";
-import { AcpBackend } from "../../src/backends/acp.js";
-import type { VibeChildProfile } from "../../src/backends/profile.js";
-import type { VibeLaunch } from "../../src/backends/launcher.js";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import type { Transport, JSONRPCMessage } from "@modelcontextprotocol/server";
@@ -19,7 +15,6 @@ function structured(result: unknown): unknown {
   return JSON.parse((result as { content: { text: string }[] }).content[0]!.text);
 }
 
-const fixture = fileURLToPath(new URL("../fixtures/fake-acp.mjs", import.meta.url));
 const canonicalTmp = await realpath(tmpdir());
 const roots: string[] = [];
 afterEach(async () => {
@@ -28,8 +23,7 @@ afterEach(async () => {
 });
 
 const COMPLETED = "Vibe completed the delegated task.";
-const TURN_LIMIT = "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so start a new run with a larger max_turns.";
-const TURN_LIMIT_ACP = "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; Vibe counts turns cumulatively per session, so continue with vibe_continue only with a larger max_turns, or start a new run.";
+const TURN_LIMIT = "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; start a fresh run from a reviewed base if more work is needed.";
 const CHANGED_PLAIN = "The source workspace changed during this read-only review. The changes may be your own edits or a read-only boundary violation; inspect the changed paths before trusting the review.";
 
 class StdioClientHarness implements Transport {
@@ -60,30 +54,14 @@ class FakeBackend implements SupervisorBackend {
   readonly kind = "programmatic" as const;
   callbacks: BackendCallbacks | undefined;
   completeOnStart: { stopReason: string } | undefined;
-  async probe() { return { available: true, backend: this.kind, supportsContinue: true, supportsPermissionResponse: true }; }
+  async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     this.callbacks = callbacks;
     if (this.completeOnStart) { const result = this.completeOnStart; setTimeout(() => { void callbacks.onState("completed", { result }); }, 50); }
     return { handle: { runId: input.runId, backend: this.kind, opaque: {} }, initialState: "running" };
   }
-  async continue() {}
-  async respond() {}
   async cancel() {}
   async close() {}
-  async recover(_record: RunRecord): Promise<BackendRunHandle | undefined> { return undefined; }
-}
-
-class FakeAcpBackend extends AcpBackend {
-  constructor(private readonly testMode: string, dataDir: string, allowedWorkspaceRoots: string[]) {
-    super({ ...DEFAULT_CONFIG, backend: "acp", allowedWorkspaceRoots, paths: { vibeAcp: "fake-acp" } }, dataDir);
-  }
-  protected override executable(): string { return "fake-acp"; }
-  protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {
-    return { command: process.execPath, args: [fixture], env: { ...profile.env, FAKE_ACP_CASE: this.testMode } };
-  }
-  override async probe() {
-    return { available: true, backend: "acp" as const, executable: "fake-acp", version: "2.25.8", supportsContinue: true, supportsPermissionResponse: true };
-  }
 }
 
 async function paths() {
@@ -96,7 +74,7 @@ async function paths() {
 async function setup() {
   const { source, data } = await paths();
   const backend = new FakeBackend();
-  const manager = new RunManager({ ...DEFAULT_CONFIG, backend: "programmatic", allowedWorkspaceRoots: [source], workerIdleTtlSeconds: 0 }, data, [backend]);
+  const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
   return { source, data, manager, backend };
 }
 
@@ -203,62 +181,16 @@ describe("stop reason reporting", () => {
     } finally { await manager.shutdown(); }
   });
 
-  it("replaces the previous turn's summary and stop-reason warning on a later turn", async () => {
-    const { source, manager, backend } = await setup();
-    try {
-      const runId = await runningReview(manager, source);
-      await backend.callbacks?.onState("completed", { result: { stopReason: "max_turn_requests", summary: "First turn partial" } });
-      await manager.continue({ run_id: runId, message: "keep going", max_turns: 25 });
-      await backend.callbacks?.onState("completed", { result: { stopReason: "end_turn", summary: "Second turn final" } });
-      const compact = await manager.result({ run_id: runId });
-      expect(compact.stop_reason).toBe("end_turn");
-      expect(compact.summary).toBe("Second turn final");
-      expect(compact.warnings).toEqual([]);
-    } finally { await manager.shutdown(); }
-  });
-
-  it("keeps review integrity warnings across a continuation while swapping the stop-reason warning", async () => {
+  it("preserves source-integrity warnings alongside the stop-reason warning", async () => {
     const { source, manager, backend } = await setup();
     await writeFile(path.join(source, "a.txt"), "a\n");
     try {
       const runId = await runningReview(manager, source);
       await writeFile(path.join(source, "a.txt"), "changed\n");
-      await backend.callbacks?.onState("completed", { result: { stopReason: "end_turn" } });
-      const first = await manager.result({ run_id: runId });
-      expect(first.warnings).toEqual([CHANGED_PLAIN]);
-      await manager.continue({ run_id: runId, message: "more" });
       await backend.callbacks?.onState("completed", { result: { stopReason: "max_turn_requests" } });
-      const second = await manager.result({ run_id: runId });
-      expect(second.summary).toBe(TURN_LIMIT);
-      expect(second.warnings).toEqual([CHANGED_PLAIN, expect.stringContaining("max_turn_requests")]);
-      await manager.continue({ run_id: runId, message: "finish", max_turns: 30 });
-      await backend.callbacks?.onState("completed", { result: { stopReason: "end_turn" } });
-      const third = await manager.result({ run_id: runId });
-      expect(third.summary).toBe(COMPLETED);
-      expect(third.warnings).toEqual([CHANGED_PLAIN]);
+      const result = await manager.result({ run_id: runId });
+      expect(result.summary).toBe(TURN_LIMIT);
+      expect(result.warnings).toEqual([CHANGED_PLAIN, expect.stringContaining("max_turn_requests")]);
     } finally { await manager.shutdown(); }
   });
-
-  it("reflects the capped second ACP turn and drops the first turn's summary", async () => {
-    const { source, data } = await paths();
-    const backend = new FakeAcpBackend("cap-on-second", data, [source]);
-    const manager = new RunManager({ ...DEFAULT_CONFIG, backend: "acp", allowedWorkspaceRoots: [source], workerIdleTtlSeconds: 60 }, data, [backend]);
-    try {
-      const started = await manager.reviewStart({ task: "review", cwd: source });
-      const first = await waitFor(() => manager.result({ run_id: started.run_id }), (value) => value.state === "completed");
-      expect(first.state).toBe("completed");
-      expect(first.stop_reason).toBe("end_turn");
-      expect(first.summary).toBe(COMPLETED);
-      expect(first.warnings).toEqual([]);
-      for (let attempt = 0; ; attempt += 1) {
-        try { await manager.continue({ run_id: started.run_id, message: "go on" }); break; }
-        catch (error) { if (attempt >= 100 || !String((error as Error).message).includes("already starting")) throw error; await new Promise((resolve) => setTimeout(resolve, 20)); }
-      }
-      const second = await waitFor(() => manager.result({ run_id: started.run_id }), (value) => value.state === "completed" && value.stop_reason === "max_turn_requests");
-      expect(second.state).toBe("completed");
-      expect(second.stop_reason).toBe("max_turn_requests");
-      expect(second.summary).toBe(TURN_LIMIT_ACP);
-      expect(second.warnings).toEqual([expect.stringContaining("max_turn_requests")]);
-    } finally { await manager.shutdown(); }
-  }, 30_000);
 });

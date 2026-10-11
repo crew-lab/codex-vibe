@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile, stat, realpath, access } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile, stat, realpath, access } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -12,11 +12,15 @@ import { captureDirtySnapshot, exportDirtySnapshot, removeVerifiedWorktree } fro
 import { spawnManaged } from '../../src/process/managed.js';
 
 const dirs: string[] = [];
+const savedPath = process.env.PATH;
 async function tempDir(): Promise<string> {
   const dir = await realpath(await mkdtemp(path.join(await realpath(os.tmpdir()), 'vibe-supervisor-security-')));
   dirs.push(dir); return dir;
 }
-afterEach(async () => { await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))); });
+afterEach(async () => {
+  if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
+  await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
 
 describe('workspace and child environment boundaries', () => {
   it('uses canonical component containment and rejects sibling-prefix and symlink escapes', async () => {
@@ -29,6 +33,15 @@ describe('workspace and child environment boundaries', () => {
     await symlink(outside, path.join(root, 'escape'));
     await expect(resolveCanonicalRoot(path.join(root, 'escape'), [root])).rejects.toThrow();
     await expect(resolveCanonicalRoot(path.join(root, '..', 'workspace-evil'), [root])).rejects.toThrow();
+  });
+
+  it('rejects broad, missing, dot-dot and symlinked allowlist roots at use time', async () => {
+    const dir = await tempDir(); const root = path.join(dir, 'workspace'); await mkdir(root);
+    const alias = path.join(dir, 'alias'); await symlink(root, alias);
+    const globalTemp = await realpath(os.tmpdir());
+    for (const allowed of [globalTemp, '/Users', '/home', `${dir}/../${path.basename(dir)}`, path.join(dir, 'missing'), alias]) {
+      await expect(resolveCanonicalRoot(root, [allowed]), allowed).rejects.toThrow();
+    }
   });
 
   it('copies only allowed environment entries and blocks recursion', () => {
@@ -143,7 +156,7 @@ describe('dirty git snapshot', () => {
     const artifacts = path.join(dir, 'artifacts'); await mkdir(artifacts, { mode: 0o700 });
     const exported = await exportDirtySnapshot(worktree, artifacts, base);
     await writeFile(path.join(worktree, 'tracked'), 'edited after export\n');
-    await expect(removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, exported)).rejects.toThrow(/changed after export/);
+    await expect(removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, exported, worktree)).rejects.toThrow(/changed after export/);
     await expect(readFile(path.join(worktree, 'tracked'), 'utf8')).resolves.toBe('edited after export\n');
   });
 
@@ -161,7 +174,7 @@ describe('dirty git snapshot', () => {
     await expect(readFile(path.join(repo, 'tracked'), 'utf8')).resolves.toBe('api_key = "knownsecret12345"\n');
   });
 
-  it('removes a cleanly verified worktree after export', async () => {
+  it('retains a verified export worktree while it contains uncommitted output', async () => {
     const dir = await tempDir(); const repo = path.join(dir, 'repo'); await mkdir(repo);
     const run = (args: string[]) => {
       const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8' });
@@ -175,8 +188,37 @@ describe('dirty git snapshot', () => {
     await writeFile(path.join(worktree, 'tracked'), 'exported change\n');
     const artifacts = path.join(dir, 'artifacts'); await mkdir(artifacts, { mode: 0o700 });
     const exported = await exportDirtySnapshot(worktree, artifacts, base);
-    await removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, exported);
-    await expect(stat(worktree)).rejects.toThrow();
+    await expect(removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, exported, worktree)).rejects.toThrow(/uncommitted or untracked files/i);
+    await expect(stat(worktree)).resolves.toBeDefined();
+  });
+
+  it('uses non-force Git removal so a file created at the final removal boundary is preserved', async () => {
+    const dir = await tempDir(); const repo = path.join(dir, 'repo'); await mkdir(repo);
+    const run = (args: string[]) => {
+      const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8' });
+      if (result.status !== 0) throw new Error(result.stderr);
+      return result.stdout;
+    };
+    run(['init', '-q']); run(['config', 'user.email', 'test@example.invalid']); run(['config', 'user.name', 'Test']);
+    await writeFile(path.join(repo, 'tracked'), 'base\n'); run(['add', 'tracked']); run(['commit', '-qm', 'base']);
+    const base = run(['rev-parse', 'HEAD']).trim(); const worktree = path.join(dir, 'worker');
+    run(['worktree', 'add', '--detach', worktree, base]);
+    const artifacts = path.join(dir, 'artifacts'); await mkdir(artifacts, { mode: 0o700 });
+    const exported = await exportDirtySnapshot(worktree, artifacts, base);
+    const bin = path.join(dir, 'git-bin'); await mkdir(bin);
+    const marker = path.join(dir, 'remove-args');
+    const lateFile = path.join(worktree, 'created-at-removal.txt');
+    const gitPath = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim();
+    const wrapper = path.join(bin, 'git');
+    await writeFile(wrapper, `#!/bin/sh\ncase " $* " in\n  *" worktree remove "*)\n    printf '%s\\n' "$@" > ${JSON.stringify(marker)}\n    printf 'preserve me\\n' > ${JSON.stringify(lateFile)}\n    ;;\nesac\nexec ${JSON.stringify(gitPath)} "$@"\n`);
+    await chmod(wrapper, 0o755);
+    process.env.PATH = `${bin}${path.delimiter}${savedPath ?? ""}`;
+    try {
+      await expect(removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, exported, worktree)).rejects.toThrow(/worktree/i);
+      expect(await readFile(lateFile, 'utf8')).toBe('preserve me\n');
+      expect(await readFile(marker, 'utf8')).not.toContain('--force');
+      await expect(stat(worktree)).resolves.toBeDefined();
+    } finally { if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath; }
   });
 });
 
@@ -200,28 +242,49 @@ describe('managed process', () => {
     expect(limited).toBe(true);
     expect(limitedProc.stdout.toBuffer().byteLength).toBe(64);
     expect(limitedProc.stdout.truncated).toBe(true);
+    await limitedProc.terminate();
+    expect(limitedProc.terminationVerified).toBe(true);
   });
 
-  it('falls back from EPERM group signaling to only its direct child and exposes degraded cleanup', async () => {
+  it('keeps termination unverified when EPERM strands a managed descendant, then retries the owned group handle', async () => {
     const dir = await tempDir();
-    const proc = spawnManaged(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { cwd: dir });
+    let grandchildPid = 0;
+    const proc = spawnManaged(process.execPath, ['-e', 'const {spawn}=require("node:child_process"); const c=spawn(process.execPath,["-e","setInterval(()=>{},1000)"],{stdio:"ignore"}); console.log(c.pid); setInterval(()=>{},1000)'], { cwd: dir, onStdout: (text) => { grandchildPid ||= Number(text.trim().split(/\s+/).at(-1)); } });
+    const until = Date.now() + 5_000;
+    while (!grandchildPid && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(grandchildPid).toBeGreaterThan(0);
     const nativeKill = process.kill;
-    const groupTargets: number[] = [];
+    const groupTargets: Array<{ pid: number; signal?: NodeJS.Signals | number }> = [];
     process.kill = ((pid: number, signal?: NodeJS.Signals | number) => {
-      if (pid < 0) { groupTargets.push(pid); throw Object.assign(new Error('sandbox denied killpg'), { code: 'EPERM' }); }
+      if (pid < 0) { groupTargets.push({ pid, signal }); if (signal !== 0) throw Object.assign(new Error('sandbox denied killpg'), { code: 'EPERM' }); }
       return nativeKill(pid, signal as NodeJS.Signals);
     }) as typeof process.kill;
     try {
-      await proc.terminate(25);
+      await expect(proc.terminate(25)).rejects.toThrow('termination is unverified');
       await proc.done;
       expect(proc.groupTerminationDegraded).toBe(true);
-      expect(groupTargets).toEqual([-proc.child.pid, -proc.child.pid]);
+      expect(groupTargets.filter((target) => target.signal !== 0)).toEqual([{ pid: -proc.child.pid, signal: 'SIGTERM' }, { pid: -proc.child.pid, signal: 'SIGKILL' }]);
+      expect(proc.terminationVerified).toBe(false);
+      expect(() => nativeKill(grandchildPid, 0)).not.toThrow();
     } finally {
       process.kill = nativeKill;
-      if (proc.child.exitCode === null && proc.child.signalCode === null && proc.child.pid) {
-        try { nativeKill(proc.child.pid, 'SIGKILL'); } catch { /* process already exited */ }
-      }
     }
+    // Normal group signaling can succeed on macOS too. If init has not
+    // reaped an orphan zombie within the bound, conservative failure is
+    // valid; the zombie can disappear immediately after that observation.
+    let retryError: unknown;
+    try { await proc.terminate(25); } catch (error) { retryError = error; }
+    if (retryError === undefined) {
+      expect(proc.terminationVerified).toBe(true);
+      if (process.platform !== 'linux') {
+        expect(() => nativeKill(-proc.child.pid!, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
+      }
+    } else {
+      expect(process.platform).not.toBe('linux');
+      expect(String(retryError)).toContain('termination is unverified');
+      expect(proc.terminationVerified).toBe(false);
+    }
+    expect(groupTargets.filter((target) => target.signal !== 0)).toEqual([{ pid: -proc.child.pid, signal: 'SIGTERM' }, { pid: -proc.child.pid, signal: 'SIGKILL' }]);
   });
 
   it('rejects termination within a bound when group and direct-child signaling fail', async () => {
@@ -235,7 +298,7 @@ describe('managed process', () => {
     }) as typeof process.kill;
     proc.child.kill = (() => { throw Object.assign(new Error('sandbox denied child kill'), { code: 'EPERM' }); }) as typeof proc.child.kill;
     try {
-      await expect(proc.terminate(5)).rejects.toThrow('did not close within the termination deadline');
+      await expect(proc.terminate(5)).rejects.toThrow('termination is unverified');
     } finally {
       process.kill = nativeKill;
       proc.child.kill = nativeChildKill;

@@ -1,15 +1,10 @@
-import { chmod, lstat, mkdtemp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BackendCallbacks, StartRunInput, SupervisorEvent } from '../../src/contracts.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
-import { RunManager } from '../../src/core/run-manager.js';
-import { AcpBackend } from '../../src/backends/acp.js';
-import type { VibeChildProfile } from '../../src/backends/profile.js';
 import { PROMPT_FILE_NAME, removePromptFile } from '../../src/backends/launcher.js';
-import type { VibeLaunch } from '../../src/backends/launcher.js';
 import { ProgrammaticBackend } from '../../src/backends/programmatic.js';
 import { ORIGINAL_HOME_ENV } from '../../src/security/environment.js';
 
@@ -38,10 +33,8 @@ vi.mock('../../src/process/managed.js', async (importOriginal) => {
   };
 });
 
-const fixture = fileURLToPath(new URL('../fixtures/fake-acp.mjs', import.meta.url));
 const canonicalTmp = await realpath(tmpdir());
 const roots: string[] = [];
-const pidDirs: string[] = [];
 
 const savedHome = process.env.HOME;
 
@@ -49,12 +42,6 @@ afterEach(async () => {
   spawnFault.armed = false;
   childScript.path = '';
   if (savedHome === undefined) delete process.env.HOME; else process.env.HOME = savedHome;
-  for (const pidDir of pidDirs.splice(0)) {
-    for (const name of await readdir(pidDir).catch(() => [] as string[])) {
-      const pid = Number(name);
-      if (Number.isInteger(pid) && pid > 0) { try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ } }
-    }
-  }
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
@@ -74,20 +61,6 @@ async function waitFor<T>(read: () => Promise<T> | T, done: (value: T) => boolea
   return value;
 }
 
-class FixtureAcpBackend extends AcpBackend {
-  readonly launchEnvs: NodeJS.ProcessEnv[] = [];
-  pidDir: string | undefined;
-  constructor(private readonly testMode: string, dataDir?: string, allowedWorkspaceRoots: string[] = []) {
-    super({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots, paths: { vibeAcp: 'fake-acp' } }, dataDir);
-  }
-  protected override executable(): string { return 'fake-acp'; }
-  protected override async buildLaunch(_args: readonly string[], profile: VibeChildProfile, _runDirectory: string): Promise<VibeLaunch> {
-    this.launchEnvs.push({ ...profile.env });
-    return { command: process.execPath, args: [fixture], env: { ...profile.env, FAKE_ACP_CASE: this.testMode, ...(this.pidDir ? { FAKE_PID_DIR: this.pidDir } : {}) } };
-  }
-  probeProcess() { return this.probe(); }
-}
-
 function makeInput(root: string): StartRunInput {
   const runId = crypto.randomUUID();
   const workspace = path.join(root, 'workspace');
@@ -103,103 +76,6 @@ async function prepared() {
   return { root, input };
 }
 
-function recordingCallbacks(log: string[]): BackendCallbacks & { texts: () => string[] } {
-  const texts: string[] = [];
-  return {
-    onEvent: (event) => {
-      if (event.type === 'message') {
-        const text = String((event.data as { text?: string }).text ?? '');
-        texts.push(text);
-        log.push(`message:${text}`);
-      }
-    },
-    onPendingRequest: () => undefined,
-    onState: (state) => { log.push(`state:${state}`); },
-    texts: () => texts
-  };
-}
-
-const FIRST = 'first complete line\n';
-const PARTIAL = 'partial line without newline';
-
-describe('F4: the last partial line survives a cancel, close or crash mid-turn', () => {
-  it('emits the buffered partial line before cancel returns, exactly once', async () => {
-    const { input } = await prepared();
-    const backend = new FixtureAcpBackend('partial-wait');
-    const log: string[] = [];
-    const callbacks = recordingCallbacks(log);
-    const started = await backend.start(input, callbacks);
-    await waitFor(() => callbacks.texts().join(''), (text) => text.includes('first complete line'));
-    expect(callbacks.texts().join('')).toBe(FIRST);
-    await backend.cancel(started.handle);
-    expect(callbacks.texts().join('')).toBe(`${FIRST}${PARTIAL}`);
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(callbacks.texts().filter((text) => text.includes(PARTIAL))).toHaveLength(1);
-  });
-
-  it('emits the buffered partial line before close returns, exactly once', async () => {
-    const { input } = await prepared();
-    const backend = new FixtureAcpBackend('partial-wait');
-    const callbacks = recordingCallbacks([]);
-    const started = await backend.start(input, callbacks);
-    await waitFor(() => callbacks.texts().join(''), (text) => text.includes('first complete line'));
-    await backend.close(started.handle);
-    expect(callbacks.texts().join('')).toBe(`${FIRST}${PARTIAL}`);
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(callbacks.texts().filter((text) => text.includes(PARTIAL))).toHaveLength(1);
-  });
-
-  it('emits the partial line before reporting a failure when the agent dies mid-turn', async () => {
-    const { input } = await prepared();
-    const backend = new FixtureAcpBackend('partial-crash');
-    const log: string[] = [];
-    const callbacks = recordingCallbacks(log);
-    const started = await backend.start(input, callbacks);
-    await waitFor(() => log, (entries) => entries.includes('state:failed'));
-    await backend.close(started.handle);
-    const tail = log.indexOf(`message:${PARTIAL}`);
-    expect(tail).toBeGreaterThanOrEqual(0);
-    expect(tail).toBeLessThan(log.indexOf('state:failed'));
-    expect(log.filter((entry) => entry === `message:${PARTIAL}`)).toHaveLength(1);
-  });
-
-  it('emits an unterminated tail exactly once when the turn ends normally', async () => {
-    const { input } = await prepared();
-    const backend = new FixtureAcpBackend('chunked');
-    const log: string[] = [];
-    const callbacks = recordingCallbacks(log);
-    const started = await backend.start(input, callbacks);
-    await waitFor(() => log, (entries) => entries.includes('state:completed'));
-    await backend.close(started.handle);
-    expect(callbacks.texts().join('')).toBe('Hello world');
-    expect(log.filter((entry) => entry === 'state:completed')).toHaveLength(1);
-  });
-
-  it('lands the partial line in transcript.md when RunManager cancels mid-line', async () => {
-    const root = await makeRoot();
-    const source = path.join(root, 'source');
-    const data = path.join(root, 'data');
-    await mkdir(source);
-    const pidDir = path.join(root, 'pids');
-    await mkdir(pidDir);
-    pidDirs.push(pidDir);
-    const backend = new FixtureAcpBackend('partial-wait', data, [source]);
-    backend.pidDir = pidDir;
-    const manager = new RunManager({ ...DEFAULT_CONFIG, backend: 'acp', allowedWorkspaceRoots: [source], workerIdleTtlSeconds: 0 }, data, [backend]);
-    try {
-      const started = await manager.reviewStart({ task: 'review', cwd: source });
-      const runDirectory = path.join(data, 'runs', started.run_id);
-      await waitFor(() => readFile(path.join(runDirectory, 'events.ndjson'), 'utf8').catch(() => ''), (raw) => raw.includes('first complete line'));
-      await manager.cancel({ run_id: started.run_id });
-      const transcript = await readFile(path.join(runDirectory, 'transcript.md'), 'utf8');
-      expect(transcript).toContain('first complete line');
-      expect(transcript).toContain(PARTIAL);
-      const events = (await readFile(path.join(runDirectory, 'events.ndjson'), 'utf8')).split('\n').filter(Boolean).map((line) => JSON.parse(line) as { type: string; data?: { text?: string } });
-      expect(events.filter((event) => event.type === 'message' && event.data?.text?.includes(PARTIAL))).toHaveLength(1);
-    } finally { await manager.shutdown(); }
-  });
-});
-
 async function installFakeVibe(root: string, childBody: string) {
   const dir = path.join(root, 'fake-vibe');
   await mkdir(dir);
@@ -208,7 +84,7 @@ async function installFakeVibe(root: string, childBody: string) {
     '#!/usr/bin/env python3',
     'import os',
     `open(${JSON.stringify(path.join(dir, 'probe-original-home'))}, "w").write(os.environ.get(${JSON.stringify(ORIGINAL_HOME_ENV)}, "unset"))`,
-    'print("vibe 2.25.8")',
+    'print("vibe 2.26.1")',
     ''
   ].join('\n'));
   await chmod(vibe, 0o755);
@@ -226,7 +102,7 @@ async function installFakeVibe(root: string, childBody: string) {
 }
 
 function programmaticBackend(vibe: string) {
-  return new ProgrammaticBackend({ ...DEFAULT_CONFIG, backend: 'programmatic', paths: { vibe } });
+  return new ProgrammaticBackend({ ...DEFAULT_CONFIG, paths: { vibe } });
 }
 
 function collecting(): BackendCallbacks & { events: Array<Pick<SupervisorEvent, 'type' | 'data'>>; states: string[] } {
@@ -235,7 +111,6 @@ function collecting(): BackendCallbacks & { events: Array<Pick<SupervisorEvent, 
   return {
     events, states,
     onEvent: (event) => { events.push({ type: event.type, data: event.data ?? {} }); },
-    onPendingRequest: () => undefined,
     onState: (state) => { states.push(state); }
   };
 }
@@ -249,7 +124,7 @@ describe('rate limits from the programmatic child', () => {
     const { vibe } = await installFakeVibe(root, "process.stderr.write('HTTP 429 Too Many Requests\\n'); process.exitCode = 1;");
     const errors: Array<{ code: string; retryable: boolean }> = [];
     const callbacks: BackendCallbacks = {
-      onEvent: () => undefined, onPendingRequest: () => undefined,
+      onEvent: () => undefined,
       onState: (state, update) => { if (state === 'failed' && update?.error) errors.push(update.error); }
     };
     await programmaticBackend(vibe).start(input, callbacks);
@@ -261,7 +136,7 @@ describe('rate limits from the programmatic child', () => {
     const { root, input } = await prepared();
     const { vibe } = await installFakeVibe(root, "process.stderr.write('x-ratelimit-limit: 100\\nHTTP 401 Unauthorized\\n'); process.exitCode = 1;");
     const errors: Array<{ code: string; retryable: boolean }> = [];
-    const callbacks: BackendCallbacks = { onEvent: () => undefined, onPendingRequest: () => undefined, onState: (state, update) => { if (state === 'failed' && update?.error) errors.push(update.error); } };
+    const callbacks: BackendCallbacks = { onEvent: () => undefined, onState: (state, update) => { if (state === 'failed' && update?.error) errors.push(update.error); } };
     await programmaticBackend(vibe).start(input, callbacks);
     await waitFor(() => errors, (value) => value.length > 0);
     expect(errors[0]).toMatchObject({ code: 'VSUP_AUTH_REQUIRED', retryable: false });
@@ -272,7 +147,7 @@ describe('rate limits from the programmatic child', () => {
     const lines = ['retrying after rate limit (HTTP 429)', ...Array.from({ length: 8 }, (_, index) => `step ${index} ok`), 'Traceback: boom'];
     const { vibe } = await installFakeVibe(root, `process.stderr.write(${JSON.stringify(lines.join('\n') + '\n')}); process.exitCode = 1;`);
     const errors: Array<{ code: string; retryable: boolean }> = [];
-    const callbacks: BackendCallbacks = { onEvent: () => undefined, onPendingRequest: () => undefined, onState: (state, update) => { if (state === 'failed' && update?.error) errors.push(update.error); } };
+    const callbacks: BackendCallbacks = { onEvent: () => undefined, onState: (state, update) => { if (state === 'failed' && update?.error) errors.push(update.error); } };
     await programmaticBackend(vibe).start(input, callbacks);
     await waitFor(() => errors, (value) => value.length > 0);
     expect(errors[0]).toMatchObject({ code: 'VSUP_BACKEND_CRASHED', retryable: false });
@@ -283,7 +158,7 @@ describe('rate limits from the programmatic child', () => {
     const { vibe } = await installFakeVibe(root, "process.stderr.write('processed 4290 files\\n'); process.exitCode = 1;");
     const errors: Array<{ code: string; retryable: boolean }> = [];
     const callbacks: BackendCallbacks = {
-      onEvent: () => undefined, onPendingRequest: () => undefined,
+      onEvent: () => undefined,
       onState: (state, update) => { if (state === 'failed' && update?.error) errors.push(update.error); }
     };
     await programmaticBackend(vibe).start(input, callbacks);
@@ -359,22 +234,6 @@ describe('F5: the task prompt file never outlives its launcher', () => {
 });
 
 describe('F6: probes never carry the original HOME to the launcher shim', () => {
-  it('omits the original-HOME variable from the ACP probe launch and keeps it for start', async () => {
-    const { root, input } = await prepared();
-    const realHome = path.join(root, 'real-home');
-    await mkdir(realHome);
-    process.env.HOME = realHome;
-    const backend = new FixtureAcpBackend('normal');
-    const probed = await backend.probeProcess();
-    expect(probed.available).toBe(true);
-    expect(backend.launchEnvs).toHaveLength(1);
-    expect(backend.launchEnvs[0]?.[ORIGINAL_HOME_ENV]).toBeUndefined();
-    const started = await backend.start(input, recordingCallbacks([]));
-    await backend.close(started.handle);
-    expect(backend.launchEnvs).toHaveLength(2);
-    expect(backend.launchEnvs[1]?.[ORIGINAL_HOME_ENV]).toBe(realHome);
-  });
-
   it('omits the original-HOME variable from the programmatic probe and keeps it for start', async () => {
     const { root, input } = await prepared();
     const realHome = path.join(root, 'real-home');
@@ -398,7 +257,7 @@ describe('programmatic output limits', () => {
     const limited = { ...input, limits: { ...input.limits, maxEventBytes: 1024 } };
     const errors: Array<{ code: string }> = [];
     const callbacks: BackendCallbacks = {
-      onEvent: () => undefined, onPendingRequest: () => undefined,
+      onEvent: () => undefined,
       onState: (state, update) => { if (state === 'failed' && update?.error) errors.push(update.error); }
     };
     await programmaticBackend(vibe).start(limited, callbacks);

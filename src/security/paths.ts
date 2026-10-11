@@ -1,5 +1,6 @@
 import { realpath, lstat, mkdir, open } from 'node:fs/promises';
 import { constants } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 
 export class WorkspacePathError extends Error {
@@ -21,13 +22,59 @@ export function expandHome(input: string, home = process.env.HOME ?? ''): string
   return input;
 }
 
+function sharedTemporaryRoots(): Set<string> {
+  const roots = [tmpdir()];
+  if (process.platform === 'darwin' || process.platform === 'linux') roots.push('/tmp', '/var/tmp');
+  if (process.platform === 'darwin') roots.push('/private/tmp', '/private/var/tmp');
+  return new Set(roots.map(root => path.resolve(root)));
+}
+
+/** Reject broad roots consistently in config parsing and setup/allow. */
+export function assertWorkspaceRootScope(input: string, home = process.env.HOME ?? process.env.USERPROFILE ?? homedir()): string {
+  if (input.split(/[\\/]+/).includes('..')) throw new WorkspacePathError('Workspace root must not contain parent-directory components.');
+  const expanded = path.resolve(expandHome(input, home));
+  const canonicalHome = path.resolve(home);
+  const sharedHomeParent = process.platform === 'win32'
+    ? path.join(path.parse(canonicalHome).root, 'Users')
+    : '/Users';
+  const broad = [path.parse(expanded).root, canonicalHome, path.resolve(sharedHomeParent), path.resolve('/home')];
+  if (broad.some(root => expanded === root || isPathWithinRoot(expanded, root)) || sharedTemporaryRoots().has(expanded)) {
+    throw new WorkspacePathError('Workspace root is too broad; allow a project directory, not a filesystem root, home parent, or global temporary directory.');
+  }
+  return expanded;
+}
+
+/** Ensure allowlist entries exist as canonical directories and cannot use symlink aliases. */
+export async function resolveCanonicalWorkspaceRoot(input: string, home?: string): Promise<string> {
+  const expanded = assertWorkspaceRootScope(input, home);
+  let canonical: string;
+  try { canonical = await realpath(expanded); } catch { throw new WorkspacePathError('Configured workspace root must exist as a directory.'); }
+  if (canonical !== expanded) throw new WorkspacePathError('Configured workspace root must use its canonical path, without symlink components.');
+  let info;
+  try { info = await lstat(canonical); } catch { throw new WorkspacePathError('Configured workspace root must exist as a directory.'); }
+  if (info.isSymbolicLink() || !info.isDirectory()) throw new WorkspacePathError('Configured workspace root must be a real directory.');
+  const canonicalTemporaryRoots = sharedTemporaryRoots();
+  for (const temporaryRoot of canonicalTemporaryRoots) {
+    const resolved = await realpath(temporaryRoot).catch(() => temporaryRoot);
+    canonicalTemporaryRoots.add(resolved);
+  }
+  if (canonicalTemporaryRoots.has(canonical)) throw new WorkspacePathError('The global temporary directory is too broad to allow.');
+  return canonical;
+}
+
+export async function validateWorkspaceRootsAtUse(roots: readonly string[], home?: string): Promise<string[]> {
+  const canonical = await Promise.all(roots.map(root => resolveCanonicalWorkspaceRoot(root, home)));
+  if (new Set(canonical).size !== canonical.length) throw new WorkspacePathError('Workspace roots must be unique after canonicalization.');
+  return canonical;
+}
+
 /** Canonicalize both sides before containment checks; string prefixes are never used. */
 export async function resolveCanonicalRoot(input: string, allowedRoots: readonly string[], home?: string): Promise<string> {
   const candidateInput = path.resolve(expandHome(input, home));
   let candidate: string;
   try { candidate = await realpath(candidateInput); } catch { throw new WorkspacePathError(); }
   const canonicalRoots = await Promise.all(allowedRoots.map(async (root) => {
-    try { return await realpath(path.resolve(expandHome(root, home))); } catch { return null; }
+    try { return await resolveCanonicalWorkspaceRoot(root, home); } catch { return null; }
   }));
   if (!canonicalRoots.some((root) => root !== null && isPathWithinRoot(root, candidate))) throw new WorkspacePathError();
   return candidate;

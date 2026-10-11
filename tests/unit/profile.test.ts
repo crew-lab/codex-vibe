@@ -49,7 +49,7 @@ describe('supervisor-owned agent profiles', () => {
 });
 
 const python = process.env.VIBE_SUPERVISOR_TEST_VIBE_PYTHON;
-describe.skipIf(!python)('installed Vibe 2.25.8 permissions (no inference)', () => {
+describe.skipIf(!python)('installed Vibe 2.26.1 permissions (no inference)', () => {
   it.each(['review', 'edit'] as const)('checks real agent layering and path boundaries for %s', async (mode) => {
     const { dir, root, profile } = await fixture(mode);
     const outside = path.join(dir, 'outside.txt'); await writeFile(outside, 'fixture');

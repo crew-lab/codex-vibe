@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { access, appendFile, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { access, appendFile, chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -26,26 +26,17 @@ class FakeBackend implements SupervisorBackend {
   callbacks = new Map<string, BackendCallbacks>();
   cancelled: string[] = [];
   closed: string[] = [];
-  continueError: Error | undefined;
-  recovered: BackendRunHandle | undefined;
-  recoverCalls = 0;
-  continued: string[] = [];
+  startEntered: string[] = [];
   beforeReturn: ((input: StartRunInput) => Promise<void>) | undefined;
-  closeGate: Promise<void> | undefined;
-  async probe() { return { available: true, backend: this.kind, supportsContinue: true, supportsPermissionResponse: true }; }
+  async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     this.callbacks.set(input.runId, callbacks);
     await this.beforeReturn?.(input);
+    this.startEntered.push(input.runId);
     return { handle: { runId: input.runId, backend: this.kind, opaque: {} }, initialState: "running" };
   }
-  async continue(_handle: BackendRunHandle, message: string) {
-    if (this.continueError) throw this.continueError;
-    this.continued.push(message);
-  }
-  async respond() {}
   async cancel(handle: BackendRunHandle) { this.cancelled.push(handle.runId); await this.callbacks.get(handle.runId)?.onState("cancelled"); }
-  async close(handle: BackendRunHandle) { await this.closeGate; this.closed.push(handle.runId); }
-  async recover(_record: RunRecord, _callbacks: BackendCallbacks) { this.recoverCalls += 1; return this.recovered; }
+  async close(handle: BackendRunHandle) { this.closed.push(handle.runId); }
 }
 
 async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean, timeoutMs = 10_000): Promise<T> {
@@ -55,7 +46,7 @@ async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean, t
   return value;
 }
 
-async function setup(options: { backend?: FakeBackend; git?: boolean; maxConcurrentRuns?: number } = {}) {
+async function setup(options: { backend?: FakeBackend; git?: boolean } = {}) {
   const backend = options.backend ?? new FakeBackend();
   const parent = await mkdtemp(path.join(canonicalTmp, "vsup-worktree-")); roots.push(parent);
   const source = path.join(parent, "source"); const data = path.join(parent, "data");
@@ -69,7 +60,7 @@ async function setup(options: { backend?: FakeBackend; git?: boolean; maxConcurr
     await exec("git", ["add", "tracked.txt", ".gitignore"], { cwd: source });
     await exec("git", ["commit", "-qm", "baseline"], { cwd: source });
   }
-  const config = { ...DEFAULT_CONFIG, backend: "programmatic" as const, allowedWorkspaceRoots: [source], workerIdleTtlSeconds: 600, maxConcurrentRuns: options.maxConcurrentRuns ?? 2 };
+  const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] };
   const manager = new RunManager(config, data, [backend]);
   return { parent, source, data, backend, config, manager };
 }
@@ -100,17 +91,15 @@ async function completedEdit(context: Awaited<ReturnType<typeof setup>>, prepare
 }
 
 describe("worktree creation", () => {
-  it("records the worktree only after git created it", async () => {
-    const context = await setup({ maxConcurrentRuns: 1 });
+  it("records the exact detached worktree identity created for the run", async () => {
+    const context = await setup();
     try {
-      const blocker = await context.manager.reviewStart({ task: "blocker", cwd: context.source });
-      await waitFor(() => stateOf(context.manager, blocker.run_id), (value) => value === "running");
-      const queued = await context.manager.editStart({ task: "edit", cwd: context.source });
-      expect(await stateOf(context.manager, queued.run_id)).toBe("queued");
-      expect((await readMeta(context.data, queued.run_id)).worktree).toBeUndefined();
-      await context.backend.callbacks.get(blocker.run_id)?.onState("completed", { result: { summary: "done" } });
-      await waitFor(() => stateOf(context.manager, queued.run_id), (value) => value === "running");
-      expect((await readMeta(context.data, queued.run_id)).worktree).toMatchObject({ path: path.join(context.data, "worktrees", queued.run_id), created_by_supervisor: true });
+      const started = await context.manager.editStart({ task: "edit", cwd: context.source });
+      await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
+      const meta = await readMeta(context.data, started.run_id);
+      expect(meta.worktree).toMatchObject({ path: path.join(context.data, "worktrees", started.run_id), created_by_supervisor: true });
+      expect(meta.worker_workspace).toBe(path.join(context.data, "worktrees", started.run_id));
+      await context.backend.callbacks.get(started.run_id)?.onState("completed", { result: { summary: "done" } });
     } finally { await context.manager.shutdown(); }
   });
 
@@ -151,35 +140,19 @@ describe("worktree creation", () => {
     await expect(createDetachedWorktree(context.source, path.join(context.data, "worktrees", randomUUID()), "no-such-ref")).rejects.toMatchObject({ code: "VSUP_WORKTREE_CREATE_FAILED", details: { stderr_tail: expect.stringContaining("fatal") } });
   });
 
-  it("finalizes a queued edit run cancelled before launch with a clean result.json", async () => {
-    const context = await setup({ maxConcurrentRuns: 1 });
-    try {
-      const blocker = await context.manager.reviewStart({ task: "blocker", cwd: context.source });
-      await waitFor(() => stateOf(context.manager, blocker.run_id), (value) => value === "running");
-      const queued = await context.manager.editStart({ task: "edit", cwd: context.source });
-      expect(await stateOf(context.manager, queued.run_id)).toBe("queued");
-      await context.manager.cancel({ run_id: queued.run_id });
-      expect(await stateOf(context.manager, queued.run_id)).toBe("cancelled");
-      const result = await readResult(context.data, queued.run_id);
-      expect(result.state).toBe("cancelled");
-      expect(result.warnings.some((warning) => warning.includes("could not be finalized"))).toBe(false);
-      expect(result.artifacts.map((artifact) => artifact.name)).toEqual(expect.arrayContaining(["transcript.md", "events.ndjson"]));
-      expect((await readEvents(context.data, queued.run_id)).some((event) => event.data.reason === "artifact_finalization_failed")).toBe(false);
-      expect((await readMeta(context.data, queued.run_id)).worktree).toBeUndefined();
-    } finally { await context.manager.shutdown(); }
-  });
+
 });
 
 describe("close", () => {
-  it("removes a verified worktree and reports worktree_removed", async () => {
+  it("retains exported edits and reports the worktree path and reason", async () => {
     const context = await setup();
     try {
       const { runId, worktree } = await completedEdit(context);
       const closed = await context.manager.close({ run_id: runId, cleanup_worktree: true });
-      expect(closed).toMatchObject({ run_id: runId, state: "closed", worktree_removed: true });
-      expect(closed.worktree_retained_reason).toBeUndefined();
-      expect(await exists(worktree)).toBe(false);
-      expect(await registeredWorktrees(context.source)).not.toContain(worktree);
+      expect(closed).toMatchObject({ run_id: runId, state: "closed", worktree_removed: false, worktree_retained_path: worktree });
+      expect(String(closed.worktree_retained_reason)).toMatch(/uncommitted or untracked files/i);
+      expect(await exists(worktree)).toBe(true);
+      expect(await registeredWorktrees(context.source)).toContain(worktree);
     } finally { await context.manager.shutdown(); }
   });
 
@@ -200,14 +173,16 @@ describe("close", () => {
     } finally { await context.manager.shutdown(); }
   });
 
-  it("removes a retained worktree when the closed run is closed again after the residue is gone", async () => {
+  it("continues to retain exported edits after ignored residue is removed", async () => {
     const context = await setup();
     try {
       const { runId, worktree } = await completedEdit(context, async (workspace) => { await writeFile(path.join(workspace, "ignored.log"), "residue\n"); });
       expect(await context.manager.close({ run_id: runId, cleanup_worktree: true })).toMatchObject({ state: "closed", worktree_removed: false });
       await rm(path.join(worktree, "ignored.log"));
-      expect(await context.manager.close({ run_id: runId, cleanup_worktree: true })).toMatchObject({ state: "closed", worktree_removed: true });
-      expect(await exists(worktree)).toBe(false);
+      const retry = await context.manager.close({ run_id: runId, cleanup_worktree: true });
+      expect(retry).toMatchObject({ state: "closed", worktree_removed: false, worktree_retained_path: worktree });
+      expect(String(retry.worktree_retained_reason)).toMatch(/uncommitted or untracked files/i);
+      expect(await exists(worktree)).toBe(true);
       expect(await context.manager.close({ run_id: runId })).toMatchObject({ state: "closed", worktree_removed: false });
     } finally { await context.manager.shutdown(); }
   });
@@ -218,12 +193,12 @@ describe("close", () => {
       const { runId, worktree } = await completedEdit(context);
       const closed = await context.manager.close({ run_id: runId });
       expect(closed).toMatchObject({ state: "closed", worktree_removed: false });
-      expect(closed.worktree_retained_reason).toBeUndefined();
+      expect(closed).toMatchObject({ worktree_retained_path: worktree, worktree_retained_reason: expect.any(String) });
       expect(await exists(worktree)).toBe(true);
     } finally { await context.manager.shutdown(); }
   });
 
-  it("removes the worktree after a restart using the saved patch artifact", async () => {
+  it("retains an exported dirty worktree after restart using the saved patch artifact", async () => {
     const first = await setup();
     const { runId, worktree } = await completedEdit(first);
     await first.manager.shutdown();
@@ -232,10 +207,11 @@ describe("close", () => {
       await second.initialize();
       expect(await stateOf(second, runId)).toBe("completed");
       const closed = await second.close({ run_id: runId, cleanup_worktree: true });
-      expect(closed).toMatchObject({ state: "closed", worktree_removed: true });
-      expect(await exists(worktree)).toBe(false);
-      expect(await registeredWorktrees(first.source)).not.toContain(worktree);
-      expect((await readMeta(first.data, runId)).worktree).toBeUndefined();
+      expect(closed).toMatchObject({ state: "closed", worktree_removed: false, worktree_retained_path: worktree });
+      expect(String(closed.worktree_retained_reason)).toMatch(/uncommitted or untracked files/i);
+      expect(await exists(worktree)).toBe(true);
+      expect(await registeredWorktrees(first.source)).toContain(worktree);
+      expect((await readMeta(first.data, runId)).worktree).toBeDefined();
     } finally { await second.shutdown(); }
   });
 
@@ -270,24 +246,92 @@ describe("close", () => {
     } finally { await second.shutdown(); }
   });
 
-  it("does not let cancel touch a run that is already closing", async () => {
+  it("close during delayed worktree creation waits and reports verified cleanup", async () => {
     const context = await setup();
+    const bin = path.join(context.parent, "delayed-git-bin"); await mkdir(bin);
+    const marker = path.join(context.parent, "worktree-add-entered");
+    const gate = path.join(context.parent, "release-worktree-add");
+    const gitPath = (await exec("which", ["git"])).stdout.trim();
+    const wrapper = path.join(bin, "git");
+    await writeFile(wrapper, `#!/bin/sh\ncase " $* " in\n  *" worktree add "*)\n    : > ${JSON.stringify(marker)}\n    while [ ! -e ${JSON.stringify(gate)} ]; do sleep 0.01; done\n    ;;\nesac\nexec ${JSON.stringify(gitPath)} "$@"\n`);
+    await chmod(wrapper, 0o755);
+    process.env.PATH = `${bin}${path.delimiter}${savedPath ?? ""}`;
     try {
-      const { runId } = await completedEdit(context);
-      let release!: () => void;
-      context.backend.closeGate = new Promise<void>((resolve) => { release = resolve; });
-      const closing = context.manager.close({ run_id: runId });
-      await waitFor(() => stateOf(context.manager, runId), (value) => value === "closing");
-      const resultFile = path.join(runDir(context.data, runId), "result.json");
-      const before = await stat(resultFile);
-      const cancelled = await context.manager.cancel({ run_id: runId });
-      expect(cancelled.state).toBe("closing");
-      expect(context.backend.cancelled).toEqual([]);
-      expect((await stat(resultFile)).mtimeMs).toBe(before.mtimeMs);
-      release();
-      expect(await closing).toMatchObject({ state: "closed" });
-    } finally { await context.manager.shutdown(); }
+      const started = await context.manager.editStart({ task: "delayed edit", cwd: context.source });
+      const worktree = path.join(context.data, "worktrees", started.run_id);
+      await waitFor(() => exists(marker), Boolean);
+      let closeFinished = false;
+      const closing = context.manager.close({ run_id: started.run_id, cleanup_worktree: true }).then((result) => { closeFinished = true; return result; });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(closeFinished).toBe(false);
+      await writeFile(gate, "go");
+      const result = await closing;
+      expect(result).toMatchObject({ state: "closed", worktree_removed: true });
+      expect(await exists(worktree)).toBe(false);
+      expect(context.backend.startEntered).not.toContain(started.run_id);
+      expect(await registeredWorktrees(context.source)).not.toContain(worktree);
+    } finally { await writeFile(gate, "go").catch(() => undefined); await context.manager.shutdown(); }
   });
+
+  it("keeps the owner lock through a short-deadline shutdown while Git creation is still pending", async () => {
+    const context = await setup();
+    const bin = path.join(context.parent, "delayed-shutdown-git-bin"); await mkdir(bin);
+    const marker = path.join(context.parent, "shutdown-worktree-add-entered");
+    const gate = path.join(context.parent, "release-shutdown-worktree-add");
+    const gitPath = (await exec("which", ["git"])).stdout.trim();
+    const wrapper = path.join(bin, "git");
+    await writeFile(wrapper, `#!/bin/sh\ncase " $* " in\n  *" worktree add "*)\n    : > ${JSON.stringify(marker)}\n    while [ ! -e ${JSON.stringify(gate)} ]; do sleep 0.01; done\n    ;;\nesac\nexec ${JSON.stringify(gitPath)} "$@"\n`);
+    await chmod(wrapper, 0o755);
+    process.env.PATH = `${bin}${path.delimiter}${savedPath ?? ""}`;
+    try {
+      const started = await context.manager.editStart({ task: "delayed shutdown edit", cwd: context.source });
+      await waitFor(() => exists(marker), Boolean);
+      const lockPath = path.join(context.data, "supervisor.lock");
+      let finished = false;
+      const shuttingDown = context.manager.shutdown(5).then((result) => { finished = true; return result; });
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      expect(finished).toBe(false);
+      expect(await exists(lockPath)).toBe(true);
+      await writeFile(gate, "go");
+      expect(await shuttingDown).toEqual({ timedOut: true });
+      expect(await exists(lockPath)).toBe(false);
+      expect(await stateOf(context.manager, started.run_id)).toBe("failed");
+      expect((await readMeta(context.data, started.run_id)).worktree).toMatchObject({ path: path.join(context.data, "worktrees", started.run_id) });
+    } finally { await writeFile(gate, "go").catch(() => undefined); await context.manager.shutdown(); }
+  });
+
+  it("refuses cleanup and retention when one run is redirected to another valid owned worktree", async () => {
+    const first = await setup();
+    const a = await completedEdit(first);
+    const b = await completedEdit(first);
+    await first.manager.shutdown();
+    const metaPath = path.join(runDir(first.data, a.runId), "meta.json");
+    const meta = JSON.parse(await readFile(metaPath, "utf8")) as { worker_workspace: string; worktree: { path: string } };
+    meta.worktree.path = b.worktree;
+    meta.worker_workspace = b.worktree;
+    await writeFile(metaPath, JSON.stringify({ ...meta, updated_at: "2020-01-01T00:00:00.000Z" }));
+    const bMetaPath = path.join(runDir(first.data, b.runId), "meta.json");
+    await writeFile(bMetaPath, JSON.stringify({ ...JSON.parse(await readFile(bMetaPath, "utf8")), updated_at: "2020-01-01T00:00:00.000Z" }));
+    const second = new RunManager(first.config, first.data, [new FakeBackend()]);
+    try {
+      await second.initialize();
+      await second.cleanup();
+      expect(await exists(a.worktree)).toBe(true);
+      expect(await exists(b.worktree)).toBe(true);
+      const result = await second.close({ run_id: a.runId, cleanup_worktree: true });
+      expect(result).toMatchObject({ state: "closed", worktree_removed: false, worktree_retained_path: b.worktree });
+      expect(String(result.worktree_retained_reason)).toMatch(/run-owned path/i);
+      expect(await exists(path.join(a.worktree, "generated.txt"))).toBe(true);
+      expect(await exists(path.join(b.worktree, "generated.txt"))).toBe(true);
+      expect(await registeredWorktrees(first.source)).toContain(a.worktree);
+      expect(await registeredWorktrees(first.source)).toContain(b.worktree);
+      await second.cleanup();
+      expect(await exists(a.worktree)).toBe(true);
+      expect(await exists(b.worktree)).toBe(true);
+      expect(await exists(path.join(first.source, "tracked.txt"))).toBe(true);
+    } finally { await second.shutdown(); }
+  });
+
 });
 
 function baseRecord(source: string, state: RunState, extra: Partial<RunRecord> = {}): RunRecord {
@@ -307,20 +351,20 @@ async function writeRecord(data: string, record: RunRecord): Promise<void> {
 }
 
 describe("startup and retention", () => {
-  it("turns a run found in closing into closed", async () => {
+  it("marks a run interrupted in closing as failed without replay", async () => {
     const context = await setup({ git: false });
     const record = baseRecord(context.source, "closing", { result: { summary: "done", artifacts: [], changedFiles: [], warnings: [] } });
     await writeRecord(context.data, record);
     try {
       await context.manager.initialize();
-      expect(await context.manager.status({ run_id: record.runId })).toMatchObject({ state: "closed" });
-      expect((await context.manager.status({ run_id: record.runId })).error).toBeUndefined();
-      expect(await readMeta(context.data, record.runId)).toMatchObject({ state: "closed" });
+      expect(await context.manager.status({ run_id: record.runId })).toMatchObject({ state: "failed", error: { code: "VSUP_BACKEND_CRASHED" } });
+      expect((await context.manager.status({ run_id: record.runId })).error).toMatchObject({ code: "VSUP_BACKEND_CRASHED" });
+      expect(await readMeta(context.data, record.runId)).toMatchObject({ state: "failed" });
       expect(activeSlots(context.manager)).toBe(0);
     } finally { await context.manager.shutdown(); }
   });
 
-  it("drops a worktree field whose path is gone and lets retention remove the run", async () => {
+  it("retains run metadata when a saved worktree path is missing", async () => {
     const context = await setup({ git: false });
     const old = "2020-01-01T00:00:00.000Z";
     const gone = baseRecord(context.source, "cancelled", { mode: "edit", updatedAt: old, finishedAt: old, worktree: { path: path.join(context.data, "worktrees", "gone"), baseRef: "a".repeat(40), createdBySupervisor: true } });
@@ -329,50 +373,9 @@ describe("startup and retention", () => {
     try {
       await context.manager.initialize();
       const removed = (await context.manager.cleanup()).removed_run_ids as string[];
-      expect(removed).toEqual([gone.runId]);
-      expect(await exists(runDir(context.data, gone.runId))).toBe(false);
+      expect(removed).toEqual([]);
+      expect(await exists(runDir(context.data, gone.runId))).toBe(true);
       expect(await exists(runDir(context.data, kept.runId))).toBe(true);
-    } finally { await context.manager.shutdown(); }
-  });
-});
-
-describe("continue", () => {
-  it("settles a resumed run as recoverable and frees the slot when the backend rejects the message", async () => {
-    const context = await setup({ git: false, maxConcurrentRuns: 1 });
-    try {
-      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
-      await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
-      await context.backend.callbacks.get(started.run_id)?.onState("completed", { result: { summary: "done" } });
-      expect(await stateOf(context.manager, started.run_id)).toBe("completed");
-      context.backend.continueError = new Error("session is gone");
-      await expect(context.manager.continue({ run_id: started.run_id, message: "again" })).rejects.toThrow("session is gone");
-      const status = await context.manager.status({ run_id: started.run_id });
-      expect(status).toMatchObject({ state: "recoverable", error: { code: "VSUP_SESSION_NOT_RESUMABLE" } });
-      expect(activeSlots(context.manager)).toBe(0);
-      expect(context.backend.closed).toContain(started.run_id);
-      expect(await readMeta(context.data, started.run_id)).toMatchObject({ state: "recoverable", error: { code: "VSUP_SESSION_NOT_RESUMABLE" } });
-      const second = await context.manager.reviewStart({ task: "second", cwd: context.source });
-      await waitFor(() => stateOf(context.manager, second.run_id), (value) => value === "running");
-
-      await context.manager.cancel({ run_id: second.run_id });
-      context.backend.continueError = undefined;
-      context.backend.recovered = { runId: started.run_id, backend: "programmatic", opaque: {} };
-      await expect(context.manager.continue({ run_id: started.run_id, message: "again" })).resolves.toMatchObject({ state: "running" });
-      expect(context.backend.recoverCalls).toBe(1);
-      expect(context.backend.continued).toEqual(["again"]);
-    } finally { await context.manager.shutdown(); }
-  });
-
-  it("leaves a ready run ready when the backend rejects the message", async () => {
-    const context = await setup({ git: false });
-    try {
-      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
-      await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
-      await context.backend.callbacks.get(started.run_id)?.onState("ready");
-      expect(await stateOf(context.manager, started.run_id)).toBe("ready");
-      context.backend.continueError = new Error("nope");
-      await expect(context.manager.continue({ run_id: started.run_id, message: "again" })).rejects.toThrow("nope");
-      expect(await stateOf(context.manager, started.run_id)).toBe("ready");
     } finally { await context.manager.shutdown(); }
   });
 });

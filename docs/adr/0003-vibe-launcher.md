@@ -1,9 +1,9 @@
-# ADR 0003: Pinned Vibe launcher shim
+# ADR 0003: pinned programmatic Vibe launcher
 
-Status: accepted for the private compatibility path; production profile verification remains required.
+The package launches the installed Vibe programmatic CLI through a packaged Python shim and enforces its legacy harness. It does not bundle Vibe or its dependencies. The runtime supports exactly Vibe 2.26.1; version or installed-source signature drift fails closed. The recorded source audit applies to macOS with CPython 3.12 and does not certify other builds.
 
-The packaged Python launcher is copied from `src/backends/runtime/vibe_supervisor_launcher.py` into `dist/backends/runtime/`. It launches the locally installed `vibe-acp` entry point while constraining the environment and profile expected by the ACP adapter. The shim is pinned to the observed Vibe 2.25.8 behavior documented in `docs/compatibility.md`; it does not bundle Vibe or Python dependencies.
+The supervisor writes a private prompt file under the run directory. The shim checks its owner-only mode, regular-file status, bounded size, UTF-8 encoding, and exact run-directory location, then deletes it and supplies the text in-process to Vibe. Prompt text is absent from OS-visible arguments.
 
-The Vibe implementation details are private and may change. At startup, the ACP backend verifies the version, the ACP protocol version, the active mode and the untrusted workspace status, and fails closed on any mismatch; the programmatic backend relies on the pinned version and its probe. The tool inventory is pinned through the environment and checked as a compatibility gate, not verified at each start. The shim and Vibe profile are application controls, not an OS sandbox. For the programmatic entrypoint the supervisor writes the task to an owner-only prompt file in the run directory and passes its path in `VIBE_SUPERVISOR_PROMPT_FILE`; the shim validates, reads, and deletes the file and substitutes `--prompt` into its in-process `sys.argv`, failing closed on any violation, so task text is absent from OS-visible argv. The ACP entrypoint rejects that variable and is unchanged. The logic lives in `consume_prompt_file` and is tested without Vibe by `test_prompt_file.py`.
+The shim uses private `HOME`/`VIBE_HOME`, filters project harness discovery and persistence before launch, redacts recognized secrets and reasoning, resolves provider credentials only inside the child, forces the tested legacy harness, and watches its parent and fixed run deadline. Each started task is one-shot. The MCP interface has no ACP adapter or alternate entry point.
 
-ACP stays opt-in until adversarial integration and soak gates pass.
+The profile is application policy, not an OS sandbox. Workspace and tool restrictions are defense in depth; do not claim that they constrain arbitrary process code to the worktree.

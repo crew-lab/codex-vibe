@@ -10,7 +10,7 @@ import { parse } from "smol-toml";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import type { Transport, JSONRPCMessage } from "@modelcontextprotocol/server";
-import type { BackendCallbacks, BackendRunHandle, BackendStartResult, PendingRequest, RunRecord, StartRunInput, SupervisorBackend, SupervisorConfig } from "../../src/contracts.js";
+import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend, SupervisorConfig } from "../../src/contracts.js";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
 import { validateConfig } from "../../src/config/validation.js";
 import { RunManager } from "../../src/core/run-manager.js";
@@ -39,28 +39,23 @@ class FakeBackend implements SupervisorBackend {
   readonly kind = "programmatic" as const;
   handle: BackendRunHandle | undefined;
   callbacks: BackendCallbacks | undefined;
-  nextPending: PendingRequest | undefined;
   beforeReturn: ((input: StartRunInput) => Promise<void>) | undefined;
-  async probe() { return { available: true, backend: this.kind, supportsContinue: true, supportsPermissionResponse: true }; }
+  async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     this.callbacks = callbacks;
     this.handle = { runId: input.runId, backend: this.kind, opaque: {} };
-    if (this.nextPending) await callbacks.onPendingRequest(this.nextPending);
     await this.beforeReturn?.(input);
     return { handle: this.handle, initialState: "running" };
   }
-  async continue() {}
-  async respond() {}
   async cancel() {}
   async close() {}
-  async recover(_record: RunRecord) { return this.handle; }
 }
 
 async function setup(backend = new FakeBackend(), overrides: Partial<SupervisorConfig> = {}) {
   const parent = await mkdtemp(join(canonicalTmp, "vsup-shape-")); roots.push(parent);
   const source = join(parent, "source"); const data = join(parent, "data");
   await mkdir(source);
-  const config = { ...DEFAULT_CONFIG, backend: "programmatic" as const, allowedWorkspaceRoots: [source], workerIdleTtlSeconds: 0, ...overrides };
+  const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], ...overrides };
   const manager = new RunManager(config, data, [backend]);
   return { parent, source, data, manager, backend };
 }
@@ -92,7 +87,6 @@ async function runningRun(manager: RunManager, source: string) {
   return started.run_id;
 }
 
-const permissionFor = (source: string): PendingRequest => ({ requestId: "req-1", kind: "permission", title: "Read file", options: [{ optionId: "allow", name: "Allow once" }, { optionId: "deny", name: "Deny" }], tool: { kind: "read", locations: [source] } });
 const tick = () => new Promise((resolve) => setTimeout(resolve, 15));
 
 describe("vibe_status wait_seconds", () => {
@@ -131,35 +125,8 @@ describe("vibe_status wait_seconds", () => {
       const last = (await manager.status({ run_id: runId })).last_seq as number;
       const waiting = manager.status({ run_id: runId, after_seq: last + 100, wait_seconds: 30 });
       await tick();
-      await backend.callbacks?.onState("ready");
-      expect((await waiting).state).toBe("ready");
-    } finally { await manager.shutdown(); }
-  });
-
-  it("returns when a pending request appears", async () => {
-    const { source, manager, backend } = await setup();
-    try {
-      const runId = await runningRun(manager, source);
-      const last = (await manager.status({ run_id: runId })).last_seq as number;
-      const waiting = manager.status({ run_id: runId, after_seq: last + 100, wait_seconds: 30 });
-      await tick();
-      await backend.callbacks?.onPendingRequest(permissionFor(source));
-      const status = await waiting;
-      expect(status.pending_request).toMatchObject({ request_id: "req-1" });
-    } finally { await manager.shutdown(); }
-  });
-
-  it("returns immediately for a run waiting on permission", async () => {
-    const backend = new FakeBackend();
-    const { source, manager } = await setup(backend);
-    backend.nextPending = permissionFor(source);
-    try {
-      const started = await manager.reviewStart({ task: "review", cwd: source });
-      await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "waiting_permission");
-      const began = Date.now();
-      const status = await manager.status({ run_id: started.run_id, after_seq: 1000, wait_seconds: 300 });
-      expect(Date.now() - began).toBeLessThan(1000);
-      expect(status.state).toBe("waiting_permission");
+      await backend.callbacks?.onState("completed", { result: { summary: "done" } });
+      expect((await waiting).state).toBe("completed");
     } finally { await manager.shutdown(); }
   });
 
@@ -248,20 +215,6 @@ describe("start tools with wait_seconds", () => {
       const started = await manager.reviewStart({ task: "review", cwd: source, wait_seconds: 30 });
       expect(started.state).toBe("completed");
       expect(started).toMatchObject({ run_id: expect.any(String), worker_workspace: source, result: { summary: "Finished", state: "completed" } });
-    } finally { await manager.shutdown(); }
-  });
-
-  it("returns immediately when the run needs a permission decision", async () => {
-    const backend = new FakeBackend();
-    const { source, manager } = await setup(backend);
-    backend.nextPending = permissionFor(source);
-    try {
-      const began = Date.now();
-      const started = await manager.reviewStart({ task: "review", cwd: source, wait_seconds: 300 });
-      expect(Date.now() - began).toBeLessThan(2000);
-      expect(started.state).toBe("waiting_permission");
-      expect(started.pending_request).toMatchObject({ request_id: "req-1" });
-      expect(started.result).toBeUndefined();
     } finally { await manager.shutdown(); }
   });
 
@@ -407,7 +360,7 @@ function stubManager(overrides: Partial<RunManagerTools> = {}): RunManagerTools 
   return {
     reviewStart: vi.fn(async () => ({})), editStart: vi.fn(async () => ({})),
     status: vi.fn(async () => ({ run_id: RUN_ID, state: "running", events: [{ seq: 1, type: "tool_call" }] })),
-    continue: vi.fn(async () => ({})), respond: vi.fn(async () => ({})), result: vi.fn(async () => ({})),
+    result: vi.fn(async () => ({})),
     close: vi.fn(async () => ({})),
     ...overrides,
   };

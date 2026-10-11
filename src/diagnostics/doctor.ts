@@ -3,15 +3,22 @@ import { accessSync, constants as fsConstants } from 'node:fs';
 import { access, mkdtemp, rm, stat, lstat, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createPrivateDir, isPathWithinRoot } from '../security/paths.js';
-import { executableSearchPath, getDataDir } from '../config/config.js';
+import { configFingerprint, executableSearchPath, getDataDir } from '../config/config.js';
 import { SUPPORTED_VIBE } from '../backends/pinned.js';
 import { inspectOwnerLock } from '../core/owner-lock.js';
 import type { SupervisorConfig } from '../contracts.js';
-import { environmentSecrets, redactSecrets } from '../security/redaction.js';
+import { APP_VERSION } from '../version.js';
+import { nodeVersionAtLeast } from '../runtime/node-version.js';
 
 export interface DoctorCheck { name: string; ok: boolean; status?: 'ok' | 'missing' | 'unverified'; version?: string; message: string; stderr_tail?: string }
-export interface DoctorReport { ok: boolean; generatedAt: string; checks: DoctorCheck[] }
+export interface DoctorReport { ok: boolean; generatedAt: string; provenance: { executable: string; application_entrypoint: string; runtime_module: string; app_version: string; vibe_version?: string; config_path: string; config_source: 'explicit' | 'environment' | 'default'; config_fingerprint: string; data_directory: string; storage_mode: 'selected-template' }; checks: DoctorCheck[] }
+
+export function nodeRuntimeCheck(version: string): DoctorCheck {
+  const ok = nodeVersionAtLeast(version, '20.19.0');
+  return { name: 'node', ok, version, message: ok ? 'Supported Node.js runtime (20.19.0 or newer).' : 'Node.js 20.19.0 or newer is required.' };
+}
 
 type ExecutableLookup = { path?: string; rejected?: string };
 
@@ -61,14 +68,12 @@ async function probe(executable: string, args: string[], cwd: string, timeoutMs 
 }
 
 export function formatDoctorCheck(check: DoctorCheck): string {
-  return `${check.status === 'unverified' ? 'UNVERIFIED' : check.ok ? 'PASS' : 'CHECK'} ${check.name}: ${check.message}${check.version ? ` (${check.version})` : ''}${check.stderr_tail ? `\n  Vibe ACP stderr: ${check.stderr_tail}` : ''}`;
+  return `${check.status === 'unverified' ? 'UNVERIFIED' : check.ok ? 'PASS' : 'CHECK'} ${check.name}: ${check.message}${check.version ? ` (${check.version})` : ''}${check.stderr_tail ? `\n  Diagnostic detail: ${check.stderr_tail}` : ''}`;
 }
 
-export async function runDoctor(config: SupervisorConfig): Promise<DoctorReport> {
+export async function runDoctor(config: SupervisorConfig, provenance?: { configPath?: string; configSource?: 'explicit' | 'environment' | 'default'; dataDir?: string; fingerprint?: string }): Promise<DoctorReport> {
   const checks: DoctorCheck[] = [];
-  const nodeVersion = process.versions.node;
-  const [major] = nodeVersion.split('.').map(Number);
-  checks.push({ name: 'node', ok: (major ?? 0) >= 20, version: nodeVersion, message: (major ?? 0) >= 20 ? 'Supported Node.js runtime.' : 'Node.js 20 or newer is required.' });
+  checks.push(nodeRuntimeCheck(process.versions.node));
   checks.push({ name: 'platform', ok: true, version: `${process.platform} ${os.arch()}`, message: `Detected ${process.platform} on ${os.arch()}.` });
   const tmpRoot = await mkdtemp(path.join(await realpath(os.tmpdir()), 'vsup-doctor-'));
   try {
@@ -94,29 +99,6 @@ export async function runDoctor(config: SupervisorConfig): Promise<DoctorReport>
       }
       catch { checks.push({ name: 'vibe', ok: false, message: 'Vibe was found but its bounded version probe failed.' }); }
     } else checks.push({ name: 'vibe', ok: false, message: 'Vibe was not found on PATH or in configuration.' });
-    const acpLookup = findExecutable('vibe-acp', config.paths?.vibeAcp);
-    const acp = acpLookup.path;
-    if (acpLookup.rejected) checks.push({ name: 'vibe-acp', ok: false, message: rejectedMessage('Vibe ACP', acpLookup.rejected) });
-    else if (acp) {
-      try { const version = await probe(acp, ['--version'], tmpRoot); checks.push({ name: 'vibe-acp', ok: true, version, message: 'Vibe ACP is available.' }); }
-      catch { checks.push({ name: 'vibe-acp', ok: false, message: 'Vibe ACP was found but its bounded version probe failed.' }); }
-    } else checks.push({ name: 'vibe-acp', ok: false, message: 'Vibe ACP was not found on PATH or in configuration.' });
-    if (acp) {
-      try {
-        const backendModulePath = '../backends/acp.js';
-        const { AcpBackend } = await import(backendModulePath);
-        const homeKeys = ['HOME', 'VIBE_HOME', 'TMPDIR'] as const;
-        const previous = homeKeys.map((key) => process.env[key]);
-        for (const key of homeKeys) process.env[key] = tmpRoot;
-        let capabilities;
-        try { capabilities = await new AcpBackend(config).probe(); }
-        finally { homeKeys.forEach((key, index) => { const value = previous[index]; if (value === undefined) delete process.env[key]; else process.env[key] = value; }); }
-        const tail = !capabilities.available && typeof capabilities.details?.stderr_tail === 'string' ? redactSecrets(capabilities.details.stderr_tail, environmentSecrets()) : '';
-        checks.push({ name: 'acp-initialize', ok: capabilities.available, message: capabilities.available ? 'ACP initialization probe succeeded in the isolated temporary home.' : 'ACP initialization probe did not succeed.', ...(tail ? { stderr_tail: tail } : {}) });
-      } catch {
-        checks.push({ name: 'acp-initialize', ok: false, message: 'ACP initialization probe failed; inspect local diagnostics and the Vibe ACP version.' });
-      }
-    } else checks.push({ name: 'acp-initialize', ok: false, status: 'unverified', message: 'ACP initialization was not attempted because Vibe ACP is unavailable.' });
     const codex = findExecutable('codex').path;
     if (codex) {
       try { const version = await probe(codex, ['--version'], tmpRoot); checks.push({ name: 'codex', ok: true, version, message: 'Codex CLI is available.' }); }
@@ -128,7 +110,7 @@ export async function runDoctor(config: SupervisorConfig): Promise<DoctorReport>
     try { const canonical = await realpath(root); if ((await stat(canonical)).isDirectory() && isPathWithinRoot(canonical, canonical)) validRoots++; } catch { /* invalid workspace roots are reported below */ }
   }
   checks.push({ name: 'workspace-roots', ok: config.allowedWorkspaceRoots.length > 0 && validRoots === config.allowedWorkspaceRoots.length, message: `${validRoots}/${config.allowedWorkspaceRoots.length} allowed workspace root(s) resolve to existing directories.` });
-  const dataDir = getDataDir();
+  const dataDir = provenance?.dataDir ?? getDataDir();
   try {
     const entry = await lstat(dataDir);
     if (entry.isSymbolicLink()) throw new Error('Supervisor data directory must not be a symlink.');
@@ -151,5 +133,18 @@ export async function runDoctor(config: SupervisorConfig): Promise<DoctorReport>
   try { await import('@modelcontextprotocol/server'); checks.push({ name: 'mcp-server', ok: true, message: 'The MCP SDK dependency is installed.' }); }
   catch { checks.push({ name: 'mcp-server', ok: false, message: 'The MCP SDK dependency is unavailable.' }); }
   const requiredFailure = checks.some((check) => !check.ok && ['node', 'git', 'vibe', 'workspace-roots', 'data-directory', 'mcp-server'].includes(check.name));
-  return { ok: !requiredFailure, generatedAt: new Date().toISOString(), checks };
+  const selectedPath = provenance?.configPath ?? path.join(dataDir, 'config.toml');
+  const vibeVersion = checks.find((check) => check.name === 'vibe')?.version;
+  return { ok: !requiredFailure, generatedAt: new Date().toISOString(), provenance: {
+    executable: process.execPath,
+    application_entrypoint: fileURLToPath(new URL('../cli.js', import.meta.url)),
+    runtime_module: fileURLToPath(import.meta.url),
+    app_version: APP_VERSION,
+    ...(vibeVersion ? { vibe_version: vibeVersion } : {}),
+    config_path: selectedPath,
+    config_source: provenance?.configSource ?? 'default',
+    config_fingerprint: provenance?.fingerprint ?? configFingerprint(config),
+    data_directory: dataDir,
+    storage_mode: 'selected-template'
+  }, checks };
 }
