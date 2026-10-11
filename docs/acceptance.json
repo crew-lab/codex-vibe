@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "candidate": "0.9.0-rc.21",
+  "candidate": "0.9.0-rc.22",
   "scope": "Programmatic one-shot review and isolated edit; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work.",
   "deterministic": [
     { "name": "lint-typecheck-build-tests-python-acceptance-secret-scan-sbom", "status": "RUN_BY_verify:release" },
