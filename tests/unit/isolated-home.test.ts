@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { prepareIsolatedHome } from '../../src/config/isolated-home.js';
 import { RunManager } from '../../src/core/run-manager.js';
+import { ProgrammaticBackend } from '../../src/backends/programmatic.js';
+import { createIsolatedRunRouter } from '../../src/core/isolated-run-router.js';
 import { loadConfig } from '../../src/config/config.js';
 import { runToWire } from '../../src/core/serialization.js';
 import type { RunRecord } from '../../src/contracts.js';
@@ -216,4 +218,136 @@ describe('session directory reuse', () => {
     await Promise.all(results.map(result => result.lock.release()));
   });
 
+});
+
+describe('isolated run UUID routing', () => {
+  async function routerFor(current: Awaited<ReturnType<typeof prepareIsolatedHome>>) {
+    const config = await loadConfig({ env: { VIBE_SUPERVISOR_HOME: current.home } });
+    const manager = new RunManager(config, current.home, [], current.lock);
+    await manager.initialize();
+    const router = createIsolatedRunRouter(manager, { sessions: current.sessions, currentHome: current.home, config });
+    return { manager, router };
+  }
+
+  it('finds a completed run in an older session and closes it there', async () => {
+    const root = await template(); const env = { VIBE_SUPERVISOR_HOME: root };
+    const older = await prepareIsolatedHome(env); const saved = record();
+    await writeRun(older.home, saved);
+    const oldOwner = await hold(older);
+    const current = await prepareIsolatedHome(env);
+    expect(current.home).not.toBe(older.home);
+    await oldOwner.shutdown();
+    const { manager, router } = await routerFor(current);
+    try {
+      expect((await router.status({ run_id: saved.runId })).state).toBe('completed');
+      expect((await router.result({ run_id: saved.runId })).state).toBe('completed');
+      expect((await router.close({ run_id: saved.runId })).state).toBe('closed');
+      expect((await router.status({ run_id: saved.runId })).state).toBe('closed');
+      expect(JSON.parse(await readFile(path.join(older.home, 'runs', saved.runId, 'meta.json'), 'utf8')).state).toBe('closed');
+    } finally { await manager.shutdown(); }
+  });
+
+  it('recovers interrupted data without starting a backend task', async () => {
+    const root = await template(); const env = { VIBE_SUPERVISOR_HOME: root };
+    const older = await prepareIsolatedHome(env); const saved = record();
+    const oldOwner = await hold(older);
+    await oldOwner.shutdown();
+    saved.state = 'running';
+    await writeRun(older.home, saved);
+    const current = await prepareIsolatedHome(env);
+    const { manager, router } = await routerFor(current);
+    const start = vi.spyOn(ProgrammaticBackend.prototype, 'start');
+    try {
+      const status = await router.status({ run_id: saved.runId });
+      expect(status.state).toBe('failed');
+      expect((await router.result({ run_id: saved.runId })).state).toBe('failed');
+      expect(start).not.toHaveBeenCalled();
+    } finally { start.mockRestore(); await manager.shutdown(); }
+  });
+
+  it('serializes concurrent borrowed operations and drains them before router shutdown', async () => {
+    const root = await template(); const env = { VIBE_SUPERVISOR_HOME: root };
+    const older = await prepareIsolatedHome(env); const saved = record();
+    await writeRun(older.home, saved);
+    const oldOwner = await hold(older);
+    const current = await prepareIsolatedHome(env);
+    await oldOwner.shutdown();
+    const { manager, router } = await routerFor(current);
+    let entered!: () => void; let release!: () => void;
+    const didEnter = new Promise<void>(resolve => { entered = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const originalStatus = RunManager.prototype.status;
+    const statusSpy = vi.spyOn(RunManager.prototype, 'status').mockImplementation(async function (input, wait) {
+      entered();
+      await gate;
+      return originalStatus.call(this, input, wait);
+    });
+    try {
+      const pending = router.status({ run_id: saved.runId });
+      await didEnter;
+      const queued = router.result({ run_id: saved.runId }).then(
+        value => ({ value, error: undefined }), error => ({ value: undefined, error }));
+      let drained = false;
+      const stopping = router.shutdown().then(() => { drained = true; });
+      await Promise.resolve();
+      expect(drained).toBe(false);
+      await expect(router.result({ run_id: saved.runId })).rejects.toMatchObject({ code: 'VSUP_INVALID_STATE' });
+      await expect(router.reviewStart({ task: 'must not run', cwd: root })).rejects.toMatchObject({ code: 'VSUP_INVALID_STATE' });
+      await expect(router.editStart({ task: 'must not run', cwd: root })).rejects.toMatchObject({ code: 'VSUP_INVALID_STATE' });
+      release();
+      expect((await pending).state).toBe('completed');
+      expect((await queued).error).toMatchObject({ code: 'VSUP_INVALID_STATE' });
+      await stopping;
+      expect(drained).toBe(true);
+    } finally { release(); statusSpy.mockRestore(); await manager.shutdown(); }
+  });
+
+  it('fails when the saved session still has a live owner', async () => {
+    const root = await template(); const env = { VIBE_SUPERVISOR_HOME: root };
+    const older = await prepareIsolatedHome(env); const saved = record();
+    await writeRun(older.home, saved);
+    const oldOwner = await hold(older);
+    const heldLock = await readFile(path.join(older.home, 'supervisor.lock'), 'utf8');
+    const current = await prepareIsolatedHome(env);
+    const { manager, router } = await routerFor(current);
+    try {
+      let rejected: unknown;
+      try { await router.result({ run_id: saved.runId }); } catch (error) { rejected = error; }
+      expect(rejected).toBeInstanceOf(Error);
+      expect(['VSUP_INVALID_STATE', 'EPERM']).toContain((rejected as NodeJS.ErrnoException).code);
+      expect(JSON.parse(await readFile(path.join(older.home, 'runs', saved.runId, 'meta.json'), 'utf8')).state).toBe('completed');
+      expect(await readFile(path.join(older.home, 'supervisor.lock'), 'utf8')).toBe(heldLock);
+    } finally { await Promise.all([manager.shutdown(), oldOwner.shutdown()]); }
+  });
+
+  it('rejects a UUID duplicated across sessions, including the current session', async () => {
+    const root = await template(); const env = { VIBE_SUPERVISOR_HOME: root };
+    const older = await prepareIsolatedHome(env); const saved = record();
+    await writeRun(older.home, saved);
+    const oldOwner = await hold(older);
+    const current = await prepareIsolatedHome(env);
+    await oldOwner.shutdown();
+    await writeRun(current.home, saved);
+    const { manager, router } = await routerFor(current);
+    try {
+      await expect(router.status({ run_id: saved.runId })).rejects.toMatchObject({ code: 'VSUP_INVALID_STATE' });
+      expect(JSON.parse(await readFile(path.join(current.home, 'runs', saved.runId, 'meta.json'), 'utf8')).state).toBe('completed');
+    } finally { await manager.shutdown(); }
+  });
+
+  it('rejects symlinked UUID paths and invalid IDs without following them', async () => {
+    const root = await template(); const env = { VIBE_SUPERVISOR_HOME: root };
+    const older = await prepareIsolatedHome(env); const saved = record();
+    await mkdir(path.join(older.home, 'runs'), { mode: 0o700 });
+    const target = await mkdtemp(path.join(tmpdir(), 'vsup-run-target-')); dirs.push(target);
+    await symlink(target, path.join(older.home, 'runs', saved.runId));
+    await older.lock.release();
+    const current = await prepareIsolatedHome(env);
+    const { manager, router } = await routerFor(current);
+    try {
+      await expect(router.status({ run_id: saved.runId })).rejects.toMatchObject({ code: 'VSUP_INVALID_STATE' });
+      await expect(router.result({ run_id: 'not-a-uuid' })).rejects.toMatchObject({ code: 'VSUP_NOT_FOUND' });
+      expect(await readdir(target)).toEqual([]);
+    } finally { await manager.shutdown(); }
+  });
 });

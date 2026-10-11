@@ -1,5 +1,7 @@
 # Reduced stable release plan
 
+> Historical implementation specification. As of 2026-10-11, the reduction/configuration/preparation work is implemented. Use the [current development plan](development-plan-2026-10-11.md) for remaining priorities and acceptance; the original baseline and future-tense statements below describe the 2026-10-09 decision.
+
 Date: 2026-10-09. Status: implementation plan; runtime unchanged.
 
 The owner approved reducing functionality after the Celle task fell back to Luna before Vibe inference. The first stable release supports one-shot review and isolated edit, followed by coordinator verification and explicit cleanup. Same-session correction is no longer a release requirement. Freeze unrelated feature work until this path passes.

@@ -6,6 +6,7 @@ import { constants as fsConstants } from 'node:fs';
 import { loadConfig, loadResolvedConfig } from './config/config.js';
 import type { OwnerLock } from './core/owner-lock.js';
 import { prepareIsolatedHome } from './config/isolated-home.js';
+import { createIsolatedRunRouter } from './core/isolated-run-router.js';
 import { APP_VERSION } from './version.js';
 import { doctorCommand } from './cli/diagnose.js';
 import { fail } from './cli/fail.js';
@@ -27,17 +28,20 @@ async function getManager(ownerLock?: OwnerLock, configPath?: string): Promise<{
   return { manager, config, dataDir };
 }
 
-async function serve(ownerLock?: OwnerLock, configPath?: string): Promise<void> {
+async function serve(ownerLock?: OwnerLock, configPath?: string, isolated?: { sessions: string; home: string }): Promise<void> {
   let ready: Awaited<ReturnType<typeof getManager>>;
   try { ready = await getManager(ownerLock, configPath); }
   catch (error) { await ownerLock?.release(); throw error; }
   const { manager, config } = ready;
-  const handle = startMcpStdio(manager, { config, onError: (message) => process.stderr.write(`${message}\n`) });
+  const tools = isolated ? createIsolatedRunRouter(manager, { sessions: isolated.sessions, currentHome: isolated.home, config }) : manager;
+  const stopRouting = isolated ? () => tools.shutdown() : undefined;
+  const handle = startMcpStdio(tools, { config, onError: (message) => process.stderr.write(`${message}\n`) });
   manager.startAutomaticRetention?.();
   let closing = false;
   const close = async (): Promise<void> => {
     if (closing) return; closing = true;
     await handle.close().catch(() => {});
+    await stopRouting?.().catch((error: unknown) => process.stderr.write(`Isolated run routing shutdown failed: ${String((error as Error).message)}\n`));
     const outcome = await manager.shutdown().catch((error) => { process.stderr.write(`Shutdown failed: ${String((error as Error).message)}\n`); return undefined; });
     if (outcome?.timedOut) process.stderr.write('', () => process.exit(1));
   };
@@ -135,10 +139,10 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
         fail('Usage: vibe-supervisor serve --stdio [--config <path>] [--isolated]', 2);
       }
       if (isolated) {
-        const { home, lock, adopted } = await prepareIsolatedHome(process.env, undefined, configPath);
+        const { home, sessions, lock, adopted } = await prepareIsolatedHome(process.env, undefined, configPath);
         process.env.VIBE_SUPERVISOR_HOME = home;
         process.stderr.write(`Vibe private session directory (${adopted ? 'adopted' : 'created'}): ${home}\n`);
-        return await serve(lock);
+        return await serve(lock, undefined, { home, sessions });
       }
       return await serve(undefined, configPath);
     }

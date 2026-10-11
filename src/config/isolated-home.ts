@@ -8,7 +8,7 @@ import { acquireOwnerLock, isOwnerLockContention } from '../core/owner-lock.js';
 import type { OwnerLock } from '../core/owner-lock.js';
 import { createPrivateDir, createPrivateFile } from '../security/paths.js';
 
-export interface IsolatedHome { home: string; lock: OwnerLock; adopted: boolean }
+export interface IsolatedHome { home: string; sessions: string; lock: OwnerLock; adopted: boolean }
 
 const SESSION_NAME = /^session-[A-Za-z0-9]{6}$/;
 const MAX_CREATE_ATTEMPTS = 8;
@@ -88,13 +88,13 @@ export async function prepareIsolatedHome(env: NodeJS.ProcessEnv = process.env, 
   await createPrivateDir(sessions);
   for (const directory of await candidates(sessions, report)) {
     const lock = await claim(directory, source, report);
-    if (lock) return { home: directory, lock, adopted: true };
+    if (lock) return { home: directory, sessions, lock, adopted: true };
   }
   for (let attempt = 0; attempt < MAX_CREATE_ATTEMPTS; attempt += 1) {
     const home = await mkdtemp(path.join(sessions, 'session-'));
     await createPrivateDir(home);
     const lock = await claim(home, source, report);
-    if (lock) return { home, lock, adopted: false };
+    if (lock) return { home, sessions, lock, adopted: false };
   }
   throw new Error('Could not claim a private session directory; retry shortly.');
 }
