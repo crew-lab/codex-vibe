@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0-rc.22 — turn-limit reporting correction
+
+- Recognize the pinned Vibe 2.26.1 code-3 turn-limit outcome, with or without its known workspace trust warning, using the exact configured-limit assistant marker and runtime stop diagnostic. Report `max_turn_requests` with an incomplete-result warning.
+- Keep wrong limits, other stop reasons, conflicting diagnostics, authentication/version errors and signal termination as failures. Preserve the legacy paired code-1 marker behavior.
+- Add no-provider regressions for persisted results, close and subsequent slot reuse. No automatic retry, continuation, budget increase or dependency upgrade. Native disconnect and clean-account acceptance remain unverified for this candidate.
+
 ## 0.9.0-rc.21 — multi-chat registration hotfix
 
 - Generate isolated Codex registrations by default and align the disabled MCP scaffold and connection instructions. Concurrent chats use distinct private storage owners instead of failing initialization against a shared lock. Existing registrations require a reviewed update and reconnect.
