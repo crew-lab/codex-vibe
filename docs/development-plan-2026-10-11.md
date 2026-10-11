@@ -1,6 +1,6 @@
 # Development plan toward v1.0
 
-Updated 2026-10-11. This is the current priority plan. It supersedes the execution order in the 2026-10-09 reduction plan and the historical ACP/100-run soak and efficiency proposals. Those records remain historical evidence.
+Updated 2026-10-12. This is the current priority plan. It supersedes the execution order in the 2026-10-09 reduction plan and the historical ACP/100-run soak and efficiency proposals. Those records remain historical evidence.
 
 ## Goal and scope
 
@@ -17,11 +17,11 @@ No ACP, continuation, task replay, queues, automatic patch application, worker s
 | Saved-run reconnect routing | rc.23 resolves a unique UUID across the same private session namespace under exclusive ownership | Live owners, unsafe paths, duplicate UUIDs and more than 128 entries fail closed |
 | rc.23 local package | Final package verification passed: 570 Vitest tests, two skips, Python, lint, typecheck, build, acceptance, secret scan, SBOM and offline installed MCP smoke | Evidence applies to this archive and documented local environment |
 | Previous real run | Installed rc.23 official client read and closed saved rc.22 run cb51c05f-5b99-4269-820f-da5a480d839c without starting a model | Saved-record access works; this is not hosted rc.23 or native Codex reload evidence |
-| Local registration | Private rc.23 installed; only Codex CLI path updated with backup | Native reload/visibility remains to be demonstrated on the actual connection |
+| Local registration | Private rc.23 installed; only Codex CLI path updated with backup | Native catalog and saved-run access verified; current server version and workspace dispatch readiness remain open |
 | Hosted/native disconnect | Previous run completed before the observer saw its Supervisor owner exit | UNVERIFIED; neither a passed disconnect test nor proof of a disconnect defect |
 | Fresh macOS account | No candidate-specific acceptance receipt | UNVERIFIED |
 | Minimum Node runtime | Declared floor 20.19.0; local rc.23 checks used 24.21.0 | Verify the actual floor before claiming it |
-| Source/public delivery | This revision records rc.23 on integrated rc.22 main; no rc.23 release publication performed | Resolve source integration and release identity before calling it stable |
+| Source/public delivery | rc.23 merged through PR 4 at main 27a30c21e5488ea9dbf4ecb1e46fb3d2c93418db; no rc.23 publication recorded | Source integration complete; native and hosted acceptance remain open |
 
 Exact implementation location: `tmp/turn-limit-fix`, based on rc.22 commit `d94541e3c4a495306b6575758593164e6e28527e`. The primary checkout is older and contains unrelated changes; it is not the runtime implementation baseline.
 
@@ -33,9 +33,13 @@ Private local evidence is in `tmp/rc23-delivery/REPORT.md` and `tmp/rc23-deliver
 
 ## Priorities and exit conditions
 
-### P0 — Establish one source of truth and preserve the candidate
+### P0 — Eliminate stale policy and misleading connection readiness
 
-Status 2026-10-11: preservation, reconstruction and focused rc.23 review completed. A separate local integration preview is prepared; the user has now authorized commit/push/merge. PR #2 and PR #3 were merged into main; this rc.23 revision proceeds through its own CI/merge workflow. See the [preservation and integration review](rc23-preservation-review-2026-10-11.md). Next independent priority: P1.
+The Garnebo incident supersedes the next execution order below. Implement and verify the [connection reliability proposal](connection-strategy-2026-10-12.md) before another project trial: preserve the original authoritative config source, validate workspace policy per dispatch, expose native no-inference workspace readiness/current-server identity, bind admission to that preparation, and distinguish connection failures from model failures. Keep five tools and the one-shot safety boundaries. This is planned, not implemented; no new hosted allowance is implied.
+
+### Completed preservation and integration priority
+
+Status 2026-10-12: preservation, reconstruction, focused review and source integration completed. PRs 2, 3 and 4 are merged; PR 4 CI passed. Main is 27a30c21e5488ea9dbf4ecb1e46fb3d2c93418db. After restart on 2026-10-12, native status/result successfully read the closed saved run without inference. Saved-record access is verified; connection-version identity and active-disconnect acceptance remain separate. See the [preservation and integration review](rc23-preservation-review-2026-10-11.md). Next priority: the connection P0 above.
 
 1. Use this plan for current work; preserve old Handoff/reduction/efficiency records with clear historical status.
 2. Review the rc.23 source delta and its exact patch/archive identity. Inspect upstream branch/PR state before integration; this plan does not assume a merge or authorize one.
