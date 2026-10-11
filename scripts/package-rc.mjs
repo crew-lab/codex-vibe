@@ -26,10 +26,6 @@ run('npm', ['run', 'smoke:install']);
 const acceptance = run(process.execPath, ['scripts/acceptance.mjs'], { capture: true });
 const report = JSON.parse(acceptance);
 if (report.deterministic_checks.some((check) => check.status !== 'PASS')) throw new Error('Acceptance report contains a failed deterministic check.');
-const acpSoakSource = await readFile(path.join(root, 'tests', 'integration', 'acp-backend.test.ts'), 'utf8');
-if (!/100 independent initialized prompt turns/.test(acpSoakSource)) throw new Error('Fake ACP 100-run regression test was not found.');
-report.deterministic_checks.push({ name: 'fake-acp-100-run-adversarial-soak', status: 'PASS', detail: 'The fake ACP 100-run test passed as part of verify:release; this is not a hosted Vibe soak.' });
-
 await mkdir(releaseDir, { recursive: true, mode: 0o700 });
 const tarballName = `${pkg.name}-${pkg.version}.tgz`;
 const tarball = path.join(releaseDir, tarballName);

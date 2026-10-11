@@ -18,7 +18,7 @@ async function assertSafeFile(file: string): Promise<void> {
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
 }
 
-export async function planCodexConfig(scope: CodexScope, projectPath: string, isolated: boolean): Promise<CodexPlan> {
+export async function planCodexConfig(scope: CodexScope, projectPath: string, isolated: boolean, configPath?: string): Promise<CodexPlan> {
   if (scope === 'project') {
     const info = await lstat(path.resolve(projectPath));
     if (info.isSymbolicLink() || !info.isDirectory()) fail('Project path must be an existing real directory.', 2);
@@ -28,7 +28,7 @@ export async function planCodexConfig(scope: CodexScope, projectPath: string, is
   await assertSafeFile(file);
   const executable = process.execPath;
   const cliPath = path.resolve(process.argv[1] ?? 'dist/cli.js');
-  const launchArgs = [cliPath, 'serve', '--stdio', ...(isolated ? ['--isolated'] : [])];
+  const launchArgs = [cliPath, 'serve', '--stdio', ...(isolated ? ['--isolated'] : []), ...(configPath ? ['--config', path.resolve(configPath)] : [])];
   const block = `[mcp_servers.vibe-supervisor]\ncommand = ${quoteToml(executable)}\nargs = [${launchArgs.map(quoteToml).join(', ')}]\nstartup_timeout_sec = ${CODEX_STARTUP_TIMEOUT_SECONDS}\ntool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SECONDS}\n`;
   let original = '';
   try { original = await readFile(file, 'utf8'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }

@@ -10,7 +10,7 @@ if (!cache || !path.isAbsolute(cache)) throw new Error('Set VIBE_SUPERVISOR_TEST
 try { await access(path.join(cache, '_cacache')); }
 catch { throw new Error('Offline smoke test needs a populated npm cache. Set VIBE_SUPERVISOR_TEST_NPM_CACHE to an existing cache; no network fallback is used.'); }
 const tmpRoot = await mkdtemp(path.join(await realpath(os.tmpdir()), 'vsup-package-smoke-'));
-const env = { ...process.env, HOME: path.join(tmpRoot, 'home'), USERPROFILE: path.join(tmpRoot, 'home'), VIBE_SUPERVISOR_HOME: path.join(tmpRoot, 'home', 'VibeSupervisor'), npm_config_cache: cache };
+const env = { ...process.env, HOME: path.join(tmpRoot, 'home'), USERPROFILE: path.join(tmpRoot, 'home'), VIBE_SUPERVISOR_HOME: path.join(tmpRoot, 'home', 'VibeSupervisor-oneshot'), npm_config_cache: cache };
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, { env, encoding: 'utf8', timeout: 120_000, maxBuffer: 2_000_000, ...options });
   if (result.error || result.status !== 0) throw new Error(`${command} ${args.join(' ')} failed: ${(result.stderr || result.error?.message || 'unknown error').trim()}`);
@@ -34,8 +34,8 @@ try {
 
   // Exercise the installed stdio process and official client without starting a backend run.
   run(executable, ['allow', packDir]);
-  const configuredBackend = (await readFile(path.join(env.VIBE_SUPERVISOR_HOME, 'config.toml'), 'utf8')).match(/^backend\s*=\s*"(\w+)"/m)?.[1] ?? 'programmatic';
-  const expectedTools = configuredBackend === 'programmatic' ? 5 : 7;
+  const expectedTools = 5;
+  const expectedToolNames = ['vibe_review_start', 'vibe_edit_start', 'vibe_status', 'vibe_result', 'vibe_close'];
   const { Client } = await import('@modelcontextprotocol/client');
   const { StdioClientTransport } = await import('@modelcontextprotocol/client/stdio');
   const transport = new StdioClientTransport({ command: executable, args: ['serve', '--stdio'], env, stderr: 'pipe' });
@@ -44,7 +44,9 @@ try {
     await client.connect(transport);
     if (client.getServerVersion()?.version !== manifest.version) throw new Error("MCP server version mismatch.");
     const listed = await client.listTools();
-    if (listed.tools.length !== expectedTools) throw new Error(`Expected ${expectedTools} MCP tools for the ${configuredBackend} backend; received ${listed.tools.length}.`);
+    if (listed.tools.length !== expectedTools) throw new Error(`Expected exactly ${expectedTools} programmatic MCP tools; received ${listed.tools.length}.`);
+    if (JSON.stringify(listed.tools.map(tool => tool.name).sort()) !== JSON.stringify([...expectedToolNames].sort())) throw new Error(`Installed MCP tool catalog differs from the one-shot contract: ${listed.tools.map(tool => tool.name).join(', ')}.`);
+    if (listed.tools.some((tool) => tool.name === 'vibe_continue' || tool.name === 'vibe_respond')) throw new Error('Interactive ACP tools must not be registered.');
     if (listed.tools.some((tool) => tool.name === 'vibe_cancel')) throw new Error('vibe_cancel must not be registered.');
     const status = await client.callTool({ name: 'vibe_status', arguments: { run_id: '00000000-0000-4000-8000-000000000001' } });
     if (!status.isError) throw new Error('Expected status on an unknown run to return a normalized error.');
@@ -55,7 +57,8 @@ try {
     try {
       await Promise.all(isolated.map(async ({ client, transport }) => {
         await client.connect(transport);
-        if ((await client.listTools()).tools.length !== expectedTools) throw new Error('Isolated tool inventory mismatch.');
+        const isolatedTools = (await client.listTools()).tools.map(tool => tool.name).sort();
+        if (JSON.stringify(isolatedTools) !== JSON.stringify([...expectedToolNames].sort())) throw new Error('Isolated tool inventory mismatch.');
         const response = await client.callTool({ name: 'vibe_status', arguments: { run_id: '00000000-0000-4000-8000-000000000001' } });
         if (!response.isError || !JSON.stringify(response).includes('VSUP_NOT_FOUND')) throw new Error('Isolated backend did not respond.');
       }));

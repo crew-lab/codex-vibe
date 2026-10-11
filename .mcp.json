@@ -2,7 +2,12 @@
   "mcpServers": {
     "vibe-supervisor": {
       "command": "node",
-      "args": ["./dist/cli.js", "serve", "--stdio"],
+      "args": [
+        "./dist/cli.js",
+        "serve",
+        "--stdio",
+        "--isolated"
+      ],
       "cwd": ".",
       "enabled": false,
       "startup_timeout_sec": 30,

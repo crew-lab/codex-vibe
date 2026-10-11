@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { lstat, mkdtemp, open, readdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { parse } from 'smol-toml';
-import { getConfigPath, getDataDir, loadConfig } from './config.js';
+import { loadConfig, resolveConfigSelection } from './config.js';
 import { validateConfig } from './validation.js';
 import { acquireOwnerLock, isOwnerLockContention } from '../core/owner-lock.js';
 import type { OwnerLock } from '../core/owner-lock.js';
@@ -17,9 +17,10 @@ function reportToStderr(message: string): void {
   process.stderr.write(`${message}\n`);
 }
 
-async function readTemplate(env: NodeJS.ProcessEnv): Promise<string> {
-  await loadConfig({ env });
-  const handle = await open(getConfigPath(env), constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+async function readTemplate(env: NodeJS.ProcessEnv, configPath?: string): Promise<{ source: string; dataDir: string }> {
+  const selection = resolveConfigSelection(configPath, env);
+  await loadConfig({ env, ...(configPath ? { configPath: selection.configPath } : {}) });
+  const handle = await open(selection.configPath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   let source: string;
   try {
     const info = await handle.stat();
@@ -28,7 +29,7 @@ async function readTemplate(env: NodeJS.ProcessEnv): Promise<string> {
   } finally { await handle.close(); }
   if (Buffer.byteLength(source) > 1_048_576) throw new Error('Configuration exceeds 1 MiB.');
   validateConfig(parse(source));
-  return source;
+  return { source, dataDir: selection.dataDir };
 }
 
 async function candidates(sessions: string, report: (message: string) => void): Promise<string[]> {
@@ -80,9 +81,10 @@ async function claim(directory: string, source: string, report: (message: string
   }
 }
 
-export async function prepareIsolatedHome(env: NodeJS.ProcessEnv = process.env, report: (message: string) => void = reportToStderr): Promise<IsolatedHome> {
-  const source = await readTemplate(env);
-  const sessions = path.join(getDataDir(env), 'mcp-sessions');
+export async function prepareIsolatedHome(env: NodeJS.ProcessEnv = process.env, report: (message: string) => void = reportToStderr, configPath?: string): Promise<IsolatedHome> {
+  const template = await readTemplate(env, configPath);
+  const source = template.source;
+  const sessions = path.join(template.dataDir, 'mcp-sessions');
   await createPrivateDir(sessions);
   for (const directory of await candidates(sessions, report)) {
     const lock = await claim(directory, source, report);

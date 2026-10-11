@@ -64,16 +64,15 @@ class ProjectDiscoveryTest(unittest.TestCase):
 
 
 class StartupOrderTest(unittest.TestCase):
-    def main_fixture(self, kind, discovery_error=None):
+    def main_fixture(self, discovery_error=None):
         events = []
-        module_name = LAUNCHER.ENTRYPOINTS[kind]
         backend = types.SimpleNamespace(main=lambda: events.append('entrypoint'))
         def discovery():
             events.append('discovery')
             if discovery_error:
                 raise discovery_error
         with patch.dict(sys.modules, {'vibe': types.SimpleNamespace(__version__=LAUNCHER.EXPECTED_VERSION)}), \
-             patch.dict(LAUNCHER.os.environ, {'VIBE_SUPERVISOR_ENTRYPOINT':kind}, clear=True), \
+             patch.dict(LAUNCHER.os.environ, {}, clear=True), \
              patch.object(LAUNCHER, '_start_parent_watchdog'), \
              patch.object(LAUNCHER, '_start_diagnostics', return_value=None), \
              patch.object(LAUNCHER, 'consume_prompt_file', side_effect=lambda env, argv, directory: argv), \
@@ -89,12 +88,8 @@ class StartupOrderTest(unittest.TestCase):
                 LAUNCHER.main()
         return events
 
-    def test_both_entrypoints_disable_discovery_before_credentials_and_backend(self):
-        for kind in LAUNCHER.ENTRYPOINTS:
-            with self.subTest(kind=kind):
-                self.assertEqual(self.main_fixture(kind), ['discovery','logger','credential','entrypoint'])
+    def test_programmatic_entrypoint_disables_discovery_before_credentials_and_backend(self):
+        self.assertEqual(self.main_fixture(), ['discovery','logger','credential','entrypoint'])
 
     def test_drift_starts_neither_credentials_nor_backend(self):
-        for kind in LAUNCHER.ENTRYPOINTS:
-            with self.subTest(kind=kind):
-                self.assertEqual(self.main_fixture(kind, RuntimeError('source drift')), ['discovery'])
+        self.assertEqual(self.main_fixture(RuntimeError('source drift')), ['discovery'])
