@@ -78,3 +78,5 @@ Use `vibe-supervisor <command> --help` for current options. The explicit selecte
 ### Codex connection isolation
 
 `setup` registers `serve --stdio --isolated` by default. The optional `setup --isolated` flag remains accepted. Existing non-isolated registrations are updated through the normal reviewed setup flow; configuration backup and confirmation rules are unchanged. A direct non-isolated `serve` still requires exclusive storage ownership and competing connections fail closed. Isolation changes storage ownership, not workspace permissions.
+
+Saved UUIDs remain usable through `vibe_status`, `vibe_result` and `vibe_close` when an isolated reconnect selects a different free store. Lookup covers at most 128 entries in the selected configuration’s private `mcp-sessions` namespace. It requires a unique safe record and exclusive ownership of its store; a live owner, duplicate UUID or unsafe path returns an error without replaying the task.
