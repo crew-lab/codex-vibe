@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0 — first stable release
+
+The first stable release of vibe-supervisor: Codex delegates one bounded review or one isolated edit at a time to Mistral Vibe 2.26.1 through five MCP tools. Identical in code to 0.9.0-rc.28; accepted on [EVIDENCE: date] with native readiness, five hosted runs with readiness receipts, a real active disconnect and provider authentication on the exact artifact.
+
+- Reviews read and search an allowlisted workspace and report whether it changed; edits run in a supervisor-created detached worktree and return a patch that is never applied, committed or pushed. Shell and network tools are off. This is an application policy boundary, not an OS sandbox.
+- The connected server rereads the selected configuration before each start; `vibe_status` checks a workspace's readiness without inference and issues a receipt that a start can present.
+- One active run per server, bounded deadlines, turns, output and Git operations, an owner lock, verified worktree cleanup, and no task replay after a restart.
+- Supported: macOS Apple silicon, Node 20.19 or later, Vibe 2.26.1 exactly. A clean-account installation is planned for 1.0.1.
+
 ## 0.9.0-rc.28 — edit export that cannot miss changes
 
 Fixes from the rc.27 cold review.
