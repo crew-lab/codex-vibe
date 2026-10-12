@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0-rc.24 — authoritative policy and native readiness
+
+- A connected server rereads the originally selected configuration before every readiness check and start, so an approved allowlist change applies without restarting Codex. `--isolated` session snapshots are audit records only. A missing, unsafe, group-writable or foreign-owned source fails closed with no fallback to a stale snapshot. Only `allowed_workspace_roots` is live; a change to any other key returns `VSUP_RESTART_REQUIRED` instead of being partly adopted.
+- An allowed root that no longer exists denies only itself and is named in `details.unavailable_root`; other roots keep working.
+- `vibe_status` gains a workspace readiness mode (`workspace`, `operation`, `base_ref` for edits): server version and instance, policy path and revision, eligibility with blockers and remedies, slot state and a non-launching runtime check, plus a 10-minute signed receipt. It creates no run, worktree or model call. Starts accept an optional `readiness_receipt` and reject drift before launch with `VSUP_READINESS_RECEIPT_INVALID`; an edit with a receipt runs on the exact commit that was checked.
+- Runs record the admitting root and policy revision. Removing a root denies later starts; a run already admitted finishes, and its verified worktree can still be cleaned up under its frozen admission with all fresh-export checks.
+- The skill starts every delegation with the readiness check and separates connection or preparation failures from Vibe outcomes, with no silent fallback to another implementer.
+- New deterministic active-disconnect rehearsal (plain and `--isolated`, review and edit, client close and SIGTERM) and CI on Node 20.19.0 and 24. No hosted or native verification of this candidate yet.
+
 ## 0.9.0-rc.23 — saved-run access after reconnect
 
 Isolated MCP connections can inspect and close a saved run by its UUID even when reconnect selects a different private session. Routing stays inside the selected configuration’s bounded private session namespace, acquires the original store’s exclusive owner lock, and refuses ambiguous, unsafe or live-owned records. No worker is launched or task replayed.

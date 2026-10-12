@@ -25,6 +25,8 @@
     "started_at": { "type": "string", "format": "date-time" },
     "finished_at": { "type": "string", "format": "date-time" },
     "task_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "policy_revision": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "admitted_root": { "type": "string", "maxLength": 4096 },
     "workspace_snapshot_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "process": {
       "type": "object", "additionalProperties": false,

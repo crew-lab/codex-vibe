@@ -2,16 +2,17 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { access, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
 import type {
-  BackendCapabilities, BackendRunHandle,
+  BackendCapabilities, BackendRunHandle, RuntimeCheck,
   StartRunInput, SupervisorBackend, BackendCallbacks
 } from '../contracts.js';
 import { supervisorError } from '../contracts.js';
 import type { SupervisorConfig } from '../contracts.js';
 import { spawnManaged } from '../process/managed.js';
 import { assertNoProjectVibeExtensions, createVibeChildProfile } from './profile.js';
-import { buildVibeLaunch, classifyFailureText, classifyStartFailure, describeMissing, removePromptFile, spawned, stderrTailText, versionMismatchOnStderr } from './launcher.js';
+import { buildVibeLaunch, resolveCommand, classifyFailureText, classifyStartFailure, describeMissing, removePromptFile, spawned, stderrTailText, versionMismatchOnStderr } from './launcher.js';
 import type { VibeLaunch } from './launcher.js';
 import { SUPPORTED_VIBE } from './pinned.js';
 import { environmentSecrets, redactSecrets, StreamingRedactor } from '../security/redaction.js';
@@ -72,6 +73,18 @@ export class ProgrammaticBackend implements SupervisorBackend {
       return { available: false, backend: this.kind, executable: executable(this.config), details: { ...missing, reason: missing.interpreter_missing ? `The interpreter for the vibe launcher${typeof missing.interpreter === 'string' ? ` (${missing.interpreter})` : ''} was not found.` : 'The Vibe version probe failed.', error: redactSecrets(String(error), secrets) } };
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  }
+
+  async runtimeCheck(): Promise<RuntimeCheck> {
+    const command = executable(this.config);
+    const note = `Vibe was not launched. The executable is resolved only; the exact version ${SUPPORTED_VIBE} is verified when a run starts and drift fails that run closed.`;
+    try {
+      const resolved = await resolveCommand(command, process.env);
+      await access(resolved, fsConstants.X_OK);
+      return { executable: command, resolved_executable: resolved, executable_found: true, pinned_version: SUPPORTED_VIBE, version_verified: false, note };
+    } catch {
+      return { executable: command, resolved_executable: null, executable_found: false, pinned_version: SUPPORTED_VIBE, version_verified: false, note };
     }
   }
 

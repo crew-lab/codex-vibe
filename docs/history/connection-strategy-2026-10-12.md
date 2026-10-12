@@ -1,6 +1,6 @@
 # Connection reliability proposal
 
-Date: 2026-10-12. Status: PROPOSED, NOT IMPLEMENTED. This is the next reliability priority, before another project trial. No runtime, registration, allowlist, provider budget or release was changed by this investigation.
+Date: 2026-10-12. Status: IMPLEMENTED in 0.9.0-rc.24, pending native and hosted verification. No runtime, registration, allowlist, provider budget or release was changed by this investigation.
 
 ## Evidence and diagnosis
 

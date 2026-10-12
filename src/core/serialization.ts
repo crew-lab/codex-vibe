@@ -28,6 +28,8 @@ export function runToWire(run: RunRecord): JsonObject {
     ...(run.startedAt ? { started_at: run.startedAt } : {}),
     ...(run.finishedAt ? { finished_at: run.finishedAt } : {}),
     task_sha256: run.taskSha256,
+    ...(run.policyRevision ? { policy_revision: run.policyRevision } : {}),
+    ...(run.admittedRoot ? { admitted_root: run.admittedRoot } : {}),
     ...(run.workspaceSnapshotSha256 ? { workspace_snapshot_sha256: run.workspaceSnapshotSha256 } : {}),
     ...(run.process ? { process: run.process } : {}),
     limits: {
@@ -89,6 +91,14 @@ export function runFromWire(value: unknown): RunRecord {
   if (typeof value.launched_at === "string") run.launchedAt = value.launched_at;
   if (typeof value.started_at === "string") run.startedAt = value.started_at;
   if (typeof value.finished_at === "string") run.finishedAt = value.finished_at;
+  if (typeof value.policy_revision === "string") {
+    if (!/^[a-f0-9]{64}$/i.test(value.policy_revision)) throw new TypeError("Invalid persisted policy revision");
+    run.policyRevision = value.policy_revision;
+  }
+  if (typeof value.admitted_root === "string") {
+    if (value.admitted_root.length > 4096 || !value.admitted_root.startsWith("/")) throw new TypeError("Invalid persisted admitted root");
+    run.admittedRoot = value.admitted_root;
+  }
   if (typeof value.workspace_snapshot_sha256 === "string") {
     if (!/^[a-f0-9]{64}$/i.test(value.workspace_snapshot_sha256)) throw new TypeError("Invalid persisted workspace snapshot digest");
     run.workspaceSnapshotSha256 = value.workspace_snapshot_sha256;

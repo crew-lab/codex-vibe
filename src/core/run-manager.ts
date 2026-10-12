@@ -5,7 +5,7 @@ import type {
   BackendCallbacks, BackendKind, BackendRunHandle,
   ReviewStartToolInput, EditStartToolInput, StatusToolInput,
   ResultToolInput, WaitOptions, CloseToolInput, RunLimits, RunMode, RunRecord, RunState, SupervisorBackend,
-  ReviewIntegrity, SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent
+  ReviewIntegrity, RuntimeCheck, SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent
 } from "../contracts.js";
 import { APP_VERSION } from "../version.js";
 import { SCHEMA_VERSION, supervisorError } from "../contracts.js";
@@ -15,10 +15,14 @@ import { readNdjsonRecovering } from "../persistence/ndjson.js";
 import { EventLog } from "../persistence/event-log.js";
 import { asStorageError, storageErrorDetails } from "../persistence/storage-error.js";
 import { describeFailure, reportBackgroundFailure, writeDiagnostic } from "../diagnostics/background.js";
-import { createPrivateDir, resolveCanonicalRoot, resolveContextFile, isPathWithinRoot } from "../security/paths.js";
+import { WorkspacePathError, createPrivateDir, expandHome, resolveAdmittedWorkspace, resolveCanonicalRoot, resolveContextFile, isPathWithinRoot } from "../security/paths.js";
 import { redactSecrets } from "../security/redaction.js";
 import { assertNotSupervisorChild } from "../security/environment.js";
-import { createDetachedWorktree, exportDirtySnapshot, removeVerifiedWorktree, resolveGitRoot } from "../git/worktree.js";
+import { createDetachedWorktree, exportDirtySnapshot, removeVerifiedWorktree, resolveBaseCommit, resolveGitRoot } from "../git/worktree.js";
+import { fixedPolicy, readCurrentPolicy } from "../config/policy.js";
+import type { CurrentPolicy, PolicySource } from "../config/policy.js";
+import { ReadinessReceipts, receiptMismatch, receiptRejected } from "./readiness-receipt.js";
+import type { OpenedReceipt } from "./readiness-receipt.js";
 import { assertNoProjectVibeExtensions, assertSimpleGlobRoot } from "../backends/profile.js";
 import { eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
@@ -74,6 +78,7 @@ type RequestedOutcome = { state: "failed" | "cancelled"; error?: SupervisorError
 type StartResult = {
   supervisor_version: string | null;
   run_id: string;
+  policy_revision: string;
   state: RunState;
   backend: BackendKind;
   mode: RunMode;
@@ -112,6 +117,13 @@ const STATUS_TEXT_CHARS = 400;
 const MAX_RETAINED_REASON_CHARS = 400;
 const DEFAULT_REMEDIATION = "Inspect the run status and supervisor diagnostics, then retry if safe.";
 
+export interface RunManagerOptions {
+  policy?: PolicySource;
+  sessionId?: string;
+}
+
+type StartOptions = { maxTurns: number; timeoutSeconds: number; contextFiles?: string[]; baseRef?: string; readinessReceipt?: string };
+
 export class RunManager {
   private readonly runRoot: string;
   private readonly backends = new Map<BackendKind, SupervisorBackend>();
@@ -129,9 +141,14 @@ export class RunManager {
   private shutdownDrain: Promise<void> | undefined;
   private readonly unverifiedWorktrees = new Map<string, string>();
   private readonly unreadableRecords = new Set<string>();
+  private readonly policy: PolicySource;
+  private readonly sessionId: string | undefined;
+  private readonly receipts = new ReadinessReceipts();
 
-  constructor(private readonly config: SupervisorConfig, private readonly dataDir: string, backends: readonly SupervisorBackend[] = [], preAcquiredLock?: OwnerLock) {
+  constructor(private readonly config: SupervisorConfig, private readonly dataDir: string, backends: readonly SupervisorBackend[] = [], preAcquiredLock?: OwnerLock, options: RunManagerOptions = {}) {
     this.ownerLock = preAcquiredLock;
+    this.policy = options.policy ?? fixedPolicy(config);
+    this.sessionId = options.sessionId;
     this.runRoot = path.join(path.resolve(dataDir), "runs");
     for (const backend of backends) this.backends.set(backend.kind, backend);
   }
@@ -187,7 +204,7 @@ export class RunManager {
     const input = parseInput(reviewStartSchema, value);
     const started = await this.start("review", input.task, input.cwd, {
       maxTurns: input.max_turns ?? this.config.limits.maxTurnsReview, timeoutSeconds: input.timeout_seconds ?? this.config.limits.reviewTimeoutSeconds,
-      contextFiles: input.context_files
+      contextFiles: input.context_files, ...(input.readiness_receipt === undefined ? {} : { readinessReceipt: input.readiness_receipt })
     });
     return this.awaitStartOutcome(started, input.wait_seconds, wait?.signal);
   }
@@ -196,7 +213,7 @@ export class RunManager {
     const input = parseInput(editStartSchema, value);
     const started = await this.start("edit", input.task, input.cwd, {
       maxTurns: input.max_turns ?? this.config.limits.maxTurnsEdit, timeoutSeconds: input.timeout_seconds ?? this.config.limits.editTimeoutSeconds,
-      baseRef: input.base_ref
+      baseRef: input.base_ref, ...(input.readiness_receipt === undefined ? {} : { readinessReceipt: input.readiness_receipt })
     });
     return this.awaitStartOutcome(started, input.wait_seconds, wait?.signal);
   }
@@ -235,9 +252,10 @@ export class RunManager {
     for (const check of [...runtime.waiters]) check();
   }
 
-  private async start(mode: RunMode, task: string, cwd: string, options: { maxTurns: number; timeoutSeconds: number; contextFiles?: string[]; baseRef?: string }): Promise<StartResult> {
+  private async start(mode: RunMode, task: string, cwd: string, options: StartOptions): Promise<StartResult> {
     await this.ready();
     if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
+    const receipt = options.readinessReceipt === undefined ? undefined : this.receipts.open(options.readinessReceipt);
     if (this.activeSlots >= 1) throw codedError("VSUP_LIMIT_EXCEEDED", "One run is already active for this supervisor.");
     this.activeSlots += 1;
     let finishPreparation!: () => void;
@@ -246,15 +264,14 @@ export class RunManager {
     const preparationDeadline = Date.now() + START_PREPARATION_DEADLINE_MS;
     let runtime: Runtime | undefined;
     try {
-      const source = await withDeadline(resolveCanonicalRoot(cwd, this.config.allowedWorkspaceRoots), preparationDeadline - Date.now(), "Workspace validation exceeded its preparation deadline.");
-      for (const file of options.contextFiles ?? []) await withDeadline(resolveContextFile(source, file), preparationDeadline - Date.now(), "Context validation exceeded its preparation deadline.");
-      if (mode === "edit") await withDeadline(assertEditAtRepositoryRoot(source), preparationDeadline - Date.now(), "Git workspace validation exceeded its preparation deadline.");
+      const policy = await withDeadline(this.admissionPolicy(), preparationDeadline - Date.now(), "Configuration reread exceeded its preparation deadline.");
+      const admitted = await this.validateAdmission(mode, cwd, options.contextFiles ?? [], policy, preparationDeadline);
+      const source = admitted.workspace;
+      const checkedBase = receipt ? await this.assertReceiptBinding(receipt, mode, source, options.baseRef ?? "HEAD", policy.revision, preparationDeadline) : undefined;
       const id = randomUUID();
       const now = new Date().toISOString();
       const workerWorkspace = mode === "edit" ? path.join(this.dataDir, "worktrees", id) : source;
-      assertSimpleGlobRoot(source);
       assertSimpleGlobRoot(workerWorkspace);
-      await withDeadline(assertNoProjectVibeExtensions(source), preparationDeadline - Date.now(), "Project extension validation exceeded its preparation deadline.");
       if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
       const limits: RunLimits = {
         timeoutSeconds: options.timeoutSeconds, maxTurns: options.maxTurns,
@@ -266,22 +283,22 @@ export class RunManager {
         schemaVersion: SCHEMA_VERSION, supervisorVersion: APP_VERSION, runId: id,
         backend: "programmatic", mode, state: "starting", sourceWorkspace: source,
         workerWorkspace, createdAt: now, updatedAt: now,
-        taskSha256: createHash("sha256").update(task).digest("hex"), limits
+        taskSha256: createHash("sha256").update(task).digest("hex"), policyRevision: policy.revision, admittedRoot: admitted.root, limits
       };
       runtime = this.makeRuntime(record, path.join(this.runRoot, id), task, options.contextFiles ?? []);
       runtime.slot = true;
-      if (mode === "edit") runtime.baseRef = options.baseRef ?? "HEAD";
+      if (mode === "edit") runtime.baseRef = checkedBase ?? options.baseRef ?? "HEAD";
       this.runs.set(id, runtime);
       await createPrivateDir(runtime.directory);
       await this.persist(runtime);
       runtime.starting = this.launch(runtime);
       runtime.starting.catch((error: unknown) => this.reportBackground(runtime, "launch", error));
       return {
-        supervisor_version: runtime.record.supervisorVersion ?? null, run_id: id,
+        supervisor_version: runtime.record.supervisorVersion ?? null, run_id: id, policy_revision: policy.revision,
         state: runtime.record.state, backend: "programmatic", mode,
         source_workspace: source, worker_workspace: workerWorkspace, created_at: now,
         next_action: this.nextAction(runtime.record, runtime.record.state),
-        ...(mode === "edit" ? { base_ref: options.baseRef ?? "HEAD" } : {})
+        ...(mode === "edit" ? { base_ref: options.baseRef ?? "HEAD", ...(checkedBase ? { base_commit: checkedBase } : {}) } : {})
       };
     } catch (error) {
       if (runtime) { this.runs.delete(runtime.record.runId); this.releaseSlot(runtime); await rm(runtime.directory, { recursive: true, force: true }).catch(() => undefined); }
@@ -293,8 +310,121 @@ export class RunManager {
     }
   }
 
+  private async currentPolicy(): Promise<CurrentPolicy> {
+    try { return await readCurrentPolicy(this.policy, this.config); }
+    catch (error) {
+      const detail = supervisorErrorOf(error)?.message ?? (error instanceof Error ? error.message : String(error));
+      throw codedError("VSUP_CONFIG_INVALID", `The selected configuration ${this.policy.configPath ?? "(in-memory)"} could not be reread and validated; no earlier snapshot or default is used. ${detail}`.slice(0, 2000), { configPath: this.policy.configPath });
+    }
+  }
+
+  private async admissionPolicy(): Promise<CurrentPolicy> {
+    const policy = await this.currentPolicy();
+    if (policy.bootDrift.length) throw restartRequired(policy.bootDrift);
+    return policy;
+  }
+
+  private async validateAdmission(mode: RunMode, cwd: string, contextFiles: readonly string[], policy: CurrentPolicy, deadline: number): Promise<{ workspace: string; root: string }> {
+    let admitted: { workspace: string; root: string };
+    try { admitted = await withDeadline(resolveAdmittedWorkspace(cwd, policy.config.allowedWorkspaceRoots), deadline - Date.now(), "Workspace validation exceeded its preparation deadline."); }
+    catch (error) {
+      if (!(error instanceof WorkspacePathError)) throw error;
+      const requested = path.resolve(expandHome(cwd));
+      const requestedReal = await realpath(requested).catch(() => requested);
+      const lost = policy.unavailableRoots.find((root) => isPathWithinRoot(root.path, requested) || isPathWithinRoot(root.path, requestedReal));
+      if (!lost) throw error;
+      throw codedError("VSUP_WORKSPACE_INVALID", `The allowed root ${lost.root} that contains this workspace is unavailable (${lost.reason}); restore the directory or correct allowed_workspace_roots in the selected config.`, { unavailable_root: lost.root });
+    }
+    const source = admitted.workspace;
+    for (const file of contextFiles) await withDeadline(resolveContextFile(source, file), deadline - Date.now(), "Context validation exceeded its preparation deadline.");
+    if (mode === "edit") await withDeadline(assertEditAtRepositoryRoot(source), deadline - Date.now(), "Git workspace validation exceeded its preparation deadline.");
+    assertSimpleGlobRoot(source);
+    await withDeadline(assertNoProjectVibeExtensions(source), deadline - Date.now(), "Project extension validation exceeded its preparation deadline.");
+    return admitted;
+  }
+
+  private async editBaseCommit(source: string, baseRef: string, deadline: number): Promise<string> {
+    const resolution = resolveBaseCommit(source, baseRef).then((commit) => ({ commit }), () => ({ commit: undefined }));
+    const { commit } = await withDeadline(resolution, deadline - Date.now(), "Edit base resolution exceeded its preparation deadline.");
+    if (commit === undefined) throw codedError("VSUP_WORKTREE_CREATE_FAILED", `base_ref ${baseRef} does not resolve to a commit in ${source}; use the Git repository root and an existing ref.`, { reason: "base_ref_unresolved" });
+    return commit;
+  }
+
+  private async assertReceiptBinding(receipt: OpenedReceipt, mode: RunMode, source: string, baseRef: string, revision: string, deadline: number): Promise<string | undefined> {
+    const edit = mode === "edit";
+    const mismatch = receiptMismatch(receipt, { revision, operation: mode, workspace: source, baseRef: edit ? baseRef : null, baseCommit: receipt.baseCommit });
+    if (mismatch) throw receiptRejected(mismatch);
+    if (!edit) return undefined;
+    let commit: string;
+    try { commit = await this.editBaseCommit(source, baseRef, deadline); }
+    catch (error) {
+      if (supervisorErrorOf(error)?.code === "VSUP_WORKTREE_CREATE_FAILED") throw receiptRejected("base_ref_unresolved");
+      throw error;
+    }
+    if (commit !== receipt.baseCommit) throw receiptRejected("base_commit");
+    return commit;
+  }
+
+  private async runtimeCheck(): Promise<RuntimeCheck | { status: "not_reported" }> {
+    const backend = this.backends.get("programmatic");
+    if (!backend?.runtimeCheck) return { status: "not_reported" };
+    return backend.runtimeCheck();
+  }
+
+  private async readiness(input: { workspace: string; operation: RunMode; base_ref?: string | undefined }): Promise<Record<string, unknown>> {
+    await this.ready();
+    const deadline = Date.now() + START_PREPARATION_DEADLINE_MS;
+    const blockers: SupervisorError[] = [];
+    const block = (error: unknown): void => { blockers.push(supervisorErrorOf(error) ?? normalizeError(error)); };
+    if (this.stopping) blockers.push(supervisorError("VSUP_INVALID_STATE", "The supervisor is shutting down."));
+    let policy: CurrentPolicy | undefined;
+    try { policy = await withDeadline(this.currentPolicy(), deadline - Date.now(), "Configuration reread exceeded its preparation deadline."); }
+    catch (error) { block(error); }
+    if (policy?.bootDrift.length) block(restartRequired(policy.bootDrift));
+    const baseRef = input.operation === "edit" ? input.base_ref ?? "HEAD" : undefined;
+    let workspace: string | null = null;
+    let baseCommit: string | null = null;
+    if (policy) {
+      try { workspace = (await this.validateAdmission(input.operation, input.workspace, [], policy, deadline)).workspace; }
+      catch (error) { block(error); }
+      if (workspace && baseRef) {
+        try { baseCommit = await this.editBaseCommit(workspace, baseRef, deadline); }
+        catch (error) { block(error); }
+      }
+    }
+    const busy = this.activeSlots >= 1;
+    if (busy) blockers.push(supervisorError("VSUP_LIMIT_EXCEEDED", "One run is already active for this supervisor."));
+    const runtime = await this.runtimeCheck().catch((error: unknown) => { block(error); return { status: "not_reported" as const }; });
+    if ("executable_found" in runtime && !runtime.executable_found) blockers.push(supervisorError("VSUP_VIBE_NOT_FOUND", `The configured Vibe executable ${runtime.executable} was not found.`));
+    const eligible = blockers.length === 0 && policy !== undefined && workspace !== null;
+    const issued = eligible ? this.receipts.issue({ revision: policy!.revision, operation: input.operation, workspace: workspace!, baseRef: baseRef ?? null, baseCommit }) : undefined;
+    return {
+      server_version: APP_VERSION,
+      server_instance_id: this.receipts.instanceId,
+      session_id: this.sessionId ?? null,
+      policy_path: this.policy.configPath,
+      policy_revision: policy?.revision ?? null,
+      restart_required: (policy?.bootDrift.length ?? 0) > 0,
+      boot_drift: policy?.bootDrift ?? [],
+      operation: input.operation,
+      requested_workspace: input.workspace,
+      workspace,
+      ...(baseRef === undefined ? {} : { base_ref: baseRef, base_commit: baseCommit }),
+      eligible,
+      blockers: blockers.map((error) => ({ code: error.code, message: error.message, remediation: error.remediation })),
+      active_slot: { busy },
+      runtime,
+      ...(issued ? { readiness_receipt: issued.receipt, receipt_expires_at: issued.expiresAt } : {}),
+      next_action: eligible
+        ? `Start the ${input.operation} with readiness_receipt before receipt_expires_at on this same connection. The receipt proves preparation only; it does not authorize the task or guarantee provider availability.`
+        : "Resolve every blocker and check again. This is a preparation failure, not a Vibe run result; do not substitute another implementer automatically."
+    };
+  }
+
   async status(value: StatusToolInput, wait?: WaitOptions): Promise<Record<string, unknown>> {
-    const input = parseInput(statusSchema, value); const runtime = this.requireRun(input.run_id);
+    const input = parseInput(statusSchema, value);
+    if (input.workspace !== undefined) return this.readiness({ workspace: input.workspace, operation: input.operation ?? "review", base_ref: input.base_ref });
+    const runtime = this.requireRun(input.run_id ?? "");
     await this.ensureLoaded(runtime);
     this.assertLogReadable(runtime);
     if (runtime.storageDegraded) await this.flushQuietly(runtime);
@@ -1120,10 +1250,17 @@ export class RunManager {
     if (path.resolve(worktree.path) !== expectedPath || path.resolve(runtime.record.workerWorkspace) !== expectedPath) {
       return { removed: false, reason: `The saved worktree identity does not match the run-owned path ${expectedPath}.` };
     }
-    try {
-      const canonicalSource = await resolveCanonicalRoot(runtime.record.sourceWorkspace, this.config.allowedWorkspaceRoots);
-      if (canonicalSource !== runtime.record.sourceWorkspace) return { removed: false, reason: "The saved source workspace no longer matches its canonical allowed path." };
-    } catch { return { removed: false, reason: "The saved source workspace is no longer an allowed canonical path." }; }
+    const admittedRoot = runtime.record.admittedRoot;
+    if (admittedRoot) {
+      const canonicalSource = await realpath(runtime.record.sourceWorkspace).catch(() => undefined);
+      if (canonicalSource !== runtime.record.sourceWorkspace) return { removed: false, reason: "The saved source workspace no longer resolves to its canonical path." };
+      if (!isPathWithinRoot(admittedRoot, canonicalSource)) return { removed: false, reason: "The saved source workspace is outside the root it was admitted under." };
+    } else {
+      try {
+        const canonicalSource = await resolveCanonicalRoot(runtime.record.sourceWorkspace, this.config.allowedWorkspaceRoots);
+        if (canonicalSource !== runtime.record.sourceWorkspace) return { removed: false, reason: "The saved source workspace no longer matches its canonical allowed path." };
+      } catch { return { removed: false, reason: "The saved source workspace is no longer an allowed canonical path." }; }
+    }
     if (!worktree.baseRef) return { removed: false, reason: "The saved worktree base reference is incomplete." };
     let verified = this.savedPatchExport(runtime);
     if (!verified) {
@@ -1372,6 +1509,17 @@ function describeUnreadableLog(error: unknown): NonNullable<Runtime["logUnavaila
 
 const MAX_DISCARDABLE_RECORD_BYTES = 1024 * 1024;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function restartRequired(drift: readonly string[]): Error {
+  return codedError("VSUP_RESTART_REQUIRED", `The selected configuration changed boot-bound settings since this server started (${drift.join(", ")}); new starts are refused until the server is restarted or the settings are reverted.`, { boot_drift: [...drift] });
+}
+
+function supervisorErrorOf(error: unknown): SupervisorError | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const value = error as { supervisor?: unknown; code?: unknown };
+  if (value.supervisor && typeof value.supervisor === "object" && "code" in value.supervisor) return value.supervisor as SupervisorError;
+  return typeof value.code === "string" && value.code.startsWith("VSUP_") ? normalizeError(error) : undefined;
+}
 
 function parseInput<T>(schema: { parse(value: unknown): T }, value: unknown): T {
   try { return schema.parse(value); }

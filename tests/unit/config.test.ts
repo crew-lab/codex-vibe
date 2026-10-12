@@ -83,10 +83,12 @@ describe("supervisor config", () => {
       expect(() => validateConfig({ version: 1, allowed_workspace_roots: [root] }), root).toThrow();
     }
     const writeConfig = async (allowedRoot: string) => writeFile(join(parent, "config.toml"), `version = 1\nallowed_workspace_roots = [${JSON.stringify(allowedRoot)}]\n`);
-    for (const root of [join(parent, "missing"), alias, canonicalTmp]) {
+    for (const root of [alias, canonicalTmp]) {
       await writeConfig(root);
       await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: parent } })).rejects.toMatchObject({ supervisor: { code: "VSUP_CONFIG_INVALID" } });
     }
+    await writeConfig(join(parent, "missing"));
+    await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: parent } })).resolves.toMatchObject({ allowedWorkspaceRoots: [join(parent, "missing")] });
   });
 
   it("reports malformed TOML/config as a stable configuration error", async () => {
