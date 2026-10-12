@@ -1,12 +1,30 @@
 # Current handoff
 
-Consolidated 2026-10-12. This document and the [development plan](docs/history/development-plan-2026-10-11.md) define current priorities. The [previous handoff](docs/history/handoff-before-consolidation-2026-10-12.md) preserves historical evidence; its older ACP, soak and release proposals are not the current work queue.
+Consolidated 2026-10-12. This document alone defines current priorities. Background: the [development plan](docs/history/development-plan-2026-10-11.md) and the [previous handoff](docs/history/handoff-before-consolidation-2026-10-12.md), whose older ACP, soak and release proposals are not the current work queue. The one active design kept under `docs/history/` is the [connection reliability proposal](docs/history/connection-strategy-2026-10-12.md), the P0 below; it lives there so it does not ship in the package.
+
+## What this is
+
+A local MCP stdio server that lets Codex delegate one bounded code review or one isolated edit at a time to Mistral Vibe 2.26.1. Codex sees five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result` and `vibe_close`. A review may only read and search an allowlisted workspace; an edit runs in a supervisor-created detached Git worktree and comes back as a patch, never applied, committed or pushed. Shell and network tools are off. This is an application policy boundary, not an OS sandbox.
+
+| Area | Code |
+| --- | --- |
+| MCP server and tool schemas | `src/mcp/` |
+| Run lifecycle, one active slot, deadline, watchdog, retention, owner lock, saved-run routing after `--isolated` reconnect | `src/core/` (`run-manager.ts`, `owner-lock.ts`, `isolated-run-router.ts`) |
+| Vibe adapter and pinned launcher (private homes, filtered environment and tools, persistence shim, turn-limit corroboration) | `src/backends/programmatic.ts`, `launcher.ts`, `profile.ts`, `runtime/vibe_supervisor_launcher.py` |
+| Worktrees, patch export, verified cleanup | `src/git/worktree.ts` |
+| Paths, child environment, redaction | `src/security/` |
+| Configuration and `--isolated` session homes | `src/config/` |
+| CLI: `setup`, `allow`, `doctor`, `serve`, `runs` | `src/cli.ts`, `src/cli/`, `src/diagnostics/doctor.ts` |
+| Release scripts (not shipped) | `scripts/` |
+| Coordinator skill (shipped) | `skills/vibe-supervisor` |
+
+Behaviour: [docs/functionality.md](docs/functionality.md); interface: [docs/reference.md](docs/reference.md); boundary: [docs/security.md](docs/security.md); Vibe assumptions: [docs/compatibility.md](docs/compatibility.md); errors: [docs/errors.md](docs/errors.md) (generated); gates: `docs/acceptance.json`. AGENTS.md lists the boundaries that must not change.
 
 ## Source and release identity
 
-rc.23 source is integrated on GitHub main at `27a30c21e5488ea9dbf4ecb1e46fb3d2c93418db`. PRs [2](https://github.com/crew-lab/codex-vibe/pull/2), [3](https://github.com/crew-lab/codex-vibe/pull/3) and [4](https://github.com/crew-lab/codex-vibe/pull/4) are merged; PR 4 CI passed. Its source commit is `c24d843c6273ac9036914c5bb10f080bb61054f3`. No rc.23 tag or public release has been created; the latest observed public prerelease is rc.22.
+rc.23 source was integrated on GitHub main at `27a30c21e5488ea9dbf4ecb1e46fb3d2c93418db`; later commits on main up to this handoff change documentation only. PRs [2](https://github.com/crew-lab/codex-vibe/pull/2), [3](https://github.com/crew-lab/codex-vibe/pull/3) and [4](https://github.com/crew-lab/codex-vibe/pull/4) are merged; PR 4 CI passed. Its source commit is `c24d843c6273ac9036914c5bb10f080bb61054f3`. No rc.23 tag or public release has been created; the latest observed public prerelease is rc.22.
 
-The primary checkout remains an older dirty tree. Preserve unrelated edits; do not reset it or use its runtime as the rc.23 baseline. The committed integration checkout is under `tmp/rc23-preserved-20261011T191549Z/integration-preview`; the original working implementation remains under `tmp/turn-limit-fix`. Preservation and integration receipts are in that preserved directory, including `integration-delivery.json` and verified Git bundles. Private ignored evidence has no remote backup guarantee.
+Two machines are involved. The **target machine** (the operator's Mac with Vibe, Codex desktop and the provider login) holds the installation and all private evidence; every `tmp/` and `/Users/roman/` path below is on it. The **preparing machine** never runs a real Vibe; it has source checkouts and offline release builds only (its `release/` folder stops at rc.17, so the rc.23 archive exists only on the target machine). On the target machine, the primary checkout remains an older dirty tree. Preserve unrelated edits; do not reset it or use its runtime as the rc.23 baseline. The committed integration checkout is under `tmp/rc23-preserved-20261011T191549Z/integration-preview`; the original working implementation remains under `tmp/turn-limit-fix`. Preservation and integration receipts are in that preserved directory, including `integration-delivery.json` and verified Git bundles. Private ignored evidence has no remote backup guarantee.
 
 Frozen archive: `tmp/turn-limit-fix/release/vibe-supervisor-0.9.0-rc.23.tgz`.
 SHA-256: `1dec1be1adcac0f96ad6d9ba453dd817977efdd3e76703ebc96acf4d65fa5998`.
