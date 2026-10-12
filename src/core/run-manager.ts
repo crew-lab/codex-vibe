@@ -411,7 +411,7 @@ export class RunManager {
       workspace,
       ...(baseRef === undefined ? {} : { base_ref: baseRef, base_commit: baseCommit }),
       eligible,
-      blockers: blockers.map((error) => ({ code: error.code, message: error.message, remediation: error.remediation })),
+      blockers: blockers.map((error) => ({ code: error.code, message: error.message, remediation: error.remediation, retryable: error.retryable, ...(error.details ? { details: error.details } : {}) })),
       active_slot: { busy },
       runtime,
       ...(issued ? { readiness_receipt: issued.receipt, receipt_expires_at: issued.expiresAt } : {}),
@@ -1527,12 +1527,12 @@ function parseInput<T>(schema: { parse(value: unknown): T }, value: unknown): T 
 }
 
 async function withDeadline<T>(operation: Promise<T>, milliseconds: number, message: string): Promise<T> {
-  if (milliseconds <= 0) throw codedError("VSUP_INVALID_STATE", message);
+  if (milliseconds <= 0) throw codedError("VSUP_PREPARATION_TIMEOUT", message);
   let timer: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([
       operation,
-      new Promise<T>((_resolve, reject) => { timer = setTimeout(() => reject(codedError("VSUP_INVALID_STATE", message)), milliseconds); })
+      new Promise<T>((_resolve, reject) => { timer = setTimeout(() => reject(codedError("VSUP_PREPARATION_TIMEOUT", message)), milliseconds); })
     ]);
   } finally { if (timer) clearTimeout(timer); }
 }

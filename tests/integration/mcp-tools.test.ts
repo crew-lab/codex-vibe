@@ -84,10 +84,29 @@ describe('MCP stdio tool surface', () => {
     await client.connect(new StdioClientHarness(input, output));
     const error = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp' } });
     expect(error.isError).toBe(true);
-    expect(errorText(error)).toMatch(/^VSUP_NOT_FOUND: .+ .+/);
+    expect(JSON.parse(errorText(error))).toEqual({ error: { code: 'VSUP_NOT_FOUND', message: 'run missing', remediation: expect.stringMatching(/.+/), retryable: false } });
     const malformed = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp', extra: true } });
     expect(malformed.isError).toBe(true);
     expect(JSON.stringify(malformed)).toContain('Unrecognized key');
+  });
+
+  it('carries code, message, remediation, retryable and details in the JSON error reply', async () => {
+    const input = new PassThrough(); const output = new PassThrough();
+    const manager = {
+      reviewStart: vi.fn(async () => { throw Object.assign(new Error('root gone'), { code: 'VSUP_WORKSPACE_INVALID', retryable: true, details: { unavailable_root: '/gone', note: 'api_key=sk-abcdef1234567890xyz' } }); }),
+      editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})), result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
+    } satisfies RunManagerTools;
+    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits } } });
+    await server.connect(new StdioServerTransport(input, output));
+    const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
+    await client.connect(new StdioClientHarness(input, output));
+    const failed = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp' } });
+    expect(failed.isError).toBe(true);
+    expect((failed.content as unknown[]).length).toBe(1);
+    expect(JSON.parse(errorText(failed))).toEqual({ error: {
+      code: 'VSUP_WORKSPACE_INVALID', message: 'root gone', remediation: expect.stringContaining('allowed_workspace_roots'), retryable: true,
+      details: { unavailable_root: '/gone', note: expect.not.stringContaining('sk-abcdef') },
+    } });
   });
 
   it('returns VSUP_INTERNAL for an unexpected error and writes its redacted cause to the error log', async () => {
@@ -104,7 +123,7 @@ describe('MCP stdio tool surface', () => {
     await client.connect(new StdioClientHarness(input, output));
     const failed = await client.callTool({ name: 'vibe_status', arguments: { run_id: '123e4567-e89b-42d3-a456-426614174000' } });
     expect(failed.isError).toBe(true);
-    expect(errorText(failed)).toContain('VSUP_INTERNAL: The request could not be completed.');
+    expect(JSON.parse(errorText(failed))).toMatchObject({ error: { code: 'VSUP_INTERNAL', message: 'The request could not be completed.' } });
     expect(JSON.stringify(failed)).not.toContain('disk exploded');
     expect(logged).toHaveLength(1);
     expect(logged[0]).toContain('VSUP_INTERNAL');

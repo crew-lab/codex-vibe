@@ -80,7 +80,7 @@ async function connect(configPath: string, dataDir: string, options: { sessionId
   return { manager, backend };
 }
 
-type Readiness = Record<string, unknown> & { eligible: boolean; blockers: { code: string; message: string; remediation: string }[]; readiness_receipt?: string; policy_revision: string | null };
+type Readiness = Record<string, unknown> & { eligible: boolean; blockers: { code: string; message: string; remediation: string; retryable: boolean; details?: Record<string, unknown> }[]; readiness_receipt?: string; policy_revision: string | null };
 
 async function readiness(manager: RunManager, workspace: string, operation: "review" | "edit" = "review", baseRef?: string): Promise<Readiness> {
   return await manager.status({ workspace, operation, ...(baseRef ? { base_ref: baseRef } : {}) }) as Readiness;
@@ -199,10 +199,27 @@ describe("authoritative policy source", () => {
     const report = await readiness(manager, box.beta);
     expect(report).toMatchObject({ eligible: false, restart_required: true, boot_drift: [key] });
     expect(report.blockers.map((blocker) => blocker.code)).toEqual(["VSUP_RESTART_REQUIRED"]);
+    expect(report.blockers[0]).toMatchObject({ retryable: false, details: { boot_drift: [key] } });
     const refused = await rejection(manager.reviewStart({ task: "review", cwd: box.beta }));
     expect(refused.code).toBe("VSUP_RESTART_REQUIRED");
     expect(backend.starts).toBe(0);
     expect(await runDirectories(dataDir)).toEqual([]);
+  });
+});
+
+describe("preparation deadline", () => {
+  it("blocks readiness with VSUP_PREPARATION_TIMEOUT, not an invalid run state", async () => {
+    const box = await sandbox();
+    const backend = new FakeBackend();
+    const inner = selectedConfigPolicy(box.configPath);
+    const policy = { configPath: inner.configPath, read: async () => { const config = await inner.read(); vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(Date.now() + 60_000); return config; } };
+    const manager = new RunManager(await loadConfig({ configPath: box.configPath }), path.join(box.parent, "data"), [backend], undefined, { policy });
+    managers.push(manager);
+    await manager.initialize();
+    const report = await readiness(manager, box.alpha);
+    expect(report.eligible).toBe(false);
+    expect(report.blockers.map((blocker) => blocker.code)).toEqual(["VSUP_PREPARATION_TIMEOUT"]);
+    expect(report.blockers[0]!.remediation).not.toMatch(/run status/i);
   });
 });
 
@@ -223,7 +240,7 @@ describe("unavailable allowed roots", () => {
     expect(alive).toMatchObject({ eligible: true, blockers: [], policy_revision: revision });
     const lost = await readiness(manager, box.beta);
     expect(lost.eligible).toBe(false);
-    expect(lost.blockers).toEqual([expect.objectContaining({ code: "VSUP_WORKSPACE_INVALID", message: expect.stringContaining(`allowed root ${box.beta}`) })]);
+    expect(lost.blockers).toEqual([expect.objectContaining({ code: "VSUP_WORKSPACE_INVALID", message: expect.stringContaining(`allowed root ${box.beta}`), details: { unavailable_root: box.beta }, retryable: false })]);
     expect(await rejection(manager.reviewStart({ task: "review", cwd: box.beta }))).toMatchObject({ code: "VSUP_WORKSPACE_INVALID", details: { unavailable_root: box.beta } });
     expect(await manager.close({ run_id: started.run_id, cleanup_worktree: true })).toMatchObject({ worktree_removed: true });
     const next = await manager.reviewStart({ task: "review", cwd: box.alpha, readiness_receipt: (await readiness(manager, box.alpha)).readiness_receipt! });

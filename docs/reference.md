@@ -43,6 +43,8 @@ All schemas are strict. `run_id` is a UUID v4. Unless noted, required fields hav
 | `vibe_close` | `run_id` | UUID v4 | required |
 | | `cleanup_worktree` | boolean | `false` |
 
+A failed tool call sets `isError` and returns one JSON text block, `{"error": {code, message, remediation, retryable, details?}}`, redacted and bounded like a result; branch on `code`, `retryable` and `details`. See [errors](errors.md).
+
 Start calls can wait until the run needs coordinator attention. For longer work, use cursor-based status calls and pass `next_after_seq` as the next `after_seq`; waits are bounded to 300 seconds. A completed run can carry a non-`end_turn` stop reason and partial-result warning. Read the stop reason before trusting its summary.
 
 ## Workspace readiness
@@ -57,7 +59,7 @@ Start calls can wait until the run needs coordinator attention. For longer work,
 | `session_id` | The private `--isolated` session directory name, or `null`. |
 | `operation`, `requested_workspace`, `workspace` | The request and its canonical path, `null` when rejected. |
 | `base_ref`, `base_commit` | Edit checks only: the ref and the commit it resolves to now. |
-| `eligible`, `blockers` | Whether a start would be admitted, and every reason it would not, each with `code`, `message` and `remediation`. |
+| `eligible`, `blockers` | Whether a start would be admitted, and every reason it would not, each with `code`, `message`, `remediation`, `retryable` and, when present, `details` (for example `unavailable_root` or `boot_drift`). |
 | `active_slot.busy` | Whether this instance already has an active run. |
 | `runtime` | Executable resolution for `paths.vibe` (`executable_found`, `pinned_version`). Vibe is not launched, so `version_verified` is always `false`; the exact pinned version is still enforced when a run starts. |
 | `readiness_receipt`, `receipt_expires_at` | Present only when eligible. An opaque token, valid for 10 minutes on this server instance. |

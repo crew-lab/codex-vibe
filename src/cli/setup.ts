@@ -27,7 +27,7 @@ export interface SetupOptions {
 export interface WorkspaceUpdate { file: string; created: boolean; added: boolean; canonical: string; notes: string[]; backup?: string }
 export interface WorkspacePlan { file: string; created: boolean; added: boolean; canonical: string; notes: string[]; text?: string; changed: boolean }
 
-export const RELOAD_NOTE = 'Restart the Codex MCP server to apply the new allowlist (reconnect the client when it uses --isolated); a running server keeps the list it started with.';
+export const RELOAD_NOTE = 'The new allowlist applies on the next readiness check or start of a connected server; no restart is needed. Restart the Codex MCP server only after a change to a boot-bound setting or when installing a new runtime.';
 
 const MAX_CONFIG_BYTES = 1_048_576;
 

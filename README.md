@@ -4,7 +4,7 @@ A local MCP server for one bounded Mistral Vibe review or isolated edit. The red
 
 This is an application policy boundary, **not an operating-system sandbox**. A delegated run uses your account's permissions, and permitted workspace content is sent to Mistral. Review [SECURITY.md](SECURITY.md) before use.
 
-The development candidate is `0.9.0-rc.24`, npm-private, distributed as a GitHub prerelease, and MIT licensed. No platform is currently certified for stable use. macOS Apple silicon is the intended first target; hosted inference, native desktop lifecycle, clean-account installation, and provider authentication remain unverified for this candidate. Linux and Windows are not claimed as supported platforms.
+The development candidate is `0.9.0-rc.25`, npm-private, distributed as a GitHub prerelease, and MIT licensed. No platform is currently certified for stable use. macOS Apple silicon is the intended first target; hosted inference, native desktop lifecycle, clean-account installation, and provider authentication remain unverified for this candidate. Linux and Windows are not claimed as supported platforms.
 
 ## Requirements
 

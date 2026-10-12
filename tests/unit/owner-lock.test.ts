@@ -85,7 +85,7 @@ describe("owner lock", () => {
     const startedAt = new Date(NOW - 60_000).toISOString();
     const h = harness({ [LOCK]: old(lockText(9001, startedAt)) }, { kill: alive, processStartTime: async () => NOW - 3_600_000 });
     const failure = await acquireOwnerLock(DATA, h.deps).then(() => undefined, (error: unknown) => error as { code: string; message: string; details?: Record<string, unknown> });
-    expect(failure).toMatchObject({ code: "VSUP_INVALID_STATE", details: { lock_path: LOCK, owner_pid: 9001 } });
+    expect(failure).toMatchObject({ code: "VSUP_OWNER_LOCKED", details: { lock_path: LOCK, owner_pid: 9001 }, retryable: true });
     expect(failure?.message).toContain(LOCK);
     expect(failure?.message).toContain("9001");
     expect(failure?.message).toContain("VIBE_SUPERVISOR_HOME");
@@ -105,18 +105,18 @@ describe("owner lock", () => {
   it("keeps a live owner whose process started only slightly after the lock timestamp", async () => {
     const startedAt = new Date(NOW - 60_000).toISOString();
     const h = harness({ [LOCK]: old(lockText(9001, startedAt)) }, { kill: alive, processStartTime: async () => NOW - 60_000 + 3_000 });
-    await expect(acquireOwnerLock(DATA, h.deps)).rejects.toMatchObject({ code: "VSUP_INVALID_STATE", details: { owner_pid: 9001 } });
+    await expect(acquireOwnerLock(DATA, h.deps)).rejects.toMatchObject({ code: "VSUP_OWNER_LOCKED", details: { owner_pid: 9001 } });
   });
 
   it("keeps refusing when the process start time cannot be determined", async () => {
     const h = harness({ [LOCK]: old(lockText(9001)) }, { kill: alive, processStartTime: async () => undefined });
-    await expect(acquireOwnerLock(DATA, h.deps)).rejects.toMatchObject({ code: "VSUP_INVALID_STATE", details: { lock_path: LOCK, owner_pid: 9001 } });
+    await expect(acquireOwnerLock(DATA, h.deps)).rejects.toMatchObject({ code: "VSUP_OWNER_LOCKED", details: { lock_path: LOCK, owner_pid: 9001 } });
     expect(h.startTimeCalls).toEqual([]);
   });
 
   it("keeps refusing when the lock timestamp is unparsable", async () => {
     const h = harness({ [LOCK]: old(lockText(9001, "yesterday-ish")) }, { kill: alive, processStartTime: async () => NOW });
-    await expect(acquireOwnerLock(DATA, h.deps)).rejects.toMatchObject({ code: "VSUP_INVALID_STATE", details: { owner_pid: 9001 } });
+    await expect(acquireOwnerLock(DATA, h.deps)).rejects.toMatchObject({ code: "VSUP_OWNER_LOCKED", details: { owner_pid: 9001 } });
   });
 
   it("removes a stale recovery lock and retries once", async () => {
@@ -128,7 +128,7 @@ describe("owner lock", () => {
 
   it("refuses while a recent recovery lock is held by another process", async () => {
     const h = harness({ [LOCK]: old(lockText(9001)), [RECOVERY]: { content: JSON.stringify({ pid: 1, token: "x" }), mtimeMs: NOW - 5_000 } });
-    await expect(acquireOwnerLock(DATA, h.deps)).rejects.toMatchObject({ code: "VSUP_INVALID_STATE", message: expect.stringContaining("recovering") });
+    await expect(acquireOwnerLock(DATA, h.deps)).rejects.toMatchObject({ code: "VSUP_OWNER_LOCKED", message: expect.stringContaining("recovering") });
     expect(h.store.has(RECOVERY)).toBe(true);
   });
 
@@ -137,20 +137,20 @@ describe("owner lock", () => {
     let reads = 0;
     const original = h.deps.fs!.read;
     h.deps.fs = { ...h.deps.fs!, read: async (file) => { if (file === LOCK && ++reads === 3) h.store.set(LOCK, fresh(lockText(9001))); return original(file); } };
-    await expect(acquireOwnerLock(DATA, h.deps)).rejects.toMatchObject({ code: "VSUP_INVALID_STATE", details: { owner_pid: 9001 } });
+    await expect(acquireOwnerLock(DATA, h.deps)).rejects.toMatchObject({ code: "VSUP_OWNER_LOCKED", details: { owner_pid: 9001 } });
     expect(h.sleeps).toEqual([250, 250]);
   });
 
   it("declares a fresh lock that stays empty malformed after four re-reads", async () => {
     const h = harness({ [LOCK]: fresh("") });
-    await expect(acquireOwnerLock(DATA, h.deps)).rejects.toMatchObject({ code: "VSUP_INVALID_STATE", message: expect.stringContaining("malformed"), details: { lock_path: LOCK } });
+    await expect(acquireOwnerLock(DATA, h.deps)).rejects.toMatchObject({ code: "VSUP_OWNER_LOCKED", message: expect.stringContaining("malformed"), details: { lock_path: LOCK } });
     expect(h.sleeps).toEqual([250, 250, 250, 250]);
     expect(h.store.has(LOCK)).toBe(true);
   });
 
   it("declares an old empty lock malformed without waiting", async () => {
     const h = harness({ [LOCK]: old("{not json") });
-    await expect(acquireOwnerLock(DATA, h.deps)).rejects.toMatchObject({ code: "VSUP_INVALID_STATE", message: expect.stringContaining("malformed") });
+    await expect(acquireOwnerLock(DATA, h.deps)).rejects.toMatchObject({ code: "VSUP_OWNER_LOCKED", message: expect.stringContaining("malformed") });
     expect(h.sleeps).toEqual([]);
   });
 
@@ -188,7 +188,7 @@ describe("owner lock on the real filesystem", () => {
   it("excludes a second owner in the same process and frees the directory on release", async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), "vsup-lock-"))); roots.push(root);
     const first = await acquireOwnerLock(root);
-    await expect(acquireOwnerLock(root)).rejects.toMatchObject({ code: "VSUP_INVALID_STATE", details: { owner_pid: process.pid, lock_path: join(root, "supervisor.lock") } });
+    await expect(acquireOwnerLock(root)).rejects.toMatchObject({ code: "VSUP_OWNER_LOCKED", details: { owner_pid: process.pid, lock_path: join(root, "supervisor.lock") } });
     expect((await stat(join(root, "supervisor.lock"))).mode & 0o777).toBe(0o600);
     await first.release();
     const second = await acquireOwnerLock(root);
@@ -259,7 +259,7 @@ describe("owner lock recovery race", () => {
     const results = await Promise.allSettled([acquireOwnerLock(DATA, h.a), acquireOwnerLock(DATA, h.b)]);
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(JSON.parse(h.store.get(LOCK)!.content).token).toBe(winnerOf(results)?.token);
-    expect(results.find((result) => result.status === "rejected")).toMatchObject({ reason: { code: "VSUP_INVALID_STATE" } });
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({ reason: { code: "VSUP_OWNER_LOCKED" } });
   });
 
   it("never takes over a recovery lock that another acquirer created after the stale one was judged", async () => {

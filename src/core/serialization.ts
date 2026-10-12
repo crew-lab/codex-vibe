@@ -1,3 +1,4 @@
+import { REMEDIATION } from "../contracts.js";
 import type { RunRecord, SupervisorErrorCode, SupervisorEvent } from "../contracts.js";
 
 type JsonObject = Record<string, unknown>;
@@ -121,7 +122,7 @@ export function runFromWire(value: unknown): RunRecord {
 }
 
 const RUN_STATES = new Set<RunRecord["state"]>(["starting", "running", "completed", "failed", "cancelled", "closing", "closed"]);
-const ERROR_CODES = new Set(["VSUP_CONFIG_INVALID", "VSUP_VIBE_NOT_FOUND", "VSUP_VIBE_VERSION_UNSUPPORTED", "VSUP_AUTH_REQUIRED", "VSUP_WORKSPACE_INVALID", "VSUP_WORKTREE_CREATE_FAILED", "VSUP_GIT_REQUIRED", "VSUP_BACKEND_CRASHED", "VSUP_TIMEOUT", "VSUP_RATE_LIMITED", "VSUP_CANCELLED", "VSUP_OUTPUT_LIMIT", "VSUP_ARTIFACT_ERROR", "VSUP_INVALID_ARGUMENT", "VSUP_NOT_FOUND", "VSUP_BACKEND_ERROR", "VSUP_LIMIT_EXCEEDED", "VSUP_NO_PROGRESS", "VSUP_INVALID_STATE", "VSUP_STORAGE_ERROR", "VSUP_INTERNAL"]);
+const ERROR_CODES = new Set<string>(Object.keys(REMEDIATION));
 
 function resultToWire(result: NonNullable<RunRecord["result"]>): JsonObject {
   return {
