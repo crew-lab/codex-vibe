@@ -555,10 +555,10 @@ export class RunManager {
     if (record.state === "closed") return this.closeOutcome(runtime, cleanupWanted ? await this.cleanupWorktree(runtime) : { removed: false });
     this.clearProgress(runtime);
     if (!isTerminal(record.state)) {
-      runtime.cancelRequested = true;
+      const outcome = this.requestOutcome(runtime, { state: "cancelled" });
       try { await this.cancelBackendSession(runtime); }
       catch (error) { return this.unverifiedWorkerOutcome(runtime, error); }
-      await this.serial(runtime, () => this.settle(runtime, { state: "cancelled" }));
+      await this.serial(runtime, () => this.settle(runtime, outcome));
     }
     try { await this.releaseSession(runtime); }
     catch (error) { return this.unverifiedWorkerOutcome(runtime, error); }
@@ -1078,6 +1078,13 @@ export class RunManager {
     try {
       await this.ensureLoaded(runtime);
       this.endTranscriptTurn(runtime);
+      try { await this.releaseSession(runtime); }
+      catch (error) {
+        const workerError = supervisorError("VSUP_BACKEND_ERROR", "Worker termination could not be verified. The run is retained with its active slot and owned handle for safe retry.");
+        outcome = { state: "failed", error: workerError };
+        runtime.record.error = workerError;
+        await this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "error", data: { reason: "worker_termination_unverified", message: describeFailure(error) } }, true).catch(() => undefined);
+      }
       if (outcome.error) runtime.record.error = outcome.error;
       await this.assessReviewIntegrity(runtime, outcome.state);
       try { await this.finalizeArtifacts(runtime, outcome.state); }
@@ -1086,13 +1093,6 @@ export class RunManager {
         else await this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "warning", data: { reason: "artifact_finalization_failed", message: describeFailure(error) } }, true).catch(() => undefined);
         if (outcome.error) runtime.record.error = outcome.error;
         await this.writeFallbackResult(runtime, outcome.state);
-      }
-      try { await this.releaseSession(runtime); }
-      catch (error) {
-        const workerError = supervisorError("VSUP_BACKEND_ERROR", "Worker termination could not be verified. The run is retained with its active slot and owned handle for safe retry.");
-        outcome = { state: "failed", error: workerError };
-        runtime.record.error = workerError;
-        await this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "error", data: { reason: "worker_termination_unverified", message: describeFailure(error) } }, true).catch(() => undefined);
       }
       await this.setState(runtime, outcome.state, { ...(outcome.error ? { error: outcome.error } : {}), finishedAt: new Date().toISOString() });
       delete runtime.requestedOutcome;

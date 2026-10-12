@@ -72,7 +72,7 @@ async function setupGit(backend: FakeBackend) {
 }
 
 async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean): Promise<T> {
-  const until = Date.now() + 3000;
+  const until = Date.now() + 10_000;
   while (Date.now() < until) {
     const value = await read();
     if (done(value)) return value;

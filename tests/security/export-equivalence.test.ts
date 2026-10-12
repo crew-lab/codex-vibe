@@ -1,9 +1,22 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { chmod, lstat, mkdtemp, mkdir, readFile, readdir, readlink, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { captureDirtySnapshot } from '../../src/git/worktree.js';
+
+const gitSpawns = vi.hoisted(() => ({ count: 0 }));
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const original = await importOriginal<typeof import('node:child_process')>();
+  return {
+    ...original,
+    spawn: (...args: Parameters<typeof original.spawn>) => {
+      if (args[0] === 'git') gitSpawns.count += 1;
+      return original.spawn(...args);
+    }
+  };
+});
 
 const dirs: string[] = [];
 async function tempDir(): Promise<string> {
@@ -121,14 +134,18 @@ describe('dirty export equivalence with the per-file reference implementation', 
   });
 
   it('exports 50 untracked files in constant time', async () => {
-    const dir = await tempDir(); const repo = path.join(dir, 'repo'); await mkdir(repo);
-    git(repo, ['init', '-q']); git(repo, ['config', 'user.email', 'test@example.invalid']); git(repo, ['config', 'user.name', 'Test']);
-    await writeFile(path.join(repo, 'base.txt'), 'base\n'); git(repo, ['add', '-A']); git(repo, ['commit', '-qm', 'base']);
-    for (let index = 0; index < 50; index += 1) await writeFile(path.join(repo, `untracked-${index}.txt`), `content ${index}\n`);
-    const started = performance.now();
-    const snapshot = await captureDirtySnapshot(repo);
-    const elapsed = performance.now() - started;
-    expect(snapshot.changedFiles).toHaveLength(50);
-    expect(elapsed).toBeLessThan(600);
+    const spawnsFor = async (untrackedCount: number) => {
+      const dir = await tempDir(); const repo = path.join(dir, 'repo'); await mkdir(repo);
+      git(repo, ['init', '-q']); git(repo, ['config', 'user.email', 'test@example.invalid']); git(repo, ['config', 'user.name', 'Test']);
+      await writeFile(path.join(repo, 'base.txt'), 'base\n'); git(repo, ['add', '-A']); git(repo, ['commit', '-qm', 'base']);
+      for (let index = 0; index < untrackedCount; index += 1) await writeFile(path.join(repo, `untracked-${index}.txt`), `content ${index}\n`);
+      const before = gitSpawns.count;
+      const snapshot = await captureDirtySnapshot(repo);
+      expect(snapshot.changedFiles).toHaveLength(untrackedCount);
+      return gitSpawns.count - before;
+    };
+    const single = await spawnsFor(1);
+    expect(single).toBeGreaterThan(0);
+    expect(await spawnsFor(50)).toBe(single);
   });
 });

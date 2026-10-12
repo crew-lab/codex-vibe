@@ -77,21 +77,22 @@ const exists = (file: string) => stat(file).then(() => true, () => false);
 const configFor = (source: string, overrides: Partial<typeof DEFAULT_CONFIG> = {}) => ({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], ...overrides });
 
 describe('lazy startup', () => {
-  it('initializes 200 runs with 1 MiB event logs in under 300 ms without reading events, and loads them on demand', async () => {
+  it('initializes 200 runs with 1 MiB event logs without reading events, and loads them on demand', async () => {
     const { source, data } = await root();
     const ids: string[] = [];
     for (let index = 0; index < 200; index += 1) ids.push(await seed(data, source, { state: 'closed', eventBytes: 1_048_576 }));
     for (const id of ids) await chmod(path.join(data, 'runs', id, 'events.ndjson'), 0o000);
     const manager = new RunManager(configFor(source), data, [new FakeBackend()]);
     try {
-      const began = performance.now();
+      const loads = vi.spyOn(RunManager.prototype as unknown as { loadRuntime(...args: unknown[]): Promise<void> }, 'loadRuntime');
       await manager.initialize();
-      expect(performance.now() - began).toBeLessThan(300);
+      expect(loads).not.toHaveBeenCalled();
       expect(await manager.runsList()).toHaveLength(200);
       const target = ids[17]!;
       await chmod(path.join(data, 'runs', target, 'events.ndjson'), 0o600);
       const status = await manager.status({ run_id: target, max_events: 5 });
       expect(status.last_seq).toBeGreaterThan(1000);
+      expect(loads).toHaveBeenCalledTimes(1);
       expect((status.events as { seq: number }[]).map((event) => event.seq)).toEqual([1, 2, 3, 4, 5]);
       await expect(manager.status({ run_id: ids[18]! })).rejects.toMatchObject({ code: 'VSUP_STORAGE_ERROR' });
     } finally { await manager.shutdown(); }

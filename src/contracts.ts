@@ -180,14 +180,6 @@ export interface BackendStartResult {
   process?: ProcessRecord;
 }
 
-export interface BackendRespondInput {
-  requestId: string;
-  kind: "permission" | "elicitation";
-  optionId?: string;
-  action?: "accept" | "decline" | "cancel";
-  content?: Record<string, unknown>;
-}
-
 export interface SupervisorBackend {
   readonly kind: BackendKind;
   probe(): Promise<BackendCapabilities>;

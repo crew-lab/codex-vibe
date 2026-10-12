@@ -16,7 +16,7 @@ An error carries `code`, `message`, `remediation`, `retryable` and sometimes `de
 | `VSUP_BACKEND_CRASHED` | The Vibe process exited before the turn finished. | Inspect the run's diagnostic events and start a new run. | no |
 | `VSUP_TIMEOUT` | The run deadline elapsed, or a Git operation exceeded its fixed 30 s limit (details.operation names it). | Increase the timeout or simplify the task, then start a new run. For a Git operation that exceeded its fixed limit, reduce the size of the repository changes. | no |
 | `VSUP_RATE_LIMITED` | Vibe or its provider answered with HTTP 429. | Wait for the service rate limit to clear and retry. | yes |
-| `VSUP_CANCELLED` | The run was cancelled, or it never started because the supervisor stopped first. | Start another run if more work is needed. | no |
+| `VSUP_CANCELLED` | No longer emitted. Kept so saved run records from older versions still read; this release records a stopped run as `cancelled` with no error. | Start another run if more work is needed. | no |
 | `VSUP_OUTPUT_LIMIT` | The run exceeded an event, transcript or artifact byte limit, or a Git command produced more than 100 MiB of output. | Reduce the requested output or increase the configured limit. | no |
 | `VSUP_ARTIFACT_ERROR` | A run artifact could not be written, read or exported, including a Git failure while capturing the edit snapshot (details.operation) or a refused Git filter. | Inspect the run directory permissions and available disk space; for a Git failure, see details.operation and the repository state. | no |
 | `VSUP_INVALID_ARGUMENT` | The tool arguments failed schema validation. | Correct the tool arguments and try again. | no |

@@ -21,6 +21,7 @@ import { reportBackgroundFailure } from '../diagnostics/background.js';
 const execFileAsync = promisify(execFile);
 const NO_FINAL_MESSAGE_WARNING = 'Vibe produced no final message.';
 const TRUST_WARNING_PATTERN = /^Warning: .+ is not trusted; project configuration \(.+\) will be ignored\. Re-run with --trust to trust this folder temporarily\.$/;
+const SHIM_CREDENTIAL_NOTICE_PATTERN = /^vibe-supervisor: no Keychain credential resolved \([^\r\n]{1,300}\); Vibe will use its own authentication$/;
 
 interface ProgrammaticHandle extends BackendRunHandle {
   opaque: { process: ReturnType<typeof spawnManaged>; done: boolean; home: string; vibeHome: string; summary: string };
@@ -36,10 +37,11 @@ function parsedVersion(stdout: string, stderr: string): string | undefined {
 }
 
 function isPinnedTurnLimitExit(code: number | null, signal: NodeJS.Signals | null, summary: string, stderr: string, maxTurns: number): boolean {
-  if (signal || summary.trim() !== `<vibe_stop_event>Turn limit of ${maxTurns} reached</vibe_stop_event>`) return false;
-  if (code === 1) return stderr.trim() === `<vibe_stop_event>Turn limit of ${maxTurns} reached</vibe_stop_event>`;
+  const marker = `<vibe_stop_event>Turn limit of ${maxTurns} reached</vibe_stop_event>`;
+  if (signal || summary.trim() !== marker) return false;
+  const lines = stderr.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).filter((line) => !SHIM_CREDENTIAL_NOTICE_PATTERN.test(line));
+  if (code === 1) return lines.length === 1 && lines[0] === marker;
   if (code !== 3) return false;
-  const lines = stderr.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (lines.pop() !== 'Stopped: turn_limit') return false;
   return lines.every((line) => TRUST_WARNING_PATTERN.test(line));
 }

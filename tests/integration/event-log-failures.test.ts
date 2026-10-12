@@ -23,6 +23,12 @@ class FakeBackend implements SupervisorBackend {
   async recover(_record: RunRecord) { return undefined; }
 }
 
+async function pendingWrites(manager: RunManager, runId: string): Promise<void> {
+  const runtime = (manager as unknown as { runs: Map<string, { manifestWrite?: Promise<void>; persistChain: Promise<void> }> }).runs.get(runId);
+  await runtime?.manifestWrite;
+  await runtime?.persistChain;
+}
+
 async function running(maxEventBytes = DEFAULT_CONFIG.limits.maxEventBytes) {
   const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-evlog-')); roots.push(parent);
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data'); await mkdir(source); await writeFile(path.join(source, 'file.txt'), 'content\n');
@@ -30,6 +36,7 @@ async function running(maxEventBytes = DEFAULT_CONFIG.limits.maxEventBytes) {
   const manager = new RunManager({ ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits, maxEventBytes }, allowedWorkspaceRoots: [source] }, data, [backend]);
   const started = await manager.reviewStart({ task: 'review', cwd: source });
   for (let attempt = 0; attempt < 500 && (await manager.status({ run_id: started.run_id })).state !== 'running'; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+  await pendingWrites(manager, started.run_id);
   const directory = path.join(data, 'runs', started.run_id);
   return { manager, callbacks: backend.callbacks.get(started.run_id)!, runId: started.run_id, directory, events: path.join(directory, 'events.ndjson') };
 }

@@ -92,18 +92,20 @@ describe('workspace snapshot', () => {
     await expect(snapshotWorkspace(root, { maxFiles: 5, maxBytes: 1_000 })).resolves.toBeDefined();
   });
 
-  it('snapshots 20,000 small ignored files quickly', async () => {
+  it('snapshots 20,000 small ignored files by metadata without hashing them', async () => {
     const root = await gitRoot();
     const modules = path.join(root, 'node_modules');
     for (let package_ = 0; package_ < 200; package_ += 1) {
       const directory = path.join(modules, `pkg${package_}`); await mkdir(directory);
       await Promise.all(Array.from({ length: 100 }, (_, index) => writeFile(path.join(directory, `f${index}.js`), `module.exports = ${index};\n`)));
     }
-    const started = performance.now();
     const snapshot = await snapshotWorkspace(root);
-    const elapsed = performance.now() - started;
     expect(snapshot.manifest.size).toBeGreaterThan(20_000);
-    expect(elapsed).toBeLessThan(3000);
+    const ignored = [...snapshot.manifest].filter(([file, entry]) => file.startsWith(`node_modules${path.sep}`) && entry.kind === 'F');
+    expect(ignored.length).toBeGreaterThan(20_000);
+    expect(ignored.filter(([, entry]) => entry.hash !== undefined)).toEqual([]);
+    expect(snapshot.manifest.get('tracked.txt')?.hash).toBeDefined();
+    expect(snapshot.manifest.get('untracked.txt')?.hash).toBeDefined();
   }, 30_000);
 
   it('counts only files toward the file cap and bounds directories separately', async () => {

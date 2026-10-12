@@ -16,7 +16,7 @@ export const MEANINGS = {
   VSUP_BACKEND_CRASHED: 'The Vibe process exited before the turn finished.',
   VSUP_TIMEOUT: 'The run deadline elapsed, or a Git operation exceeded its fixed 30 s limit (details.operation names it).',
   VSUP_RATE_LIMITED: 'Vibe or its provider answered with HTTP 429.',
-  VSUP_CANCELLED: 'The run was cancelled, or it never started because the supervisor stopped first.',
+  VSUP_CANCELLED: 'No longer emitted. Kept so saved run records from older versions still read; this release records a stopped run as `cancelled` with no error.',
   VSUP_OUTPUT_LIMIT: 'The run exceeded an event, transcript or artifact byte limit, or a Git command produced more than 100 MiB of output.',
   VSUP_ARTIFACT_ERROR: 'A run artifact could not be written, read or exported, including a Git failure while capturing the edit snapshot (details.operation) or a refused Git filter.',
   VSUP_INVALID_ARGUMENT: 'The tool arguments failed schema validation.',

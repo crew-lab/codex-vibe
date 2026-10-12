@@ -80,7 +80,7 @@ The configuration is strict TOML. The starter allowlist is empty. Removed keysâ€
 |---|---|
 | `version` | Required schema version `1`. |
 | `allowed_workspace_roots` | Up to 100 absolute or home-relative canonical workspace roots. Defaults to empty. |
-| `retention.days` | Bounded artifact retention age. |
+| `retention.days` | Bounded artifact retention age. Retention removes closed and cancelled runs older than the cutoff when no worktree is retained, and closes then removes completed runs after at least a day. A failed run that was never closed is never pruned by age; close it with `vibe_close` to make it eligible. |
 | `limits.review_timeout_seconds`, `limits.edit_timeout_seconds` | Default run deadlines. |
 | `limits.max_turns_review`, `limits.max_turns_edit` | Default one-shot turn limits, 1â€“50. |
 | `limits.max_event_bytes`, `limits.max_transcript_bytes`, `limits.max_artifact_bytes` | Bounded persisted output sizes. |
