@@ -8,7 +8,7 @@ Offline packaging requires the populated cache and runs lint, typecheck, build, 
 
 Installation targets a new `/Users/roman/.local/share/vibe-supervisor/rc18` prefix. Preserve rc17, private provider state, original configuration backup and all existing runs. Preserve unrelated Codex settings and backend/roots/limits; change only the executable/template paths. Refresh the existing skill links to the installed package. Independently verify installed version, archive/runtime/skill bytes and seven-tool official-client initialization. This chat's already connected process remains unverified until a new native run records its creator; do not restart it automatically.
 
-See [triage](lifecycle-triage-2026-10-09.md), [test plan](../../lifecycle-recovery-test-plan.md), [prior installation](rc17-local-installation-2026-10-09.md) and [Handoff](../../../Handoff.md).
+See [triage](lifecycle-triage-2026-10-09.md), [test plan](../lifecycle-recovery-test-plan.md), [prior installation](rc17-local-installation-2026-10-09.md) and [Handoff](../../../Handoff.md).
 
 ## Verified outcome
 

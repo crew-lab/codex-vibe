@@ -16,7 +16,7 @@ Source: `9191338380cca6f2723765a513d26040c1b636a4`, now merged into remote main.
 | F13, shutdown | Current remedy has graceful deadline, owned-worker termination and owner-lock release. Existing fake-process tests passed, including a real OS process group for a fake ACP peer. Force termination has a separate bounded wait. | Old finding is remedied locally; end-to-end native desktop shutdown/recovery remains unverified. Measure the entire client/server path, not just the graceful timer. |
 | F14, unused dependency | `@modelcontextprotocol/node` remains pinned but has no imports in source/tests/scripts. | Nonblocking maintenance decision; dependencies unchanged. |
 
-F8, F7, F15 and F11 must be fixed and covered by meaningful passing regressions before the [bounded recovery campaign](../../lifecycle-recovery-test-plan.md). F9 requires resolution before its specific gate. Historical “non-blocking” labels do not override reproduced boundary/lifecycle failures.
+F8, F7, F15 and F11 must be fixed and covered by meaningful passing regressions before the [bounded recovery campaign](../lifecycle-recovery-test-plan.md). F9 requires resolution before its specific gate. Historical “non-blocking” labels do not override reproduced boundary/lifecycle failures.
 
 ## Reproduction and verification
 
