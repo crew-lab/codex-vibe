@@ -67,7 +67,8 @@ const report = {
   schema_version: 1,
   generated_at: new Date().toISOString(),
   deterministic_checks: checks,
-  unverified_release_gates: gates.unverified.map(({ name, status, evidence_required }) => ({ name, status, reason: evidence_required })),
+  verified_release_gates: (gates.verified ?? []).map(({ name, status }) => ({ name, status })),
+  unverified_release_gates: (gates.unverified ?? []).map(({ name, status, evidence_required }) => ({ name, status, reason: evidence_required })),
 };
 process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 if (checks.some((check) => check.status === 'FAIL')) process.exitCode = 1;
