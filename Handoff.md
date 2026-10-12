@@ -1,6 +1,6 @@
 # Current handoff
 
-Consolidated 2026-10-12. This document and the [development plan](docs/development-plan-2026-10-11.md) define current priorities. The [previous handoff](docs/history/handoff-before-consolidation-2026-10-12.md) preserves historical evidence; its older ACP, soak and release proposals are not the current work queue.
+Consolidated 2026-10-12. This document and the [development plan](docs/history/development-plan-2026-10-11.md) define current priorities. The [previous handoff](docs/history/handoff-before-consolidation-2026-10-12.md) preserves historical evidence; its older ACP, soak and release proposals are not the current work queue.
 
 ## Source and release identity
 
@@ -10,7 +10,7 @@ The primary checkout remains an older dirty tree. Preserve unrelated edits; do n
 
 Frozen archive: `tmp/turn-limit-fix/release/vibe-supervisor-0.9.0-rc.23.tgz`.
 SHA-256: `1dec1be1adcac0f96ad6d9ba453dd817977efdd3e76703ebc96acf4d65fa5998`.
-Installed runtime files match this archive. Later documentation updates are not part of the frozen archive. See the [preservation review](docs/rc23-preservation-review-2026-10-11.md).
+Installed runtime files match this archive. Later documentation updates are not part of the frozen archive. See the [preservation review](docs/history/rc23-preservation-review-2026-10-11.md).
 
 ## Local installation and readiness
 
@@ -28,7 +28,7 @@ rc.23 fixes saved-run lookup within the selected private session namespace while
 
 ## Connection incident and revised priority — 2026-10-12
 
-Garnebo dispatch was refused before run creation after an approved allowlist edit. Selected config and isolated session snapshots now contain different policy generations. Reading an old run was insufficient to establish workspace dispatch readiness. The [connection reliability proposal](docs/connection-strategy-2026-10-12.md) is the next P0: authoritative per-dispatch policy, native workspace preflight/current-server identity, and no automatic Luna substitution for connection preparation failures. This is proposed, not implemented. Native saved-record access remains verified; readiness for a new project is not established by that fact.
+Garnebo dispatch was refused before run creation after an approved allowlist edit. Selected config and isolated session snapshots now contain different policy generations. Reading an old run was insufficient to establish workspace dispatch readiness. The [connection reliability proposal](docs/history/connection-strategy-2026-10-12.md) is the next P0: authoritative per-dispatch policy, native workspace preflight/current-server identity, and no automatic Luna substitution for connection preparation failures. This is proposed, not implemented. Native saved-record access remains verified; readiness for a new project is not established by that fact.
 
 ## Next priorities
 
