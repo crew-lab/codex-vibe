@@ -6,11 +6,17 @@ Everything for the launch article lives here. It is not part of the npm package 
 |---|---|
 | [plan.md](plan.md) | Goal, reader, story, title and tags, outline, assets, what blocks publishing, open questions |
 | [final.md](final.md) | Revised rc.17 article, with DEV front matter, an evidence-based failure story and open engineering questions |
+| [draft-1.0.md](draft-1.0.md) | Draft for 1.0 on the one-shot product (rc.28), with `[EVIDENCE: …]` placeholders for the hosted sitting |
 | [draft.md](draft.md) | Draft 2 with `[author]` and `[...]` placeholders, the base for a 1.0 version once Phase D has numbers |
 | [evidence.md](evidence.md) | Every benefit and number the article may use, with its conditions and source; the claims it must never make |
 | [research.md](research.md) | DEV's publishing and AI-disclosure rules, writing practice, the landscape, sources |
 | [experiment.md](experiment.md) | Optional planted-bug comparison of Codex alone and Codex with Vibe |
 | [review.md](review.md) | Fact-check of plan, evidence and draft 1 against the repository, editorial findings, decisions for the author |
+
+## Status (2026-10-12)
+
+- [draft-1.0.md](draft-1.0.md) is the base for the launch article: the one-shot product (five tools, Vibe 2.26.1, readiness receipts), with six checks drawn from what went wrong: turn-limit reporting (twice), the stale-allowlist incident, the incomplete-export bugs whose cleanup check shared their blind spot, the worker misreporting its own read count, shutdown and the SDK's 4-second SIGKILL, and what was removed. Hosted numbers, the disconnect outcome and the release URL are `[EVIDENCE: …]` placeholders; publish only after the 1.0 sitting fills them and the author has read it in their own voice.
+- [final.md](final.md) describes rc.17 with ACP, which no longer exists; do not publish it.
 
 ## Status (2026-10-09)
 
