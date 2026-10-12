@@ -68,16 +68,36 @@ export async function validateWorkspaceRootsAtUse(roots: readonly string[], home
   return canonical;
 }
 
+export interface UnavailableWorkspaceRoot { root: string; path: string; reason: string }
+
+export async function inspectWorkspaceRoots(roots: readonly string[], home?: string): Promise<{ available: string[]; unavailable: UnavailableWorkspaceRoot[] }> {
+  const available: string[] = [];
+  const unavailable: UnavailableWorkspaceRoot[] = [];
+  for (const root of roots) {
+    const expanded = assertWorkspaceRootScope(root, home);
+    const missing = await lstat(expanded).then(() => false, (error: NodeJS.ErrnoException) => error.code === 'ENOENT' || error.code === 'ENOTDIR');
+    if (missing) { unavailable.push({ root, path: expanded, reason: 'the directory no longer exists' }); continue; }
+    available.push(await resolveCanonicalWorkspaceRoot(root, home));
+  }
+  if (new Set(available).size !== available.length) throw new WorkspacePathError('Workspace roots must be unique after canonicalization.');
+  return { available, unavailable };
+}
+
 /** Canonicalize both sides before containment checks; string prefixes are never used. */
-export async function resolveCanonicalRoot(input: string, allowedRoots: readonly string[], home?: string): Promise<string> {
+export async function resolveAdmittedWorkspace(input: string, allowedRoots: readonly string[], home?: string): Promise<{ workspace: string; root: string }> {
   const candidateInput = path.resolve(expandHome(input, home));
   let candidate: string;
   try { candidate = await realpath(candidateInput); } catch { throw new WorkspacePathError(); }
   const canonicalRoots = await Promise.all(allowedRoots.map(async (root) => {
     try { return await resolveCanonicalWorkspaceRoot(root, home); } catch { return null; }
   }));
-  if (!canonicalRoots.some((root) => root !== null && isPathWithinRoot(root, candidate))) throw new WorkspacePathError();
-  return candidate;
+  const containing = canonicalRoots.filter((root): root is string => root !== null && isPathWithinRoot(root, candidate));
+  if (!containing.length) throw new WorkspacePathError();
+  return { workspace: candidate, root: containing.sort((a, b) => b.length - a.length)[0]! };
+}
+
+export async function resolveCanonicalRoot(input: string, allowedRoots: readonly string[], home?: string): Promise<string> {
+  return (await resolveAdmittedWorkspace(input, allowedRoots, home)).workspace;
 }
 
 export async function assertPathWithinRoot(root: string, candidate: string): Promise<string> {

@@ -6,11 +6,11 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const errorsDocPath = path.join(root, 'docs', 'errors.md');
 
 export const MEANINGS = {
-  VSUP_CONFIG_INVALID: 'The configuration file is missing a required field, has an invalid value or cannot be parsed.',
+  VSUP_CONFIG_INVALID: 'The selected configuration file is missing, unsafe (symlinked, foreign-owned, group/world-writable or over 1 MiB), cannot be parsed, or has a missing or invalid field.',
   VSUP_VIBE_NOT_FOUND: 'The Vibe executable or its Python launcher interpreter is missing.',
   VSUP_VIBE_VERSION_UNSUPPORTED: 'The installed Vibe is not the pinned version.',
   VSUP_AUTH_REQUIRED: 'Vibe reported a missing or rejected credential (401, unauthorized, missing API key).',
-  VSUP_WORKSPACE_INVALID: 'The workspace or a context file does not exist or lies outside every allowed root, contains project .vibe, a symlink or non-directory .agents, a symlinked .vibeignore or glob characters in its path, or an edit run did not start at the git repository root.',
+  VSUP_WORKSPACE_INVALID: 'The workspace or a context file does not exist or lies outside every allowed root, contains project .vibe, a symlink or non-directory .agents, a symlinked .vibeignore or glob characters in its path, or an edit run did not start at the git repository root; details.unavailable_root names an allowed root whose directory no longer exists.',
   VSUP_WORKTREE_CREATE_FAILED: 'git worktree add failed for the edit run; details.stderr_tail and details.operation say why.',
   VSUP_GIT_REQUIRED: 'The git executable is missing.',
   VSUP_BACKEND_CRASHED: 'The Vibe process exited before the turn finished.',
@@ -27,6 +27,8 @@ export const MEANINGS = {
   VSUP_INVALID_STATE: 'The action is not valid in the run state, or the data directory is owned by another supervisor.',
   VSUP_STORAGE_ERROR: 'A filesystem fault (disk full, permissions, read-only, I/O) hit the data directory.',
   VSUP_INTERNAL: 'An unexpected supervisor failure; the detail is only on stderr.',
+  VSUP_RESTART_REQUIRED: 'The selected configuration, reread before a readiness check or start, changes a boot-bound setting (paths.vibe, retention or a limit) that the running server cannot adopt.',
+  VSUP_READINESS_RECEIPT_INVALID: 'A start carried a readiness_receipt that is malformed, altered, expired, from another server instance, or bound to a different policy revision, operation, workspace or base_ref, or whose edit base no longer resolves or resolves to another commit; details.reason names which.',
 };
 
 const RETRYABLE = new Set(['VSUP_RATE_LIMITED']);

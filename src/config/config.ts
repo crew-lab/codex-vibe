@@ -8,7 +8,7 @@ import { DEFAULT_CONFIG } from "./defaults.js";
 import { validateConfig } from "./validation.js";
 import { supervisorError } from "../contracts.js";
 import type { SupervisorConfig } from "../contracts.js";
-import { createPrivateDir, validateWorkspaceRootsAtUse } from "../security/paths.js";
+import { createPrivateDir, inspectWorkspaceRoots } from "../security/paths.js";
 
 export interface LoadConfigOptions {
   /** Create the private application data root when it does not exist. */
@@ -113,10 +113,12 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Super
   try {
     const stat = await handle.stat();
     if (!stat.isFile() || stat.size > 1_048_576) throw new Error("Config must be a regular file no larger than 1 MiB.");
+    if (typeof process.getuid === "function" && stat.uid !== process.getuid()) throw new Error("Config must be owned by the current user.");
+    if ((stat.mode & 0o022) !== 0) throw new Error("Config must not be writable by group or others; run chmod 600 on it.");
     const source = await handle.readFile("utf8");
     const raw = parse(source);
     const config = validateConfig(raw, env.HOME ?? env.USERPROFILE);
-    await validateWorkspaceRootsAtUse(config.allowedWorkspaceRoots, env.HOME ?? env.USERPROFILE);
+    await inspectWorkspaceRoots(config.allowedWorkspaceRoots, env.HOME ?? env.USERPROFILE);
     return config;
   } catch (error) {
     if (error instanceof Error) {

@@ -4,7 +4,7 @@ Consolidated 2026-10-12. This document alone defines current priorities. Backgro
 
 ## What this is
 
-A local MCP stdio server that lets Codex delegate one bounded code review or one isolated edit at a time to Mistral Vibe 2.26.1. Codex sees five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result` and `vibe_close`. A review may only read and search an allowlisted workspace; an edit runs in a supervisor-created detached Git worktree and comes back as a patch, never applied, committed or pushed. Shell and network tools are off. This is an application policy boundary, not an OS sandbox.
+A local MCP stdio server (current candidate `0.9.0-rc.24`) that lets Codex delegate one bounded code review or one isolated edit at a time to Mistral Vibe 2.26.1. Codex sees five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result` and `vibe_close`. A review may only read and search an allowlisted workspace; an edit runs in a supervisor-created detached Git worktree and comes back as a patch, never applied, committed or pushed. Shell and network tools are off. This is an application policy boundary, not an OS sandbox.
 
 | Area | Code |
 | --- | --- |
@@ -19,6 +19,29 @@ A local MCP stdio server that lets Codex delegate one bounded code review or one
 | Coordinator skill (shipped) | `skills/vibe-supervisor` |
 
 Behaviour: [docs/functionality.md](docs/functionality.md); interface: [docs/reference.md](docs/reference.md); boundary: [docs/security.md](docs/security.md); Vibe assumptions: [docs/compatibility.md](docs/compatibility.md); errors: [docs/errors.md](docs/errors.md) (generated); gates: `docs/acceptance.json`. AGENTS.md lists the boundaries that must not change.
+
+## rc.24 — built, not yet installed (2026-10-12)
+
+rc.24 implements the P0 [connection reliability proposal](docs/history/connection-strategy-2026-10-12.md) on the preparing machine, against fake backends only:
+
+- The server rereads the originally selected config before every readiness check and start; an approved allowlist change applies without restarting Codex. Session snapshots are audit records. Only `allowed_workspace_roots` is live; any other changed key gives `VSUP_RESTART_REQUIRED`. A missing, unsafe, group-writable or foreign-owned config fails closed. A root whose directory disappeared denies only itself.
+- `vibe_status` with `workspace` and `operation` (and `base_ref` for an edit) is the native readiness check: current server version and instance, policy path and revision, eligibility and blockers, slot state, a non-launching runtime check, and a 10-minute signed receipt. No run, worktree or model call. Starts take an optional `readiness_receipt`; drift is rejected before launch with `VSUP_READINESS_RECEIPT_INVALID`, and an edit with a receipt runs on the exact commit checked.
+- Runs record their admitting root and policy revision; removing a root denies later starts, and an admitted run's verified worktree can still be cleaned up.
+- The skill starts every delegation with readiness; a missing tool is CONNECTION_FAILED, a blocker PREPARATION_FAILED, neither a Vibe result, and there is no silent fallback to Luna.
+- A deterministic active-disconnect rehearsal (8 cases: plain and `--isolated`, review and edit, client close and SIGTERM) passes: the server exits, the worker's process group is gone, the lock is released, the interrupted run is `failed` and never relaunched, and an edit's worktree is kept until `vibe_close` cleans it.
+- CI runs on Node 20.19.0 and 24; a scan found no Node API newer than the floor. CI has not yet run on this commit.
+
+A cold review found three defects (one deleted root blocked every start and cleanup; a deleted base ref was misreported; narrowing the allowlist stranded worktrees) and the base ref being resolved twice; all fixed with regressions.
+
+`package:rc` passed: 606 tests passed and 2 skipped in 60 files, Python tests, lint, typecheck, build, acceptance, secret scan, SBOM, and the offline installed-package smoke test (including isolated concurrency and saved-run reconnect). Artifacts on the preparing machine at `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.24/` (Git-ignored); check with `shasum -a 256 -c SHA256SUMS`:
+
+```text
+vibe-supervisor-0.9.0-rc.24.tgz  sha256 55154e8350aee0f787060741a438ca77064a6f75ec17f6c2387fcc6f8c9e3a80
+sbom.spdx.json                   sha256 5224499a116a4cd88d3f405d9a9e4c483f8a214f5c50b3849925f90b91c6570b
+acceptance.json                  sha256 4ce3e82b1e5e6dc190998c14ec6f79238a34ac5071a96e3d7469e822051b93db
+```
+
+Upgrading from rc.23: a hand-edited config that is group- or world-writable (for example 0664) is now refused; set it to 0600. Registrations need a reconnect to load the new code.
 
 ## Source and release identity
 
@@ -46,16 +69,16 @@ rc.23 fixes saved-run lookup within the selected private session namespace while
 
 ## Connection incident and revised priority — 2026-10-12
 
-Garnebo dispatch was refused before run creation after an approved allowlist edit. Selected config and isolated session snapshots now contain different policy generations. Reading an old run was insufficient to establish workspace dispatch readiness. The [connection reliability proposal](docs/history/connection-strategy-2026-10-12.md) is the next P0: authoritative per-dispatch policy, native workspace preflight/current-server identity, and no automatic Luna substitution for connection preparation failures. This is proposed, not implemented. Native saved-record access remains verified; readiness for a new project is not established by that fact.
+Garnebo dispatch was refused before run creation after an approved allowlist edit. Selected config and isolated session snapshots now contain different policy generations. Reading an old run was insufficient to establish workspace dispatch readiness. The [connection reliability proposal](docs/history/connection-strategy-2026-10-12.md) is the next P0: authoritative per-dispatch policy, native workspace preflight/current-server identity, and no automatic Luna substitution for connection preparation failures. Implemented in rc.24 (see above); native verification pending. Native saved-record access remains verified; readiness for a new project is not established by that fact.
 
 ## Next priorities
 
-1. Implement and verify the P0 connection proposal before another project trial: authoritative policy, workspace-specific native readiness and dispatch revalidation. Then rehearse active disconnect with a deterministic local fixture.
-2. Verify exact Node 20.19.0 compatibility and prepare fresh standard macOS account acceptance with human participation and no credential copying.
-3. Run a separately authorized, bounded candidate-specific hosted matrix, accounting explicitly for active disconnect and fresh-account inference. Stop at the first failure; no automatic retry or account rotation.
-4. Decide v1.0 only after required gates pass. Tagging and release publication need explicit authorization.
+1. On the target machine: install rc.24 (authorized), reconnect Codex, and in the testing thread run the native readiness check for the fixture and for Garnebo; confirm the reported server version is rc.24, then approve or remove a root and confirm readiness follows without a restart. No inference needed.
+2. Push CI and confirm the Node 20.19.0 and 24 jobs pass. Prepare the fresh standard macOS account acceptance with human participation and no credential copying.
+3. Run a separately authorized, bounded hosted matrix on rc.24 (five runs: an initial review, an initial edit, three more), each started with a readiness receipt, including one real active disconnect. Stop at the first failure; no automatic retry or account rotation.
+4. Decide v1.0 only after required gates pass. Tagging and release publication need explicit authorization. Rewrite the launch article for the one-shot product after that (the current draft describes rc.17 with ACP).
 
-A new practical trial is appropriate after native preflight passes and its workspace, baseline, task, limits and provider budget are explicitly agreed. The current readiness request starts no hosted work. Codex coordinates independent verification; GPT-6 Luna High is the backup.
+A new practical trial is appropriate after native readiness passes and its workspace, baseline, task, limits and provider budget are explicitly agreed. Codex coordinates independent verification; GPT-6 Luna High is the backup.
 
 ## Fixed scope and safeguards
 

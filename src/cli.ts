@@ -3,7 +3,9 @@ import { lstat, open, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { constants as fsConstants } from 'node:fs';
-import { loadConfig, loadResolvedConfig } from './config/config.js';
+import { loadConfig, loadResolvedConfig, resolveConfigSelection } from './config/config.js';
+import { selectedConfigPolicy } from './config/policy.js';
+import { inspectWorkspaceRoots } from './security/paths.js';
 import type { OwnerLock } from './core/owner-lock.js';
 import { prepareIsolatedHome } from './config/isolated-home.js';
 import { createIsolatedRunRouter } from './core/isolated-run-router.js';
@@ -19,21 +21,24 @@ import { supervisorError, type SupervisorErrorCode } from './contracts.js';
 import { environmentSecrets, redactSecrets } from './security/redaction.js';
 
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
-async function getManager(ownerLock?: OwnerLock, configPath?: string): Promise<{ manager: RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> }; config: Awaited<ReturnType<typeof loadConfig>>; dataDir: string }> {
-  const resolved = await loadResolvedConfig({ createDataDir: true, ...(configPath ? { configPath } : {}) });
-  const { config, dataDir } = resolved;
+async function getManager(ownerLock?: OwnerLock, configPath?: string, isolatedHome?: string): Promise<{ manager: RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> }; config: Awaited<ReturnType<typeof loadConfig>>; dataDir: string; policy: ReturnType<typeof selectedConfigPolicy> }> {
+  const resolved = await loadResolvedConfig({ createDataDir: isolatedHome === undefined, ...(configPath ? { configPath } : {}) });
+  const config = resolved.config;
+  const dataDir = isolatedHome ?? resolved.dataDir;
+  const policy = selectedConfigPolicy(resolved.configPath);
+  for (const lost of (await inspectWorkspaceRoots(config.allowedWorkspaceRoots)).unavailable) process.stderr.write(`Allowed workspace root ${lost.root} is unavailable and denied until it is restored: ${lost.reason}\n`);
   const { RunManager } = await import('./core/run-manager.js');
-  const manager = new RunManager(config, dataDir, [], ownerLock) as RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> };
+  const manager = new RunManager(config, dataDir, [], ownerLock, { policy, ...(isolatedHome ? { sessionId: path.basename(isolatedHome) } : {}) }) as RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> };
   await manager.initialize();
-  return { manager, config, dataDir };
+  return { manager, config, dataDir, policy };
 }
 
 async function serve(ownerLock?: OwnerLock, configPath?: string, isolated?: { sessions: string; home: string }): Promise<void> {
   let ready: Awaited<ReturnType<typeof getManager>>;
-  try { ready = await getManager(ownerLock, configPath); }
+  try { ready = await getManager(ownerLock, configPath, isolated?.home); }
   catch (error) { await ownerLock?.release(); throw error; }
-  const { manager, config } = ready;
-  const tools = isolated ? createIsolatedRunRouter(manager, { sessions: isolated.sessions, currentHome: isolated.home, config }) : manager;
+  const { manager, config, policy } = ready;
+  const tools = isolated ? createIsolatedRunRouter(manager, { sessions: isolated.sessions, currentHome: isolated.home, config, policy }) : manager;
   const stopRouting = isolated ? () => tools.shutdown() : undefined;
   const handle = startMcpStdio(tools, { config, onError: (message) => process.stderr.write(`${message}\n`) });
   manager.startAutomaticRetention?.();
@@ -139,10 +144,11 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
         fail('Usage: vibe-supervisor serve --stdio [--config <path>] [--isolated]', 2);
       }
       if (isolated) {
+        const selected = resolveConfigSelection(configPath, process.env).configPath;
         const { home, sessions, lock, adopted } = await prepareIsolatedHome(process.env, undefined, configPath);
         process.env.VIBE_SUPERVISOR_HOME = home;
-        process.stderr.write(`Vibe private session directory (${adopted ? 'adopted' : 'created'}): ${home}\n`);
-        return await serve(lock, undefined, { home, sessions });
+        process.stderr.write(`Vibe private session directory (${adopted ? 'adopted' : 'created'}): ${home}\nSelected configuration (reread before every readiness check and start): ${selected}\n`);
+        return await serve(lock, selected, { home, sessions });
       }
       return await serve(undefined, configPath);
     }

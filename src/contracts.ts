@@ -79,7 +79,8 @@ export type SupervisorErrorCode =
   | "VSUP_RATE_LIMITED" | "VSUP_CANCELLED" | "VSUP_OUTPUT_LIMIT"
   | "VSUP_ARTIFACT_ERROR" | "VSUP_INVALID_ARGUMENT" | "VSUP_NOT_FOUND"
   | "VSUP_BACKEND_ERROR" | "VSUP_LIMIT_EXCEEDED"
-  | "VSUP_NO_PROGRESS" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR" | "VSUP_INTERNAL";
+  | "VSUP_NO_PROGRESS" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR" | "VSUP_INTERNAL"
+  | "VSUP_RESTART_REQUIRED" | "VSUP_READINESS_RECEIPT_INVALID";
 
 export interface RunRecord {
   /** Release that created the run; absent on legacy records. */
@@ -98,6 +99,8 @@ export interface RunRecord {
   startedAt?: string;
   finishedAt?: string;
   taskSha256: string;
+  policyRevision?: string;
+  admittedRoot?: string;
   workspaceSnapshotSha256?: string;
   process?: ProcessRecord;
   limits: RunLimits;
@@ -191,11 +194,22 @@ export interface SupervisorBackend {
   cancel(handle: BackendRunHandle): Promise<void>;
   close(handle: BackendRunHandle): Promise<void>;
   terminateNow?(handle: BackendRunHandle): Promise<void>;
+  runtimeCheck?(): Promise<RuntimeCheck>;
+}
+
+export interface RuntimeCheck {
+  executable: string;
+  resolved_executable: string | null;
+  executable_found: boolean;
+  pinned_version: string;
+  version_verified: false;
+  note: string;
 }
 
 export interface StartToolInput {
   task: string;
   cwd: string;
+  readiness_receipt?: string;
   max_turns?: number;
   timeout_seconds?: number;
   wait_seconds?: number;
@@ -204,7 +218,7 @@ export interface ReviewStartToolInput extends StartToolInput { context_files?: s
 export interface EditStartToolInput extends StartToolInput {
   base_ref?: string;
 }
-export interface StatusToolInput { run_id: string; after_seq?: number; max_events?: number; wait_seconds?: number }
+export interface StatusToolInput { run_id?: string; after_seq?: number; max_events?: number; wait_seconds?: number; workspace?: string; operation?: RunMode; base_ref?: string }
 export interface WaitOptions { signal?: AbortSignal }
 export interface ResultToolInput { run_id: string; detail?: "compact" | "full"; include_transcript?: boolean }
 export interface CloseToolInput { run_id: string; cleanup_worktree?: boolean }
@@ -214,7 +228,7 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_VIBE_NOT_FOUND: "Install Vibe or set paths.vibe to its executable.",
   VSUP_VIBE_VERSION_UNSUPPORTED: `Install exactly the supported Vibe version (for example \`uv tool install mistral-vibe==${SUPPORTED_VIBE}\`) or set paths.vibe to its executable.`,
   VSUP_AUTH_REQUIRED: "Sign in to Vibe or configure its supported authentication.",
-  VSUP_WORKSPACE_INVALID: "Provide an existing workspace directory under an allowed_workspace_roots entry (the git repository root for an edit, without project .vibe, unsafe .agents paths or glob characters), and existing context files inside it; a real .agents directory is supported without inheriting its content. Add the workspace to the selected config with `node dist/cli.js allow --config <selected-config> <workspace>` (or the equivalent installed executable path), then restart the Codex MCP server so it reads the new list.",
+  VSUP_WORKSPACE_INVALID: "Provide an existing workspace directory under an allowed_workspace_roots entry (the git repository root for an edit, without project .vibe, unsafe .agents paths or glob characters), and existing context files inside it; a real .agents directory is supported without inheriting its content. Add the workspace to the selected config with `node dist/cli.js allow --config <selected-config> <workspace>` (or the equivalent installed executable path). The connected server rereads that file before every readiness check and start, so no restart is needed; confirm with vibe_status in workspace mode.",
   VSUP_WORKTREE_CREATE_FAILED: "Check the repository state and worktree path, then retry.",
   VSUP_GIT_REQUIRED: "Install Git and use a Git repository for edit runs.",
   VSUP_BACKEND_CRASHED: "Inspect the run's diagnostic events and start a new run.",
@@ -231,6 +245,8 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_INVALID_STATE: "Check the run status and use an action valid for its current state.",
   VSUP_STORAGE_ERROR: "Check the supervisor data directory permissions and disk space.",
   VSUP_INTERNAL: "Inspect supervisor diagnostics and retry; report the error if it persists.",
+  VSUP_RESTART_REQUIRED: "A boot-bound setting (paths.vibe, retention or limits) in the selected config differs from the value this server started with, so new starts are refused rather than partially adopted. Revert the setting, or close any active run and deliberately restart the Codex MCP server; allowed_workspace_roots changes never need a restart.",
+  VSUP_READINESS_RECEIPT_INVALID: "No run was created and nothing was launched. Call vibe_status with workspace and operation on this same connection, resolve any blockers, and start once with the new readiness_receipt; do not retry the start automatically.",
 };
 
 export function supervisorError(code: SupervisorErrorCode, message: string, details?: Record<string, unknown>, retryable = false): SupervisorError {

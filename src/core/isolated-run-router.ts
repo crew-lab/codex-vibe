@@ -5,6 +5,7 @@ import { supervisorError, type CloseToolInput, type ResultToolInput, type Status
 import type { SupervisorConfig } from "../contracts.js";
 import { acquireOwnerLock, isOwnerLockContention } from "./owner-lock.js";
 import type { RunManagerTools } from "../mcp/tools.js";
+import type { PolicySource } from "../config/policy.js";
 
 const SESSION_NAME = /^session-[A-Za-z0-9]{6}$/;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -16,6 +17,7 @@ export interface IsolatedRunRouterOptions {
   sessions: string;
   currentHome: string;
   config: SupervisorConfig;
+  policy?: PolicySource;
 }
 
 function fail(code: "VSUP_NOT_FOUND" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR", message: string): Error {
@@ -92,7 +94,7 @@ async function locate(sessions: string, runId: string): Promise<string> {
   return matches[0]!;
 }
 
-async function createBorrowedManager(config: SupervisorConfig, home: string, sessions: string, runId: string): Promise<Manager> {
+async function createBorrowedManager(config: SupervisorConfig, policy: PolicySource | undefined, home: string, sessions: string, runId: string): Promise<Manager> {
   const lock = await acquireOwnerLock(home).catch((error: unknown) => {
     if (isOwnerLockContention(error)) throw fail("VSUP_INVALID_STATE", "The isolated session is owned by another live supervisor; retry when it is available.");
     throw error;
@@ -104,7 +106,7 @@ async function createBorrowedManager(config: SupervisorConfig, home: string, ses
     await assertPrivateDirectory(home, "session directory");
     await assertCanonicalPath(home, "session directory");
     const { RunManager } = await import("./run-manager.js");
-    manager = new RunManager(config, home, [], lock) as Manager;
+    manager = new RunManager(config, home, [], lock, policy ? { policy } : {}) as Manager;
     await manager.initialize();
     return manager;
   } catch (error) {
@@ -132,7 +134,7 @@ export function createIsolatedRunRouter(manager: Manager, options: IsolatedRunRo
       if (shuttingDown) throw fail("VSUP_INVALID_STATE", "The isolated supervisor is shutting down.");
       const home = await locate(sessions, runId);
       if (path.resolve(home) === currentHome) return operation(manager);
-      const borrowed = await createBorrowedManager(options.config, home, sessions, runId);
+      const borrowed = await createBorrowedManager(options.config, options.policy, home, sessions, runId);
       try {
         return await operation(borrowed);
       } finally {
@@ -153,7 +155,11 @@ export function createIsolatedRunRouter(manager: Manager, options: IsolatedRunRo
       if (shuttingDown) throw fail("VSUP_INVALID_STATE", "The isolated supervisor is shutting down.");
       return manager.editStart(input, wait);
     },
-    status: (input: StatusToolInput, wait?: WaitOptions) => route(input.run_id, target => target.status(input, wait)),
+    status: async (input: StatusToolInput, wait?: WaitOptions) => {
+      if (input.run_id !== undefined) return route(input.run_id, target => target.status(input, wait));
+      if (shuttingDown) throw fail("VSUP_INVALID_STATE", "The isolated supervisor is shutting down.");
+      return manager.status(input, wait);
+    },
     result: (input: ResultToolInput) => route(input.run_id, target => target.result(input)),
     close: (input: CloseToolInput) => route(input.run_id, target => target.close(input)),
     async shutdown() { shuttingDown = true; await borrowedChain; },
