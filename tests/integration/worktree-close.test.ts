@@ -9,7 +9,7 @@ import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord,
 import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
 import { RunManager } from "../../src/core/run-manager.js";
 import { runToWire } from "../../src/core/serialization.js";
-import { createDetachedWorktree } from "../../src/git/worktree.js";
+import { captureDirtySnapshot, createDetachedWorktree } from "../../src/git/worktree.js";
 
 const exec = promisify(execFile);
 const canonicalTmp = await realpath(tmpdir());
@@ -378,4 +378,19 @@ describe("startup and retention", () => {
       expect(await exists(runDir(context.data, kept.runId))).toBe(true);
     } finally { await context.manager.shutdown(); }
   });
+
+  it("maps git failures to their own codes and keeps VSUP_GIT_REQUIRED for a missing binary or non-repository", async () => {
+    const context = await setup();
+    const plain = path.join(context.parent, "plain"); await mkdir(plain);
+    await expect(captureDirtySnapshot(plain)).rejects.toMatchObject({ code: "VSUP_GIT_REQUIRED" });
+
+    await exec("git", ["config", "filter.lfs.clean", "cat"], { cwd: context.source });
+    await expect(captureDirtySnapshot(context.source)).rejects.toMatchObject({ code: "VSUP_ARTIFACT_ERROR", details: { operation: "filter configuration" } });
+    await exec("git", ["config", "--unset", "filter.lfs.clean"], { cwd: context.source });
+
+    const fakeBin = path.join(context.parent, "fake-bin"); await mkdir(fakeBin);
+    await writeFile(path.join(fakeBin, "git"), "#!/bin/sh\nhead -c 110000000 /dev/zero\n", { mode: 0o755 });
+    process.env.PATH = `${fakeBin}:${savedPath}`;
+    await expect(captureDirtySnapshot(context.source)).rejects.toMatchObject({ code: "VSUP_OUTPUT_LIMIT" });
+  }, 60_000);
 });

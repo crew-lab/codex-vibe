@@ -314,7 +314,7 @@ describe('isolated run UUID routing', () => {
       let rejected: unknown;
       try { await router.result({ run_id: saved.runId }); } catch (error) { rejected = error; }
       expect(rejected).toBeInstanceOf(Error);
-      expect(['VSUP_INVALID_STATE', 'EPERM']).toContain((rejected as NodeJS.ErrnoException).code);
+      expect(['VSUP_OWNER_LOCKED', 'EPERM']).toContain((rejected as NodeJS.ErrnoException).code);
       expect(JSON.parse(await readFile(path.join(older.home, 'runs', saved.runId, 'meta.json'), 'utf8')).state).toBe('completed');
       expect(await readFile(path.join(older.home, 'supervisor.lock'), 'utf8')).toBe(heldLock);
     } finally { await Promise.all([manager.shutdown(), oldOwner.shutdown()]); }

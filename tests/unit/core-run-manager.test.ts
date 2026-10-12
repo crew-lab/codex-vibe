@@ -103,7 +103,7 @@ describe("RunManager core lifecycle", () => {
     const other = new RunManager({ ...DEFAULT_CONFIG }, data, [new FakeBackend()]);
     try {
       await manager.initialize();
-      await expect(other.initialize()).rejects.toMatchObject({ code: "VSUP_INVALID_STATE" });
+      await expect(other.initialize()).rejects.toMatchObject({ code: "VSUP_OWNER_LOCKED" });
       await manager.shutdown();
       await other.initialize();
     } finally { await manager.shutdown(); await other.shutdown(); }

@@ -242,11 +242,12 @@ describe('allow', () => {
 });
 
 describe('allow and setup reload note', () => {
-  it('tells the user to restart the MCP server after a change and stays quiet when nothing changed', async () => {
+  it('says the allowlist applies on the next check or start and stays quiet when nothing changed', async () => {
     const box = await sandbox(); capture();
     await runCli(['allow', box.workspace]);
-    expect(output.join('')).toMatch(/restart the Codex MCP server/i);
-    expect(output.join('')).toMatch(/--isolated/);
+    expect(output.join('')).toMatch(/next readiness check or start/i);
+    expect(output.join('')).toMatch(/no restart is needed/i);
+    expect(output.join('')).not.toMatch(/keeps the list/i);
     output.length = 0;
     await runCli(['allow', box.workspace]);
     expect(output.join('')).not.toMatch(/restart/i);
@@ -255,7 +256,7 @@ describe('allow and setup reload note', () => {
   it('prints the same note from setup when the allowlist changed', async () => {
     const box = await sandbox(); capture();
     await runCli(['setup', '--workspace', box.workspace]);
-    expect(output.join('')).toMatch(/restart the Codex MCP server/i);
+    expect(output.join('')).toMatch(/next readiness check or start/i);
   }, 60_000);
 });
 

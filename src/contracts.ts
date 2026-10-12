@@ -80,7 +80,8 @@ export type SupervisorErrorCode =
   | "VSUP_ARTIFACT_ERROR" | "VSUP_INVALID_ARGUMENT" | "VSUP_NOT_FOUND"
   | "VSUP_BACKEND_ERROR" | "VSUP_LIMIT_EXCEEDED"
   | "VSUP_NO_PROGRESS" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR" | "VSUP_INTERNAL"
-  | "VSUP_RESTART_REQUIRED" | "VSUP_READINESS_RECEIPT_INVALID";
+  | "VSUP_RESTART_REQUIRED" | "VSUP_READINESS_RECEIPT_INVALID"
+  | "VSUP_OWNER_LOCKED" | "VSUP_PREPARATION_TIMEOUT";
 
 export interface RunRecord {
   /** Release that created the run; absent on legacy records. */
@@ -230,22 +231,24 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_AUTH_REQUIRED: "Sign in to Vibe or configure its supported authentication.",
   VSUP_WORKSPACE_INVALID: "Provide an existing workspace directory under an allowed_workspace_roots entry (the git repository root for an edit, without project .vibe, unsafe .agents paths or glob characters), and existing context files inside it; a real .agents directory is supported without inheriting its content. Add the workspace to the selected config with `node dist/cli.js allow --config <selected-config> <workspace>` (or the equivalent installed executable path). The connected server rereads that file before every readiness check and start, so no restart is needed; confirm with vibe_status in workspace mode.",
   VSUP_WORKTREE_CREATE_FAILED: "Check the repository state and worktree path, then retry.",
-  VSUP_GIT_REQUIRED: "Install Git and use a Git repository for edit runs.",
+  VSUP_GIT_REQUIRED: "Install Git (the git executable must be on PATH) and use a Git repository for edit runs.",
   VSUP_BACKEND_CRASHED: "Inspect the run's diagnostic events and start a new run.",
-  VSUP_TIMEOUT: "Increase the timeout or simplify the task, then start a new run.",
+  VSUP_TIMEOUT: "Increase the timeout or simplify the task, then start a new run. For a Git operation that exceeded its fixed limit, reduce the size of the repository changes.",
   VSUP_RATE_LIMITED: "Wait for the service rate limit to clear and retry.",
   VSUP_CANCELLED: "Start another run if more work is needed.",
   VSUP_OUTPUT_LIMIT: "Reduce the requested output or increase the configured limit.",
-  VSUP_ARTIFACT_ERROR: "Inspect the run directory permissions and available disk space.",
+  VSUP_ARTIFACT_ERROR: "Inspect the run directory permissions and available disk space; for a Git failure, see details.operation and the repository state.",
   VSUP_INVALID_ARGUMENT: "Correct the tool arguments and try again.",
   VSUP_NOT_FOUND: "Check the run ID and try again.",
   VSUP_BACKEND_ERROR: "Inspect backend diagnostics and retry if the problem is transient.",
   VSUP_LIMIT_EXCEEDED: "Wait for the active run to finish, then start another run.",
   VSUP_NO_PROGRESS: "The worker produced no output for the configured limits.worker_progress_timeout_seconds; inspect the run diagnostics and events, then start a new run deliberately; the task is never replayed.",
-  VSUP_INVALID_STATE: "Check the run status and use an action valid for its current state.",
+  VSUP_INVALID_STATE: "The request conflicts with the current state: check the run status and use an action valid for it, or wait until a shutting-down supervisor has been restarted, or inspect the isolated session path named in the message.",
   VSUP_STORAGE_ERROR: "Check the supervisor data directory permissions and disk space.",
   VSUP_INTERNAL: "Inspect supervisor diagnostics and retry; report the error if it persists.",
   VSUP_RESTART_REQUIRED: "A boot-bound setting (paths.vibe, retention or limits) in the selected config differs from the value this server started with, so new starts are refused rather than partially adopted. Revert the setting, or close any active run and deliberately restart the Codex MCP server; allowed_workspace_roots changes never need a restart.",
+  VSUP_OWNER_LOCKED: "Another vibe-supervisor owns this data directory, or its owner lock needs inspection. Stop the other process or give each Codex session its own VIBE_SUPERVISOR_HOME, then retry; for an unsafe or malformed lock, inspect the file named in details.lock_path.",
+  VSUP_PREPARATION_TIMEOUT: "Preparation did not finish within its fixed deadline and no run was created. Check that the workspace, repository and configuration filesystems respond, then check readiness again.",
   VSUP_READINESS_RECEIPT_INVALID: "No run was created and nothing was launched. Call vibe_status with workspace and operation on this same connection, resolve any blockers, and start once with the new readiness_receipt; do not retry the start automatically.",
 };
 

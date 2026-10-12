@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.0-rc.25 — accurate errors
+
+Fixes from the rc.24 cold review; no change to scope or boundaries.
+
+- Tool errors are one JSON text block, `{"error": {code, message, remediation, retryable, details}}`, redacted and bounded, so a coordinator can act on `details` (for example a receipt's `reason`, `unavailable_root` or `boot_drift`). Readiness blockers carry `retryable` and `details` too.
+- Git failures are classified: a missing Git or a non-repository is `VSUP_GIT_REQUIRED`, a timeout `VSUP_TIMEOUT`, output over 100 MiB `VSUP_OUTPUT_LIMIT`, anything else `VSUP_ARTIFACT_ERROR`, each with `details.operation` and `details.kind`, instead of always "Install Git".
+- New `VSUP_OWNER_LOCKED` (retryable when the lock is only contended) and `VSUP_PREPARATION_TIMEOUT` replace `VSUP_INVALID_STATE` for owner-lock contention and preparation deadlines; `VSUP_INVALID_STATE` keeps genuine run-state conflicts with a remedy that fits them.
+- `allow` and `setup` say an allowlist change applies on the next readiness check or start, with a restart needed only for boot-bound settings or a new runtime.
+- The persisted error-code list is derived from the remedy table, so new codes can no longer be missing from it.
+
 ## 0.9.0-rc.24 — authoritative policy and native readiness
 
 - A connected server rereads the originally selected configuration before every readiness check and start, so an approved allowlist change applies without restarting Codex. `--isolated` session snapshots are audit records only. A missing, unsafe, group-writable or foreign-owned source fails closed with no fallback to a stale snapshot. Only `allowed_workspace_roots` is live; a change to any other key returns `VSUP_RESTART_REQUIRED` instead of being partly adopted.

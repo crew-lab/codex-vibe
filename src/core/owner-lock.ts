@@ -97,7 +97,7 @@ function errorCode(error: unknown): string | undefined {
 
 function lockError(message: string, lockPath: string, ownerPid?: number, contended = false): Error {
   const details = { lock_path: lockPath, ...(ownerPid === undefined ? {} : { owner_pid: ownerPid }), ...(contended ? { contended: true } : {}) };
-  return Object.assign(new Error(message), supervisorError("VSUP_INVALID_STATE", message, details));
+  return Object.assign(new Error(message), supervisorError("VSUP_OWNER_LOCKED", message, details, contended));
 }
 
 export function isOwnerLockContention(error: unknown): boolean {

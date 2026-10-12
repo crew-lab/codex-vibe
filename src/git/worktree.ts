@@ -10,9 +10,26 @@ const MAX_GIT_OUTPUT = 100 * 1024 * 1024;
 const MAX_GIT_RUNTIME_MS = 30_000;
 const MAX_GIT_STDERR_BYTES = 4096;
 
+export type GitFailureKind = 'missing' | 'not_repository' | 'timeout' | 'overflow' | 'failed';
+
+const GIT_FAILURE_CODES: Record<GitFailureKind, 'VSUP_GIT_REQUIRED' | 'VSUP_TIMEOUT' | 'VSUP_OUTPUT_LIMIT' | 'VSUP_ARTIFACT_ERROR'> = {
+  missing: 'VSUP_GIT_REQUIRED',
+  not_repository: 'VSUP_GIT_REQUIRED',
+  timeout: 'VSUP_TIMEOUT',
+  overflow: 'VSUP_OUTPUT_LIMIT',
+  failed: 'VSUP_ARTIFACT_ERROR',
+};
+
 export class GitOperationError extends Error {
-  readonly code = 'VSUP_GIT_REQUIRED';
-  constructor(readonly operation: string, detail?: string, readonly missing = false, readonly stderrTail = '') { super(detail ?? `Git operation failed: ${operation}`); this.name = 'GitOperationError'; }
+  readonly code: (typeof GIT_FAILURE_CODES)[GitFailureKind];
+  readonly details: Record<string, unknown>;
+  constructor(readonly operation: string, detail?: string, readonly kind: GitFailureKind = 'failed', readonly stderrTail = '') {
+    super(detail ?? `Git operation failed: ${operation}`);
+    this.name = 'GitOperationError';
+    this.code = GIT_FAILURE_CODES[kind];
+    this.details = { operation, kind };
+  }
+  get missing(): boolean { return this.kind === 'missing'; }
 }
 
 export class WorktreeCreateError extends Error {
@@ -51,11 +68,15 @@ async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = process
       stderr = joined.subarray(-MAX_GIT_STDERR_BYTES);
     });
     const stderrTail = (): string => redactedTail(stderr, 1024, environmentSecrets(), stderrHeadDropped ? 'head' : undefined);
-    child.once('error', (error) => reject(new GitOperationError(args[0] ?? 'git', undefined, (error as NodeJS.ErrnoException).code === 'ENOENT')));
+    child.once('error', (error) => reject(new GitOperationError(args[0] ?? 'git', undefined, (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'missing' : 'failed')));
     child.once('close', (code) => {
       clearTimeout(timer);
-      if (timedOut) reject(new GitOperationError(args[0] ?? 'git', `Git operation timed out: ${args[0] ?? 'git'}`, false, stderrTail()));
-      else if (overflow || code === null || !allowedCodes.includes(code)) reject(new GitOperationError(args[0] ?? 'git', undefined, false, stderrTail()));
+      if (timedOut) reject(new GitOperationError(args[0] ?? 'git', `Git operation timed out: ${args[0] ?? 'git'}`, 'timeout', stderrTail()));
+      else if (overflow) reject(new GitOperationError(args[0] ?? 'git', `Git output exceeded its limit: ${args[0] ?? 'git'}`, 'overflow', stderrTail()));
+      else if (code === null || !allowedCodes.includes(code)) {
+        const tail = stderrTail();
+        reject(new GitOperationError(args[0] ?? 'git', undefined, /not a git repository/i.test(tail) ? 'not_repository' : 'failed', tail));
+      }
       else resolve(Buffer.concat(chunks, size));
     });
   });

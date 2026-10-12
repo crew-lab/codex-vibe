@@ -20,7 +20,7 @@ export interface IsolatedRunRouterOptions {
   policy?: PolicySource;
 }
 
-function fail(code: "VSUP_NOT_FOUND" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR", message: string): Error {
+function fail(code: "VSUP_NOT_FOUND" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR" | "VSUP_OWNER_LOCKED", message: string): Error {
   return Object.assign(new Error(message), supervisorError(code, message));
 }
 
@@ -96,7 +96,7 @@ async function locate(sessions: string, runId: string): Promise<string> {
 
 async function createBorrowedManager(config: SupervisorConfig, policy: PolicySource | undefined, home: string, sessions: string, runId: string): Promise<Manager> {
   const lock = await acquireOwnerLock(home).catch((error: unknown) => {
-    if (isOwnerLockContention(error)) throw fail("VSUP_INVALID_STATE", "The isolated session is owned by another live supervisor; retry when it is available.");
+    if (isOwnerLockContention(error)) throw fail("VSUP_OWNER_LOCKED", "The isolated session is owned by another live supervisor; retry when it is available.");
     throw error;
   });
   let manager: Manager | undefined;

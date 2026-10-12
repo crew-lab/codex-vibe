@@ -213,8 +213,7 @@ export function registerSupervisorTools(server: McpServer, manager: RunManagerTo
         }
         if (JSON.stringify({ error: safeError }).length > options.maxResultChars) safeError.message = 'The request failed; inspect the stable code and remediation.';
         options.onError?.(safeError.code === 'VSUP_INTERNAL' ? { ...safeError, message: `${safeError.message} Cause: ${describeFailure(cause)}` } : safeError);
-        const text = `${safeError.code}: ${safeError.message} ${safeError.remediation}`.slice(0, options.maxResultChars);
-        return { isError: true, ...shapeResult(text) };
+        return { isError: true, ...shapeResult(JSON.stringify({ error: safeError })) };
       }
     });
   }
