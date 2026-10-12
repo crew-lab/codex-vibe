@@ -62,16 +62,12 @@ try {
 const unexpectedFixture = path.join(root, 'dist', 'backends', 'runtime', 'test_vibe_supervisor_launcher.py');
 try { await access(unexpectedFixture); record('test-fixture-excluded', false, 'Test fixture was incorrectly copied into dist.'); }
 catch { record('test-fixture-excluded', true, 'Test-only shim fixture is absent from dist.'); }
+const gates = JSON.parse(await readFile(path.join(root, 'docs', 'acceptance.json'), 'utf8'));
 const report = {
   schema_version: 1,
   generated_at: new Date().toISOString(),
   deterministic_checks: checks,
-  unverified_release_gates: [
-    { name: 'hosted-vibe-auth', status: 'UNVERIFIED', reason: 'No hosted model request was made.' },
-    { name: 'hosted-one-shot-review-and-edit', status: 'UNVERIFIED', reason: 'No hosted review or edit was run against this candidate.' },
-    { name: 'native-codex-five-tool-lifecycle', status: 'UNVERIFIED', reason: 'Native desktop discovery, useful work, close and active-run disconnect were not exercised.' },
-    { name: 'macos-apple-silicon-install', status: 'UNVERIFIED', reason: 'A clean macOS Apple silicon account install was not exercised.' },
-  ],
+  unverified_release_gates: gates.unverified.map(({ name, status, evidence_required }) => ({ name, status, reason: evidence_required })),
 };
 process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 if (checks.some((check) => check.status === 'FAIL')) process.exitCode = 1;
