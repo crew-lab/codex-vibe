@@ -30,6 +30,8 @@ import { changedSinceSnapshot, parseManifest, serializeManifest, snapshotWorkspa
 import type { ManifestEntry } from "./workspace-snapshot.js";
 import { acquireOwnerLock } from "./owner-lock.js";
 import type { OwnerLock } from "./owner-lock.js";
+import { needsAttention, pruneIsolatedSessions } from "./session-pruning.js";
+import type { SessionSweep } from "./session-pruning.js";
 
 interface Runtime {
   record: RunRecord;
@@ -120,6 +122,7 @@ const DEFAULT_REMEDIATION = "Inspect the run status and supervisor diagnostics, 
 export interface RunManagerOptions {
   policy?: PolicySource;
   sessionId?: string;
+  sessionNamespace?: string;
 }
 
 type StartOptions = { maxTurns: number; timeoutSeconds: number; contextFiles?: string[]; baseRef?: string; readinessReceipt?: string };
@@ -143,12 +146,14 @@ export class RunManager {
   private readonly unreadableRecords = new Set<string>();
   private readonly policy: PolicySource;
   private readonly sessionId: string | undefined;
+  private readonly sessionNamespace: string | undefined;
   private readonly receipts = new ReadinessReceipts();
 
   constructor(private readonly config: SupervisorConfig, private readonly dataDir: string, backends: readonly SupervisorBackend[] = [], preAcquiredLock?: OwnerLock, options: RunManagerOptions = {}) {
     this.ownerLock = preAcquiredLock;
     this.policy = options.policy ?? fixedPolicy(config);
     this.sessionId = options.sessionId;
+    this.sessionNamespace = options.sessionNamespace;
     this.runRoot = path.join(path.resolve(dataDir), "runs");
     for (const backend of backends) this.backends.set(backend.kind, backend);
   }
@@ -619,12 +624,13 @@ export class RunManager {
       return { run_id: runId, worktree_removed: cleanup.removed, ...(cleanup.reason ? { worktree_retained_reason: cleanup.reason, ...(runtime.record.worktree ? { worktree_retained_path: path.resolve(runtime.record.worktree.path) } : {}) } : {}) };
     }
     const removed = await this.pruneRuns(false);
+    const sessions = await this.pruneSessions(false);
     const unverified = [...this.unverifiedWorktrees].map(([run_id, worktreePath]) => ({ run_id, path: worktreePath }));
     const retained = [...this.runs.values()].filter((runtime) => runtime.record.worktree).map((runtime) => {
       const retainedPath = path.resolve(runtime.record.worktree!.path);
       return { run_id: runtime.record.runId, state: runtime.record.state, path: retainedPath, manual_command: `git -C ${shellQuote(runtime.record.sourceWorkspace)} worktree remove ${shellQuote(retainedPath)}` };
     });
-    return { removed_run_ids: removed, ...(unverified.length ? { unverified_worktrees: unverified } : {}), ...(retained.length ? { retained_worktrees: retained } : {}) };
+    return { removed_run_ids: removed, ...(unverified.length ? { unverified_worktrees: unverified } : {}), ...(retained.length ? { retained_worktrees: retained } : {}), ...(sessions ?? {}) };
   }
 
   startAutomaticRetention(options: { firstDelayMs?: number; intervalMs?: number } = {}): void {
@@ -637,6 +643,8 @@ export class RunManager {
         this.retentionTimer = undefined;
         this.retentionRun = this.pruneRuns(true, (error) => reportBackgroundFailure("retention", error))
           .then(() => undefined, (error: unknown) => reportBackgroundFailure("retention", error))
+          .then(() => this.pruneSessions(true))
+          .then(() => undefined, (error: unknown) => reportBackgroundFailure("session pruning", error))
           .then(() => schedule(interval));
       }, delay);
       this.retentionTimer.unref?.();
@@ -657,6 +665,13 @@ export class RunManager {
       catch (error) { if (!onError) throw error; onError(error); }
     }
     return removed;
+  }
+
+  private async pruneSessions(background: boolean): Promise<SessionSweep | undefined> {
+    if (this.sessionNamespace === undefined || (background && this.stopping)) return undefined;
+    const sweep = await pruneIsolatedSessions({ sessions: this.sessionNamespace, retentionDays: this.config.retention.days, currentHome: this.dataDir, stopping: () => this.stopping });
+    if (background) for (const kept of sweep.kept_sessions.filter(needsAttention)) writeDiagnostic(`isolated session ${kept.path} was kept (${kept.reason}): ${kept.message}`);
+    return sweep;
   }
 
   private async pruneUnloadedRuns(cutoff: number): Promise<string[]> {

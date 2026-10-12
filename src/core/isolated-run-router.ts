@@ -4,12 +4,13 @@ import path from "node:path";
 import { supervisorError, type CloseToolInput, type ResultToolInput, type StatusToolInput, type WaitOptions } from "../contracts.js";
 import type { SupervisorConfig } from "../contracts.js";
 import { acquireOwnerLock, isOwnerLockContention } from "./owner-lock.js";
+import { SESSION_NAME } from "./session-pruning.js";
+import { writeDiagnostic } from "../diagnostics/background.js";
 import type { RunManagerTools } from "../mcp/tools.js";
 import type { PolicySource } from "../config/policy.js";
 
-const SESSION_NAME = /^session-[A-Za-z0-9]{6}$/;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const MAX_SESSION_DIRECTORIES = 128;
+export const MAX_SIBLING_SESSIONS = 128;
 const MAX_META_BYTES = 1_048_576;
 type Manager = RunManagerTools & { initialize(): Promise<void>; shutdown(): Promise<{ timedOut: boolean }> };
 
@@ -18,10 +19,17 @@ export interface IsolatedRunRouterOptions {
   currentHome: string;
   config: SupervisorConfig;
   policy?: PolicySource;
+  report?: (message: string) => void;
 }
 
-function fail(code: "VSUP_NOT_FOUND" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR" | "VSUP_OWNER_LOCKED", message: string): Error {
-  return Object.assign(new Error(message), supervisorError(code, message));
+function fail(code: "VSUP_NOT_FOUND" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR" | "VSUP_OWNER_LOCKED", message: string, details?: Record<string, unknown>): Error {
+  return Object.assign(new Error(message), supervisorError(code, message, details));
+}
+
+class UnsafeSession extends Error {}
+
+function wrongOwner(uid: number): boolean {
+  return typeof process.getuid === "function" && uid !== process.getuid();
 }
 
 async function assertPrivateDirectory(directory: string, label: string): Promise<void> {
@@ -31,8 +39,7 @@ async function assertPrivateDirectory(directory: string, label: string): Promise
     if ((error as NodeJS.ErrnoException).code === "ENOENT") throw fail("VSUP_NOT_FOUND", "Run was not found.");
     throw error;
   }
-  const wrongOwner = typeof process.getuid === "function" && info.uid !== process.getuid();
-  if (info.isSymbolicLink() || !info.isDirectory() || (info.mode & 0o077) !== 0 || wrongOwner) {
+  if (info.isSymbolicLink() || !info.isDirectory() || (info.mode & 0o077) !== 0 || wrongOwner(info.uid)) {
     throw fail("VSUP_INVALID_STATE", `An unsafe ${label} was found in the isolated session namespace; inspect it manually.`);
   }
 }
@@ -42,66 +49,96 @@ async function assertCanonicalPath(target: string, label: string): Promise<void>
   if (canonical !== path.resolve(target)) throw fail("VSUP_INVALID_STATE", `The ${label} path changed or resolves through a link; inspect it manually.`);
 }
 
-/** Find a UUID only inside the bounded, private sibling-session namespace. */
-async function locate(sessions: string, runId: string): Promise<string> {
-  if (!UUID_V4.test(runId)) throw fail("VSUP_NOT_FOUND", "Run was not found.");
-  await assertPrivateDirectory(sessions, "session root");
-  await assertCanonicalPath(sessions, "session root");
-  const entries = await readdir(sessions);
-  if (entries.length > MAX_SESSION_DIRECTORIES) throw fail("VSUP_INVALID_STATE", "The isolated session namespace exceeds its safe scan limit; inspect it manually.");
-  const matches: string[] = [];
-  for (const name of entries) {
-    if (!SESSION_NAME.test(name)) continue;
-    const home = path.join(sessions, name);
+async function assertSessionUsable(home: string): Promise<boolean> {
+  try {
     await assertPrivateDirectory(home, "session directory");
     await assertCanonicalPath(home, "session directory");
-    const runs = path.join(home, "runs");
-    let runRootInfo;
-    try { runRootInfo = await lstat(runs); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
-    const wrongOwner = typeof process.getuid === "function" && runRootInfo.uid !== process.getuid();
-    if (runRootInfo.isSymbolicLink() || !runRootInfo.isDirectory() || (runRootInfo.mode & 0o077) !== 0 || wrongOwner) {
-      throw fail("VSUP_INVALID_STATE", "An unsafe run directory was found in the isolated session namespace; inspect it manually.");
-    }
-    const runDirectory = path.join(runs, runId);
-    try {
-      const info = await lstat(runDirectory);
-      const runWrongOwner = typeof process.getuid === "function" && info.uid !== process.getuid();
-      if (info.isSymbolicLink() || !info.isDirectory() || (info.mode & 0o077) !== 0 || runWrongOwner) {
-        throw fail("VSUP_INVALID_STATE", "An unsafe run path was found in the isolated session namespace; inspect it manually.");
-      }
-      await assertCanonicalPath(runDirectory, "run directory");
-      const metadata = path.join(runDirectory, "meta.json");
-      try {
-        const metaInfo = await lstat(metadata);
-        const metaWrongOwner = typeof process.getuid === "function" && metaInfo.uid !== process.getuid();
-        if (metaInfo.isSymbolicLink() || !metaInfo.isFile() || metaInfo.size > MAX_META_BYTES || metaWrongOwner || (metaInfo.mode & 0o077) !== 0) {
-          throw fail("VSUP_INVALID_STATE", "An unsafe run record was found in the isolated session namespace; inspect it manually.");
-        }
-        // Open without following a replacement symlink after the lstat check.
-        const handle = await open(metadata, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
-        await handle.close();
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      }
-      matches.push(home);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
+  } catch (error) {
+    if ((error as { code?: unknown }).code === "VSUP_NOT_FOUND") return false;
+    throw new UnsafeSession((error as Error).message);
   }
-  if (matches.length === 0) throw fail("VSUP_NOT_FOUND", "Run was not found.");
-  if (matches.length !== 1) throw fail("VSUP_INVALID_STATE", "The run ID appears in multiple isolated sessions; no session was changed.");
-  return matches[0]!;
+  const runs = path.join(home, "runs");
+  let runRootInfo;
+  try { runRootInfo = await lstat(runs); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw new UnsafeSession(`The session run directory could not be inspected (${String((error as NodeJS.ErrnoException).code)}).`);
+  }
+  if (runRootInfo.isSymbolicLink() || !runRootInfo.isDirectory() || (runRootInfo.mode & 0o077) !== 0 || wrongOwner(runRootInfo.uid)) {
+    throw new UnsafeSession("An unsafe run directory was found in the isolated session namespace; inspect it manually.");
+  }
+  return true;
 }
 
-async function createBorrowedManager(config: SupervisorConfig, policy: PolicySource | undefined, home: string, sessions: string, runId: string): Promise<Manager> {
+async function holdsRun(home: string, runId: string): Promise<boolean> {
+  const runDirectory = path.join(home, "runs", runId);
+  let info;
+  try { info = await lstat(runDirectory); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+  if (info.isSymbolicLink() || !info.isDirectory() || (info.mode & 0o077) !== 0 || wrongOwner(info.uid)) {
+    throw fail("VSUP_INVALID_STATE", "An unsafe run path was found in the isolated session namespace; inspect it manually.");
+  }
+  await assertCanonicalPath(runDirectory, "run directory");
+  const metadata = path.join(runDirectory, "meta.json");
+  try {
+    const metaInfo = await lstat(metadata);
+    if (metaInfo.isSymbolicLink() || !metaInfo.isFile() || metaInfo.size > MAX_META_BYTES || wrongOwner(metaInfo.uid) || (metaInfo.mode & 0o077) !== 0) {
+      throw fail("VSUP_INVALID_STATE", "An unsafe run record was found in the isolated session namespace; inspect it manually.");
+    }
+    const handle = await open(metadata, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+    await handle.close();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  return true;
+}
+
+interface Lookup { sessions: string; currentHome: string; report: (home: string, message: string) => void }
+
+async function locate(lookup: Lookup, runId: string): Promise<string> {
+  if (!UUID_V4.test(runId)) throw fail("VSUP_NOT_FOUND", "Run was not found.");
+  const { sessions, currentHome } = lookup;
+  await assertPrivateDirectory(sessions, "session root");
+  await assertCanonicalPath(sessions, "session root");
+  const matches: string[] = [];
+  try {
+    if (await assertSessionUsable(currentHome) && await holdsRun(currentHome, runId)) matches.push(currentHome);
+  } catch (error) {
+    if (error instanceof UnsafeSession) throw fail("VSUP_INVALID_STATE", error.message);
+    throw error;
+  }
+  const siblings = (await readdir(sessions)).filter(name => SESSION_NAME.test(name) && path.join(sessions, name) !== currentHome).sort();
+  const scanned = siblings.slice(0, MAX_SIBLING_SESSIONS);
+  const skipped: string[] = [];
+  for (const name of scanned) {
+    const home = path.join(sessions, name);
+    try {
+      if (await assertSessionUsable(home) && await holdsRun(home, runId)) matches.push(home);
+    } catch (error) {
+      if (!(error instanceof UnsafeSession)) throw error;
+      skipped.push(name);
+      lookup.report(home, error.message);
+    }
+  }
+  if (matches.length > 1) throw fail("VSUP_INVALID_STATE", "The run ID appears in multiple isolated sessions; no session was changed.");
+  if (matches.length === 1) return matches[0]!;
+  const unscanned = siblings.length - scanned.length;
+  const notes = [
+    ...(skipped.length ? [`${skipped.length} unsafe or unreadable session director${skipped.length === 1 ? "y was" : "ies were"} skipped`] : []),
+    ...(unscanned ? [`${unscanned} session director${unscanned === 1 ? "y was" : "ies were"} beyond the scan limit of ${MAX_SIBLING_SESSIONS}`] : [])
+  ];
+  const details = { ...(skipped.length ? { skipped_sessions: skipped } : {}), ...(unscanned ? { unscanned_sessions: unscanned } : {}) };
+  throw fail("VSUP_NOT_FOUND", notes.length ? `Run was not found; ${notes.join(" and ")}.` : "Run was not found.", notes.length ? details : undefined);
+}
+
+async function createBorrowedManager(config: SupervisorConfig, policy: PolicySource | undefined, home: string, lookup: Lookup, runId: string): Promise<Manager> {
   const lock = await acquireOwnerLock(home).catch((error: unknown) => {
     if (isOwnerLockContention(error)) throw fail("VSUP_OWNER_LOCKED", "The isolated session is owned by another live supervisor; retry when it is available.");
     throw error;
   });
   let manager: Manager | undefined;
   try {
-    const confirmedHome = await locate(sessions, runId);
+    const confirmedHome = await locate(lookup, runId);
     if (confirmedHome !== home) throw fail("VSUP_INVALID_STATE", "The run path changed while its session was being claimed; retry after inspection.");
     await assertPrivateDirectory(home, "session directory");
     await assertCanonicalPath(home, "session directory");
@@ -121,20 +158,25 @@ export function createIsolatedRunRouter(manager: Manager, options: IsolatedRunRo
   let borrowedChain: Promise<void> = Promise.resolve();
   let shuttingDown = false;
   const currentHome = path.resolve(options.currentHome);
-  const sessions = path.resolve(options.sessions);
+  const reported = new Set<string>();
+  const report = options.report ?? ((message: string) => writeDiagnostic(message));
+  const lookup: Lookup = {
+    sessions: path.resolve(options.sessions), currentHome,
+    report: (home, message) => { if (reported.has(home)) return; reported.add(home); report(`isolated run lookup skipped ${home}: ${message}`); },
+  };
 
   async function route<T>(runId: string, operation: (target: RunManagerTools) => Promise<T>): Promise<T> {
     if (shuttingDown) throw fail("VSUP_INVALID_STATE", "The isolated supervisor is shutting down.");
-    const firstHome = await locate(sessions, runId);
+    const firstHome = await locate(lookup, runId);
     if (shuttingDown) throw fail("VSUP_INVALID_STATE", "The isolated supervisor is shutting down.");
     if (path.resolve(firstHome) === currentHome) return operation(manager);
     // Serialize borrowed claims and mutations within this server. The owner lock
     // coordinates the same session with other server processes.
     const pending = borrowedChain.then(async () => {
       if (shuttingDown) throw fail("VSUP_INVALID_STATE", "The isolated supervisor is shutting down.");
-      const home = await locate(sessions, runId);
+      const home = await locate(lookup, runId);
       if (path.resolve(home) === currentHome) return operation(manager);
-      const borrowed = await createBorrowedManager(options.config, options.policy, home, sessions, runId);
+      const borrowed = await createBorrowedManager(options.config, options.policy, home, lookup, runId);
       try {
         return await operation(borrowed);
       } finally {

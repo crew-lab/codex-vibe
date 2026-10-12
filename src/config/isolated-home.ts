@@ -6,11 +6,11 @@ import { loadConfig, resolveConfigSelection } from './config.js';
 import { validateConfig } from './validation.js';
 import { acquireOwnerLock, isOwnerLockContention } from '../core/owner-lock.js';
 import type { OwnerLock } from '../core/owner-lock.js';
+import { SESSION_NAME } from '../core/session-pruning.js';
 import { createPrivateDir, createPrivateFile } from '../security/paths.js';
 
 export interface IsolatedHome { home: string; sessions: string; lock: OwnerLock; adopted: boolean }
 
-const SESSION_NAME = /^session-[A-Za-z0-9]{6}$/;
 const MAX_CREATE_ATTEMPTS = 8;
 
 function reportToStderr(message: string): void {

@@ -72,7 +72,7 @@ Compact results include state, stop reason, summary, warnings, error, next actio
 
 Review integrity is `verified`, `changed`, or `unverified`. Inspect `changed_paths` and `reason` before relying on a review that changed during execution or could not be fully snapshotted. For edits, inspect the fresh patch and changed/residual files before close. Cleanup reports `worktree_removed` and, when cleanup is refused, a retained reason. The snapshot behind review integrity hashes every Git-visible file and stats everything else except `.git`, within caps of 200,000 files and 2 GiB; past a cap integrity is `unverified`, and large ignored trees such as `node_modules` cost stat time at launch and settle.
 
-`vibe-supervisor runs cleanup` without a run id removes expired runs and lists `retained_worktrees` (`run_id`, `state`, `path`, `manual_command`) and `unverified_worktrees`. A retained worktree stays registered in the source repository; if it was pruned or deleted by hand, verified cleanup refuses it. Run `manual_command` (`git -C <source> worktree remove <path>`) or `git worktree prune` yourself after saving the exported patch. Worktree creation, patch export and cleanup are bounded at 5 minutes (other Git queries 30 s), and the patch at `limits.max_artifact_bytes`. `limits.max_event_bytes` bounds the raw worker stdout stream; `limits.max_transcript_bytes` bounds only the transcript.
+`vibe-supervisor runs cleanup` without a run id removes expired runs and lists `retained_worktrees` (`run_id`, `state`, `path`, `manual_command`) and `unverified_worktrees`. It also prunes stale isolated session directories and reports `pruned_sessions` (session names) and `kept_sessions` (`session`, `path`, `reason`, `message`); see [Codex connection isolation](#codex-connection-isolation). A retained worktree stays registered in the source repository; if it was pruned or deleted by hand, verified cleanup refuses it. Run `manual_command` (`git -C <source> worktree remove <path>`) or `git worktree prune` yourself after saving the exported patch. Worktree creation, patch export and cleanup are bounded at 5 minutes (other Git queries 30 s), and the patch at `limits.max_artifact_bytes`. `limits.max_event_bytes` bounds the raw worker stdout stream; `limits.max_transcript_bytes` bounds only the transcript.
 
 ## Configuration
 
@@ -82,7 +82,7 @@ The configuration is strict TOML. The starter allowlist is empty. Removed keys�
 |---|---|
 | `version` | Required schema version `1`. |
 | `allowed_workspace_roots` | Up to 100 absolute or home-relative canonical workspace roots. Defaults to empty. |
-| `retention.days` | Bounded artifact retention age. Retention removes closed and cancelled runs older than the cutoff when no worktree is retained, and closes then removes completed runs after at least a day. A failed run that was never closed is never pruned by age; close it with `vibe_close` to make it eligible. |
+| `retention.days` | Bounded artifact retention age. Retention removes closed and cancelled runs older than the cutoff when no worktree is retained, and closes then removes completed runs after at least a day. A failed run that was never closed is never pruned by age; close it with `vibe_close` to make it eligible. The same age decides when an unused isolated session directory can be pruned. |
 | `limits.review_timeout_seconds`, `limits.edit_timeout_seconds` | Default run deadlines. |
 | `limits.max_turns_review`, `limits.max_turns_edit` | Default one-shot turn limits, 1–50. |
 | `limits.max_event_bytes`, `limits.max_transcript_bytes`, `limits.max_artifact_bytes` | Bounded persisted output sizes. |
@@ -114,4 +114,17 @@ Use `vibe-supervisor <command> --help` for current options. The explicit selecte
 
 `setup` registers `serve --stdio --isolated` by default. The optional `setup --isolated` flag remains accepted. Existing non-isolated registrations are updated through the normal reviewed setup flow; configuration backup and confirmation rules are unchanged. A direct non-isolated `serve` still requires exclusive storage ownership and competing connections fail closed. Isolation changes storage ownership, not workspace permissions.
 
-Saved UUIDs remain usable through `vibe_status`, `vibe_result` and `vibe_close` when an isolated reconnect selects a different free store. Lookup covers at most 128 entries in the selected configuration’s private `mcp-sessions` namespace. It requires a unique safe record and exclusive ownership of its store; a live owner, duplicate UUID or unsafe path returns an error without replaying the task.
+Saved UUIDs remain usable through `vibe_status`, `vibe_result` and `vibe_close` when an isolated reconnect selects a different free store. Lookup searches the current session first, then at most 128 sibling sessions in the selected configuration’s private `mcp-sessions` namespace, in name order. It requires a unique safe record and exclusive ownership of its store; a live owner, duplicate UUID or unsafe path for the requested run returns an error without replaying the task. An unsafe or unreadable sibling session is skipped and reported instead of failing the lookup; a not-found error names skipped siblings in `details.skipped_sessions` and counts siblings past the limit in `details.unscanned_sessions`.
+
+Session directories are pruned 5 seconds after an isolated server starts and every 24 hours, and by `runs cleanup`. A session is removed only when all of these hold; otherwise it is kept with a reason:
+
+| Condition | `kept_sessions` reason when it fails |
+|---|---|
+| The namespace and session are private, owner-only directories, not links, inside `mcp-sessions` | `unsafe_namespace`, `unsafe` |
+| Unused for longer than `retention.days` (directory, `config.toml` and `runs` modification times) | `recently_used` |
+| No live owner by the owner-lock rules; the lock is then taken the normal way | `live_owner`, `lock_unavailable` |
+| Only closed or cancelled runs, older than the cutoff, recording no worktree; `worktrees` empty | `run_retained`, `worktree_retained`, `too_many_runs` |
+| Every run record readable; no other entries than `config.toml`, `supervisor.lock`, `runs` and `worktrees` | `unreadable`, `unexpected_entry` |
+| Unchanged when rechecked under the lock, and removed after being renamed out of the namespace | `changed_during_sweep`, `removal_failed` |
+
+A sweep inspects at most 64 sessions, oldest first; the rest are reported as `deferred`. The current session is never pruned.

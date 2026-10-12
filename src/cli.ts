@@ -21,21 +21,21 @@ import { supervisorError, type SupervisorErrorCode } from './contracts.js';
 import { environmentSecrets, redactSecrets } from './security/redaction.js';
 
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
-async function getManager(ownerLock?: OwnerLock, configPath?: string, isolatedHome?: string): Promise<{ manager: RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> }; config: Awaited<ReturnType<typeof loadConfig>>; dataDir: string; policy: ReturnType<typeof selectedConfigPolicy> }> {
+async function getManager(ownerLock?: OwnerLock, configPath?: string, isolatedHome?: string, sessionNamespace?: string): Promise<{ manager: RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> }; config: Awaited<ReturnType<typeof loadConfig>>; dataDir: string; policy: ReturnType<typeof selectedConfigPolicy> }> {
   const resolved = await loadResolvedConfig({ createDataDir: isolatedHome === undefined, ...(configPath ? { configPath } : {}) });
   const config = resolved.config;
   const dataDir = isolatedHome ?? resolved.dataDir;
   const policy = selectedConfigPolicy(resolved.configPath);
   for (const lost of (await inspectWorkspaceRoots(config.allowedWorkspaceRoots)).unavailable) process.stderr.write(`Allowed workspace root ${lost.root} is unavailable and denied until it is restored: ${lost.reason}\n`);
   const { RunManager } = await import('./core/run-manager.js');
-  const manager = new RunManager(config, dataDir, [], ownerLock, { policy, ...(isolatedHome ? { sessionId: path.basename(isolatedHome) } : {}) }) as RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> };
+  const manager = new RunManager(config, dataDir, [], ownerLock, { policy, ...(isolatedHome ? { sessionId: path.basename(isolatedHome) } : {}), ...(sessionNamespace ? { sessionNamespace } : {}) }) as RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> };
   await manager.initialize();
   return { manager, config, dataDir, policy };
 }
 
 async function serve(ownerLock?: OwnerLock, configPath?: string, isolated?: { sessions: string; home: string }): Promise<void> {
   let ready: Awaited<ReturnType<typeof getManager>>;
-  try { ready = await getManager(ownerLock, configPath, isolated?.home); }
+  try { ready = await getManager(ownerLock, configPath, isolated?.home, isolated?.sessions); }
   catch (error) { await ownerLock?.release(); throw error; }
   const { manager, config, policy } = ready;
   const tools = isolated ? createIsolatedRunRouter(manager, { sessions: isolated.sessions, currentHome: isolated.home, config, policy }) : manager;
@@ -101,7 +101,7 @@ async function runsCommand(args: string[]): Promise<void> {
   }
   if (subcommand === 'cleanup') {
     if (id && !validRunId(id)) fail('runs cleanup run-id must be a valid UUID.', 2);
-    const { manager } = await getManager(undefined, configPath);
+    const { manager } = await getManager(undefined, configPath, undefined, id ? undefined : path.join(dataDir, 'mcp-sessions'));
     try { print(await manager.cleanup(id)); } finally { await manager.shutdown(); }
     return;
   }
