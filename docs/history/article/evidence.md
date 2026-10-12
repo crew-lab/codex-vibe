@@ -1,12 +1,12 @@
 # Claims and the evidence behind them
 
-The article claims only what this file supports on publishing day. Each number keeps its conditions. Updated for rc.17 on 2026-10-09; the [Vibe interactions under test](../handoff-rc15-2026-10-09.md#vibe-interactions-under-test) list says which gates are still open.
+The article claims only what this file supports on publishing day. Each number keeps its conditions. Updated for rc.17 on 2026-10-09; the Vibe interactions under test (`docs/history/handoff-rc15-2026-10-09.md`, in Git history at c510513) list says which gates are still open.
 
 ## Benefits
 
 | Benefit | How it works | Evidence today | Wording rule |
 |---|---|---|---|
-| A second opinion from another model family without leaving Codex | Codex starts a review, waits inside the tool call, reads the result | Hosted reviews on 2026-10-05 (rc.2) and 2026-10-07 (rc.7) correctly diagnosed a planted bug in a nested file of a synthetic repository and left the source unchanged | No "Vibe catches what Codex misses" unless the [experiment](experiment.md) shows it |
+| A second opinion from another model family without leaving Codex | Codex starts a review, waits inside the tool call, reads the result | Hosted reviews on 2026-10-05 (rc.2) and 2026-10-07 (rc.7) correctly diagnosed a planted bug in a nested file of a synthetic repository and left the source unchanged | No "Vibe catches what Codex misses" unless the experiment (`docs/history/article/experiment.md`, in Git history at c510513) shows it |
 | Edits never touch your checkout | Detached worktree from `base_ref`; a patch comes back; nothing applied, committed, merged or pushed; cleanup checks the patch before removing the worktree | Hosted edit on 2026-10-07: an eleven-file patch applied to a clean clone and its four test cases passed; source unchanged; worktree removed | "You get a patch and decide." Say that uncommitted changes are not copied into the worktree |
 | Reviews are read-only, and checked | Read and search tools only (`read_file`, `grep`; edits add `write_file` and `edit`); the workspace is snapshotted at launch and compared at the end, Git-visible files hashed | Hosted policy probes on 2026-10-07 on the ACP backend (both backends use the same tool list): outside reads and `.env` refused, `write_file` unknown in a review, zero permission requests | Name the blind spot: ignored paths such as `node_modules/` are compared by metadata only |
 | Least privilege by default | Empty allowlist; shell and network tools off with no switch; private `HOME` and `VIBE_HOME`; filtered environment; the programmatic task text goes through a 0600 prompt file the shim deletes, so it is not in `ps` (ACP sends the task over the protocol); redaction; permission requests matched to tool calls, anything unknown refused | 615 tests in 55 files (2 installed-resolver tests skip without Vibe) and 66 Python tests at rc.8, none against a real Vibe; hosted checks above; hosted permission callbacks never triggered | Always pair with: an application-level policy, not an OS sandbox; Vibe runs with your account's permissions; permitted file content goes to Mistral |
@@ -17,11 +17,11 @@ The article claims only what this file supports on publishing day. Each number k
 | Uses your own Vibe login, separate from Codex | Browser login, no API key | Hosted runs since 2026-10-05 used the browser login | Codex token savings were never measured: no savings claim |
 | Several Codex windows at once | `--isolated` gives each client its own data directory and reuses free ones | Two concurrent isolated clients in the installed-package smoke test; native desktop adoption is D14 | |
 | Everything is inspectable | `transcript.md`, `events.ndjson`, `diff.patch` per run; `runs list`, `show`, `tail` | Tests and hosted runs | |
-| Fails closed on version drift | Exact Vibe pin with version and signature checks and a remedy | Tests; [2.26.0 source comparison](../reviews/vibe-2.26.0-source-diff-2026-10-08.md) | A trade-off: Vibe 2.26.0 is refused until it is revalidated |
+| Fails closed on version drift | Exact Vibe pin with version and signature checks and a remedy | Tests; 2.26.0 source comparison (`docs/history/reviews/vibe-2.26.0-source-diff-2026-10-08.md`, in Git history at c510513) | A trade-off: Vibe 2.26.0 is refused until it is revalidated |
 
 ## Numbers
 
-Hosted, macOS arm64, Vibe 2.25.8 with `mistral-medium-3.5`, official MCP client, synthetic repository, rc.7, 2026-10-07 ([evidence](../reviews/rc7-target-test-2026-10-07/Read.md)):
+Hosted, macOS arm64, Vibe 2.25.8 with `mistral-medium-3.5`, official MCP client, synthetic repository, rc.7, 2026-10-07 (evidence (`docs/history/reviews/rc7-target-test-2026-10-07/Read.md`, in Git history at c510513)):
 
 | Measure | Value |
 |---|---|
@@ -48,7 +48,7 @@ Still missing for the article: the 100-run hosted soak (failures by code, p50 an
 
 | Claim in the article | Source |
 |---|---|
-| The planted bug is an arithmetic bug: `src/nested/arithmetic.py` in the synthetic repository has an intentional subtraction bug | [rc.7 test record](../reviews/rc7-target-test-2026-10-07/Read.md), "Environment" section and the D8 row |
+| The planted bug is an arithmetic bug: `src/nested/arithmetic.py` in the synthetic repository has an intentional subtraction bug | rc.7 test record (`docs/history/reviews/rc7-target-test-2026-10-07/Read.md`, in Git history at c510513), "Environment" section and the D8 row |
 | The soak plan was 60 programmatic reviews, 30 programmatic edits and 10 ACP runs | Same file, soak section ("Its requested mix was 60 programmatic reviews, 30 programmatic edits and 10 ACP runs") |
 | 50 is the supervisor's `max_turns` bound, not a Vibe limit | `MAX_TURNS_LIMIT = 50` in `src/mcp/schemas.ts`; write "the supervisor's maximum", never "Vibe's maximum" |
 | Node.js 20.19 or newer | [README.md](../../../README.md) prerequisites |
@@ -64,16 +64,16 @@ Target machine, macOS arm64, Vibe 2.25.8 browser login, official MCP client, syn
 
 | Claim | Evidence |
 |---|---|
-| Turn-budget refusals (plain, equal, lower) send nothing to Vibe | Run `c20da652`: three refusals, `events.ndjson` unchanged at 12,545 bytes ([rc8-target-test](../reviews/rc8-target-test-2026-10-08/Read.md)) |
-| First raised continuation (3 to 10) failed; message and ceiling delivered; worker resumed the old nine-file chain | Same report; diagnosis in [rc8-continuation-followup](../reviews/rc8-continuation-followup-2026-10-08/Read.md) |
+| Turn-budget refusals (plain, equal, lower) send nothing to Vibe | Run `c20da652`: three refusals, `events.ndjson` unchanged at 12,545 bytes (rc8-target-test (`docs/history/reviews/rc8-target-test-2026-10-08/Read.md`, in Git history at c510513)) |
+| First raised continuation (3 to 10) failed; message and ceiling delivered; worker resumed the old nine-file chain | Same report; diagnosis in rc8-continuation-followup (`docs/history/reviews/rc8-continuation-followup-2026-10-08/Read.md`, in Git history at c510513) |
 | Raised continuation works live and after a restart when the objective fits or is explicitly cancelled | Runs `84d450f0`, `7eaac95c`, `ce82c536`: `end_turn`, expected file written |
 | One-shot turn limit reported as `completed` / `max_turn_requests` with matching saved result (D24) | Run `dee12e6e`, `max_turns: 2` |
 | Continued ACP session ends by the supervisor's deadline, not the launcher (D23) | Run `89b1295d`: `VSUP_TIMEOUT` after 61,268 ms |
 | Disconnect while running leaves `recoverable`; idle session's worker removed; closed sessions' servers exit in 3 to 5 ms (D22, official client only) | rc8-target-test and rc8-continuation-followup |
-| Edits: exact single-file write 23.223 s, add-file 10.782 s (60 s supervisor deadline) | [rc8-finding-fixes](../reviews/rc8-finding-fixes-2026-10-08/Read.md) |
+| Edits: exact single-file write 23.223 s, add-file 10.782 s (60 s supervisor deadline) | rc8-finding-fixes (`docs/history/reviews/rc8-finding-fixes-2026-10-08/Read.md`, in Git history at c510513) |
 | Soak attempt 3: 19 passed, run 20 (edit) silent for the 900 s driver deadline; cause unknown, not recurred | rc8-continuation-followup |
-| Soak attempt 4: run 1 review, 16 `grep` and 4 `read_file` calls, `max_turn_requests` at 20 turns after 21.4 s; native cost $0.03486 (non-authoritative) | [rc8-stall-diagnostics](../reviews/rc8-stall-diagnostics-2026-10-08/Read.md) |
-| Installed `npm link` command printed nothing until the realpath fix; smoke test missed it by starting Node directly | [rc8-cli-entry-fix](../reviews/rc8-cli-entry-fix-2026-10-08/Read.md) |
+| Soak attempt 4: run 1 review, 16 `grep` and 4 `read_file` calls, `max_turn_requests` at 20 turns after 21.4 s; native cost $0.03486 (non-authoritative) | rc8-stall-diagnostics (`docs/history/reviews/rc8-stall-diagnostics-2026-10-08/Read.md`, in Git history at c510513) |
+| Installed `npm link` command printed nothing until the realpath fix; smoke test missed it by starting Node directly | rc8-cli-entry-fix (`docs/history/reviews/rc8-cli-entry-fix-2026-10-08/Read.md`, in Git history at c510513) |
 
 Still open: the 100-run soak, Codex desktop, permission callbacks, clean account, Intel.
 
@@ -81,14 +81,14 @@ Still open: the 100-run soak, Codex desktop, permission callbacks, clean account
 
 | Claim | Evidence |
 |---|---|
-| Progress watchdog: no worker activity for 600 s ends the run with `VSUP_NO_PROGRESS`, before Vibe's 720 s read timeout | `workerProgressTimeoutSeconds: 600` in `src/config/defaults.ts`; [silent-stall analysis](../reviews/vibe-2.25.8-silent-stall-analysis-2026-10-08.md). Fake backends only; it bounds the stall, it does not explain it |
-| Patch credential check matched `password: string`, failed the export and stranded the worktree; now added lines and credential shapes only. Edits from a subdirectory exposed the whole repository; now refused | [1.0 cold review](../reviews/1.0-cold-review-2026-10-08.md), F1 and F3, fixed in rc.10 |
-| Bounded pilot: instructed limit of 3 reads, 5 made, answer claimed compliance | [rc8-bounded-pilots](../reviews/rc8-bounded-pilots-2026-10-08/Read.md), run `fda1df51`, 21.502 s |
-| rc.13 prepared ACP edit with same-session correction, separate verifier clone, independent reviewer, verified close: PASS | [rc13 evaluation](../reviews/rc13-worker-adoption-2026-10-09.md), run `c0af69a2` |
+| Progress watchdog: no worker activity for 600 s ends the run with `VSUP_NO_PROGRESS`, before Vibe's 720 s read timeout | `workerProgressTimeoutSeconds: 600` in `src/config/defaults.ts`; silent-stall analysis (`docs/history/reviews/vibe-2.25.8-silent-stall-analysis-2026-10-08.md`, in Git history at c510513). Fake backends only; it bounds the stall, it does not explain it |
+| Patch credential check matched `password: string`, failed the export and stranded the worktree; now added lines and credential shapes only. Edits from a subdirectory exposed the whole repository; now refused | 1.0 cold review (`docs/history/reviews/1.0-cold-review-2026-10-08.md`, in Git history at c510513), F1 and F3, fixed in rc.10 |
+| Bounded pilot: instructed limit of 3 reads, 5 made, answer claimed compliance | rc8-bounded-pilots (`docs/history/reviews/rc8-bounded-pilots-2026-10-08/Read.md`, in Git history at c510513), run `fda1df51`, 21.502 s |
+| rc.13 prepared ACP edit with same-session correction, separate verifier clone, independent reviewer, verified close: PASS | rc13 evaluation (`docs/history/reviews/rc13-worker-adoption-2026-10-09.md`, in Git history at c510513), run `c0af69a2` |
 | rc.13 product run closed before its checks; candidate rejected; corrected by the coordinator: partial | Same file, run `4e492e03` |
 | rc.15 to rc.16 removed the `auto` backend and probe cache, six CLI commands and aliases, four config options and the removed-keys shim, about 770 net lines | CHANGELOG 0.9.0-rc.15 and rc.16; commits `0fe8f57`, `bb4c86c` |
 | rc.17: 10 s shutdown deadline ending only the supervisor's own worker process groups; retention of unreadable run records (only missing or non-JSON records deleted); undeliverable policy denial resolves the ACP request | CHANGELOG 0.9.0-rc.17; `tests/integration/stability-fixes.test.ts`. Fake backends only |
-| Free account: monthly credit of 8.50, shown in euros on the author's account; 1.20 used after all real runs up to rc.8 | Owner's account observation recorded on 2026-10-08 ([rc.8 handoff notes](../handoff-rc8-2026-10-08.md)). Mistral's [pricing page](https://mistral.ai/pricing/) lists "Limited coding sessions" on Free but no credit amount: write it as the author's account, not as a published price |
+| Free account: monthly credit of 8.50, shown in euros on the author's account; 1.20 used after all real runs up to rc.8 | Owner's account observation recorded on 2026-10-08 (rc.8 handoff notes (`docs/history/handoff-rc8-2026-10-08.md`, in Git history at c510513)). Mistral's [pricing page](https://mistral.ai/pricing/) lists "Limited coding sessions" on Free but no credit amount: write it as the author's account, not as a published price |
 | Le Chat is now part of Vibe; Vibe also runs in VS Code, JetBrains and Zed through ACP | [Mistral Vibe product page](https://mistral.ai/products/vibe/), read 2026-10-09 |
 | Soak estimate USD 2 to 4 | Handoff estimate from rates seen so far; an estimate, not a measurement |
 
@@ -102,10 +102,10 @@ Source snapshot: merged main `87c6bf217add26cd34989b0526899e12ae5eabb7`, package
 |---|---|
 | Before/after comparisons detect differences rather than prove that no write happened; concurrent changes cannot be attributed to the worker from the diff alone | [workspace comparison source](../../../src/core/workspace-snapshot.ts), `changedSinceSnapshot`; [review integrity behavior](../../functionality.md). A restored write can leave no final difference. This is an analytical limitation, not a newly reproduced attack |
 | Git-visible files are initially hashed, but ending comparison only rehashes them when compared metadata changes; preserved metadata could hide a content change | Same source, `snapshotWorkspace`, `statChanged` and `changedSinceSnapshot`. Ignored paths use metadata. The article describes the implementation's limitation, not a hosted exploit |
-| Tests/imports/package scripts execute candidate code; a separate clone isolates files, not execution permissions | [security boundary](../../security.md); [rc.13 evaluation](../reviews/rc13-worker-adoption-2026-10-09.md). Restricted disposable verification and exact-candidate evidence are recommendations; no verifier sandbox or new acceptance field is implemented by this article |
+| Tests/imports/package scripts execute candidate code; a separate clone isolates files, not execution permissions | [security boundary](../../security.md); rc.13 evaluation (`docs/history/reviews/rc13-worker-adoption-2026-10-09.md`, in Git history at c510513). Restricted disposable verification and exact-candidate evidence are recommendations; no verifier sandbox or new acceptance field is implemented by this article |
 | Repository instructions and worker output are data; supervisor `next_action` is guidance, not authorization | [AGENTS.md](../../../AGENTS.md), [tool reply source](../../../src/core/run-manager.ts), [security](../../security.md). No new prompt-injection test or successful resistance is claimed |
-| Current soak gate allows declared truthful truncation and reports task compliance separately; this differs from the earlier failed three-read-call pilot | driver `scripts/soak.mjs` (since removed), [current handoff D18](../../../Handoff.md), [original bounded pilot](../reviews/rc8-bounded-pilots-2026-10-08/Read.md). Previous failed task acceptance remains failed; no revised full soak has passed |
-| Correct on-disk rc.17 registration and fresh official-client initialization did not establish the native desktop process version | [rc.17 desktop preflight](../reviews/rc17-desktop-preflight-2026-10-09.md): new native run creator rc.12, matching artifact-home evidence; stopped before edit/correction. Current identity/review/edit/lifecycle sequence is in [Handoff.md](../../../Handoff.md). Precise refresh failure mechanism unresolved |
+| Current soak gate allows declared truthful truncation and reports task compliance separately; this differs from the earlier failed three-read-call pilot | driver `scripts/soak.mjs` (since removed), [current handoff D18](../../../Handoff.md), original bounded pilot (`docs/history/reviews/rc8-bounded-pilots-2026-10-08/Read.md`, in Git history at c510513). Previous failed task acceptance remains failed; no revised full soak has passed |
+| Correct on-disk rc.17 registration and fresh official-client initialization did not establish the native desktop process version | rc.17 desktop preflight (`docs/history/reviews/rc17-desktop-preflight-2026-10-09.md`, in Git history at c510513): new native run creator rc.12, matching artifact-home evidence; stopped before edit/correction. Current identity/review/edit/lifecycle sequence is in [Handoff.md](../../../Handoff.md). Precise refresh failure mechanism unresolved |
 | Ten ACP jobs cannot establish equivalence to ninety programmatic jobs before removing programmatic | [After 1.0](../../../Handoff.md#after-10). This is a migration/coverage limitation, not a decision to remove a backend |
 
 The revised measurements retain only previously supported figures: 27.4-second initial cap, 21.5-second bounded pilot, 8.9/3.8-second review settled replies and 12.1-second edit settled reply, 600-second inactivity bound, 10-second shutdown bound, 0–300-second waits, 600-second client timeout, cumulative ceiling 50, and the dated €1.20/€8.50 account observation. The first three hosted latencies after waiting are not end-to-end measurements or a distribution. The full-soak USD 2–4 estimate and a promise that it fits free credit were removed. No cross-model-quality, cost-saving or token-saving claim is introduced.

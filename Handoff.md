@@ -1,6 +1,6 @@
 # Current handoff
 
-Updated 2026-10-12. This document alone defines current priorities. Earlier handoffs, plans, reviews and test evidence are in [docs/history/](docs/history/) and in Git history; nothing there is the current work queue.
+Updated 2026-10-12. This document alone defines current priorities. [docs/history/](docs/history/) keeps only what the current work uses: the rc.28 brief, runbook and evidence template, the acceptance log, the latest reviews, the 2.26.1 compatibility audit, the install notes and the 1.0 article draft. Everything older (earlier handoffs, plans, phase evidence, rc.2 to rc.17 test records) was removed from the tree on 2026-10-12 and is in Git history at `c510513`.
 
 ## What this is
 
@@ -24,7 +24,7 @@ Behaviour: [docs/functionality.md](docs/functionality.md); interface: [docs/refe
 
 **Candidate: `0.9.0-rc.28`**, built on the preparing machine, not yet installed or run on the target machine. What changed since the last installed build (rc.23) is in [CHANGELOG.md](CHANGELOG.md): authoritative per-start policy reread and no-inference readiness with signed receipts (rc.24), accurate error codes and JSON error replies (rc.25), a reliable test suite and shutdown/settle fixes (rc.26), edits that fit large repositories and an export that cannot miss same-second edits (rc.27), and export and cleanup that see every change regardless of `core.ignoreStat`, assume-unchanged or skip-worktree (rc.28).
 
-Verification on the preparing machine, fake backends only: `package:rc` passed (629 tests, 2 skipped; Python tests; lint, typecheck, build; acceptance; secret scan; SBOM; offline installed-package smoke test), and ten consecutive full suite runs on a clean clone passed. Exact Node 20.19.0 passed `verify:release` locally (on rc.24's source). Three cold reviews and a readiness assessment are in `docs/history/reviews/` (`rc24-…`, `rc27-…`, `v1-readiness-assessment-…`); their remaining items are listed under After 1.0 below.
+Verification on the preparing machine, fake backends only: `package:rc` passed (629 tests, 2 skipped; Python tests; lint, typecheck, build; acceptance; secret scan; SBOM; offline installed-package smoke test), and ten consecutive full suite runs on a clean clone passed. Exact Node 20.19.0 passed `verify:release` locally (on rc.24's source). Two cold reviews and a readiness assessment are in `docs/history/reviews/` (`rc24-…`, `rc27-…`, `v1-readiness-assessment-…`); their remaining items are listed under After 1.0 below.
 
 Hosted evidence: Vibe 2.26.1 ran inference once, on rc.22 (run `cb51c05f`, `end_turn`). Nothing after rc.22 has run with inference; that is what the target-machine sitting closes.
 

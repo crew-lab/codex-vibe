@@ -8,7 +8,7 @@ Offline packaging requires the populated cache and runs lint, typecheck, build, 
 
 Installation targets a new `/Users/roman/.local/share/vibe-supervisor/rc18` prefix. Preserve rc17, private provider state, original configuration backup and all existing runs. Preserve unrelated Codex settings and backend/roots/limits; change only the executable/template paths. Refresh the existing skill links to the installed package. Independently verify installed version, archive/runtime/skill bytes and seven-tool official-client initialization. This chat's already connected process remains unverified until a new native run records its creator; do not restart it automatically.
 
-See [triage](lifecycle-triage-2026-10-09.md), [test plan](../lifecycle-recovery-test-plan.md), [prior installation](rc17-local-installation-2026-10-09.md) and [Handoff](../../../Handoff.md).
+See triage (`docs/history/reviews/lifecycle-triage-2026-10-09.md`, in Git history at c510513), test plan (`docs/history/lifecycle-recovery-test-plan.md`, in Git history at c510513), prior installation (`docs/history/reviews/rc17-local-installation-2026-10-09.md`, in Git history at c510513) and [Handoff](../../../Handoff.md).
 
 ## Verified outcome
 
@@ -26,4 +26,4 @@ Local installation at `/Users/roman/.local/share/vibe-supervisor/rc18` passed do
 
 Fresh official-client initialization confirmed **0.9.0-rc.18**, seven ACP tools and no start-side backend/allow_shell fields. Missing-run status returned VSUP_NOT_FOUND; close left zero saved runs/owner locks in the new initialization-only session. This does not prove the current desktop process refreshed. Hosted inference was NOT_RUN. No recovery, soak, clean-account or Intel claim is made. Skill changes are available on the next turn; establish native creator identity before hosted dispatch.
 
-[Sanitized outcome](rc18-release-outcome-2026-10-09.json) records exact identity/check results. Private logs, downloaded outputs, installation/doctor/handshake and file-verification records are retained under the rc18 prefix's `installation-evidence-2026-10-09`. Post-build outcome documentation is committed separately from the tagged artifact to avoid self-referential checksums; the published tag/assets remain immutable.
+Sanitized outcome (`docs/history/reviews/rc18-release-outcome-2026-10-09.json`, in Git history at c510513) records exact identity/check results. Private logs, downloaded outputs, installation/doctor/handshake and file-verification records are retained under the rc18 prefix's `installation-evidence-2026-10-09`. Post-build outcome documentation is committed separately from the tagged artifact to avoid self-referential checksums; the published tag/assets remain immutable.
