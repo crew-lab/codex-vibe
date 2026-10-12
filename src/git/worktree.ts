@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFile, mkdtemp, open, lstat, realpath, rm, utimes } from 'node:fs/promises';
+import { copyFile, mkdtemp, open, lstat, realpath, rm, stat, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createPrivateDir } from '../security/paths.js';
@@ -20,16 +20,17 @@ export function overrideGitBounds(overrides: Partial<GitBounds>): () => void {
   return () => { Object.assign(gitBounds, previous); };
 }
 
-interface GitLimits { timeoutMs?: number; maxOutputBytes?: number }
+interface GitLimits { timeoutMs?: number; maxOutputBytes?: number; input?: Buffer }
 
 const heavy = (maxOutputBytes?: number): GitLimits => ({ timeoutMs: gitBounds.heavyRuntimeMs, ...(maxOutputBytes === undefined ? {} : { maxOutputBytes }) });
 
 const MAX_GIT_STDERR_BYTES = 4096;
 
-export type GitFailureKind = 'missing' | 'not_repository' | 'timeout' | 'overflow' | 'failed';
+export type GitFailureKind = 'missing' | 'workspace_missing' | 'not_repository' | 'timeout' | 'overflow' | 'failed';
 
 const GIT_FAILURE_CODES: Record<GitFailureKind, 'VSUP_GIT_REQUIRED' | 'VSUP_TIMEOUT' | 'VSUP_OUTPUT_LIMIT' | 'VSUP_ARTIFACT_ERROR'> = {
   missing: 'VSUP_GIT_REQUIRED',
+  workspace_missing: 'VSUP_ARTIFACT_ERROR',
   not_repository: 'VSUP_GIT_REQUIRED',
   timeout: 'VSUP_TIMEOUT',
   overflow: 'VSUP_OUTPUT_LIMIT',
@@ -39,11 +40,11 @@ const GIT_FAILURE_CODES: Record<GitFailureKind, 'VSUP_GIT_REQUIRED' | 'VSUP_TIME
 export class GitOperationError extends Error {
   readonly code: (typeof GIT_FAILURE_CODES)[GitFailureKind];
   readonly details: Record<string, unknown>;
-  constructor(readonly operation: string, detail?: string, readonly kind: GitFailureKind = 'failed', readonly stderrTail = '') {
+  constructor(readonly operation: string, detail?: string, readonly kind: GitFailureKind = 'failed', readonly stderrTail = '', extraDetails: Record<string, unknown> = {}) {
     super(detail ?? `Git operation failed: ${operation}`);
     this.name = 'GitOperationError';
     this.code = GIT_FAILURE_CODES[kind];
-    this.details = { operation, kind };
+    this.details = { ...extraDetails, operation, kind };
   }
   get missing(): boolean { return this.kind === 'missing'; }
 }
@@ -59,12 +60,16 @@ async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = process
   return await new Promise<Buffer>((resolve, reject) => {
     const safeEnv: NodeJS.ProcessEnv = { PATH: env.PATH, HOME: env.HOME, LANG: env.LANG, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_OPTIONAL_LOCKS: '0' };
     if (env.GIT_INDEX_FILE) safeEnv.GIT_INDEX_FILE = env.GIT_INDEX_FILE;
-    const fixed = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.attributesFile=/dev/null', '-c', 'core.splitIndex=false', '-c', 'core.untrackedCache=false', '-c', 'index.skipHash=false'];
-    const child = spawn('git', [...fixed, '-C', cwd, ...args], { cwd, env: safeEnv, shell: false, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
+    const fixed = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.attributesFile=/dev/null', '-c', 'core.splitIndex=false', '-c', 'splitIndex.sharedIndexExpire=never', '-c', 'core.ignoreStat=false', '-c', 'core.untrackedCache=false', '-c', 'index.skipHash=false'];
+    const operation = args[0] ?? 'git';
+    const child = spawn('git', [...fixed, '-C', cwd, ...args], { cwd, env: safeEnv, shell: false, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'] });
+    child.stdin.on('error', () => {});
+    if (limits.input) child.stdin.end(limits.input); else child.stdin.end();
     const chunks: Buffer[] = []; let size = 0; let overflow = false;
     let stderr = Buffer.alloc(0);
     let stderrHeadDropped = false;
     let timedOut = false;
+    let spawnFailed = false;
     const signalTree = (signal: NodeJS.Signals): void => {
       if (!child.pid) return;
       try { process.kill(process.platform === 'win32' ? child.pid : -child.pid, signal); } catch { /* child already stopped */ }
@@ -86,14 +91,22 @@ async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = process
       stderr = joined.subarray(-MAX_GIT_STDERR_BYTES);
     });
     const stderrTail = (): string => redactedTail(stderr, 1024, environmentSecrets(), stderrHeadDropped ? 'head' : undefined);
-    child.once('error', (error) => reject(new GitOperationError(args[0] ?? 'git', undefined, (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'missing' : 'failed')));
+    child.once('error', (error) => {
+      spawnFailed = true;
+      clearTimeout(timer);
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') { reject(new GitOperationError(operation)); return; }
+      void stat(cwd).then((info) => info.isDirectory(), () => false).then((present) => {
+        reject(present ? new GitOperationError(operation, undefined, 'missing') : new GitOperationError(operation, `Git working directory does not exist: ${cwd}`, 'workspace_missing', '', { path: cwd }));
+      });
+    });
     child.once('close', (code) => {
       clearTimeout(timer);
-      if (timedOut) reject(new GitOperationError(args[0] ?? 'git', `Git operation timed out: ${args[0] ?? 'git'}`, 'timeout', stderrTail()));
-      else if (overflow) reject(new GitOperationError(args[0] ?? 'git', `Git output exceeded its limit: ${args[0] ?? 'git'}`, 'overflow', stderrTail()));
+      if (spawnFailed) return;
+      if (timedOut) reject(new GitOperationError(operation, `Git operation timed out: ${operation}`, 'timeout', stderrTail()));
+      else if (overflow) reject(new GitOperationError(operation, `Git output exceeded its limit: ${operation}`, 'overflow', stderrTail()));
       else if (code === null || !allowedCodes.includes(code)) {
         const tail = stderrTail();
-        reject(new GitOperationError(args[0] ?? 'git', undefined, /not a git repository/i.test(tail) ? 'not_repository' : 'failed', tail));
+        reject(new GitOperationError(operation, undefined, /not a git repository/i.test(tail) ? 'not_repository' : 'failed', tail));
       }
       else resolve(Buffer.concat(chunks, size));
     });
@@ -132,9 +145,49 @@ async function withPrivateIndex<T>(root: string, work: (env: NodeJS.ProcessEnv) 
     const location = decodeTrimmed(await git(root, ['rev-parse', '--git-path', 'index']));
     const source = path.resolve(root, location);
     const copy = path.join(directory, 'index');
-    try { await copyFile(source, copy); await utimes(copy, 1, 1); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-    return await work({ ...process.env, GIT_INDEX_FILE: copy });
+    let copied = true;
+    try { await copyFile(source, copy); await utimes(copy, 1, 1); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; copied = false; }
+    const env = { ...process.env, GIT_INDEX_FILE: copy };
+    if (copied) await exposeEveryChange(root, env);
+    return await work(env);
   } finally { await rm(directory, { recursive: true, force: true }); }
+}
+
+async function presentPaths(root: string, entries: Buffer[]): Promise<Buffer[]> {
+  const prefix = Buffer.from(`${root}${path.sep}`);
+  const present: Buffer[] = [];
+  for (let start = 0; start < entries.length; start += 64) {
+    const batch = entries.slice(start, start + 64);
+    const found = await Promise.all(batch.map((entry) => lstat(Buffer.concat([prefix, entry])).then(() => true, () => false)));
+    batch.forEach((entry, index) => { if (found[index]) present.push(entry); });
+  }
+  return present;
+}
+
+async function clearIndexFlag(root: string, env: NodeJS.ProcessEnv, flag: string, entries: Buffer[]): Promise<void> {
+  if (entries.length === 0) return;
+  const input = Buffer.concat(entries.flatMap((entry) => [entry, Buffer.from([0])]));
+  await git(root, ['update-index', '-z', flag, '--stdin'], env, [0], { ...heavy(), input });
+}
+
+async function exposeEveryChange(root: string, env: NodeJS.ProcessEnv): Promise<void> {
+  const listed = await git(root, ['ls-files', '-z', '-v'], env, [0], heavy());
+  const assumed: Buffer[] = []; const skipped: Buffer[] = [];
+  let start = 0;
+  while (start < listed.length) {
+    let end = listed.indexOf(0, start);
+    if (end === -1) end = listed.length;
+    const entry = listed.subarray(start, end);
+    start = end + 1;
+    if (entry.length < 3) continue;
+    const tag = entry[0]!;
+    const file = entry.subarray(2);
+    if (tag >= 0x61 && tag <= 0x7a) assumed.push(file);
+    if (tag === 0x53 || tag === 0x73) skipped.push(file);
+  }
+  await clearIndexFlag(root, env, '--no-assume-unchanged', assumed);
+  await clearIndexFlag(root, env, '--no-skip-worktree', await presentPaths(root, skipped));
+  await git(root, ['update-index', '-q', '--force-write-index'], env, [0], heavy());
 }
 
 /** Captures staged, unstaged and untracked (including binary) changes without touching the source index. */
@@ -164,7 +217,7 @@ export async function createDetachedWorktree(source: string, worktreePath: strin
   try { return await addDetachedWorktree(source, worktreePath, baseRef); }
   catch (error) {
     if (error instanceof GitOperationError) {
-      if (error.missing) throw error;
+      if (error.kind !== 'failed' && error.kind !== 'not_repository') throw error;
       throw new WorktreeCreateError(`Git could not create the isolated worktree (${error.operation}).`, { operation: error.operation, ...(error.stderrTail ? { stderr_tail: error.stderrTail } : {}) });
     }
     const code = (error as NodeJS.ErrnoException).code;
@@ -248,7 +301,7 @@ export async function removeVerifiedWorktree(source: string, record: { path: str
   if (actualHead !== expectedBase) throw new Error('Worktree HEAD no longer matches its recorded base; refusing cleanup');
   const fresh = await captureDirtySnapshot(target, record.baseRef, maxPatchBytes);
   if (fresh.sha256 !== verifiedExport.sha256 && !samePatchContent(patch, fresh.patch)) throw new Error('Worktree changed after export; refusing cleanup');
-  const status = await git(record.path, ['status', '--porcelain=v1', '-z', '--ignored=matching', '--untracked-files=all', '--no-renames'], process.env, [0], heavy());
+  const status = await withPrivateIndex(target, (env) => git(target, ['status', '--porcelain=v1', '-z', '--ignored=matching', '--untracked-files=all', '--no-renames'], env, [0], heavy()));
   const statusLines = status.toString('utf8').split('\0').filter(Boolean);
   if (statusLines.some((line) => line.startsWith('!!'))) throw new Error('Ignored files remain in worktree; refusing cleanup');
   if (statusLines.length > 0) throw new Error('Uncommitted or untracked files remain after export; worktree retained');

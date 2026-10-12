@@ -1,6 +1,6 @@
-# rc.27 target-machine evidence (template)
+# rc.28 target-machine evidence (template)
 
-Copy this directory to `docs/history/reviews/rc27-target-test-<YYYY-MM-DD>/` before the session and fill it in there; keep this template unchanged. The procedure, expectations and stop rules are in the [rc.27 target runbook](../../rc27-target-runbook.md). Record facts only: exact commands, versions, run IDs, timings and outcomes. Never paste credentials or task text that contains anything sensitive; `security` is only ever called without `-w`. Keep earlier failures next to later passes.
+Copy this directory to `docs/history/reviews/rc28-target-test-<YYYY-MM-DD>/` before the session and fill it in there; keep this template unchanged. The procedure, expectations and stop rules are in the [rc.28 target runbook](../../rc28-target-runbook.md). Record facts only: exact commands, versions, run IDs, timings and outcomes. Never paste credentials or task text that contains anything sensitive; `security` is only ever called without `-w`. Keep earlier failures next to later passes.
 
 Put raw evidence (redacted tool replies, `doctor --json`, config hashes, timing logs) next to this file and reference it in the Evidence column by file name.
 
@@ -16,7 +16,7 @@ Put raw evidence (redacted tool replies, `doctor --json`, config hashes, timing 
 | Codex desktop version | |
 | Release tarball and its sha256 (expected `55154e83...3a80`) | |
 | `shasum -a 256 -c SHA256SUMS` result | |
-| rc.27 prefix, selected config path and its mode | |
+| rc.28 prefix, selected config path and its mode | |
 | Codex config hash before and after registration | |
 | Fixture path, `base_ref` and its commit | |
 | Authorizations given (install, hosted spend and budget, clean account) | |

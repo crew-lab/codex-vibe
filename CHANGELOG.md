@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.0-rc.28 — edit export that cannot miss changes
+
+Fixes from the rc.27 cold review.
+
+- Fixed: in a repository with `core.ignoreStat=true`, or with assume-unchanged or skip-worktree entries, worker edits to tracked files could be missing from the patch and then removed by verified cleanup. Every supervisor Git command runs with `core.ignoreStat=false`, and export and cleanup work on a private index copy with those bits cleared (skip-worktree only for files present on disk, so sparse checkouts do not export deletions). Neither the source index nor the worktree's own index is modified.
+- Private-index commands also set `splitIndex.sharedIndexExpire=never`, so no shared index file in the gitdir is written or expired.
+- A missing worktree directory is reported as `VSUP_ARTIFACT_ERROR` with `kind: "workspace_missing"` instead of "install Git"; a worktree-creation timeout is `VSUP_TIMEOUT`; readiness keeps a missing Git or a timeout as their own codes instead of "base_ref does not resolve".
+- The manual cleanup command printed by `runs cleanup` single-quotes every path, so pasting it cannot run a command substitution.
+- Each private index copy is hashed once, so export and cleanup of large repositories no longer re-hash the tree for every Git command.
+
 ## 0.9.0-rc.27 — edits that fit real repositories
 
 - Fixed: an edit whose worker changed a file within the same second and kept its size could be exported as unchanged, silently dropping that change. The private index used for export now forces Git to re-hash content; the source repository's index is untouched. Cleanup's fresh-export comparison uses the same path.

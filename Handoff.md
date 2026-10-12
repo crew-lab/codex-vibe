@@ -4,7 +4,7 @@ Consolidated 2026-10-12. This document alone defines current priorities. Backgro
 
 ## What this is
 
-A local MCP stdio server (current candidate `0.9.0-rc.27`) that lets Codex delegate one bounded code review or one isolated edit at a time to Mistral Vibe 2.26.1. Codex sees five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result` and `vibe_close`. A review may only read and search an allowlisted workspace; an edit runs in a supervisor-created detached Git worktree and comes back as a patch, never applied, committed or pushed. Shell and network tools are off. This is an application policy boundary, not an OS sandbox.
+A local MCP stdio server (current candidate `0.9.0-rc.28`) that lets Codex delegate one bounded code review or one isolated edit at a time to Mistral Vibe 2.26.1. Codex sees five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result` and `vibe_close`. A review may only read and search an allowlisted workspace; an edit runs in a supervisor-created detached Git worktree and comes back as a patch, never applied, committed or pushed. Shell and network tools are off. This is an application policy boundary, not an OS sandbox.
 
 | Area | Code |
 | --- | --- |
@@ -20,7 +20,7 @@ A local MCP stdio server (current candidate `0.9.0-rc.27`) that lets Codex deleg
 
 Behaviour: [docs/functionality.md](docs/functionality.md); interface: [docs/reference.md](docs/reference.md); boundary: [docs/security.md](docs/security.md); Vibe assumptions: [docs/compatibility.md](docs/compatibility.md); errors: [docs/errors.md](docs/errors.md) (generated); gates: `docs/acceptance.json`. AGENTS.md lists the boundaries that must not change.
 
-## rc.24 to rc.27 — built, not yet installed (2026-10-12)
+## rc.24 to rc.28 — built, not yet installed (2026-10-12)
 
 rc.24 implements the P0 [connection reliability proposal](docs/history/connection-strategy-2026-10-12.md) on the preparing machine, against fake backends only:
 
@@ -43,15 +43,17 @@ rc.27 applies the assessment's should-fix items. The most important is a correct
 
 After rc.27: ten consecutive full suite runs on a clean clone of `84f4421` passed (621 passed, 2 skipped each), meeting the assessment's exit criterion. A [cold review of rc.25 to rc.27](docs/history/reviews/rc27-cold-review-2026-10-12.md) found nothing introduced in that range that blocks hosted testing, but two older defects in edit export that should be fixed before 1.0: with `core.ignoreStat=true` in the user's repository worker edits to tracked files are missing from the patch and are then deleted by verified cleanup (F1, reproduced); with a split index and `splitIndex.sharedIndexExpire=now` the export breaks the worktree's index (F2, reproduced). Smaller: a missing worktree directory reported as "install Git" (F3), a creation timeout without its timeout code (F4), shell expansion in the printed manual cleanup command (F5), full re-hashing on every export command in very large repositories (F6).
 
-rc.27 is the candidate for the target machine. `package:rc` passed: 621 tests passed and 2 skipped in 61 files, Python tests, lint, typecheck, build, acceptance, secret scan, SBOM, and the offline installed-package smoke test (including isolated concurrency and saved-run reconnect). On exactly Node 20.19.0 (npm 10.8.2), rc.24's source passed the same `verify:release`. Artifacts on the preparing machine at `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.27/` (Git-ignored); check with `shasum -a 256 -c SHA256SUMS`:
+rc.28 fixes that review's F1 to F5 and the open question, each with a regression test that fails on rc.27: export and cleanup see every real change regardless of `core.ignoreStat`, assume-unchanged or skip-worktree (sparse-checkout absences excepted), using a private index copy and never modifying the source or worktree index; private-index commands never write or expire shared index files (F2 did not reproduce at rc.27, which already disabled split index; the expiry flag is added and tested); a missing worktree directory is `VSUP_ARTIFACT_ERROR` (`workspace_missing`), a creation timeout `VSUP_TIMEOUT`, and readiness keeps Git timeouts and a missing Git as their own codes; the printed manual cleanup command single-quotes paths; each private index copy is hashed once (F6).
+
+rc.28 is the candidate for the target machine. `package:rc` passed: 629 tests passed and 2 skipped in 62 files, Python tests, lint, typecheck, build, acceptance, secret scan, SBOM, and the offline installed-package smoke test (including isolated concurrency and saved-run reconnect); the fix work ran three consecutive clean full suites. Artifacts on the preparing machine at `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.28/` (Git-ignored); check with `shasum -a 256 -c SHA256SUMS`:
 
 ```text
-vibe-supervisor-0.9.0-rc.27.tgz  sha256 cb9c96a75d810d12a553755d1d606596658c537e5cb27b68f6aec227f44bece8
-sbom.spdx.json                   sha256 3c3c6183af6299dfbc4771947dec1ffff52ef3bdaed2d45e6eba36459539e564
-acceptance.json                  sha256 302ebae62c7022de4df67e8378d3ed90adc01805190083af8d07785897334154
+vibe-supervisor-0.9.0-rc.28.tgz  sha256 61ca4ee91067e2bbf8a7dbf2f14baf3f3667a661c8c587d4fd9b02323fe7e6cd
+sbom.spdx.json                   sha256 13b6a16f2b6cc88f568452fb08a305911e7569605d0178ff986429c61e277ac0
+acceptance.json                  sha256 1afa534349c75bd4ada07271ada71ec2fd8541f585cd482b878cefcb65510c5e
 ```
 
-Upgrading from rc.23 to rc.27: a hand-edited config that is group- or world-writable (for example 0664) is now refused; set it to 0600. Registrations need a reconnect to load the new code.
+Upgrading from rc.23 to rc.28: a hand-edited config that is group- or world-writable (for example 0664) is now refused; set it to 0600. Registrations need a reconnect to load the new code.
 
 ## Source and release identity
 
@@ -83,17 +85,17 @@ Garnebo dispatch was refused before run creation after an approved allowlist edi
 
 ## Next priorities
 
-Open decision: fix the rc.27 review's F1 and F2 (and F3 to F5) in rc.28 before the target-machine sitting, which costs nothing because nothing is installed yet, or freeze rc.27 and fix them in 1.0.1. The reviewer and I recommend rc.28: F1 silently deletes user edits.
+Decided 2026-10-12: the rc.27 review's F1 to F5 are fixed in rc.28.
 
 Owner decisions of 2026-10-12: the assessment's S1 to S7 are in rc.27; the 1.0 gates are native readiness, the five-run hosted matrix, a real active disconnect and provider authentication (`docs/acceptance.json` `unverified`). The live-allowlist and boot-key checks are optional, the clean-account install moves to 1.0.1, and the separate exact-20.19.0 CI job is dropped (`not_required_for_1_0`). Still open: publishing the candidate as a tagged GitHub prerelease (tags stop at rc.22; the README points users at a prerelease).
 
-1. On the target machine, following the [rc.27 target runbook](docs/history/rc27-target-runbook.md): install rc.27 (authorized), reconnect Codex, and run the native readiness check for the fixture and Garnebo; confirm `server_version` is 0.9.0-rc.27. No inference needed.
-2. In the same sitting, with a separately authorized budget: the five-run hosted matrix on rc.27 (review, edit, review to the turn limit, edit to the turn limit, review), each started with a readiness receipt, plus one real active disconnect (quit Codex mid-run). This also records provider authentication. Stop at the first failure; no automatic retry or account rotation.
+1. On the target machine, following the [rc.28 target runbook](docs/history/rc28-target-runbook.md): install rc.28 (authorized), reconnect Codex, and run the native readiness check for the fixture and Garnebo; confirm `server_version` is 0.9.0-rc.28. No inference needed.
+2. In the same sitting, with a separately authorized budget: the five-run hosted matrix on rc.28 (review, edit, review to the turn limit, edit to the turn limit, review), each started with a readiness receipt, plus one real active disconnect (quit Codex mid-run). This also records provider authentication. Stop at the first failure; no automatic retry or account rotation.
 3. Owner: publish the frozen candidate as a tagged GitHub prerelease (does not need the token's `workflow` scope). Optionally give the token that scope to push `claude/release-workflow` and `claude/ci-node-floor`.
-4. Go or no-go. If steps 1 and 2 pass with no code change, rc.27 becomes 1.0.0 by version bump, changelog, `docs/acceptance.json` and Handoff only; re-run `verify:release` and `package:rc`, tag `v1.0.0` and publish. Any code change after step 2 means repeating the five runs. After 1.0: clean-account install (1.0.1), isolated session pruning, Handoff collapse, the launch article rewrite.
+4. Go or no-go. If steps 1 and 2 pass with no code change, rc.28 becomes 1.0.0 by version bump, changelog, `docs/acceptance.json` and Handoff only; re-run `verify:release` and `package:rc`, tag `v1.0.0` and publish. Any code change after step 2 means repeating the five runs. After 1.0: clean-account install (1.0.1), isolated session pruning, Handoff collapse, the launch article rewrite.
 
 A new practical trial is appropriate after native readiness passes and its workspace, baseline, task, limits and provider budget are explicitly agreed. Codex coordinates independent verification; GPT-6 Luna High is the backup.
 
 ## Fixed scope and safeguards
 
-Exactly five one-shot MCP tools; no ACP continuation/recovery, replay, queue, automatic patch application, worker shell/network or new platform scope. Reviews are read-only; edits use isolated detached worktrees. Retain canonical allowlists, private child homes, filtered environments, redaction, bounded deadlines/output, owner locks and verified cleanup. This policy is not a kernel sandbox. Missing evidence remains unknown; rc.27 is not certified stable v1.0.
+Exactly five one-shot MCP tools; no ACP continuation/recovery, replay, queue, automatic patch application, worker shell/network or new platform scope. Reviews are read-only; edits use isolated detached worktrees. Retain canonical allowlists, private child homes, filtered environments, redaction, bounded deadlines/output, owner locks and verified cleanup. This policy is not a kernel sandbox. Missing evidence remains unknown; rc.28 is not certified stable v1.0.
