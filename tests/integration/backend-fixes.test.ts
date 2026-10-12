@@ -265,4 +265,22 @@ describe('programmatic output limits', () => {
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatchObject({ code: 'VSUP_OUTPUT_LIMIT' });
   });
+  it('caps the raw stdout stream by the event limit, not the transcript limit', async () => {
+    const { root, input } = await prepared();
+    const body = "for (let i = 0; i < 20; i++) process.stdout.write(JSON.stringify({ role: 'tool', content: 'r'.repeat(1000) }) + '\\n'); process.stdout.write(JSON.stringify({ role: 'assistant', text: 'done' }) + '\\n');";
+    const { vibe } = await installFakeVibe(root, body);
+    const roomy = { ...input, limits: { ...input.limits, maxTranscriptBytes: 4096, maxEventBytes: 200_000 } };
+    const callbacks = collecting();
+    await programmaticBackend(vibe).start(roomy, callbacks);
+    await waitFor(() => callbacks.states, (states) => states.includes('completed') || states.includes('failed'));
+    expect(callbacks.states).toContain('completed');
+    expect(callbacks.states).not.toContain('failed');
+
+    const tight = { ...roomy, runId: crypto.randomUUID(), limits: { ...roomy.limits, maxEventBytes: 8192 } };
+    await mkdir(tight.runDirectory, { recursive: true });
+    const errors: Array<{ code: string }> = [];
+    await programmaticBackend(vibe).start(tight, { onEvent: () => undefined, onState: (state, update) => { if (state === 'failed' && update?.error) errors.push(update.error); } });
+    await waitFor(() => errors, (value) => value.length > 0);
+    expect(errors[0]).toMatchObject({ code: 'VSUP_OUTPUT_LIMIT' });
+  });
 });

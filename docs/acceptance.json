@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "candidate": "0.9.0-rc.26",
+  "candidate": "0.9.0-rc.27",
   "scope": "Programmatic one-shot review and isolated edit; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work.",
   "deterministic": [
     {
@@ -45,17 +45,7 @@
     {
       "name": "native-readiness-on-candidate",
       "status": "UNVERIFIED",
-      "evidence_required": "On the intended Codex desktop connection and exact frozen artifact, vibe_status in workspace mode for the fixture (review, and edit with base_ref) and for the approved second workspace: server_version 0.9.0-rc.26, server_instance_id, policy_path, policy_revision, eligible, blockers, active_slot, runtime and readiness_receipt recorded; no run created. Procedure: docs/history/rc24-target-runbook.md section C."
-    },
-    {
-      "name": "live-allowlist-change-without-restart",
-      "status": "UNVERIFIED",
-      "evidence_required": "On the same connection without restarting Codex: removing an allowlisted root from the selected config makes readiness ineligible with the reason and a new policy_revision; restoring it makes readiness eligible again with a new revision and the same server_instance_id."
-    },
-    {
-      "name": "boot-key-change-restart-required",
-      "status": "UNVERIFIED",
-      "evidence_required": "On the same connection: changing a boot-bound key gives restart_required with the key in boot_drift; restoring it clears it."
+      "evidence_required": "On the intended Codex desktop connection and exact frozen artifact, vibe_status in workspace mode for the fixture (review, and edit with base_ref) and for the approved second workspace: server_version 0.9.0-rc.27, server_instance_id, policy_path, policy_revision, eligible, blockers, active_slot, runtime and readiness_receipt recorded; no run created. Procedure: docs/history/rc24-target-runbook.md section C."
     },
     {
       "name": "hosted-review-edit-matrix",
@@ -71,16 +61,32 @@
       "name": "provider-authentication-for-this-candidate",
       "status": "UNVERIFIED",
       "evidence_required": "Observe authentication only during an authorized real run against the exact frozen candidate; doctor, readiness and initialize-only checks do not qualify."
+    }
+  ],
+  "not_required_for_1_0": [
+    {
+      "name": "live-allowlist-change-without-restart",
+      "status": "OPTIONAL",
+      "evidence_required": "On the same connection without restarting Codex: removing an allowlisted root from the selected config makes readiness ineligible with the reason and a new policy_revision; restoring it makes readiness eligible again with a new revision and the same server_instance_id.",
+      "decision": "OPTIONAL: covered by deterministic tests (policy reread); observe on the target if convenient, not a 1.0 criterion."
+    },
+    {
+      "name": "boot-key-change-restart-required",
+      "status": "OPTIONAL",
+      "evidence_required": "On the same connection: changing a boot-bound key gives restart_required with the key in boot_drift; restoring it clears it.",
+      "decision": "OPTIONAL: covered by deterministic tests; not a 1.0 criterion."
     },
     {
       "name": "clean-account-install",
-      "status": "UNVERIFIED",
-      "evidence_required": "After authorization and a reviewable frozen tarball, execute the documented install/config/doctor/registration workflow in a fresh Apple silicon macOS account with a person present; record OS/architecture, Node, artifact hash, exact config/registration diff, rollback outcome, and cleanup."
+      "status": "DEFERRED",
+      "evidence_required": "After authorization and a reviewable frozen tarball, execute the documented install/config/doctor/registration workflow in a fresh Apple silicon macOS account with a person present; record OS/architecture, Node, artifact hash, exact config/registration diff, rollback outcome, and cleanup.",
+      "decision": "DEFERRED to 1.0.1 by owner decision 2026-10-12."
     },
     {
       "name": "node-floor-20.19.0-ci",
-      "status": "UNVERIFIED",
-      "evidence_required": "CI jobs on exactly Node 20.19.0 and 24 pass; the workflow change is on the local branch claude/ci-node-floor and awaits the push token's workflow scope."
+      "status": "DROPPED",
+      "evidence_required": "CI jobs on exactly Node 20.19.0 and 24 pass; the workflow change is on the local branch claude/ci-node-floor and awaits the push token's workflow scope.",
+      "decision": "DROPPED by owner decision 2026-10-12: the local exact-20.19.0 verify:release pass is recorded and CI runs 20.19.x; the exact-floor CI job remains on branch claude/ci-node-floor."
     }
   ],
   "historical_evidence": "Version-bound prior candidate reports remain in docs/history and do not establish acceptance of this candidate."

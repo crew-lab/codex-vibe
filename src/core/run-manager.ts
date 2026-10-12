@@ -617,7 +617,11 @@ export class RunManager {
     }
     const removed = await this.pruneRuns(false);
     const unverified = [...this.unverifiedWorktrees].map(([run_id, worktreePath]) => ({ run_id, path: worktreePath }));
-    return { removed_run_ids: removed, ...(unverified.length ? { unverified_worktrees: unverified } : {}) };
+    const retained = [...this.runs.values()].filter((runtime) => runtime.record.worktree).map((runtime) => {
+      const retainedPath = path.resolve(runtime.record.worktree!.path);
+      return { run_id: runtime.record.runId, state: runtime.record.state, path: retainedPath, manual_command: `git -C ${JSON.stringify(runtime.record.sourceWorkspace)} worktree remove ${JSON.stringify(retainedPath)}` };
+    });
+    return { removed_run_ids: removed, ...(unverified.length ? { unverified_worktrees: unverified } : {}), ...(retained.length ? { retained_worktrees: retained } : {}) };
   }
 
   startAutomaticRetention(options: { firstDelayMs?: number; intervalMs?: number } = {}): void {
@@ -1184,7 +1188,7 @@ export class RunManager {
     await createPrivateDir(artifactDir);
     let patchInfo: { patchPath: string; statPath: string; sha256: string; bytes: number; changedFiles: string[] } | undefined;
     if (runtime.record.mode === "edit" && runtime.record.worktree) {
-      patchInfo = await exportDirtySnapshot(runtime.record.workerWorkspace, artifactDir, runtime.record.worktree.baseRef);
+      patchInfo = await exportDirtySnapshot(runtime.record.workerWorkspace, artifactDir, runtime.record.worktree.baseRef, runtime.record.limits.maxArtifactBytes);
       runtime.verifiedPatch = { patchPath: patchInfo.patchPath, sha256: patchInfo.sha256 };
       await this.atomicWriteText(path.join(artifactDir, "changed-files.json"), JSON.stringify({ schema_version: 1, changed_files: patchInfo.changedFiles }, null, 2) + "\n");
     }
@@ -1269,7 +1273,7 @@ export class RunManager {
       verified = this.savedPatchExport(runtime);
     }
     if (!verified) return { removed: false, reason: "No verified patch export is available for this worktree." };
-    try { await removeVerifiedWorktree(runtime.record.sourceWorkspace, worktree, verified, expectedPath); }
+    try { await removeVerifiedWorktree(runtime.record.sourceWorkspace, worktree, verified, expectedPath, runtime.record.limits.maxArtifactBytes); }
     catch (error) { return { removed: false, reason: redactSecrets(error instanceof Error ? error.message : "Worktree cleanup was refused.").slice(0, MAX_RETAINED_REASON_CHARS) }; }
     delete runtime.record.worktree;
     try { await this.persist(runtime); }

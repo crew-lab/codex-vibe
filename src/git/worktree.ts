@@ -1,13 +1,29 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFile, mkdtemp, open, lstat, realpath, rm } from 'node:fs/promises';
+import { copyFile, mkdtemp, open, lstat, realpath, rm, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createPrivateDir } from '../security/paths.js';
 import { environmentSecrets, patchContainsCredential, redactedTail } from '../security/redaction.js';
 
-const MAX_GIT_OUTPUT = 100 * 1024 * 1024;
-const MAX_GIT_RUNTIME_MS = 30_000;
+const gitBounds = {
+  queryRuntimeMs: 30_000,
+  heavyRuntimeMs: 300_000,
+  outputBytes: 100 * 1024 * 1024,
+};
+
+export type GitBounds = typeof gitBounds;
+
+export function overrideGitBounds(overrides: Partial<GitBounds>): () => void {
+  const previous = { ...gitBounds };
+  Object.assign(gitBounds, overrides);
+  return () => { Object.assign(gitBounds, previous); };
+}
+
+interface GitLimits { timeoutMs?: number; maxOutputBytes?: number }
+
+const heavy = (maxOutputBytes?: number): GitLimits => ({ timeoutMs: gitBounds.heavyRuntimeMs, ...(maxOutputBytes === undefined ? {} : { maxOutputBytes }) });
+
 const MAX_GIT_STDERR_BYTES = 4096;
 
 export type GitFailureKind = 'missing' | 'not_repository' | 'timeout' | 'overflow' | 'failed';
@@ -37,7 +53,9 @@ export class WorktreeCreateError extends Error {
   constructor(message: string, readonly details: Record<string, unknown>) { super(message); this.name = 'WorktreeCreateError'; }
 }
 
-async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = process.env, allowedCodes: readonly number[] = [0]): Promise<Buffer> {
+async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = process.env, allowedCodes: readonly number[] = [0], limits: GitLimits = {}): Promise<Buffer> {
+  const timeoutMs = limits.timeoutMs ?? gitBounds.queryRuntimeMs;
+  const outputLimit = limits.maxOutputBytes ?? gitBounds.outputBytes;
   return await new Promise<Buffer>((resolve, reject) => {
     const safeEnv: NodeJS.ProcessEnv = { PATH: env.PATH, HOME: env.HOME, LANG: env.LANG, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_OPTIONAL_LOCKS: '0' };
     if (env.GIT_INDEX_FILE) safeEnv.GIT_INDEX_FILE = env.GIT_INDEX_FILE;
@@ -55,11 +73,11 @@ async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = process
       timedOut = true;
       signalTree('SIGTERM');
       setTimeout(() => signalTree('SIGKILL'), 1000).unref?.();
-    }, MAX_GIT_RUNTIME_MS);
+    }, timeoutMs);
     timer.unref?.();
     child.stdout.on('data', (chunk: Buffer) => {
       size += chunk.length;
-      if (size > MAX_GIT_OUTPUT) { overflow = true; signalTree('SIGTERM'); setTimeout(() => signalTree('SIGKILL'), 1000).unref?.(); return; }
+      if (size > outputLimit) { overflow = true; signalTree('SIGTERM'); setTimeout(() => signalTree('SIGKILL'), 1000).unref?.(); return; }
       chunks.push(Buffer.from(chunk));
     });
     child.stderr.on('data', (chunk: Buffer) => {
@@ -114,21 +132,21 @@ async function withPrivateIndex<T>(root: string, work: (env: NodeJS.ProcessEnv) 
     const location = decodeTrimmed(await git(root, ['rev-parse', '--git-path', 'index']));
     const source = path.resolve(root, location);
     const copy = path.join(directory, 'index');
-    try { await copyFile(source, copy); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    try { await copyFile(source, copy); await utimes(copy, 1, 1); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     return await work({ ...process.env, GIT_INDEX_FILE: copy });
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
 
 /** Captures staged, unstaged and untracked (including binary) changes without touching the source index. */
-export async function captureDirtySnapshot(source: string, baseRef = 'HEAD'): Promise<DirtySnapshot> {
+export async function captureDirtySnapshot(source: string, baseRef = 'HEAD', maxPatchBytes?: number): Promise<DirtySnapshot> {
   const root = await resolveGitRoot(source);
   const base = await resolveBaseCommit(root, baseRef);
   await assertNoExternalFilters(root);
   return await withPrivateIndex(root, async (env) => {
-    await git(root, ['add', '-N', '--all', '--', '.'], env);
-    const patch = await git(root, ['diff', '--binary', '--no-ext-diff', '--no-textconv', '--no-renames', base, '--'], env);
-    const names = await git(root, ['diff', '--name-only', '-z', '--no-textconv', '--no-renames', base, '--'], env);
-    const stat = await git(root, ['diff', '--stat', '--no-textconv', '--no-renames', base, '--'], env);
+    await git(root, ['add', '-N', '--all', '--', '.'], env, [0], heavy());
+    const patch = await git(root, ['diff', '--binary', '--no-ext-diff', '--no-textconv', '--no-renames', base, '--'], env, [0], heavy(maxPatchBytes));
+    const names = await git(root, ['diff', '--name-only', '-z', '--no-textconv', '--no-renames', base, '--'], env, [0], heavy());
+    const stat = await git(root, ['diff', '--stat', '--no-textconv', '--no-renames', base, '--'], env, [0], heavy());
     return { patch, diffStat: stat.toString('utf8'), changedFiles: names.toString('utf8').split('\0').filter(Boolean), sha256: createHash('sha256').update(patch).digest('hex'), bytes: patch.byteLength };
   });
 }
@@ -162,7 +180,7 @@ async function addDetachedWorktree(source: string, worktreePath: string, baseRef
   try { await lstat(target); throw new GitOperationError('worktree path already exists'); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   await assertNoExternalFilters(root);
-  await git(root, ['worktree', 'add', '--detach', '--', target, base]);
+  await git(root, ['worktree', 'add', '--detach', '--', target, base], process.env, [0], heavy());
   return { path: target, baseRef: base, createdBySupervisor: true };
 }
 
@@ -184,8 +202,8 @@ async function writeArtifact(file: string, data: Buffer): Promise<void> {
 }
 
 /** Write dirty source patch + metadata before any cleanup; verify bytes and digest after writing. */
-export async function exportDirtySnapshot(source: string, artifactDir: string, baseRef = 'HEAD'): Promise<DirtySnapshot & { patchPath: string; statPath: string }> {
-  const snapshot = await captureDirtySnapshot(source, baseRef);
+export async function exportDirtySnapshot(source: string, artifactDir: string, baseRef = 'HEAD', maxPatchBytes?: number): Promise<DirtySnapshot & { patchPath: string; statPath: string }> {
+  const snapshot = await captureDirtySnapshot(source, baseRef, maxPatchBytes);
   const patchText = snapshot.patch.toString('utf8');
   if (patchContainsCredential(patchText, environmentSecrets())) {
     throw Object.assign(new Error('Patch appears to contain a recognized secret; export was refused and the worktree was retained.'), { code: 'VSUP_ARTIFACT_ERROR' });
@@ -212,7 +230,7 @@ function samePatchContent(saved: Buffer, fresh: Buffer): boolean {
 }
 
 /** Remove only a registered supervisor-created worktree after patch export was verified. */
-export async function removeVerifiedWorktree(source: string, record: { path: string; baseRef?: string; createdBySupervisor: boolean }, verifiedExport: { patchPath: string; sha256: string }, expectedPath: string): Promise<void> {
+export async function removeVerifiedWorktree(source: string, record: { path: string; baseRef?: string; createdBySupervisor: boolean }, verifiedExport: { patchPath: string; sha256: string }, expectedPath: string, maxPatchBytes?: number): Promise<void> {
   if (!record.createdBySupervisor) throw new Error('Refusing to remove a worktree not created by the supervisor');
   const patch = await import('node:fs/promises').then(({ readFile }) => readFile(verifiedExport.patchPath));
   if (createHash('sha256').update(patch).digest('hex') !== verifiedExport.sha256) throw new Error('Patch export verification failed; worktree retained');
@@ -228,15 +246,15 @@ export async function removeVerifiedWorktree(source: string, record: { path: str
   const expectedBase = await resolveBaseCommit(root, record.baseRef);
   const actualHead = decodeTrimmed(await git(target, ['rev-parse', '--verify', 'HEAD^{commit}']));
   if (actualHead !== expectedBase) throw new Error('Worktree HEAD no longer matches its recorded base; refusing cleanup');
-  const fresh = await captureDirtySnapshot(target, record.baseRef);
+  const fresh = await captureDirtySnapshot(target, record.baseRef, maxPatchBytes);
   if (fresh.sha256 !== verifiedExport.sha256 && !samePatchContent(patch, fresh.patch)) throw new Error('Worktree changed after export; refusing cleanup');
-  const status = await git(record.path, ['status', '--porcelain=v1', '-z', '--ignored=matching', '--untracked-files=all', '--no-renames']);
+  const status = await git(record.path, ['status', '--porcelain=v1', '-z', '--ignored=matching', '--untracked-files=all', '--no-renames'], process.env, [0], heavy());
   const statusLines = status.toString('utf8').split('\0').filter(Boolean);
   if (statusLines.some((line) => line.startsWith('!!'))) throw new Error('Ignored files remain in worktree; refusing cleanup');
   if (statusLines.length > 0) throw new Error('Uncommitted or untracked files remain after export; worktree retained');
   // Without --force, Git refuses removal if anything changed after the checks.
   // This preserves concurrent or residual files instead of deleting them.
-  await git(root, ['worktree', 'remove', '--', target]);
+  await git(root, ['worktree', 'remove', '--', target], process.env, [0], heavy());
 }
 
 export { git as preparationGit };

@@ -12,7 +12,7 @@ A start, with or without a receipt, reserves the slot, then rereads and validate
 
 ## Review
 
-A review requires a canonical workspace beneath an explicitly configured allowlist. The starter allowlist is empty. Before launch, the supervisor snapshots source integrity. Vibe receives only read and search tools. The final result records whether source integrity remained verified, changed, or could not be established. `completed` means the worker ended; the coordinator must inspect the stop reason, warnings, integrity and final answer.
+A review requires a canonical workspace beneath an explicitly configured allowlist. The starter allowlist is empty. Before launch, the supervisor snapshots source integrity (see Review snapshot cost below). Vibe receives only read and search tools. The final result records whether source integrity remained verified, changed, or could not be established. `completed` means the worker ended; the coordinator must inspect the stop reason, warnings, integrity and final answer.
 
 ## Edit
 
@@ -25,6 +25,14 @@ Settlement records one final state. The active slot and owned handle are release
 A corroborated Vibe turn-limit stop is recorded as `completed` with `stop_reason: max_turn_requests` and an incomplete-result warning. This means execution ended at its configured budget, not that the task succeeded. The supervisor does not retry, continue, or increase the budget. An assistant message alone cannot establish a runtime limit: unmatched limits, conflicting errors, other stop reasons, and process crashes remain failures.
 
 Closing a live run cancels its process group and accounts for worktree creation that is already in flight. Worktree deletion requires the expected canonical run-owned path, validated Git registration, a fresh export matching the saved artifact, and an inventory showing the worktree is pristine. Dirty or uncertain worktrees are retained with an explicit path and reason so the coordinator can review the exported patch. Cleanup is admitted by the root recorded when the run started, not by the current allowlist. Removing a root does not stop a run already admitted there: it runs to its normal end, stays readable and closable, and its verified pristine worktree can still be removed; a dirty or uncertain one is retained exactly as before. Saved PIDs alone never authorize termination, and saved mutable worktree metadata alone never authorizes deletion.
+
+A retained worktree stays registered in the source repository under `.git/worktrees/`. If you run `git worktree prune` or delete the directory yourself, verified cleanup refuses it permanently, because the registration it checks no longer exists, and the run directory is kept. Recover manually: read the exported patch from the run's artifacts, call `vibe_close` without cleanup (or use `vibe-supervisor runs cleanup`, which lists each retained worktree with the exact `git -C <source> worktree remove <path>` command), then remove or prune the worktree yourself with Git. The supervisor never force-deletes retained data.
+
+Git operations are bounded separately: queries such as `rev-parse` and `ls-files` have a 30 s bound, while worktree creation, patch export and verified cleanup have a 5 minute bound so large repositories can be checked out. The exported patch is capped by `limits.max_artifact_bytes`. Exceeding a bound fails with `VSUP_TIMEOUT` or `VSUP_OUTPUT_LIMIT` and `details.operation`.
+
+### Review snapshot cost
+
+The integrity snapshot hashes the content of every file Git can see (tracked, plus untracked files not ignored) and only stats everything else, such as ignored trees like `node_modules`, skipping `.git`. It runs at launch and again at settle. Large ignored trees cost stat time at both ends. The snapshot is capped at 200,000 files and 2 GiB of hashed content; past either cap integrity is reported as `unverified` rather than failing the review. Keep large generated trees out of the reviewed workspace, or accept `unverified`.
 
 On server shutdown, the supervisor allows a primary 10-second graceful drain and then retries termination through each live owned handle. Individual cancel and forced-termination attempts are bounded, but there is no fixed overall exit guarantee while termination remains unverified. Unresolved workers retain their handle, slot, worktree and owner lock; pending initialization and in-flight Git/worktree writes also remain accounted for under that lock. The lock is released only after all owned work is accounted for.
 
@@ -40,6 +48,6 @@ Runs, events and artifacts are persisted privately and bounded by configured lim
 
 Select a config with `--config`; otherwise resolution uses `VIBE_SUPERVISOR_HOME`, then the reduced candidate's platform default root. Explicit invalid or missing configs fail without fallback. That selection is made once, before `--isolated` switches to a private session directory, and stays the policy source for the life of the connection; the session's copy of `config.toml` is an audit record only. Once serving, a missing selected file fails closed even where startup could have used defaults. Removed keys such as `backend`, `max_concurrent_runs`, idle-session TTL and ACP executable paths are rejected. The config, doctor provenance, data directory and already-open client handshake are separate facts.
 
-Reviewed dirty inputs can be prepared before connecting by the source-checkout helper. Its dry-run binds config/runtime provenance and source HEAD, index, refs, input paths, modes and hashes. Snapshot creation requires the dry-run digest and writes to a private coordinator repository. It revalidates inputs, then returns a `base_ref` and independently checkable manifest. It does not change the original source checkout or require a server, connection identity, credential, or Vibe inference. A clean reviewed Git base skips this step.
+Commit or stash the reviewed state before delegating and pass its ref as `base_ref`; uncommitted source bytes are not an edit base.
 
 The supervisor's path checks, filtered profiles and Vibe tool configuration are application policy. They are not a kernel or process sandbox. A worker's account permissions and any content included in its allowed workspace remain relevant.

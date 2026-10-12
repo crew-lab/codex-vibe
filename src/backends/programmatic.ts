@@ -124,11 +124,11 @@ export class ProgrammaticBackend implements SupervisorBackend {
       child = spawnManaged(launch.command, launch.args, {
         cwd: input.workerWorkspace, env: launch.env,
         forwardEnv: Object.keys(launch.env),
-        maxStdoutBytes: input.limits.maxTranscriptBytes,
+        maxStdoutBytes: Math.max(input.limits.maxEventBytes, input.limits.maxTranscriptBytes),
         maxStderrBytes: input.limits.maxEventBytes,
         onLimit: (stream) => {
           outputLimited = true;
-          const message = stream === 'stdout' ? 'Vibe programmatic output exceeded the configured transcript limit.' : 'Vibe programmatic diagnostics exceeded the configured event limit.';
+          const message = stream === 'stdout' ? 'Vibe programmatic output exceeded the configured event limit.' : 'Vibe programmatic diagnostics exceeded the configured event limit.';
           Promise.resolve(callbacks.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', message) })).catch((error: unknown) => reportBackgroundFailure('programmatic-output-limit', error));
         },
         onStdout: (chunk) => { outputChain = outputChain.then(() => chunks.push(chunk)).catch(async (error: unknown) => {
