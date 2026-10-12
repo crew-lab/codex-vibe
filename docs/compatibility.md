@@ -23,6 +23,8 @@ The declared Node floor is 20.19.0. Release acceptance compares major, minor, an
 | Real active disconnect | [EVIDENCE: run ID, outcome after restart] |
 | Provider authentication | [EVIDENCE: first authenticated run ID] |
 
-Not part of 1.0.0: a clean-account installation (planned for 1.0.1), CI on exactly Node 20.19.0 (verified locally; CI runs 20.19.x), and the live-allowlist and boot-key observations (covered by deterministic tests).
+## Unverified gates
+
+Not part of 1.0.0 and still unverified: a clean-account installation (planned for 1.0.1), CI on exactly Node 20.19.0 (verified locally; CI runs 20.19.x), and the live-allowlist and boot-key observations (covered by deterministic tests).
 
 macOS Apple silicon is the supported platform. Linux and Windows code paths may exist, but 1.0.0 makes no support claim for them. No Intel or plugin installation gates apply to the reduced surface. `.codex-plugin/plugin.json` remains an unverified source scaffold and is not part of the npm package; its declarations do not establish plugin installation or registration support.
