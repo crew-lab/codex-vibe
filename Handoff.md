@@ -4,7 +4,7 @@ Consolidated 2026-10-12. This document alone defines current priorities. Backgro
 
 ## What this is
 
-A local MCP stdio server (current candidate `0.9.0-rc.25`) that lets Codex delegate one bounded code review or one isolated edit at a time to Mistral Vibe 2.26.1. Codex sees five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result` and `vibe_close`. A review may only read and search an allowlisted workspace; an edit runs in a supervisor-created detached Git worktree and comes back as a patch, never applied, committed or pushed. Shell and network tools are off. This is an application policy boundary, not an OS sandbox.
+A local MCP stdio server (current candidate `0.9.0-rc.26`) that lets Codex delegate one bounded code review or one isolated edit at a time to Mistral Vibe 2.26.1. Codex sees five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result` and `vibe_close`. A review may only read and search an allowlisted workspace; an edit runs in a supervisor-created detached Git worktree and comes back as a patch, never applied, committed or pushed. Shell and network tools are off. This is an application policy boundary, not an OS sandbox.
 
 | Area | Code |
 | --- | --- |
@@ -20,7 +20,7 @@ A local MCP stdio server (current candidate `0.9.0-rc.25`) that lets Codex deleg
 
 Behaviour: [docs/functionality.md](docs/functionality.md); interface: [docs/reference.md](docs/reference.md); boundary: [docs/security.md](docs/security.md); Vibe assumptions: [docs/compatibility.md](docs/compatibility.md); errors: [docs/errors.md](docs/errors.md) (generated); gates: `docs/acceptance.json`. AGENTS.md lists the boundaries that must not change.
 
-## rc.24 and rc.25 — built, not yet installed (2026-10-12)
+## rc.24 to rc.26 — built, not yet installed (2026-10-12)
 
 rc.24 implements the P0 [connection reliability proposal](docs/history/connection-strategy-2026-10-12.md) on the preparing machine, against fake backends only:
 
@@ -35,15 +35,19 @@ A cold review found three defects (one deleted root blocked every start and clea
 
 A cold review of the whole rc.24 surface ([report](docs/history/reviews/rc24-cold-review-2026-10-12.md)) found no blocker and no weakened boundary. rc.25 fixes its four should-fix items: tool errors are one JSON text block with `code`, `message`, `remediation`, `retryable` and `details`; Git failures are classified (`VSUP_GIT_REQUIRED` only for a missing Git or non-repository, otherwise `VSUP_TIMEOUT`, `VSUP_OUTPUT_LIMIT` or `VSUP_ARTIFACT_ERROR`); new `VSUP_OWNER_LOCKED` and `VSUP_PREPARATION_TIMEOUT` replace misused `VSUP_INVALID_STATE`; `allow` and `setup` no longer ask for a restart after an allowlist change. Its after-1.0 items A1 to A9 stay open in the report; of the old F7 to F15 only F12 (stdout capped by the transcript limit) remains.
 
-rc.25 is the candidate for the target machine. `package:rc` passed: 609 tests passed and 2 skipped in 60 files, Python tests, lint, typecheck, build, acceptance, secret scan, SBOM, and the offline installed-package smoke test (including isolated concurrency and saved-run reconnect). On exactly Node 20.19.0 (npm 10.8.2), rc.24's source passed the same `verify:release`. Artifacts on the preparing machine at `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.25/` (Git-ignored); check with `shasum -a 256 -c SHA256SUMS`:
+rc.26 fixes the cold review's A2 to A6 and A9 (turn-limit detection tolerates the launcher's Keychain notice; settle waits for verified worker termination before exporting; a user close records cancelled; `doctor` accepts `~/` roots and allows 15 s for its version probe; ACP leftovers removed) and makes the suite reliable. A 25-run loop of rc.25's suite failed in 12 runs across 11 tests; all were test races or wall-clock budgets except the doctor probe's 2.5 s deadline, which security scanning of newly written executables can exceed. Wall-clock assertions are now structural, and the suite passed 6 consecutive full runs and 3 rounds of two concurrent full runs. A product note from that work: the MCP SDK's stdio client escalates to SIGKILL about 4 s after closing stdin, so a slow edit shutdown under a real client can be killed before the server's own 10 s deadline; the next start takes over the stale lock and marks the run failed, which is the designed recovery.
+
+A read-only [v1.0 readiness assessment](docs/history/reviews/v1-readiness-assessment-2026-10-12.md) proposes the shortest path to 1.0 and lists remaining issues; its owner decisions are open (see Next priorities). It overstates one point: 2.26.1 did run inference once, on rc.22 (run `cb51c05f`, `end_turn`), but nothing after rc.22 has.
+
+rc.26 is the candidate for the target machine. `package:rc` passed: 616 tests passed and 2 skipped in 60 files, Python tests, lint, typecheck, build, acceptance, secret scan, SBOM, and the offline installed-package smoke test (including isolated concurrency and saved-run reconnect). On exactly Node 20.19.0 (npm 10.8.2), rc.24's source passed the same `verify:release`. Artifacts on the preparing machine at `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.26/` (Git-ignored); check with `shasum -a 256 -c SHA256SUMS`:
 
 ```text
-vibe-supervisor-0.9.0-rc.25.tgz  sha256 8c2a4e1ddfec5492a4bf2a700dabd11808c4aafd1a1f87e7b4ee4e73e3f235ec
-sbom.spdx.json                   sha256 6c35793e4207ab9ede65d17132b6c1502a4a3ad1a2626e0a64f8f4402ec8e38e
-acceptance.json                  sha256 df4b1ad5012838a2a4ada74b8a940b10ae05e5e2b439cd7eb421866be4ee1122
+vibe-supervisor-0.9.0-rc.26.tgz  sha256 684a91bc244b37f9b36679f9e60206df5badfccef458c266cfa470f3edb0c322
+sbom.spdx.json                   sha256 8f3519f4e431bf92ef3cbec349dbd337cff83bd1204d00a2222aa20a9084ccf2
+acceptance.json                  sha256 cdfd2715293ba3b33a60cc2b6f688b979eabd00c34767a1f9e0cd26a1cc62299
 ```
 
-Upgrading from rc.23 to rc.25: a hand-edited config that is group- or world-writable (for example 0664) is now refused; set it to 0600. Registrations need a reconnect to load the new code.
+Upgrading from rc.23 to rc.26: a hand-edited config that is group- or world-writable (for example 0664) is now refused; set it to 0600. Registrations need a reconnect to load the new code.
 
 ## Source and release identity
 
@@ -75,9 +79,11 @@ Garnebo dispatch was refused before run creation after an approved allowlist edi
 
 ## Next priorities
 
-1. Follow the [rc.25 target runbook](docs/history/rc25-target-runbook.md) (install, native readiness, hosted matrix, clean account, evidence recording). On the target machine: install rc.24 (authorized), reconnect Codex, and in the testing thread run the native readiness check for the fixture and for Garnebo; confirm the reported server version is rc.24, then approve or remove a root and confirm readiness follows without a restart. No inference needed.
+Open owner decisions from the readiness assessment: (a) whether to fold its S1 (Git 30 s / 100 MiB limit on worktree creation and export), S3 (stdout capped by the transcript limit), S7 (skill links an unshipped `scripts/README.md`) and the S2/S4 documentation into the build before hosted testing; (b) publishing the candidate as a tagged GitHub prerelease (tags stop at rc.22; the README points users at a prerelease); (c) cutting 1.0 gates: clean-account install to 1.0.1, the separate exact-20.19.0 CI job, and the live-allowlist and boot-key checks as optional observations.
+
+1. Follow the [rc.26 target runbook](docs/history/rc26-target-runbook.md) (install, native readiness, hosted matrix, clean account, evidence recording). On the target machine: install rc.24 (authorized), reconnect Codex, and in the testing thread run the native readiness check for the fixture and for Garnebo; confirm the reported server version is rc.24, then approve or remove a root and confirm readiness follows without a restart. No inference needed.
 2. Give the push token the `workflow` scope, push `claude/ci-node-floor` and `claude/release-workflow`, and confirm the Node 20.19.0 and 24 jobs pass (the full release verification already passed locally under exactly Node 20.19.0 on the preparing machine). Prepare the fresh standard macOS account acceptance with human participation and no credential copying.
-3. Run a separately authorized, bounded hosted matrix on rc.25 (five runs: an initial review, an initial edit, three more), each started with a readiness receipt, including one real active disconnect. Stop at the first failure; no automatic retry or account rotation.
+3. Run a separately authorized, bounded hosted matrix on rc.26 (five runs: an initial review, an initial edit, three more), each started with a readiness receipt, including one real active disconnect. Stop at the first failure; no automatic retry or account rotation.
 4. Decide v1.0 only after required gates pass. Tagging and release publication need explicit authorization. Rewrite the launch article for the one-shot product after that (the current draft describes rc.17 with ACP).
 
 A new practical trial is appropriate after native readiness passes and its workspace, baseline, task, limits and provider budget are explicitly agreed. Codex coordinates independent verification; GPT-6 Luna High is the backup.

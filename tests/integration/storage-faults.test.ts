@@ -79,6 +79,14 @@ async function waitForLaunchManifest(manager: RunManager, runId: string): Promis
   expect(write).toBeDefined();
   await write;
 }
+
+async function flushEventLog(manager: RunManager, runId: string): Promise<void> {
+  const runs = (manager as unknown as { runs: Map<string, { eventLog?: { flush(): Promise<void> } }> }).runs;
+  const log = runs.get(runId)?.eventLog;
+  expect(log).toBeDefined();
+  await log?.flush();
+}
+
 const SECRET_TEXT = 'findings-that-must-not-appear-in-storage-errors';
 
 async function runningWithTranscript(h: Awaited<ReturnType<typeof harness>>, task = 'review') {
@@ -164,6 +172,7 @@ describe('storage faults', () => {
       const runId = await runningWithTranscript(h);
       await expect(h.manager.reviewStart({ task: 'follow', cwd: h.source })).rejects.toMatchObject({ code: 'VSUP_LIMIT_EXCEEDED' });
       await waitForLaunchManifest(h.manager, runId);
+      await flushEventLog(h.manager, runId);
       const runDirectory = path.join(h.data, 'runs', runId);
       await chmod(runDirectory, 0o500); restore.push(runDirectory);
       await h.backend.callbacks.get(runId)?.onState('completed', { result: { summary: 'done' } });

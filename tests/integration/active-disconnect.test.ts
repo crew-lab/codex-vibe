@@ -89,12 +89,13 @@ async function launch(box: Box, mode: Mode) {
   await client.connect(transport);
   const pid = transport.pid as number;
   strays.add(pid);
+  const closeInput = () => { (transport as unknown as { _process?: { stdin?: { end(): void } | null } })._process?.stdin?.end(); };
   const call = async (name: string, args: Record<string, unknown>) => {
     const result = await client.callTool({ name, arguments: args }, { timeout: 20_000 });
     const text = (result.content as { type: string; text?: string }[]).find((part) => part.type === 'text')?.text ?? '{}';
     return (result.structuredContent ?? JSON.parse(text)) as Reply & Record<string, unknown>;
   };
-  return { client, pid, stderr, call };
+  return { client, pid, stderr, call, closeInput };
 }
 
 async function readWorker(box: Box): Promise<{ pid: number; grandchild: number } | undefined> {
@@ -120,7 +121,7 @@ async function startActiveRun(server: Server, box: Box, kind: Kind) {
 
 async function disconnect(server: Server, how: Disconnect): Promise<number> {
   const began = Date.now();
-  if (how === 'client-close') void server.client.close().catch(() => undefined);
+  if (how === 'client-close') server.closeInput();
   else process.kill(server.pid, 'SIGTERM');
   const exited = await until(() => !alive(server.pid), DEADLINE_MS);
   expect(exited, `server ${server.pid} still alive after ${how}; stderr: ${server.stderr.join('')}`).toBe(true);

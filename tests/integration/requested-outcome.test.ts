@@ -26,6 +26,12 @@ class CompletingCancelBackend implements SupervisorBackend {
   async close() {}
 }
 
+class CrashingCancelBackend extends CompletingCancelBackend {
+  override async cancel(handle: BackendRunHandle) {
+    await this.callbacks.get(handle.runId)?.onState('failed', { error: { code: 'VSUP_AUTH_REQUIRED', message: 'racing authentication failure', remedy: 'none' } as never });
+  }
+}
+
 async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean, timeoutMs = 10_000): Promise<T> {
   const until = Date.now() + timeoutMs;
   let value = await read();
@@ -33,10 +39,9 @@ async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean, t
   return value;
 }
 
-async function startRunning(timeoutSeconds?: number) {
+async function startRunning(timeoutSeconds?: number, backend: CompletingCancelBackend = new CompletingCancelBackend()) {
   const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-requested-')); roots.push(parent);
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data'); await mkdir(source);
-  const backend = new CompletingCancelBackend();
   const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
   const started = await manager.reviewStart({ task: 'review', cwd: source, ...(timeoutSeconds ? { timeout_seconds: timeoutSeconds } : {}) });
   await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
@@ -68,4 +73,14 @@ describe('a supervisor decision wins over a backend that reports completed', () 
       expect(await waitFor(async () => activeSlots(manager), (value) => value === 0)).toBe(0);
     } finally { await manager.shutdown(); }
   }, 30_000);
+
+  it('records a closed run as cancelled even when the backend reports a failure while closing', async () => {
+    const { manager, runId, data } = await startRunning(undefined, new CrashingCancelBackend());
+    try {
+      await manager.close({ run_id: runId });
+      expect(JSON.parse(await readFile(path.join(data, 'runs', runId, 'result.json'), 'utf8'))).toMatchObject({ state: 'cancelled' });
+      expect(await manager.status({ run_id: runId })).toMatchObject({ state: 'closed' });
+      expect(await manager.status({ run_id: runId })).not.toHaveProperty('error');
+    } finally { await manager.shutdown(); }
+  });
 });

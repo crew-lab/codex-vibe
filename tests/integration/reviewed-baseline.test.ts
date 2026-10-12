@@ -16,7 +16,7 @@ async function setup(template?:string){
  const input={source,baseRef:base,outputParent:parent,entries:[{path:'a.txt',operation:'replace',baseSha256:digest(Buffer.from('old\n')),reviewedSha256:digest(Buffer.from('reviewed\n')),mode:'100644'},{path:'new.txt',operation:'add',baseSha256:null,reviewedSha256:digest(Buffer.from('new\n')),mode:'100644'},{path:'delete.txt',operation:'delete',baseSha256:digest(Buffer.from('gone\n')),reviewedSha256:null}]};
  return {root,source,parent,git,input};
 }
-describe('reviewed baseline preparation',()=>{
+describe('reviewed baseline preparation',{timeout:60_000},()=>{
  it('dry-runs and creates exact reviewed snapshots without source/index/ref changes',async()=>{
   const {root,source,parent,git,input}=await setup();const index=await readFile(path.join(source,'.git/index'));const status=await git('status','--porcelain');const ref=await git('rev-parse','HEAD');
   expect((await prepareReviewedBaseline(input,[root])).status).toBe('validated_dry_run');

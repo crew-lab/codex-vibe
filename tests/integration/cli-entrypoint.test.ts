@@ -8,7 +8,7 @@ import { APP_VERSION } from '../../src/version.js';
 
 const exec = promisify(execFile);
 const roots: string[] = [];
-const cli = path.resolve(import.meta.dirname, '../../dist/cli.js');
+const cli = path.join(process.env.VIBE_SUPERVISOR_TEST_DIST ?? path.resolve(import.meta.dirname, '../../dist'), 'cli.js');
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 async function installedCommand() {

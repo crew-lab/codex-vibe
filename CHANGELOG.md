@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0-rc.26 — stability fixes and a reliable suite
+
+- A turn-limit stop is no longer misreported as a failure when the launcher printed its own "no Keychain credential" notice; any other extra output still fails closed.
+- Settle waits for verified worker termination before exporting the patch, so an output-limit or parser failure cannot export a patch the dying worker is still changing.
+- A run closed by the user is recorded as cancelled even if the backend reports an error while closing.
+- `doctor` accepts `~/` workspace roots, and its Vibe version probe allows 15 s like the backend instead of 2.5 s, so a slow first exec (security scanning of a new file) no longer fails it.
+- Removed ACP leftovers; `VSUP_CANCELLED` is no longer emitted and stays readable in older saved runs. The docs say failed runs are kept until closed.
+- The suite is reliable under load: wall-clock budgets are replaced by the properties they stood for (constant Git spawns for export, no event reads at startup, ignored files not hashed), and four test races are fixed. Six consecutive full runs and three rounds of two concurrent full runs passed with no failure.
+
 ## 0.9.0-rc.25 — accurate errors
 
 Fixes from the rc.24 cold review; no change to scope or boundaries.

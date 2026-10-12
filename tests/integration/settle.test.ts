@@ -214,4 +214,19 @@ describe('one-shot settlement', () => {
       expect(context.backend.closed).toEqual([started.run_id]);
     } finally { await context.manager.shutdown(); }
   });
+
+  it('verifies worker termination before it finalizes artifacts', async () => {
+    const context = await setup();
+    try {
+      const started = await context.manager.reviewStart({ task: 'limit', cwd: context.source });
+      await waitFor(() => state(context.manager, started.run_id), (value) => value === 'running');
+      const closedAtFinalize: boolean[] = [];
+      const internals = context.manager as unknown as { finalizeArtifacts: (...args: unknown[]) => Promise<unknown> };
+      const original = internals.finalizeArtifacts.bind(context.manager);
+      internals.finalizeArtifacts = async (...args: unknown[]) => { closedAtFinalize.push(context.backend.closed.includes(started.run_id)); return original(...args); };
+      await context.backend.callbacks.get(started.run_id)!.onState('failed', { error: supervisorError('VSUP_OUTPUT_LIMIT', 'limit') });
+      await waitFor(() => state(context.manager, started.run_id), (value) => value === 'failed');
+      expect(closedAtFinalize).toEqual([true]);
+    } finally { await context.manager.shutdown(); }
+  });
 });

@@ -4,7 +4,7 @@ import { access, mkdtemp, rm, stat, lstat, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createPrivateDir, isPathWithinRoot } from '../security/paths.js';
+import { createPrivateDir, expandHome, isPathWithinRoot } from '../security/paths.js';
 import { configFingerprint, executableSearchPath, getDataDir } from '../config/config.js';
 import { SUPPORTED_VIBE } from '../backends/pinned.js';
 import { inspectOwnerLock } from '../core/owner-lock.js';
@@ -48,7 +48,9 @@ function requireAccess(file: string): void {
   accessSync(file, fsConstants.X_OK);
 }
 
-async function probe(executable: string, args: string[], cwd: string, timeoutMs = 2500): Promise<string> {
+const VERSION_PROBE_TIMEOUT_MS = 15_000;
+
+async function probe(executable: string, args: string[], cwd: string, timeoutMs = VERSION_PROBE_TIMEOUT_MS): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
     const child = spawn(executable, args, { cwd, env: { PATH: process.env.PATH, HOME: cwd, VIBE_HOME: cwd, TMPDIR: cwd, LANG: 'C' }, shell: false, stdio: ['ignore', 'pipe', 'ignore'] });
     const chunks: Buffer[] = []; let size = 0;
@@ -107,7 +109,7 @@ export async function runDoctor(config: SupervisorConfig, provenance?: { configP
   } finally { await rm(tmpRoot, { recursive: true, force: true }); }
   let validRoots = 0;
   for (const root of config.allowedWorkspaceRoots) {
-    try { const canonical = await realpath(root); if ((await stat(canonical)).isDirectory() && isPathWithinRoot(canonical, canonical)) validRoots++; } catch { /* invalid workspace roots are reported below */ }
+    try { const canonical = await realpath(expandHome(root)); if ((await stat(canonical)).isDirectory() && isPathWithinRoot(canonical, canonical)) validRoots++; } catch { /* invalid workspace roots are reported below */ }
   }
   checks.push({ name: 'workspace-roots', ok: config.allowedWorkspaceRoots.length > 0 && validRoots === config.allowedWorkspaceRoots.length, message: `${validRoots}/${config.allowedWorkspaceRoots.length} allowed workspace root(s) resolve to existing directories.` });
   const dataDir = provenance?.dataDir ?? getDataDir();

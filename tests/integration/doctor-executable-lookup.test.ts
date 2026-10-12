@@ -71,4 +71,15 @@ describe('doctor executable lookup', () => {
     expect(report.checks.find((check) => check.name === 'vibe')?.version).toContain('0.0.0');
     expect(existsSync(hit)).toBe(true);
   });
+
+  it('accepts a home-relative workspace root', async () => {
+    const dir = await tempDir();
+    const home = path.join(dir, 'home'); await mkdir(path.join(home, 'project'), { recursive: true });
+    const savedHomeVar = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      const report = await runDoctor({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: ['~/project'], paths: { vibe: 'vibe' } });
+      expect(report.checks.find((check) => check.name === 'workspace-roots')).toMatchObject({ ok: true, message: expect.stringContaining('1/1') });
+    } finally { if (savedHomeVar === undefined) delete process.env.HOME; else process.env.HOME = savedHomeVar; }
+  });
 });
