@@ -29,7 +29,7 @@ rc.24 implements the P0 [connection reliability proposal](docs/history/connectio
 - Runs record their admitting root and policy revision; removing a root denies later starts, and an admitted run's verified worktree can still be cleaned up.
 - The skill starts every delegation with readiness; a missing tool is CONNECTION_FAILED, a blocker PREPARATION_FAILED, neither a Vibe result, and there is no silent fallback to Luna.
 - A deterministic active-disconnect rehearsal (8 cases: plain and `--isolated`, review and edit, client close and SIGTERM) passes: the server exits, the worker's process group is gone, the lock is released, the interrupted run is `failed` and never relaunched, and an edit's worktree is kept until `vibe_close` cleans it.
-- CI runs on Node 20.19.0 and 24; a scan found no Node API newer than the floor. CI has not yet run on this commit.
+- A scan found no Node API newer than the 20.19.0 floor. Running CI on exactly 20.19.0 and 24 is ready on the local branch `claude/ci-node-floor` but cannot be pushed until the push token has the `workflow` scope (the same block as `claude/release-workflow`); CI on main still uses the latest 20.19.x.
 
 A cold review found three defects (one deleted root blocked every start and cleanup; a deleted base ref was misreported; narrowing the allowlist stranded worktrees) and the base ref being resolved twice; all fixed with regressions.
 
@@ -74,7 +74,7 @@ Garnebo dispatch was refused before run creation after an approved allowlist edi
 ## Next priorities
 
 1. On the target machine: install rc.24 (authorized), reconnect Codex, and in the testing thread run the native readiness check for the fixture and for Garnebo; confirm the reported server version is rc.24, then approve or remove a root and confirm readiness follows without a restart. No inference needed.
-2. Push CI and confirm the Node 20.19.0 and 24 jobs pass. Prepare the fresh standard macOS account acceptance with human participation and no credential copying.
+2. Give the push token the `workflow` scope, push `claude/ci-node-floor` and `claude/release-workflow`, and confirm the Node 20.19.0 and 24 jobs pass. Prepare the fresh standard macOS account acceptance with human participation and no credential copying.
 3. Run a separately authorized, bounded hosted matrix on rc.24 (five runs: an initial review, an initial edit, three more), each started with a readiness receipt, including one real active disconnect. Stop at the first failure; no automatic retry or account rotation.
 4. Decide v1.0 only after required gates pass. Tagging and release publication need explicit authorization. Rewrite the launch article for the one-shot product after that (the current draft describes rc.17 with ACP).
 

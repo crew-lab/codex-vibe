@@ -7,7 +7,7 @@
 - `vibe_status` gains a workspace readiness mode (`workspace`, `operation`, `base_ref` for edits): server version and instance, policy path and revision, eligibility with blockers and remedies, slot state and a non-launching runtime check, plus a 10-minute signed receipt. It creates no run, worktree or model call. Starts accept an optional `readiness_receipt` and reject drift before launch with `VSUP_READINESS_RECEIPT_INVALID`; an edit with a receipt runs on the exact commit that was checked.
 - Runs record the admitting root and policy revision. Removing a root denies later starts; a run already admitted finishes, and its verified worktree can still be cleaned up under its frozen admission with all fresh-export checks.
 - The skill starts every delegation with the readiness check and separates connection or preparation failures from Vibe outcomes, with no silent fallback to another implementer.
-- New deterministic active-disconnect rehearsal (plain and `--isolated`, review and edit, client close and SIGTERM) and CI on Node 20.19.0 and 24. No hosted or native verification of this candidate yet.
+- New deterministic active-disconnect rehearsal (plain and `--isolated`, review and edit, client close and SIGTERM). No hosted or native verification of this candidate yet.
 
 ## 0.9.0-rc.23 — saved-run access after reconnect
 
