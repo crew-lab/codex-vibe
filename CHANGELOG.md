@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0-rc.27 — edits that fit real repositories
+
+- Fixed: an edit whose worker changed a file within the same second and kept its size could be exported as unchanged, silently dropping that change. The private index used for export now forces Git to re-hash content; the source repository's index is untouched. Cleanup's fresh-export comparison uses the same path.
+- Worktree creation, patch export and cleanup status get a 5-minute Git bound instead of 30 s (quick queries keep 30 s), and the patch is capped by the run's `max_artifact_bytes` instead of a hidden 100 MiB.
+- The worker's output stream is capped by the event limit, not the transcript limit, so a read-heavy review no longer fails with `VSUP_OUTPUT_LIMIT` while its transcript is small.
+- `runs cleanup` lists retained worktrees with the safe manual `git worktree remove` command; the docs say a retained worktree stays registered in your repository and how to recover after `git worktree prune`. The docs also state the review snapshot's cost and caps.
+- The reviewed dirty-baseline step is gone from the shipped skill and README: commit or stash the reviewed state, then pass `base_ref`. The baseline script and its schema stay in `scripts/`, unshipped; no shipped document links to an unshipped path.
+- 1.0 gates reduced by owner decision: native readiness, the five-run hosted matrix, a real active disconnect and provider authentication. The live-policy checks are optional, the clean-account install moves to 1.0.1, and the separate exact-20.19.0 CI job is dropped.
+
 ## 0.9.0-rc.26 — stability fixes and a reliable suite
 
 - A turn-limit stop is no longer misreported as a failure when the launcher printed its own "no Keychain credential" notice; any other extra output still fails closed.

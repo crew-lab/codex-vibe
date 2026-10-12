@@ -14,7 +14,7 @@ export const MEANINGS = {
   VSUP_WORKTREE_CREATE_FAILED: 'git worktree add failed for the edit run; details.stderr_tail and details.operation say why.',
   VSUP_GIT_REQUIRED: 'The git executable is missing, or the workspace is not a Git repository.',
   VSUP_BACKEND_CRASHED: 'The Vibe process exited before the turn finished.',
-  VSUP_TIMEOUT: 'The run deadline elapsed, or a Git operation exceeded its fixed 30 s limit (details.operation names it).',
+  VSUP_TIMEOUT: 'The run deadline elapsed, or a Git operation exceeded its limit: 30 s for queries, 5 min for worktree creation, patch export and cleanup (details.operation names it).',
   VSUP_RATE_LIMITED: 'Vibe or its provider answered with HTTP 429.',
   VSUP_CANCELLED: 'No longer emitted. Kept so saved run records from older versions still read; this release records a stopped run as `cancelled` with no error.',
   VSUP_OUTPUT_LIMIT: 'The run exceeded an event, transcript or artifact byte limit, or a Git command produced more than 100 MiB of output.',

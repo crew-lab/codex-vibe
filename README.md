@@ -4,7 +4,7 @@ A local MCP server for one bounded Mistral Vibe review or isolated edit. The red
 
 This is an application policy boundary, **not an operating-system sandbox**. A delegated run uses your account's permissions, and permitted workspace content is sent to Mistral. Review [SECURITY.md](SECURITY.md) before use.
 
-The development candidate is `0.9.0-rc.26`, npm-private, distributed as a GitHub prerelease, and MIT licensed. No platform is currently certified for stable use. macOS Apple silicon is the intended first target; hosted inference, native desktop lifecycle, clean-account installation, and provider authentication remain unverified for this candidate. Linux and Windows are not claimed as supported platforms.
+The development candidate is `0.9.0-rc.27`, npm-private, distributed as a GitHub prerelease, and MIT licensed. No platform is currently certified for stable use. macOS Apple silicon is the intended first target; hosted inference, native desktop lifecycle, clean-account installation, and provider authentication remain unverified for this candidate. Linux and Windows are not claimed as supported platforms.
 
 ## Requirements
 
@@ -48,7 +48,7 @@ Bind preparation, doctor, allow, and serve to the same explicit config. For a se
 
 ## One-shot workflow
 
-1. Review the config and choose a clean Git base, or prepare reviewed dirty bytes using the source-checkout helper in [scripts/README.md](scripts/README.md). Preparation is a dry run first and needs no live connection. Snapshot creation uses a separate private repository; verify its receipt, source invariants, file hashes, and `base_ref` before dispatch.
+1. Review the config and choose a clean Git base: commit or stash the reviewed state, then pass its ref as `base_ref`.
 2. Check readiness on the owning connection with `vibe_status` in workspace mode (`workspace`, `operation`, and `base_ref` for an edit). It starts nothing; a blocker is a preparation failure, not a Vibe result. Allowlist changes in the selected config are picked up without a restart. Then start one bounded review or edit with explicit scope and limits, passing the returned `readiness_receipt`. A second start on the same server/storage instance is rejected while the first run is active. There are no interactive grants, continuation tools, or restart recovery. A run interrupted by server restart is marked failed; its task is never replayed.
 3. Wait with `vibe_status`, inspect `vibe_result`, and verify the result independently. `completed` means execution ended, not that the work was accepted. For edits, inspect the fresh patch and exact changed files while the worktree is available.
 4. Call `vibe_close` after review. Cleanup is reported only after current-export and ownership checks; inspect any retained-worktree reason.
@@ -57,11 +57,10 @@ Patches are never applied automatically. The worker has no shell or network tool
 
 ## Skills and references
 
-The package ships one coordinator skill at `skills/vibe-supervisor`. It describes the explicit config and reviewed-baseline workflow, five-tool catalog, one-shot limits, verification, and close procedure.
+The package ships one coordinator skill at `skills/vibe-supervisor`. It describes the explicit config workflow, five-tool catalog, one-shot limits, verification, and close procedure.
 
 - [Tool, config, and CLI reference](docs/reference.md)
 - [Behavior and lifecycle](docs/functionality.md)
 - [Security](docs/security.md) and [error codes](docs/errors.md)
 - [Vibe compatibility and unverified gates](docs/compatibility.md)
 - [Candidate acceptance record](docs/acceptance.json)
-- [Implementation handoff](Handoff.md)

@@ -109,6 +109,11 @@ describe("runs cleanup <id> only touches a run that is finished", () => {
       expect(await exists(closed.worktree)).toBe(true);
       expect(await context.manager.cleanup(closed.runId)).toMatchObject({ run_id: closed.runId, worktree_removed: false, worktree_retained_reason: expect.stringMatching(/uncommitted or untracked files/i) });
       expect(await exists(closed.worktree)).toBe(true);
+      const listing = await context.manager.cleanup() as { retained_worktrees?: Array<{ run_id: string; path: string; manual_command: string }> };
+      expect(listing.retained_worktrees?.map((entry) => entry.run_id).sort()).toEqual([cancelled.runId, closed.runId].sort());
+      const entry = listing.retained_worktrees!.find((item) => item.run_id === closed.runId)!;
+      expect(entry.path).toBe(path.resolve(closed.worktree));
+      expect(entry.manual_command).toBe(`git -C ${JSON.stringify(context.source)} worktree remove ${JSON.stringify(path.resolve(closed.worktree))}`);
     } finally { await context.manager.shutdown(); }
   });
 });

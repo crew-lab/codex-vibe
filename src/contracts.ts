@@ -225,7 +225,7 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_WORKTREE_CREATE_FAILED: "Check the repository state and worktree path, then retry.",
   VSUP_GIT_REQUIRED: "Install Git (the git executable must be on PATH) and use a Git repository for edit runs.",
   VSUP_BACKEND_CRASHED: "Inspect the run's diagnostic events and start a new run.",
-  VSUP_TIMEOUT: "Increase the timeout or simplify the task, then start a new run. For a Git operation that exceeded its fixed limit, reduce the size of the repository changes.",
+  VSUP_TIMEOUT: "Increase the timeout or simplify the task, then start a new run. For a Git operation that exceeded its limit (30 s for queries, 5 min for worktree creation, export and cleanup), check the repository size and disk speed.",
   VSUP_RATE_LIMITED: "Wait for the service rate limit to clear and retry.",
   VSUP_CANCELLED: "Start another run if more work is needed.",
   VSUP_OUTPUT_LIMIT: "Reduce the requested output or increase the configured limit.",

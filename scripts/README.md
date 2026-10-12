@@ -40,7 +40,7 @@ The manifest is private JSON (owner read/write only) with this strict shape. For
 }
 ```
 
-Replace every path and hash placeholder with actual values before running the helper. For example, obtain a base-file hash with `git show 'HEAD:path/to/file' | shasum -a 256` and a reviewed-file hash with `shasum -a 256 /absolute/path/to/source-repository/path/to/file`. The source tree must already reflect the reviewed add/replace/delete operations; the helper never changes it. Create the JSON file with mode `0600` in an owner-private directory. The full input contract is also in [`schemas/reviewed-baseline-manifest.schema.json`](../schemas/reviewed-baseline-manifest.schema.json).
+Replace every path and hash placeholder with actual values before running the helper. For example, obtain a base-file hash with `git show 'HEAD:path/to/file' | shasum -a 256` and a reviewed-file hash with `shasum -a 256 /absolute/path/to/source-repository/path/to/file`. The source tree must already reflect the reviewed add/replace/delete operations; the helper never changes it. Create the JSON file with mode `0600` in an owner-private directory. The full input contract is also in [`reviewed-baseline-manifest.schema.json`](reviewed-baseline-manifest.schema.json).
 
 The receipt includes a `manifest_sha256`, selected configuration/runtime provenance, source HEAD/index/ref invariants, selected input inventory, hashes, and modes. For snapshot creation, pass the dry-run digest back explicitly:
 
