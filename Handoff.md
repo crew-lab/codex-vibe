@@ -2,6 +2,10 @@
 
 Consolidated 2026-10-12. This document alone defines current priorities. Background: the [development plan](docs/history/development-plan-2026-10-11.md) and the [previous handoff](docs/history/handoff-before-consolidation-2026-10-12.md), whose older ACP, soak and release proposals are not the current work queue. The one active design kept under `docs/history/` is the [connection reliability proposal](docs/history/connection-strategy-2026-10-12.md), the P0 below; it lives there so it does not ship in the package.
 
+## 1.0.0 release branch
+
+This branch (`claude/v1.0.0`) prepares 1.0.0 from 0.9.0-rc.28 with no code change: version, changelog, README, `docs/compatibility.md` and `docs/acceptance.json`. Every `[EVIDENCE: …]` placeholder must be filled from the target-machine sitting before it is merged. To release: fill the placeholders, `npm run verify:release`, `VIBE_SUPERVISOR_TEST_NPM_CACHE=<cache> npm run package:rc`, merge to main with `make push`, tag `v1.0.0` and publish the GitHub release with the tarball, `SHA256SUMS`, `sbom.spdx.json` and `acceptance.json` (owner authorization). Any code change after the hosted runs means a new candidate and repeating them.
+
 ## What this is
 
 A local MCP stdio server (current candidate `0.9.0-rc.28`) that lets Codex delegate one bounded code review or one isolated edit at a time to Mistral Vibe 2.26.1. Codex sees five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result` and `vibe_close`. A review may only read and search an allowlisted workspace; an edit runs in a supervisor-created detached Git worktree and comes back as a patch, never applied, committed or pushed. Shell and network tools are off. This is an application policy boundary, not an OS sandbox.

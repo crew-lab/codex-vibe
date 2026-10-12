@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "candidate": "0.9.0-rc.28",
+  "candidate": "1.0.0",
   "scope": "Programmatic one-shot review and isolated edit; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work.",
   "deterministic": [
     {
@@ -41,25 +41,25 @@
       "evidence": "Clean clone of main at 7cbb0ed on macOS arm64 under exactly Node v20.19.0 and npm 10.8.2: npm ci --offline from the populated cache succeeded and npm run verify:release passed (lint, typecheck, build, 60 files with 606 tests passed and 2 skipped, 72 Python tests, acceptance, secret scan, SBOM)."
     }
   ],
-  "unverified": [
+  "verified": [
     {
       "name": "native-readiness-on-candidate",
-      "status": "UNVERIFIED",
-      "evidence_required": "On the intended Codex desktop connection and exact frozen artifact, vibe_status in workspace mode for the fixture (review, and edit with base_ref) and for the approved second workspace: server_version 0.9.0-rc.28, server_instance_id, policy_path, policy_revision, eligible, blockers, active_slot, runtime and readiness_receipt recorded; no run created. Procedure: docs/history/rc24-target-runbook.md section C."
+      "status": "[EVIDENCE: VERIFIED with path]",
+      "evidence_required": "On the intended Codex desktop connection and exact frozen artifact, vibe_status in workspace mode for the fixture (review, and edit with base_ref) and for the approved second workspace: server_version 0.9.0-rc.28, server_instance_id, policy_path, policy_revision, eligible, blockers, active_slot, runtime and readiness_receipt recorded; no run created. Procedure: docs/history/rc28-target-runbook.md section C."
     },
     {
       "name": "hosted-review-edit-matrix",
-      "status": "UNVERIFIED",
+      "status": "[EVIDENCE: VERIFIED with path]",
       "evidence_required": "Against one frozen artifact/config/baseline: five total sequential runs (an initial review, an initial edit, then three additional review or edit), each preceded by readiness and started with its readiness_receipt; stop on first failure; record run IDs, stop_reason, state, timings, exact artifact/source/config/baseline hashes, independent patch checks, usage where available, and cleanup receipts."
     },
     {
       "name": "active-disconnect-hosted",
-      "status": "UNVERIFIED",
+      "status": "[EVIDENCE: VERIFIED with path]",
       "evidence_required": "One real client disconnect during a running hosted run, through the desktop app and the official client: the server exits, the worker process group is gone, the owner lock is released, the run is failed and never relaunched, and an edit worktree is kept until vibe_close cleanup. A run that settled before the disconnect does not qualify."
     },
     {
       "name": "provider-authentication-for-this-candidate",
-      "status": "UNVERIFIED",
+      "status": "[EVIDENCE: VERIFIED with path]",
       "evidence_required": "Observe authentication only during an authorized real run against the exact frozen candidate; doctor, readiness and initialize-only checks do not qualify."
     }
   ],

@@ -4,7 +4,7 @@ A local MCP server for one bounded Mistral Vibe review or isolated edit. The red
 
 This is an application policy boundary, **not an operating-system sandbox**. A delegated run uses your account's permissions, and permitted workspace content is sent to Mistral. Review [SECURITY.md](SECURITY.md) before use.
 
-The development candidate is `0.9.0-rc.28`, npm-private, distributed as a GitHub prerelease, and MIT licensed. No platform is currently certified for stable use. macOS Apple silicon is the intended first target; hosted inference, native desktop lifecycle, clean-account installation, and provider authentication remain unverified for this candidate. Linux and Windows are not claimed as supported platforms.
+Version `1.0.0`, npm-private, distributed as a GitHub release, and MIT licensed. Supported platform: macOS Apple silicon with Mistral Vibe 2.26.1. The release was accepted on [EVIDENCE: date] with native readiness, five hosted runs, a real active disconnect and provider authentication on the exact artifact; a clean-account installation is planned for 1.0.1. Linux and Windows are not claimed as supported platforms.
 
 ## Requirements
 
@@ -27,7 +27,7 @@ npm ci
 npm run build
 ```
 
-This builds the checkout for local inspection; it does not install the package. Install the exact tarball from the matching GitHub prerelease into a private local prefix, using a populated offline npm cache and `--ignore-scripts`. Review its checksums and the exact executable/config paths before updating Codex registration; retain the previous prefix and a configuration backup for rollback. Source setup does not update an existing installation.
+This builds the checkout for local inspection; it does not install the package. Install the exact tarball from the matching GitHub release into a private local prefix, using a populated offline npm cache and `--ignore-scripts`. Review its checksums and the exact executable/config paths before updating Codex registration; retain the previous prefix and a configuration backup for rollback. Source setup does not update an existing installation.
 
 ## Configuration and connection
 
