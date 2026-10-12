@@ -105,8 +105,9 @@ describe('MCP stdio tool surface', () => {
     expect((failed.content as unknown[]).length).toBe(1);
     expect(JSON.parse(errorText(failed))).toEqual({ error: {
       code: 'VSUP_WORKSPACE_INVALID', message: 'root gone', remediation: expect.stringContaining('allowed_workspace_roots'), retryable: true,
-      details: { unavailable_root: '/gone', note: expect.not.stringContaining('sk-abcdef') },
+      details: { unavailable_root: '/gone', note: expect.stringContaining('api_key=') },
     } });
+    expect((JSON.parse(errorText(failed)) as { error: { details: { note: string } } }).error.details.note).not.toContain('sk-abcdef');
   });
 
   it('returns VSUP_INTERNAL for an unexpected error and writes its redacted cause to the error log', async () => {

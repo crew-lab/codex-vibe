@@ -14,7 +14,7 @@ The declared Node floor is 20.19.0. Release acceptance compares major, minor, an
 
 ## Unverified gates
 
-No hosted or native-client acceptance claim applies to `0.9.0-rc.27` until its exact frozen artifact has been exercised and evidence recorded. Prior releases' reports are preserved in the source repository under `docs/history/` (not shipped); they are version-bound and do not establish this candidate's behavior.
+No hosted or native-client acceptance claim applies to `0.9.0-rc.28` until its exact frozen artifact has been exercised and evidence recorded. Prior releases' reports are preserved in the source repository under `docs/history/` (not shipped); they are version-bound and do not establish this candidate's behavior.
 
 | Gate | Evidence still required |
 |---|---|

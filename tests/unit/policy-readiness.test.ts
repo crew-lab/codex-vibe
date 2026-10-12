@@ -13,14 +13,19 @@ import { createIsolatedRunRouter } from "../../src/core/isolated-run-router.js";
 import { RECEIPT_TTL_MS } from "../../src/core/readiness-receipt.js";
 import { toolSchemas } from "../../src/mcp/schemas.js";
 import { APP_VERSION } from "../../src/version.js";
+import { overrideGitBounds } from "../../src/git/worktree.js";
 
 const exec = promisify(execFile);
 const canonicalTmp = await realpath(tmpdir());
 const scratch: string[] = [];
 const managers: RunManager[] = [];
+const savedPath = process.env.PATH;
+let restoreBounds: (() => void) | undefined;
 
 afterEach(async () => {
   vi.useRealTimers();
+  process.env.PATH = savedPath;
+  restoreBounds?.(); restoreBounds = undefined;
   await Promise.all(managers.splice(0).map((manager) => manager.shutdown().catch(() => undefined)));
   await Promise.all(scratch.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
@@ -286,6 +291,23 @@ describe("workspace readiness on the connection", () => {
     expect(report.eligible).toBe(false);
     expect(report.blockers.map((blocker) => blocker.code)).toEqual(["VSUP_WORKTREE_CREATE_FAILED"]);
   });
+
+  it("keeps a missing git binary and a Git timeout distinct from an unresolved base_ref", async () => {
+    const box = await sandbox();
+    const { manager } = await connect(box.configPath, path.join(box.parent, "data"));
+    const noGit = path.join(box.parent, "no-git-bin"); await mkdir(noGit);
+    process.env.PATH = noGit;
+    const missing = await readiness(manager, box.alpha, "edit");
+    process.env.PATH = savedPath;
+    expect(missing.blockers).toEqual([expect.objectContaining({ code: "VSUP_GIT_REQUIRED", details: expect.objectContaining({ kind: "missing" }) })]);
+    const slowBin = path.join(box.parent, "slow-git-bin"); await mkdir(slowBin);
+    const realGit = (await exec("sh", ["-c", "command -v git"])).stdout.trim();
+    await writeFile(path.join(slowBin, "git"), `#!/bin/sh\ncase " $* " in *" --verify "*) sleep 3;; esac\nexec ${realGit} "$@"\n`, { mode: 0o755 });
+    process.env.PATH = `${slowBin}:${savedPath}`;
+    restoreBounds = overrideGitBounds({ queryRuntimeMs: 500 });
+    const slow = await readiness(manager, box.alpha, "edit");
+    expect(slow.blockers).toEqual([expect.objectContaining({ code: "VSUP_TIMEOUT", details: expect.objectContaining({ kind: "timeout" }) })]);
+  }, 30_000);
 
   it("requires exactly one of run_id or an absolute workspace with an operation", () => {
     const runId = "f47ac10b-58cc-4372-a567-0e02b2c3d479";

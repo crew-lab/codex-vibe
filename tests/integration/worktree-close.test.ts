@@ -140,6 +140,15 @@ describe("worktree creation", () => {
     await expect(createDetachedWorktree(context.source, path.join(context.data, "worktrees", randomUUID()), "no-such-ref")).rejects.toMatchObject({ code: "VSUP_WORKTREE_CREATE_FAILED", details: { stderr_tail: expect.stringContaining("fatal") } });
   });
 
+  it("does not create the worktree with assume-unchanged bits when the repository sets core.ignoreStat", async () => {
+    const context = await setup();
+    await exec("git", ["config", "core.ignoreStat", "true"], { cwd: context.source });
+    const target = path.join(context.data, "worktrees", randomUUID());
+    await createDetachedWorktree(context.source, target, "HEAD");
+    const { stdout } = await exec("git", ["-c", "core.ignoreStat=false", "ls-files", "-v"], { cwd: target });
+    expect(stdout.split("\n").filter(Boolean).map((line) => line[0])).toEqual(["H", "H"]);
+  });
+
 
 });
 
@@ -300,6 +309,39 @@ describe("close", () => {
     } finally { await writeFile(gate, "go").catch(() => undefined); await context.manager.shutdown(); }
   });
 
+  it("exports and keeps a tracked-file edit when the repository sets core.ignoreStat", async () => {
+    const context = await setup();
+    await exec("git", ["config", "core.ignoreStat", "true"], { cwd: context.source });
+    const sourceIndex = await readFile(path.join(context.source, ".git", "index"));
+    try {
+      const { runId, worktree } = await completedEdit(context, async (workspace) => {
+        await exec("git", ["update-index", "--assume-unchanged", "tracked.txt"], { cwd: workspace });
+        await writeFile(path.join(workspace, "tracked.txt"), "edited by the worker\n");
+      });
+      const patch = await readFile(path.join(runDir(context.data, runId), "artifacts", "diff.patch"), "utf8");
+      expect(patch).toContain("+edited by the worker");
+      const closed = await context.manager.close({ run_id: runId, cleanup_worktree: true });
+      expect(closed).toMatchObject({ state: "closed", worktree_removed: false, worktree_retained_path: worktree });
+      expect(await readFile(path.join(worktree, "tracked.txt"), "utf8")).toBe("edited by the worker\n");
+      expect(await readFile(path.join(context.source, ".git", "index"))).toEqual(sourceIndex);
+    } finally { await context.manager.shutdown(); }
+  });
+
+  it("exports and keeps an edit to a skip-worktree entry", async () => {
+    const context = await setup();
+    try {
+      const { runId, worktree } = await completedEdit(context, async (workspace) => {
+        await exec("git", ["update-index", "--skip-worktree", "tracked.txt"], { cwd: workspace });
+        await writeFile(path.join(workspace, "tracked.txt"), "edited by the worker\n");
+      });
+      const patch = await readFile(path.join(runDir(context.data, runId), "artifacts", "diff.patch"), "utf8");
+      expect(patch).toContain("+edited by the worker");
+      const closed = await context.manager.close({ run_id: runId, cleanup_worktree: true });
+      expect(closed).toMatchObject({ state: "closed", worktree_removed: false, worktree_retained_path: worktree });
+      expect(await readFile(path.join(worktree, "tracked.txt"), "utf8")).toBe("edited by the worker\n");
+    } finally { await context.manager.shutdown(); }
+  });
+
   it("refuses cleanup and retention when one run is redirected to another valid owned worktree", async () => {
     const first = await setup();
     const a = await completedEdit(first);
@@ -382,7 +424,15 @@ describe("startup and retention", () => {
   it("maps git failures to their own codes and keeps VSUP_GIT_REQUIRED for a missing binary or non-repository", async () => {
     const context = await setup();
     const plain = path.join(context.parent, "plain"); await mkdir(plain);
-    await expect(captureDirtySnapshot(plain)).rejects.toMatchObject({ code: "VSUP_GIT_REQUIRED" });
+    await expect(captureDirtySnapshot(plain)).rejects.toMatchObject({ code: "VSUP_GIT_REQUIRED", details: { kind: "not_repository" } });
+
+    const noGit = path.join(context.parent, "no-git-bin"); await mkdir(noGit);
+    process.env.PATH = noGit;
+    await expect(captureDirtySnapshot(context.source)).rejects.toMatchObject({ code: "VSUP_GIT_REQUIRED", details: { kind: "missing" } });
+    process.env.PATH = savedPath;
+
+    const vanished = path.join(context.parent, "vanished-worktree");
+    await expect(captureDirtySnapshot(vanished)).rejects.toMatchObject({ code: "VSUP_ARTIFACT_ERROR", details: { kind: "workspace_missing", path: vanished } });
 
     await exec("git", ["config", "filter.lfs.clean", "cat"], { cwd: context.source });
     await expect(captureDirtySnapshot(context.source)).rejects.toMatchObject({ code: "VSUP_ARTIFACT_ERROR", details: { operation: "filter configuration" } });

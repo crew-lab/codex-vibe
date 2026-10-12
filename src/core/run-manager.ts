@@ -18,7 +18,7 @@ import { describeFailure, reportBackgroundFailure, writeDiagnostic } from "../di
 import { WorkspacePathError, createPrivateDir, expandHome, resolveAdmittedWorkspace, resolveCanonicalRoot, resolveContextFile, isPathWithinRoot } from "../security/paths.js";
 import { redactSecrets } from "../security/redaction.js";
 import { assertNotSupervisorChild } from "../security/environment.js";
-import { createDetachedWorktree, exportDirtySnapshot, removeVerifiedWorktree, resolveBaseCommit, resolveGitRoot } from "../git/worktree.js";
+import { createDetachedWorktree, exportDirtySnapshot, GitOperationError, removeVerifiedWorktree, resolveBaseCommit, resolveGitRoot } from "../git/worktree.js";
 import { fixedPolicy, readCurrentPolicy } from "../config/policy.js";
 import type { CurrentPolicy, PolicySource } from "../config/policy.js";
 import { ReadinessReceipts, receiptMismatch, receiptRejected } from "./readiness-receipt.js";
@@ -344,7 +344,10 @@ export class RunManager {
   }
 
   private async editBaseCommit(source: string, baseRef: string, deadline: number): Promise<string> {
-    const resolution = resolveBaseCommit(source, baseRef).then((commit) => ({ commit }), () => ({ commit: undefined }));
+    const resolution = resolveBaseCommit(source, baseRef).then((commit) => ({ commit }), (error: unknown) => {
+      if (error instanceof GitOperationError && error.kind !== "failed" && error.kind !== "not_repository") throw error;
+      return { commit: undefined };
+    });
     const { commit } = await withDeadline(resolution, deadline - Date.now(), "Edit base resolution exceeded its preparation deadline.");
     if (commit === undefined) throw codedError("VSUP_WORKTREE_CREATE_FAILED", `base_ref ${baseRef} does not resolve to a commit in ${source}; use the Git repository root and an existing ref.`, { reason: "base_ref_unresolved" });
     return commit;
@@ -619,7 +622,7 @@ export class RunManager {
     const unverified = [...this.unverifiedWorktrees].map(([run_id, worktreePath]) => ({ run_id, path: worktreePath }));
     const retained = [...this.runs.values()].filter((runtime) => runtime.record.worktree).map((runtime) => {
       const retainedPath = path.resolve(runtime.record.worktree!.path);
-      return { run_id: runtime.record.runId, state: runtime.record.state, path: retainedPath, manual_command: `git -C ${JSON.stringify(runtime.record.sourceWorkspace)} worktree remove ${JSON.stringify(retainedPath)}` };
+      return { run_id: runtime.record.runId, state: runtime.record.state, path: retainedPath, manual_command: `git -C ${shellQuote(runtime.record.sourceWorkspace)} worktree remove ${shellQuote(retainedPath)}` };
     });
     return { removed_run_ids: removed, ...(unverified.length ? { unverified_worktrees: unverified } : {}), ...(retained.length ? { retained_worktrees: retained } : {}) };
   }
@@ -1513,6 +1516,10 @@ function describeUnreadableLog(error: unknown): NonNullable<Runtime["logUnavaila
 
 const MAX_DISCARDABLE_RECORD_BYTES = 1024 * 1024;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
 
 function restartRequired(drift: readonly string[]): Error {
   return codedError("VSUP_RESTART_REQUIRED", `The selected configuration changed boot-bound settings since this server started (${drift.join(", ")}); new starts are refused until the server is restarted or the settings are reverted.`, { boot_drift: [...drift] });

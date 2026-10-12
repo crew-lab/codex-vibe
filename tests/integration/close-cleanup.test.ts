@@ -44,9 +44,9 @@ async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean, t
   return value;
 }
 
-async function setup(backend = new CloseBackend()) {
+async function setup(backend = new CloseBackend(), names = { source: "source", data: "data" }) {
   const parent = await mkdtemp(path.join(canonicalTmp, "vsup-close-")); roots.push(parent);
-  const source = path.join(parent, "source"); const data = path.join(parent, "data");
+  const source = path.join(parent, names.source); const data = path.join(parent, names.data);
   await mkdir(source);
   await writeFile(path.join(source, "tracked.txt"), "original\n");
   await exec("git", ["init", "-q"], { cwd: source });
@@ -113,7 +113,25 @@ describe("runs cleanup <id> only touches a run that is finished", () => {
       expect(listing.retained_worktrees?.map((entry) => entry.run_id).sort()).toEqual([cancelled.runId, closed.runId].sort());
       const entry = listing.retained_worktrees!.find((item) => item.run_id === closed.runId)!;
       expect(entry.path).toBe(path.resolve(closed.worktree));
-      expect(entry.manual_command).toBe(`git -C ${JSON.stringify(context.source)} worktree remove ${JSON.stringify(path.resolve(closed.worktree))}`);
+      expect(entry.manual_command).toBe(`git -C '${context.source}' worktree remove '${path.resolve(closed.worktree)}'`);
+    } finally { await context.manager.shutdown(); }
+  });
+
+  it("prints a manual cleanup command that a shell passes to git literally", async () => {
+    const hostile = "x $(touch subst) `touch tick` $HOME it's";
+    const context = await setup(new CloseBackend(), { source: `source ${hostile}`, data: `data ${hostile}` });
+    try {
+      const run = await runningEdit(context);
+      await context.manager.cancel({ run_id: run.runId });
+      const listing = await context.manager.cleanup() as { retained_worktrees?: Array<{ run_id: string; manual_command: string }> };
+      const command = listing.retained_worktrees!.find((item) => item.run_id === run.runId)!.manual_command;
+      const bin = path.join(context.parent, "record-bin"); await mkdir(bin);
+      const recorded = path.join(context.parent, "recorded-args");
+      await writeFile(path.join(bin, "git"), `#!/bin/sh\nprintf '%s\\0' "$@" > '${recorded}'\n`, { mode: 0o755 });
+      await exec("/bin/sh", ["-c", command], { cwd: context.parent, env: { PATH: bin, HOME: "/expanded-home" } });
+      expect((await readFile(recorded, "utf8")).split("\0").filter(Boolean)).toEqual(["-C", context.source, "worktree", "remove", path.resolve(run.worktree)]);
+      expect(await exists(path.join(context.parent, "subst"))).toBe(false);
+      expect(await exists(path.join(context.parent, "tick"))).toBe(false);
     } finally { await context.manager.shutdown(); }
   });
 });

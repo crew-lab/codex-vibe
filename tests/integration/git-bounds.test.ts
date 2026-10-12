@@ -48,7 +48,7 @@ describe('git operation bounds', () => {
     expect(created.createdBySupervisor).toBe(true);
     restoreBounds();
     restoreBounds = overrideGitBounds({ queryRuntimeMs: 3000, heavyRuntimeMs: 3500 });
-    await expect(createDetachedWorktree(source, path.join(parent, 'wt-late'), 'HEAD')).rejects.toMatchObject({ code: 'VSUP_WORKTREE_CREATE_FAILED', details: { operation: 'worktree' } });
+    await expect(createDetachedWorktree(source, path.join(parent, 'wt-late'), 'HEAD')).rejects.toMatchObject({ code: 'VSUP_TIMEOUT', details: { operation: 'worktree', kind: 'timeout' } });
   }, 90_000);
 
   it('lets patch export take longer than the query bound and reports a timeout past the heavy bound', async () => {
