@@ -16,11 +16,13 @@ The declared Node floor is 20.19.0. Release acceptance compares major, minor, an
 
 No hosted or native-client acceptance claim applies to `0.9.0-rc.28` until its exact frozen artifact has been exercised and evidence recorded. Prior releases' reports are preserved in the source repository under `docs/history/` (not shipped); they are version-bound and do not establish this candidate's behavior.
 
-| Gate | Evidence still required |
+| Gate required for 1.0 | Evidence still required |
 |---|---|
-| Hosted one-shot review and edit | Five total runs on the frozen candidate: one bounded review and one bounded edit, followed by three additional sequential review or edit runs. Stop at first failure, preserve diagnostics, verify every patch independently, and account for cleanup. No automatic retry or spending is authorized by this document. |
-| Native Codex lifecycle | Actual five-tool discovery, one useful task, close, and client disconnect while a run is active against the exact artifact. |
-| Clean macOS Apple silicon account | Install and run the documented workflow in a fresh account. |
+| Native readiness | `vibe_status` workspace readiness on the actual Codex desktop connection, reporting the exact candidate version. |
+| Hosted one-shot review and edit | Five sequential runs on the frozen candidate (review, edit, review to the turn limit, edit to the turn limit, review), each started with a readiness receipt. Stop at the first failure, verify every patch independently, and account for cleanup. No automatic retry or spending is authorized by this document. |
+| Active disconnect | Codex quit while a hosted run is active: server, worker and lock gone, run failed and never relaunched. |
 | Provider authentication | A real candidate run; doctor and initialization-only checks are insufficient. |
+
+Not required for 1.0 (owner decision 2026-10-12): a clean macOS account installation (planned for 1.0.1), CI on exactly Node 20.19.0 (passed locally; CI runs 20.19.x), and the live-allowlist and boot-key observations (covered by deterministic tests).
 
 No platform is currently certified for stable use. macOS Apple silicon is the first release target after these documented checks pass. Linux and Windows code paths may exist, but this candidate makes no support claim for them. No Intel or plugin installation gates apply to the reduced surface. `.codex-plugin/plugin.json` remains an unverified source scaffold and is not part of the npm package; its declarations do not establish plugin installation or registration support.
