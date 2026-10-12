@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `--isolated` session directories under `mcp-sessions/` are pruned when nothing can still need them: not the current session, no live owner, private and not a link, unused past `retention.days`, and holding only closed or cancelled runs past retention with no worktree. Anything uncertain is kept. The check repeats under the session's owner lock, and the directory is renamed out of the namespace before removal. Sweeps run with automatic retention (after serving starts, then every 24 h) and in `runs cleanup`, which reports `pruned_sessions` and `kept_sessions` with reasons. A sweep inspects at most 64 sessions.
+- Isolated run lookup searches the current session first, then up to 128 siblings in name order. An unsafe or unreadable sibling is skipped and reported instead of failing every lookup, and a namespace over 128 entries no longer makes the current session unreachable. A run ID found in two sessions still fails closed.
+
 ## 0.9.0-rc.28 — edit export that cannot miss changes
 
 Fixes from the rc.27 cold review.
