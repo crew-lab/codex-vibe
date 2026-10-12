@@ -75,4 +75,4 @@ Private artifact/checksums, build log, migration and installation records, docto
 
 The current desktop connection was not reloaded or attested. No hosted run ID, worker candidate, current-build correction, recovery, soak, callback, Intel or clean-account pass is claimed. Initialization checks do not certify full D0–D4 or 1.0.
 
-Next: reconnect the desktop integration or start a fresh chat, verify its actual version/catalog, then execute the bounded review and complete edit/correction/verification/cleanup sequence in the [stable strategy](../../v1-stable-strategy.md).
+Next: reconnect the desktop integration or start a fresh chat, verify its actual version/catalog, then execute the bounded review and complete edit/correction/verification/cleanup sequence in the [stable strategy](../v1-stable-strategy.md).
