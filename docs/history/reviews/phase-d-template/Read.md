@@ -1,10 +1,10 @@
-# Phase D target-machine evidence (template)
+# rc.24 target-machine evidence (template)
 
-Copy this directory to `docs/history/reviews/rc7-target-test-<YYYY-MM-DD>/` before the session and fill it in there; keep this template unchanged. The steps, expectations and ground rules are in the [Phase D test plan](../../handoff-rc15-2026-10-09.md#phase-d-test-plan). Record facts only: exact commands, versions, run IDs, timings and outcomes. Never paste credentials or task text that contains anything sensitive; `security` is only ever called without `-w`.
+Copy this directory to `docs/history/reviews/rc24-target-test-<YYYY-MM-DD>/` before the session and fill it in there; keep this template unchanged. The procedure, expectations and stop rules are in the [rc.24 target runbook](../../rc24-target-runbook.md). Record facts only: exact commands, versions, run IDs, timings and outcomes. Never paste credentials or task text that contains anything sensitive; `security` is only ever called without `-w`. Keep earlier failures next to later passes.
 
-Put raw evidence (redacted tool replies, `doctor --json`, timing logs, the soak `summary.json` and `runs.ndjson`) next to this file and reference it in the Evidence column by file name.
+Put raw evidence (redacted tool replies, `doctor --json`, config hashes, timing logs) next to this file and reference it in the Evidence column by file name.
 
-## Environment (D0)
+## Environment
 
 | Item | Value |
 |---|---|
@@ -13,82 +13,66 @@ Put raw evidence (redacted tool replies, `doctor --json`, timing logs, the soak 
 | Node and npm | |
 | Git | |
 | `vibe --version` and the Vibe Python path | |
-| Codex CLI version / Codex desktop version | |
-| Release tarball and its sha256 | |
-| Source checkout commit (for D4 and D18) | |
-| Throwaway workspace path and how it was prepared | |
-| Model used by hosted runs (from the run's private session records) | |
+| Codex desktop version | |
+| Release tarball and its sha256 (expected `55154e83...3a80`) | |
+| `shasum -a 256 -c SHA256SUMS` result | |
+| rc.24 prefix, selected config path and its mode | |
+| Codex config hash before and after registration | |
+| Fixture path, `base_ref` and its commit | |
+| Authorizations given (install, hosted spend and budget, clean account) | |
 
-## Steps
+## Gates
 
-Result is PASS, FAIL, SKIP (with the reason) or PARTIAL (with what was and was not shown).
+Result is PASS, FAIL, SKIP (with the reason) or PARTIAL (with what was and was not shown). Gate names match `docs/acceptance.json`.
 
-| ID | Step (short) | Result | Run IDs | Timing | Evidence | Notes |
+| Gate | Runbook | Result | Run IDs | Timing | Evidence | Notes |
 |---|---|---|---|---|---|---|
-| D0 | Environment recorded | | | | | |
-| D1 | Install from the tarball, `--version` | | | | | |
-| D2 | `setup` without and with `--yes`, rerun, `doctor --json` | | | | | |
-| D3 | Tool list: five for programmatic, seven for `acp` | | | | | |
-| D4 | `compat:probe` and the manual resolver check | | | | | |
-| D5 | Review loop: start, status, close; cold and warm | | | | | |
-| D6 | No task text in argv; artifacts and event count | | | | | |
-| D7 | Integrity: real change vs touch; snapshot time | | | | | |
-| D8 | Edit with ten or more new files, close with cleanup | | | | | |
-| D9 | ACP continuation | | | | | |
-| D10 | ACP `vibe_close` mid-turn | | | | | |
-| D11 | Restart after a completed and during a running run | | | | | |
-| D12 | Idle expiry with `worker_idle_ttl_seconds = 60` | | | | | |
-| D13 | Policy probes: outside read, `.env`, review write, `allow_shell` | | | | | |
-| D14 | `--isolated` with desktop and CLI, restart adoption | | | | | |
-| D15 | Second shared client refused; missing executable label | | | | | |
-| D16 | R1 (what the model sees), R2 (`wait_seconds: 300`) | | | | | |
-| D17 | Measurements P2 to P4 | | | | | |
-| D18 | Hosted soak, 100 runs | | | | | |
-| D19 | Unified harness (optional, not a 1.0 criterion) | | | | | |
-| D20 | Clean account (required), Intel (if available) | | | | | |
+| install-and-registration (checksum, doctor, dry run, rollback tested) | B | | | | | |
+| native-readiness-on-candidate (fixture review and edit, Garnebo) | C1 | | | | | |
+| live-allowlist-change-without-restart | C2 | | | | | |
+| boot-key-change-restart-required | C3 | | | | | |
+| hosted-review-edit-matrix (5 runs, each with a receipt) | D | | | | | |
+| active-disconnect-hosted | D | | | | | |
+| provider-authentication-for-this-candidate | D | | | | | |
+| garnebo-review (optional, separately authorized) | D | | | | | |
+| clean-account-install | E | | | | | |
+| node-floor-20.19.0 (local or CI run) | F | | | | | |
 
-## Measurements
+## Readiness replies (C)
 
-| Measure | Preparing machine (fake backends) | Target machine |
-|---|---|---|
-| P1 time to first event, programmatic cold / warm | not measurable there | |
-| P1 time to `completed`, programmatic cold / warm | not measurable there | |
-| P1 time to first event and to `completed`, ACP cold / warm | not measurable there | |
-| P2 availability probe (`time vibe-supervisor doctor`) | not measurable there | |
-| P3 `import vibe` total (`python -X importtime`) | not measurable there | |
-| P3 `security find-generic-password` lookup (no `-w`) | not measurable there | |
-| P4 events per review / edit / ACP continuation | not measurable there | |
-| Review snapshot on the large `node_modules/` tree | 2.6 s per pass on 156,169 files | |
-| Patch export with ten or more new files | 0.13 s with 50 new files | |
+| Check | `server_version` | `server_instance_id` | `policy_revision` | `restart_required` | `eligible` | Blockers | Receipt issued |
+|---|---|---|---|---|---|---|---|
+| Fixture review | | | | | | | |
+| Fixture edit (`base_ref`, `base_commit`) | | | | | | | |
+| Garnebo review | | | | | | | |
+| Root removed (no Codex restart) | | | | | | | |
+| Root restored | | | | | | | |
+| Boot key changed | | | | | | | |
+| Boot key restored | | | | | | | |
 
-## Soak (D18)
+## Hosted matrix (D)
 
-Command used (without credentials):
+| # | Operation | Receipt used | Run ID | `stop_reason` | State | Start to settled | Integrity / patch review | Cleanup |
+|---|---|---|---|---|---|---|---|---|
+| 1 review | | | | | | | | |
+| 2 edit | | | | | | | | |
+| 3 | | | | | | | | |
+| 4 | | | | | | | | |
+| 5 | | | | | | | | |
 
-```text
-
-```
-
-| Criterion from `summary.json` | Result |
+| Active disconnect | Value |
 |---|---|
-| Zero unexpected failures | |
-| Zero permission requests | |
-| No leaked processes or worktrees | |
-| Bounded artifacts | |
-| Retention keeps recent runs | |
+| Method (desktop quit or official client close) | |
+| Run was still running at disconnect (status evidence) | |
+| Server exited; worker process group gone; owner lock released | |
+| Run state after next start; not relaunched | |
+| Worktree kept until `vibe_close` cleanup, cleanup result | |
 
-| Figure | Value |
-|---|---|
-| Runs by kind and backend | |
-| Time to first event p50 / p95 | |
-| Time to settled p50 / p95 | |
-| Failures by code | |
-| Restart outcomes (reloaded / error code / not exercised) | |
-| Reported cost (non-authoritative) | |
+Usage and reported cost (non-authoritative):
 
 ## Outcome
 
 - Gates newly verified (copy into `docs/compatibility.md` "Unverified gates" and `docs/acceptance.json` only with the evidence above):
 - Failures and the first failing step:
 - What remains uncertain:
-- Recommendation (rc.8 with fixes, or 1.0):
+- Recommendation:

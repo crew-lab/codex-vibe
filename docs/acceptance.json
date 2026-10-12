@@ -26,33 +26,61 @@
     {
       "name": "installed-mcp-saved-run-reconnect-status-result-close",
       "status": "RUN_BY_smoke:install"
+    },
+    {
+      "name": "active-disconnect-rehearsal-fake-backend-plain-and-isolated-review-and-edit",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "authoritative-policy-reread-readiness-receipt-and-restart-required",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "node-floor-20.19.0",
+      "status": "PASSED_LOCALLY",
+      "evidence": "Clean clone of main at 7cbb0ed on macOS arm64 under exactly Node v20.19.0 and npm 10.8.2: npm ci --offline from the populated cache succeeded and npm run verify:release passed (lint, typecheck, build, 60 files with 606 tests passed and 2 skipped, 72 Python tests, acceptance, secret scan, SBOM)."
     }
   ],
   "unverified": [
     {
-      "name": "node-20.19.0-minimum-runtime",
+      "name": "native-readiness-on-candidate",
       "status": "UNVERIFIED",
-      "evidence_required": "Release checks enforce the semantic floor, but the package/test suite has not run on Node 20.19.0 itself."
+      "evidence_required": "On the intended Codex desktop connection and exact frozen artifact, vibe_status in workspace mode for the fixture (review, and edit with base_ref) and for the approved second workspace: server_version 0.9.0-rc.24, server_instance_id, policy_path, policy_revision, eligible, blockers, active_slot, runtime and readiness_receipt recorded; no run created. Procedure: docs/history/rc24-target-runbook.md section C."
     },
     {
-      "name": "hosted-one-shot-review-and-edit",
+      "name": "live-allowlist-change-without-restart",
       "status": "UNVERIFIED",
-      "evidence_required": "Against one frozen artifact/config/baseline: five total sequential runs (one review, one edit, then three additional review or edit); stop on first failure; record run IDs, outcomes, exact artifact/source/config/baseline hashes, independent patch checks, usage where available, and cleanup receipts."
+      "evidence_required": "On the same connection without restarting Codex: removing an allowlisted root from the selected config makes readiness ineligible with the reason and a new policy_revision; restoring it makes readiness eligible again with a new revision and the same server_instance_id."
     },
     {
-      "name": "native-codex-five-tool-lifecycle",
+      "name": "boot-key-change-restart-required",
       "status": "UNVERIFIED",
-      "evidence_required": "On the intended client connection and exact frozen artifact, record handshake version, exact five tool names, one useful task, close, and client disconnect during an active run with process/owner-lock outcome."
+      "evidence_required": "On the same connection: changing a boot-bound key gives restart_required with the key in boot_drift; restoring it clears it."
     },
     {
-      "name": "clean-macos-apple-silicon-account-install",
+      "name": "hosted-review-edit-matrix",
       "status": "UNVERIFIED",
-      "evidence_required": "After authorization and a reviewable frozen tarball, execute the documented install/config/doctor/registration workflow in a fresh Apple silicon macOS account; record OS/architecture, Node, artifact hash, exact config/registration diff, rollback outcome, and cleanup."
+      "evidence_required": "Against one frozen artifact/config/baseline: five total sequential runs (an initial review, an initial edit, then three additional review or edit), each preceded by readiness and started with its readiness_receipt; stop on first failure; record run IDs, stop_reason, state, timings, exact artifact/source/config/baseline hashes, independent patch checks, usage where available, and cleanup receipts."
+    },
+    {
+      "name": "active-disconnect-hosted",
+      "status": "UNVERIFIED",
+      "evidence_required": "One real client disconnect during a running hosted run, through the desktop app and the official client: the server exits, the worker process group is gone, the owner lock is released, the run is failed and never relaunched, and an edit worktree is kept until vibe_close cleanup. A run that settled before the disconnect does not qualify."
     },
     {
       "name": "provider-authentication-for-this-candidate",
       "status": "UNVERIFIED",
-      "evidence_required": "Observe authentication only during an authorized real run against the exact frozen candidate; doctor and initialize-only checks do not qualify."
+      "evidence_required": "Observe authentication only during an authorized real run against the exact frozen candidate; doctor, readiness and initialize-only checks do not qualify."
+    },
+    {
+      "name": "clean-account-install",
+      "status": "UNVERIFIED",
+      "evidence_required": "After authorization and a reviewable frozen tarball, execute the documented install/config/doctor/registration workflow in a fresh Apple silicon macOS account with a person present; record OS/architecture, Node, artifact hash, exact config/registration diff, rollback outcome, and cleanup."
+    },
+    {
+      "name": "node-floor-20.19.0-ci",
+      "status": "UNVERIFIED",
+      "evidence_required": "CI jobs on exactly Node 20.19.0 and 24 pass; the workflow change is on the local branch claude/ci-node-floor and awaits the push token's workflow scope."
     }
   ],
   "historical_evidence": "Version-bound prior candidate reports remain in docs/history and do not establish acceptance of this candidate."
