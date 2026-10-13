@@ -22,7 +22,7 @@ The runtime source of 1.0.0 is identical to 0.9.0-rc.28 (`bef09855cd8104b979b962
 | Five hosted runs (review, edit, review and edit to the turn limit, review), each with a readiness receipt | VERIFIED, rc.28, 2026-10-13; the edit checked independently; no retries or repairs. |
 | Provider authentication | VERIFIED through the hosted runs, rc.28, 2026-10-13. |
 | Real active disconnect, official client | PASS 2026-10-13, run 56c3920b-6758-4751-8b57-f58b2803942e. The desktop variant (case 6) was inconclusive and is covered by the deterministic rehearsal. |
-| 1.0.0 archive confirmation: readiness, one review, one edit with verified cleanup | Release-specific evidence supplement required; this gate is pending until the exact archive is confirmed |
+| 1.0.0 archive confirmation: readiness, one review, one edit with verified cleanup | PASS 2026-10-13, archive 4e91e90b…; review f8f9c56f…, edit 377bc531…; independent verification and safe close, dirty export retained. See dated release-evidence supplement. |
 
 A separate real-project review ran safely but its answer was not accepted. Usage and cost are not reported (UNKNOWN). Completed execution and correct task output remain separate claims.
 

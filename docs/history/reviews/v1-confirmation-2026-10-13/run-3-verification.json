@@ -1,0 +1,15 @@
+{
+  "acceptance": "PASS",
+  "independent_cases": 11,
+  "source_hash_unchanged": true,
+  "verification_scope": "Pure service parser and URL normalization in disposable copy",
+  "close": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"supervisor_version\":\"1.0.0\",\"run_id\":\"1284e7c0-9852-4a81-8c3b-691927d16536\",\"state\":\"closed\",\"next_action\":\"The run is closed; start a new run for more work.\",\"worktree_removed\":false}"
+      }
+    ]
+  },
+  "usage_cost": "UNKNOWN"
+}

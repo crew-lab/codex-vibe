@@ -2,19 +2,15 @@
 
 Updated 2026-10-13. This document alone defines current priorities. [docs/history/](docs/history/) keeps only what the current work uses: the rc.28 brief, runbook, evidence template and target evidence, the acceptance log, the latest reviews, the 2.26.1 compatibility audit, the install notes, the [competitive landscape](docs/history/competitive-landscape-2026-10-13.md), the [ecosystem notes](docs/history/ecosystem-2026-10-13.md) on Vibe, MCP and Codex, the [strategy](docs/history/strategy-2026-10-13.md) after rc.28 (owner's wins, community, propagation, case study), the [case 7 brief](docs/history/case7-disconnect-brief.md) and the 1.0 article draft. Everything older was removed from the tree on 2026-10-12 and is in Git history at `c510513`.
 
-## 1.0.0 release branch
+## Release identity and acceptance
 
-This branch (`claude/v1.0.0-bump`) prepares 1.0.0 from 0.9.0-rc.28 with no runtime change: version, changelog, README, shipped wording, the skill's task templates, `docs/compatibility.md` and `docs/acceptance.json`. It replaces the earlier `claude/v1.0.0`, which was cut before the 2026-10-12 cleanup and can be deleted. It assumes the owner's two recommended decisions: one disconnect observation through the official client, and a version bump confirmed on the new archive with the rc.28 hosted results carried over because the runtime source is identical.
+**1.0.0 is approved for publication.** Its exact tested archive SHA256 is `4e91e90bb7cb48c4411e1dc02820e91abddd690fc430f15a65ad6a9f3bd1c610`; frozen source snapshot `f0f317e10d5d021f171ed38f5a85bb8e2354f12d`. The archive is not rebuilt after confirmation. Main records later acceptance evidence separately; the package's generated acceptance report describes packaging-time state and the external release supplement records the later PASS.
 
-Every `[EVIDENCE: …]` placeholder is filled from the target before merge (`grep -rn "\[EVIDENCE" README.md CHANGELOG.md docs/`):
+Owner decisions 2026-10-13: one independently observed official-client disconnect satisfies the gate; release a genuine 1.0.0 version bump with unchanged runtime and native readiness plus one review and one edit confirmation. Case 7 PASSED (56c3920b-6758-4751-8b57-f58b2803942e), then closed with pristine-worktree removal. Desktop case 6 remains INCONCLUSIVE and is not presented as a pass.
 
-1. Case 7 on rc.28, as in the [case 7 brief](docs/history/case7-disconnect-brief.md): the `active-disconnect-hosted` result and the compatibility row.
-2. The owner's decision date for both decisions, in `docs/acceptance.json`.
-3. On the preparing machine: `npm run verify:release` and `VIBE_SUPERVISOR_TEST_NPM_CACHE=<cache> npm run package:rc` on this branch.
-4. On the target, with a new authorization for two hosted runs: install the 1.0.0 archive next to rc.28, native readiness (expect `server_version` `1.0.0`), one review (assignment case 1) and one edit (case 2), the edit verified with `scripts/v1-fixture-verify.mjs` in a disposable copy and closed with cleanup. That fills `release-archive-confirmation`, the README and CHANGELOG dates and the compatibility row.
-5. Move each filled gate from `unverified` to `verified` in `docs/acceptance.json`, merge into main, `make push`, tag `v1.0.0` and publish the release with the tarball, `SHA256SUMS`, `sbom.spdx.json` and `acceptance.json` (owner authorization).
+1.0.0 native readiness and both hosted confirmations PASSED. Review f8f9c56f-0ffb-4b5f-b338-a125ba7f310e; edit 377bc531-70e9-4dd4-b10e-4de8c2a03253 passed nine independent checks and six worker tests without repairs. Both closed; the dirty edit worktree was safely retained. Two separately scoped real-project usefulness reviews also PASSED (11 parser/URL cases and five array-isolation cases); they do not erase the earlier failed broad review or establish general model accuracy.
 
-A failure at any step leaves the placeholders, is recorded in the evidence folder and the Handoff on main, and goes back to the owner. Any runtime change means a new candidate and the full five-run matrix again.
+Evidence: [release supplement](docs/history/reviews/v1-confirmation-2026-10-13/release-evidence.json), [target report](docs/history/reviews/v1-confirmation-2026-10-13/REPORT.md), and `docs/acceptance.json`. All four latest hosted allowances are consumed; no further run is authorized. Usage/cost remains UNKNOWN. Clean-account installation is deferred to 1.0.1.
 
 ## What this is
 
@@ -34,35 +30,12 @@ A local MCP stdio server that lets Codex delegate one bounded code review or one
 
 Behaviour: [docs/functionality.md](docs/functionality.md); interface: [docs/reference.md](docs/reference.md); boundary: [docs/security.md](docs/security.md); Vibe assumptions and gates: [docs/compatibility.md](docs/compatibility.md); errors: [docs/errors.md](docs/errors.md) (generated); machine-readable gates: `docs/acceptance.json`. AGENTS.md lists the boundaries that must not change.
 
-## Status
+## Current priorities
 
-**Candidate: `0.9.0-rc.28`, published as a GitHub [prerelease](https://github.com/crew-lab/codex-vibe/releases/tag/v0.9.0-rc.28)** from runtime source `bef09855cd8104b979b962462ae9d87062ed8a9d`, archive SHA256 `9179a091830e548d9ebd3c13bd6f12997f22a86bda6964d827c23e1a55773bbf` (built and installed on the target machine; the preparing machine's build of the same source, `61ca4ee9…`, differs, so packaging is not byte-reproducible). Later commits on main change documentation and coordinator tests only; the published runtime is unchanged.
-
-| 1.0 gate | Result on rc.28 | Evidence |
-| --- | --- | --- |
-| Native readiness on the Codex desktop connection | VERIFIED 2026-10-13 | [target evidence](docs/history/reviews/rc28-target-test-2026-10-13/STATUS.md) |
-| Five hosted runs with readiness receipts (review, edit, review and edit to the turn limit, review) | VERIFIED: all five passed, no retries or repairs; the edit was checked independently | same |
-| Provider authentication | VERIFIED by the hosted runs | same |
-| Real active disconnect | INCONCLUSIVE: desktop case 6 finished before the disconnect; official-client case 7 not run | same |
-| Node 20.19.0 floor (not a gate, recorded) | PASSED on the preparing machine on `7c7ba0e`, runtime identical to rc.28 | `docs/acceptance.json` |
-
-Also recorded: a real-project review completed safely but its findings failed acceptance; usage and cost were not reported (UNKNOWN). Machine-readable gates are in `docs/acceptance.json`; the dated log is [docs/history/acceptance.md](docs/history/acceptance.md). Not required for 1.0 (owner decision 2026-10-12): the clean-account install (1.0.1), CI on exactly Node 20.19.0, and the live-allowlist and boot-key observations.
-
-The target's coordinator tools, `scripts/v1-fixture-verify.mjs` (independent edit verification), `scripts/v1-disconnect-observer.mjs` (read-only live observation of ownership and process groups) and `scripts/v1-disconnect-client.mjs` (the scripted official-client disconnect), are covered by the normal vitest suite and are not shipped.
-
-**Direction (2026-10-13).** Stability is one observation and two decisions away. Usefulness is the open question: every fixture run passed, and the one real-project review completed safely but its findings were not accepted. The runtime works; the task given to Vibe is what decides whether the answer is worth reading. Two facts from the [ecosystem notes](docs/history/ecosystem-2026-10-13.md) set the direction after 1.0: Vibe's source calls the legacy harness we pin a temporary escape hatch "kept until the legacy runtime is removed", so 1.0 is the last release on this engine and the next theme is a Unified Harness adapter with the same boundaries; and Vibe 2.26.1 already reports usage and cost per run in `export.json` through `--output-dir`, which the supervisor does not pass, so the UNKNOWN usage is one flag away. Neither is a reason to delay 1.0. Of the two large competitors, neither supports Vibe or isolates the agents it runs; the product's place is one contained, checkable delegation from Codex to a different model family, not a platform. The [strategy](docs/history/strategy-2026-10-13.md) says what to do with 1.0 once it exists: publish the checklist with the tool as evidence, take the harness question to Mistral, and keep a usefulness log.
-
-## Decisions needed from the owner
-
-1. **Disconnect gate.** On 2026-10-12 the gate was "one real active disconnect". `docs/acceptance.json` and the target evidence keep two observations, desktop and official client. Choose one. Recommendation: one observation, official-client case 7, which is already authorized; the desktop variant stays covered by the deterministic rehearsal and is recorded as not observed. Case 6 was inconclusive because a person could not quit Codex before the edit finished, so case 7 is now scripted: [`scripts/v1-disconnect-client.mjs`](scripts/v1-disconnect-client.mjs) closes the official client two seconds after the run is first seen running, with the observer started before the run. The authorized case 7 task stays as it is.
-2. **What 1.0.0 is.** Either release the exact tested rc.28 archive as 1.0 by policy (its version string stays 0.9.0-rc.28), or bump to 1.0.0, which makes new package bytes, and re-run a short confirmation on the new archive. Hosted results do not transfer to new bytes automatically. Branch `claude/v1.0.0-bump` prepares the bump with the recorded rc.28 results and placeholders for the rest. Recommendation: bump, because `server_version` is the first field the skill tells a coordinator to read, and a 1.0 that reports 0.9.0-rc.28 contradicts the readiness check we ask everyone to trust. Keep the runtime unchanged, and confirm the new archive with native readiness plus one review and one edit with cleanup, not the full five-run matrix.
-
-## Next steps
-
-1. Owner decides 1 and 2 above.
-2. Target machine: case 7 as in the [case 7 brief](docs/history/case7-disconnect-brief.md). It is still authorized; a desktop retry needs separate approval. Stop at the first unexpected failure; never replay.
-3. Then 1.0 as decided. With the bump, branch `claude/v1.0.0-bump` carries the version, changelog and evidence from rc.28 and leaves placeholders only for case 7 and the confirmation on the new archive (its Handoff section says what to fill); `verify:release` and `package:rc`, the target confirmation, merge, `make push`, tag `v1.0.0` and publish with the owner's authorization. Without the bump, tag the tested archive. Finish the article from [draft-1.0.md](docs/history/article/draft-1.0.md) with the real numbers.
-4. Useful operations, in parallel with 3: the skill now has a review and an edit task template, written from the fixture tasks that passed. Run two or three authorized real-project reviews with them and keep a usefulness log in `docs/history/` that records the task, the turns used, whether the answer was accepted and why. Usefulness evidence is separate from the acceptance gates and does not block 1.0.
+1. Publish the approved exact archive from the frozen source snapshot, with SBOM, packaging-time acceptance report, checksums and dated release supplement. Verify downloaded asset bytes and tag/source identity. Never replace it with an untested rebuild.
+2. Keep private rc.28 as rollback. The installed 1.0.0 package and its native connection are already verified; publication requires no extra hosted run.
+3. Continue usefulness evaluation only with separately authorized scope/budget. Task templates are in the shipped skill; no automatic retries or silent Luna substitution.
+4. After 1.0, follow the existing ordered roadmap below: operational documentation and clean-account install; Vibe export for measured usage; then Unified Harness compatibility. Each runtime change is a new candidate.
 
 ## After 1.0
 
@@ -87,4 +60,4 @@ In order. Each runtime change is a new candidate with one hosted observation per
 
 ## Fixed scope and safeguards
 
-Exactly five one-shot MCP tools; no ACP, continuation, recovery replay, queue, automatic patch application, worker shell or network, or new platform scope. Reviews are read-only; edits use isolated detached worktrees. Retain canonical allowlists, private child homes, filtered environments, redaction, bounded deadlines and output, owner locks and verified cleanup. Missing evidence remains unknown; rc.28 is a prerelease, not certified stable 1.0.
+Exactly five one-shot MCP tools; no ACP, continuation, recovery replay, queue, automatic patch application, worker shell or network, or new platform scope. Reviews are read-only; edits use isolated detached worktrees. Retain canonical allowlists, private child homes, filtered environments, redaction, bounded deadlines and output, owner locks and verified cleanup. Missing evidence remains unknown; 1.0.0 acceptance is limited to the recorded macOS Apple-silicon and pinned Vibe contracts. No other platform or universal answer-quality guarantee is made.

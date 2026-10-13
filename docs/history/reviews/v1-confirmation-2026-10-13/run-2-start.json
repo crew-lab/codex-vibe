@@ -1,0 +1,46 @@
+{
+  "preparation": {
+    "server_version": "1.0.0",
+    "server_instance_id": "3b17b1f6-0ceb-4ab5-8a7b-cd06b61c8d8b",
+    "session_id": "session-9Bmn4g",
+    "policy_path": "<private-supervisor-home>/rc20-config/config.toml",
+    "policy_revision": "1b44e421b46ad2443563e8b5625f1ad4859870bfe02397fcb86acbeb41db3966",
+    "restart_required": false,
+    "boot_drift": [],
+    "operation": "edit",
+    "requested_workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+    "workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+    "base_ref": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+    "base_commit": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+    "eligible": true,
+    "blockers": [],
+    "active_slot": {
+      "busy": false
+    },
+    "runtime": {
+      "executable": "<user-home>/.local/share/uv/tools/mistral-vibe/bin/vibe",
+      "resolved_executable": "<user-home>/.local/share/uv/tools/mistral-vibe/bin/vibe",
+      "executable_found": true,
+      "pinned_version": "2.26.1",
+      "version_verified": false,
+      "note": "Vibe was not launched. The executable is resolved only; the exact version 2.26.1 is verified when a run starts and drift fails that run closed."
+    },
+    "receipt_expires_at": "2026-10-13T17:28:52.974Z",
+    "next_action": "Start the edit with readiness_receipt before receipt_expires_at on this same connection. The receipt proves preparation only; it does not authorize the task or guarantee provider availability."
+  },
+  "start": {
+    "supervisor_version": "1.0.0",
+    "run_id": "377bc531-70e9-4dd4-b10e-4de8c2a03253",
+    "policy_revision": "1b44e421b46ad2443563e8b5625f1ad4859870bfe02397fcb86acbeb41db3966",
+    "state": "starting",
+    "backend": "programmatic",
+    "mode": "edit",
+    "source_workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+    "worker_workspace": "<private-supervisor-home>/rc20-config/mcp-sessions/session-9Bmn4g/worktrees/377bc531-70e9-4dd4-b10e-4de8c2a03253",
+    "created_at": "2026-10-13T17:18:57.345Z",
+    "next_action": "Call vibe_status with wait_seconds 120-300 until the run needs action.",
+    "base_ref": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+    "base_commit": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00"
+  },
+  "budget_used": 2
+}

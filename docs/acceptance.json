@@ -69,16 +69,16 @@
       "evidence_required": "One real client disconnect during a running hosted run through the official client (one observation, owner decision 2026-10-13): the server exits, the worker process group is gone, the owner lock is released, the run is failed and never relaunched, and an edit worktree is kept until vibe_close cleanup. A run that settled before the disconnect does not qualify. Procedure: docs/history/case7-disconnect-brief.md.",
       "result": "PASS 2026-10-13: official-client run 56c3920b-6758-4751-8b57-f58b2803942e; independently observed active worker disappearance, lock release, failed no-replay record and retained edit worktree; native close removed the pristine worktree. Desktop case 6 remains INCONCLUSIVE. Owner adopted one official-client observation on 2026-10-13.",
       "evidence": "docs/history/reviews/rc28-target-test-2026-10-13/matrix-7-client.json"
-    }
-  ],
-  "unverified": [
+    },
     {
       "name": "release-archive-confirmation",
-      "status": "UNVERIFIED",
+      "status": "VERIFIED",
       "evidence_required": "On the 1.0.0 archive built from the release commit and installed on the target: native readiness on the Codex desktop connection reporting server_version 1.0.0, then one review and one edit on the frozen fixture, each started with its readiness receipt; the edit patch verified independently and the run closed with verified cleanup. Stop on first failure; no retries.",
-      "result": "PENDING at packaging time. A dated external release-evidence supplement must identify this exact archive and record native readiness, one review, one independently verified edit and cleanup before stable publication."
+      "result": "PASS 2026-10-13 on exact archive 4e91e90bb7cb48c4411e1dc02820e91abddd690fc430f15a65ad6a9f3bd1c610: native readiness 1.0.0; review f8f9c56f-0ffb-4b5f-b338-a125ba7f310e; edit 377bc531-70e9-4dd4-b10e-4de8c2a03253 independently verified (9 cases, 6 worker tests), both closed. Cleanup requested; dirty export retained as required by policy.",
+      "evidence": "docs/history/reviews/v1-confirmation-2026-10-13/release-evidence.json"
     }
   ],
+  "unverified": [],
   "not_required_for_1_0": [
     {
       "name": "live-allowlist-change-without-restart",

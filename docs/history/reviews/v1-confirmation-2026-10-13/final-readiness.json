@@ -1,0 +1,27 @@
+{
+  "server_version": "1.0.0",
+  "server_instance_id": "3b17b1f6-0ceb-4ab5-8a7b-cd06b61c8d8b",
+  "session_id": "session-9Bmn4g",
+  "policy_path": "<private-supervisor-home>/rc20-config/config.toml",
+  "policy_revision": "1b44e421b46ad2443563e8b5625f1ad4859870bfe02397fcb86acbeb41db3966",
+  "restart_required": false,
+  "boot_drift": [],
+  "operation": "review",
+  "requested_workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+  "workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+  "eligible": true,
+  "blockers": [],
+  "active_slot": {
+    "busy": false
+  },
+  "runtime": {
+    "executable": "<user-home>/.local/share/uv/tools/mistral-vibe/bin/vibe",
+    "resolved_executable": "<user-home>/.local/share/uv/tools/mistral-vibe/bin/vibe",
+    "executable_found": true,
+    "pinned_version": "2.26.1",
+    "version_verified": false,
+    "note": "Vibe was not launched. The executable is resolved only; the exact version 2.26.1 is verified when a run starts and drift fails that run closed."
+  },
+  "receipt_expires_at": "2026-10-13T17:34:48.373Z",
+  "next_action": "Start the review with readiness_receipt before receipt_expires_at on this same connection. The receipt proves preparation only; it does not authorize the task or guarantee provider availability."
+}

@@ -1,0 +1,15 @@
+{
+  "acceptance": "PASS",
+  "independent_predicate_checks": 9,
+  "worker_tests_passed": 6,
+  "coordinator_repairs": false,
+  "close": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"supervisor_version\":\"1.0.0\",\"run_id\":\"377bc531-70e9-4dd4-b10e-4de8c2a03253\",\"state\":\"closed\",\"next_action\":\"The run is closed; start a new run for more work.\",\"worktree_removed\":false,\"worktree_retained_reason\":\"Uncommitted or untracked files remain after export; worktree retained\",\"worktree_retained_path\":\"<private-supervisor-home>/rc20-config/mcp-sessions/session-9Bmn4g/worktrees/377bc531-70e9-4dd4-b10e-4de8c2a03253\"}"
+      }
+    ]
+  },
+  "usage_cost": "UNKNOWN"
+}
