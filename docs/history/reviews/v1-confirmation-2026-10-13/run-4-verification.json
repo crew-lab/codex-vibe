@@ -1,0 +1,15 @@
+{
+  "acceptance": "PASS",
+  "independent_cases": 5,
+  "source_hash_unchanged": true,
+  "verification_scope": "Pure selection functions; React/history dependencies mocked, not browser lifecycle",
+  "close": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"supervisor_version\":\"1.0.0\",\"run_id\":\"6e141ea6-fe02-4a6b-ab31-838d610bba1b\",\"state\":\"closed\",\"next_action\":\"The run is closed; start a new run for more work.\",\"worktree_removed\":false}"
+      }
+    ]
+  },
+  "usage_cost": "UNKNOWN"
+}
