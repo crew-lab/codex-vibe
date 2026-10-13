@@ -1,10 +1,10 @@
 # vibe-supervisor
 
-A local MCP server for one bounded Mistral Vibe review or isolated edit. The reduced candidate exposes exactly five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. Edits run in a supervisor-created detached Git worktree and return a patch for review; the supervisor never applies, commits, merges, or pushes it automatically.
+A local MCP server for one bounded Mistral Vibe review or isolated edit. It exposes exactly five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. Edits run in a supervisor-created detached Git worktree and return a patch for review; the supervisor never applies, commits, merges, or pushes it automatically.
 
 This is an application policy boundary, **not an operating-system sandbox**. A delegated run uses your account's permissions, and permitted workspace content is sent to Mistral. Review [SECURITY.md](SECURITY.md) before use.
 
-The development candidate is `0.9.0-rc.28`, npm-private, distributed as a GitHub prerelease, and MIT licensed. No platform is currently certified for stable use. macOS Apple silicon is the intended first target; hosted inference, native desktop lifecycle, clean-account installation, and provider authentication remain unverified for this candidate. Linux and Windows are not claimed as supported platforms.
+Version `1.0.0`, npm-private, distributed as a GitHub release, and MIT licensed. Supported platform: macOS Apple silicon with Mistral Vibe 2.26.1. Its runtime was accepted on the target machine as 0.9.0-rc.28 (native readiness, five hosted runs, provider authentication and an official-client active disconnect) and confirmed on the 1.0.0 archive on [EVIDENCE: date]; see [compatibility](docs/compatibility.md). A clean-account installation is planned for 1.0.1. Linux and Windows are not claimed as supported platforms.
 
 ## Requirements
 
@@ -27,7 +27,7 @@ npm ci
 npm run build
 ```
 
-This builds the checkout for local inspection; it does not install the package. Install the exact tarball from the matching GitHub prerelease into a private local prefix, using a populated offline npm cache and `--ignore-scripts`. Review its checksums and the exact executable/config paths before updating Codex registration; retain the previous prefix and a configuration backup for rollback. Source setup does not update an existing installation.
+This builds the checkout for local inspection; it does not install the package. Install the exact tarball from the matching GitHub release into a private local prefix, using a populated offline npm cache and `--ignore-scripts`. Review its checksums and the exact executable/config paths before updating Codex registration; retain the previous prefix and a configuration backup for rollback. Source setup does not update an existing installation.
 
 ## Configuration and connection
 
@@ -40,7 +40,7 @@ node dist/cli.js doctor --config "$CONFIG" --json
 node dist/cli.js serve --stdio --isolated --config "$CONFIG"
 ```
 
-Replace `$PWD` with the intended canonical repository path if it is not the current directory. An explicit missing or invalid config fails for doctor/serve and never falls back. Without an override, the candidate uses `~/Library/Application Support/VibeSupervisor-oneshot` on macOS, `%APPDATA%/VibeSupervisor-oneshot` on Windows, or `${XDG_DATA_HOME:-~/.local/share}/vibe-supervisor-oneshot` on Linux. `VIBE_SUPERVISOR_HOME` explicitly selects another root. Do not point it at legacy `VibeSupervisor` data.
+Replace `$PWD` with the intended canonical repository path if it is not the current directory. An explicit missing or invalid config fails for doctor/serve and never falls back. Without an override, it uses `~/Library/Application Support/VibeSupervisor-oneshot` on macOS, `%APPDATA%/VibeSupervisor-oneshot` on Windows, or `${XDG_DATA_HOME:-~/.local/share}/vibe-supervisor-oneshot` on Linux. `VIBE_SUPERVISOR_HOME` explicitly selects another root. Do not point it at legacy `VibeSupervisor` data.
 
 Codex `setup` generates `--isolated` registrations by default. Each connection owns a separate private storage directory, so another chat can connect without competing for the same owner lock. Existing registrations need the flag added and the connection reloaded; setup previews that change before writing it. Each instance still permits one active run. Direct `serve` without `--isolated` remains available for a deliberately shared storage owner.
 
@@ -63,4 +63,4 @@ The package ships one coordinator skill at `skills/vibe-supervisor`. It describe
 - [Behavior and lifecycle](docs/functionality.md)
 - [Security](docs/security.md) and [error codes](docs/errors.md)
 - [Vibe compatibility and unverified gates](docs/compatibility.md)
-- [Candidate acceptance record](docs/acceptance.json)
+- [Acceptance record](docs/acceptance.json)
