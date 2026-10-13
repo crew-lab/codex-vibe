@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0 — first stable release
+
+Codex delegates one bounded review or one isolated edit at a time to Mistral Vibe 2.26.1 through five MCP tools. The runtime source is identical to 0.9.0-rc.28 (`bef0985`), which was accepted on the target machine on 2026-10-13 with native readiness, five hosted runs with readiness receipts and provider authentication, and an official-client active disconnect on 2026-10-13. The exact 1.0.0 archive was confirmed on 2026-10-13 with native readiness, one review and one independently verified edit; both runs were closed. The dirty edit export was retained as required by policy.
+
+- Reviews read and search an allowlisted workspace and report whether it changed; edits run in a supervisor-created detached worktree and return a patch that is never applied, committed or pushed. Shell and network tools are off. This is an application policy boundary, not an OS sandbox.
+- The connected server rereads the selected configuration before each start; `vibe_status` checks a workspace's readiness without inference and issues a receipt that a start can present.
+- One active run per server, bounded deadlines, turns, output and Git operations, an owner lock, verified worktree cleanup, and no task replay after a restart.
+- The skill has a review and an edit task template, written from the fixture tasks whose answers were accepted.
+- Supported: macOS Apple silicon, Node 20.19 or later, Vibe 2.26.1 exactly. A clean-account installation is planned for 1.0.1.
+
 ## 0.9.0-rc.28 — edit export that cannot miss changes
 
 Fixes from the rc.27 cold review.

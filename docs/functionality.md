@@ -48,7 +48,7 @@ Runs, events and artifacts are persisted privately and bounded by configured lim
 
 ## Configuration and preparation
 
-Select a config with `--config`; otherwise resolution uses `VIBE_SUPERVISOR_HOME`, then the reduced candidate's platform default root. Explicit invalid or missing configs fail without fallback. That selection is made once, before `--isolated` switches to a private session directory, and stays the policy source for the life of the connection; the session's copy of `config.toml` is an audit record only. Once serving, a missing selected file fails closed even where startup could have used defaults. Removed keys such as `backend`, `max_concurrent_runs`, idle-session TTL and ACP executable paths are rejected. The config, doctor provenance, data directory and already-open client handshake are separate facts.
+Select a config with `--config`; otherwise resolution uses `VIBE_SUPERVISOR_HOME`, then the platform default root. Explicit invalid or missing configs fail without fallback. That selection is made once, before `--isolated` switches to a private session directory, and stays the policy source for the life of the connection; the session's copy of `config.toml` is an audit record only. Once serving, a missing selected file fails closed even where startup could have used defaults. Removed keys such as `backend`, `max_concurrent_runs`, idle-session TTL and ACP executable paths are rejected. The config, doctor provenance, data directory and already-open client handshake are separate facts.
 
 Commit or stash the reviewed state before delegating and pass its ref as `base_ref`; uncommitted source bytes are not an edit base.
 

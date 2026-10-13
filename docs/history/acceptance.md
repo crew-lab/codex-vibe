@@ -4,6 +4,10 @@
 
 The machine-readable report is `docs/acceptance.json`. rc.28 evidence verifies native readiness, provider authentication and the five hosted fixture cases; active disconnect remains unverified. Historical ACP, continuation, multi-tool and soak entries below describe old versions, not the current five-tool one-shot product.
 
+## 2026-10-13 — 1.0.0 exact-archive confirmation
+
+Owner adopted one independently observed official-client disconnect and a genuine version bump with two confirmation runs. Case 7 PASSED (56c3920b-6758-4751-8b57-f58b2803942e), then closed with pristine-worktree removal. Exact 1.0.0 archive 4e91e90bb7cb48c4411e1dc02820e91abddd690fc430f15a65ad6a9f3bd1c610 passed native readiness, review f8f9c56f-0ffb-4b5f-b338-a125ba7f310e and independently verified edit 377bc531-70e9-4dd4-b10e-4de8c2a03253. Both closed; dirty edit retained under policy. Two separately scoped real-project usefulness reviews also passed; earlier failed broad review remains recorded. No retries or repairs, usage/cost UNKNOWN. Full promotion verification passed 647 tests (2 skipped) and 72 Python tests. See [release supplement](reviews/v1-confirmation-2026-10-13/release-evidence.json).
+
 ## 2026-10-13 — rc.28 evidence and source reconciliation
 
 The target archive SHA256 is `9179a091830e548d9ebd3c13bd6f12997f22a86bda6964d827c23e1a55773bbf`, runtime source `bef0985`. Five hosted fixture cases passed without retries or repairs. The isolated edit passed independent checks in a disposable export. Both one-turn cases stopped with max_turn_requests and incomplete warnings as intended; these are limit-behavior passes, not completed tasks.

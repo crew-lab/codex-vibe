@@ -7,7 +7,7 @@
     },
     {
       "path": "STATUS.md",
-      "sha256": "2213b2ee2bd5a59b4ae0041b1d19ec8d2509d6ede6fbba67d891196eb413d94f"
+      "sha256": "4a98a6a9ddad925c7bbbb58aef9900b4f474ec31ce90b8bb92d931c3365e4387"
     },
     {
       "path": "assignments.json",
@@ -46,6 +46,14 @@
       "sha256": "4f06e80d69c4ee9a6abfcb1421e2e4d826c2ea512454208124100271437ccf1d"
     },
     {
+      "path": "matrix-7-client.json",
+      "sha256": "a2e723162b4b9915fc2aab703fa989307d33bbe3c51dc37255ab518a7475865c"
+    },
+    {
+      "path": "matrix-7-observer.jsonl",
+      "sha256": "7da93886659005841ab30a8e58ee0906fa5b05529738102d1f822ead59698c7e"
+    },
+    {
       "path": "native-readiness.json",
       "sha256": "81eec17fb8203e068c4b03e9a9dcf474b0410c845813c65a341f0d428bdeb24b"
     },
@@ -55,7 +63,7 @@
     },
     {
       "path": "target-acceptance.json",
-      "sha256": "f2d143ee43550dfa11ea63bb17fa05d15f0d8fca87a0dffde57e743b7b839c53"
+      "sha256": "2e6f9f088dc8b75527e1b2ab159f827b45a0d4b9e568972643eea05212ff1f6d"
     }
   ]
 }

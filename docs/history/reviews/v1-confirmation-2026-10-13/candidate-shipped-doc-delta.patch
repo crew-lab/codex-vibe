@@ -1,0 +1,92 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 78238b9..a81edc0 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,7 +2,7 @@
+ 
+ ## 1.0.0 — first stable release
+ 
+-Codex delegates one bounded review or one isolated edit at a time to Mistral Vibe 2.26.1 through five MCP tools. The runtime source is identical to 0.9.0-rc.28 (`bef0985`), which was accepted on the target machine on 2026-10-13 with native readiness, five hosted runs with readiness receipts and provider authentication, and an official-client active disconnect on [EVIDENCE: date]. The 1.0.0 archive was confirmed with native readiness, one review and one edit on [EVIDENCE: date].
++Codex delegates one bounded review or one isolated edit at a time to Mistral Vibe 2.26.1 through five MCP tools. The runtime source is identical to 0.9.0-rc.28 (`bef0985`), which was accepted on the target machine on 2026-10-13 with native readiness, five hosted runs with readiness receipts and provider authentication, and an official-client active disconnect on 2026-10-13. The exact 1.0.0 archive requires native readiness, one review and one edit; its dated release-evidence supplement records whether that confirmation passed.
+ 
+ - Reviews read and search an allowlisted workspace and report whether it changed; edits run in a supervisor-created detached worktree and return a patch that is never applied, committed or pushed. Shell and network tools are off. This is an application policy boundary, not an OS sandbox.
+ - The connected server rereads the selected configuration before each start; `vibe_status` checks a workspace's readiness without inference and issues a receipt that a start can present.
+diff --git a/README.md b/README.md
+index a3aa5db..3909dc3 100644
+--- a/README.md
++++ b/README.md
+@@ -4,7 +4,7 @@ A local MCP server for one bounded Mistral Vibe review or isolated edit. It expo
+ 
+ This is an application policy boundary, **not an operating-system sandbox**. A delegated run uses your account's permissions, and permitted workspace content is sent to Mistral. Review [SECURITY.md](SECURITY.md) before use.
+ 
+-Version `1.0.0`, npm-private, distributed as a GitHub release, and MIT licensed. Supported platform: macOS Apple silicon with Mistral Vibe 2.26.1. Its runtime was accepted on the target machine as 0.9.0-rc.28 (native readiness, five hosted runs, provider authentication and an official-client active disconnect) and confirmed on the 1.0.0 archive on [EVIDENCE: date]; see [compatibility](docs/compatibility.md). A clean-account installation is planned for 1.0.1. Linux and Windows are not claimed as supported platforms.
++Version `1.0.0`, npm-private, distributed as a GitHub release, and MIT licensed. Supported platform: macOS Apple silicon with Mistral Vibe 2.26.1. Its runtime was accepted on the target machine as 0.9.0-rc.28 (native readiness, five hosted runs, provider authentication and an official-client active disconnect) with separate confirmation required on the exact 1.0.0 archive; consult its dated release-evidence supplement for confirmation status; see [compatibility](docs/compatibility.md). A clean-account installation is planned for 1.0.1. Linux and Windows are not claimed as supported platforms.
+ 
+ ## Requirements
+ 
+diff --git a/docs/acceptance.json b/docs/acceptance.json
+index e782de3..f001bbb 100644
+--- a/docs/acceptance.json
++++ b/docs/acceptance.json
+@@ -47,35 +47,36 @@
+       "status": "VERIFIED",
+       "evidence_required": "On the intended Codex desktop connection and exact frozen artifact, vibe_status in workspace mode for the fixture (review, and edit with base_ref) and for the approved second workspace: server_version 0.9.0-rc.28, server_instance_id, policy_path, policy_revision, eligible, blockers, active_slot, runtime and readiness_receipt recorded; no run created. Procedure: docs/history/rc28-target-runbook.md section C.",
+       "evidence": "docs/history/reviews/rc28-target-test-2026-10-13/",
+-      "result": "PASS 2026-10-13 on the target (native-readiness.json); target archive sha256 9179a091830e548d9ebd3c13bd6f12997f22a86bda6964d827c23e1a55773bbf built from runtime source bef0985. Runtime source of 1.0.0 is identical to rc.28 (bef0985); this result applies to 1.0.0 by owner decision [EVIDENCE: date] together with release-archive-confirmation."
++      "result": "PASS 2026-10-13 on the target (native-readiness.json); target archive sha256 9179a091830e548d9ebd3c13bd6f12997f22a86bda6964d827c23e1a55773bbf built from runtime source bef0985. Runtime source of 1.0.0 is identical to rc.28 (bef0985); this result applies to 1.0.0 by owner decision 2026-10-13 together with release-archive-confirmation."
+     },
+     {
+       "name": "hosted-review-edit-matrix",
+       "status": "VERIFIED",
+       "evidence_required": "Against one frozen artifact/config/baseline: five total sequential runs (an initial review, an initial edit, then three additional review or edit), each preceded by readiness and started with its readiness_receipt; stop on first failure; record run IDs, stop_reason, state, timings, exact artifact/source/config/baseline hashes, independent patch checks, usage where available, and cleanup receipts.",
+       "evidence": "docs/history/reviews/rc28-target-test-2026-10-13/",
+-      "result": "PASS 2026-10-13: matrix cases 1 to 5 (normal review, verified edit, review and edit at the turn limit, normal review) with readiness receipts, no retries or repairs (matrix-1..5-result.json, matrix-2-verification.json). Runtime source of 1.0.0 is identical to rc.28 (bef0985); this result applies to 1.0.0 by owner decision [EVIDENCE: date] together with release-archive-confirmation."
++      "result": "PASS 2026-10-13: matrix cases 1 to 5 (normal review, verified edit, review and edit at the turn limit, normal review) with readiness receipts, no retries or repairs (matrix-1..5-result.json, matrix-2-verification.json). Runtime source of 1.0.0 is identical to rc.28 (bef0985); this result applies to 1.0.0 by owner decision 2026-10-13 together with release-archive-confirmation."
+     },
+     {
+       "name": "provider-authentication-for-this-candidate",
+       "status": "VERIFIED",
+       "evidence_required": "Observe authentication only during an authorized real run against the exact frozen candidate; doctor, readiness and initialize-only checks do not qualify.",
+       "evidence": "docs/history/reviews/rc28-target-test-2026-10-13/",
+-      "result": "PASS 2026-10-13: authenticated hosted inference in the matrix runs. Runtime source of 1.0.0 is identical to rc.28 (bef0985); this result applies to 1.0.0 by owner decision [EVIDENCE: date] together with release-archive-confirmation."
++      "result": "PASS 2026-10-13: authenticated hosted inference in the matrix runs. Runtime source of 1.0.0 is identical to rc.28 (bef0985); this result applies to 1.0.0 by owner decision 2026-10-13 together with release-archive-confirmation."
++    },
++    {
++      "name": "active-disconnect-hosted",
++      "status": "VERIFIED",
++      "evidence_required": "One real client disconnect during a running hosted run through the official client (one observation, owner decision 2026-10-13): the server exits, the worker process group is gone, the owner lock is released, the run is failed and never relaunched, and an edit worktree is kept until vibe_close cleanup. A run that settled before the disconnect does not qualify. Procedure: docs/history/case7-disconnect-brief.md.",
++      "result": "PASS 2026-10-13: official-client run 56c3920b-6758-4751-8b57-f58b2803942e; independently observed active worker disappearance, lock release, failed no-replay record and retained edit worktree; native close removed the pristine worktree. Desktop case 6 remains INCONCLUSIVE. Owner adopted one official-client observation on 2026-10-13.",
++      "evidence": "docs/history/reviews/rc28-target-test-2026-10-13/matrix-7-client.json"
+     }
+   ],
+   "unverified": [
+-    {
+-      "name": "active-disconnect-hosted",
+-      "status": "UNVERIFIED",
+-      "evidence_required": "One real client disconnect during a running hosted run through the official client (one observation, owner decision [EVIDENCE: date]): the server exits, the worker process group is gone, the owner lock is released, the run is failed and never relaunched, and an edit worktree is kept until vibe_close cleanup. A run that settled before the disconnect does not qualify. Procedure: docs/history/case7-disconnect-brief.md.",
+-      "result": "Desktop case 6 INCONCLUSIVE 2026-10-13 (reached end_turn before the disconnect). Official-client case 7: [EVIDENCE: verdict, run id, matrix-7-client.json and matrix-7-observer.jsonl]."
+-    },
+     {
+       "name": "release-archive-confirmation",
+       "status": "UNVERIFIED",
+       "evidence_required": "On the 1.0.0 archive built from the release commit and installed on the target: native readiness on the Codex desktop connection reporting server_version 1.0.0, then one review and one edit on the frozen fixture, each started with its readiness receipt; the edit patch verified independently and the run closed with verified cleanup. Stop on first failure; no retries.",
+-      "result": "[EVIDENCE: date, archive sha256, run ids, stop reasons, edit verification, worktree_removed]"
++      "result": "PENDING at packaging time. A dated external release-evidence supplement must identify this exact archive and record native readiness, one review, one independently verified edit and cleanup before stable publication."
+     }
+   ],
+   "not_required_for_1_0": [
+diff --git a/docs/compatibility.md b/docs/compatibility.md
+index ed85161..fe7eac0 100644
+--- a/docs/compatibility.md
++++ b/docs/compatibility.md
+@@ -21,8 +21,8 @@ The runtime source of 1.0.0 is identical to 0.9.0-rc.28 (`bef09855cd8104b979b962
+ | Native readiness | VERIFIED on the Codex desktop connection, rc.28, 2026-10-13. |
+ | Five hosted runs (review, edit, review and edit to the turn limit, review), each with a readiness receipt | VERIFIED, rc.28, 2026-10-13; the edit checked independently; no retries or repairs. |
+ | Provider authentication | VERIFIED through the hosted runs, rc.28, 2026-10-13. |
+-| Real active disconnect, official client | [EVIDENCE: date, run id, verdict]. The desktop variant (case 6) was inconclusive and is covered by the deterministic rehearsal. |
+-| 1.0.0 archive confirmation: readiness, one review, one edit with verified cleanup | [EVIDENCE: date, archive sha256, run ids] |
++| Real active disconnect, official client | PASS 2026-10-13, run 56c3920b-6758-4751-8b57-f58b2803942e. The desktop variant (case 6) was inconclusive and is covered by the deterministic rehearsal. |
++| 1.0.0 archive confirmation: readiness, one review, one edit with verified cleanup | Release-specific evidence supplement required; this gate is pending until the exact archive is confirmed |
+ 
+ A separate real-project review ran safely but its answer was not accepted. Usage and cost are not reported (UNKNOWN). Completed execution and correct task output remain separate claims.
+ 
