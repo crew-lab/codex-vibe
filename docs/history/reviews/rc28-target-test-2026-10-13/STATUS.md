@@ -17,3 +17,7 @@ The public packet omits private project source patches, GSC records, credentials
 ## CI integration repair
 
 Initial PR verification failed because the two coordinator node:test files were discovered by Vitest as empty suites. They now use the repository Vitest test API and cleanup hooks. Full local verify:release subsequently passed; the earlier failure is preserved here rather than omitted. This repair changes coordinator tests only, not the installed or published runtime archive.
+
+## Subsequent case 7 and owner decision
+
+Official-client case 7 PASSED on 2026-10-13 (56c3920b-6758-4751-8b57-f58b2803942e): independent observer proved active worker disappearance and lock release; reconnect found failed no-replay state; close removed the pristine worktree. Owner adopted this one official-client observation as the gate. Desktop case 6 remains INCONCLUSIVE. See matrix-7-client.json and matrix-7-observer.jsonl.

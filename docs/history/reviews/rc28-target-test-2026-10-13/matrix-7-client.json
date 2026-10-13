@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "operation": "edit",
+  "max_turns": 12,
+  "timeout_seconds": 180,
+  "timestamps": {
+    "connect": "2026-10-13T17:07:00.229Z",
+    "start": "2026-10-13T17:07:00.477Z",
+    "running_first_seen": "2026-10-13T17:07:00.614Z",
+    "running_observed": "2026-10-13T17:07:02.619Z",
+    "client_close": "2026-10-13T17:07:02.619Z",
+    "client_close_returned": "2026-10-13T17:07:03.025Z",
+    "server_exit_observed": "2026-10-13T17:07:03.025Z",
+    "reconnect": "2026-10-13T17:07:04.636Z"
+  },
+  "task_sha256": "dd33d1a54d7deaa0767edd7812a6e8e1c13e3ca247aeb9e024f0fafcc959c54a",
+  "server_pid": 93606,
+  "readiness": {
+    "server_version": "0.9.0-rc.28",
+    "server_instance_id": "f68e5eab-9728-42e0-a519-1ac8f1ead219",
+    "session_id": "session-XAek6g",
+    "policy_path": "<private-supervisor-home>/rc20-config/config.toml",
+    "policy_revision": "1b44e421b46ad2443563e8b5625f1ad4859870bfe02397fcb86acbeb41db3966",
+    "restart_required": false,
+    "boot_drift": [],
+    "operation": "edit",
+    "requested_workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+    "workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+    "base_ref": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+    "base_commit": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+    "eligible": true,
+    "blockers": [],
+    "active_slot": {
+      "busy": false
+    },
+    "runtime": {
+      "executable": "<user-home>/.local/share/uv/tools/mistral-vibe/bin/vibe",
+      "resolved_executable": "<user-home>/.local/share/uv/tools/mistral-vibe/bin/vibe",
+      "executable_found": true,
+      "pinned_version": "2.26.1",
+      "version_verified": false,
+      "note": "Vibe was not launched. The executable is resolved only; the exact version 2.26.1 is verified when a run starts and drift fails that run closed."
+    },
+    "receipt_expires_at": "2026-10-13T17:17:00.373Z",
+    "next_action": "Start the edit with readiness_receipt before receipt_expires_at on this same connection. The receipt proves preparation only; it does not authorize the task or guarantee provider availability."
+  },
+  "observer": {
+    "pid": 93621,
+    "output": "<temporary-export>/case7-observer-20261013.jsonl",
+    "started": true
+  },
+  "run_id": "56c3920b-6758-4751-8b57-f58b2803942e",
+  "state_before_disconnect": "running",
+  "last_seq_before_disconnect": 0,
+  "observed_running": true,
+  "settled_before_disconnect": false,
+  "server_exited": true,
+  "state_after_reconnect": "failed",
+  "error_after_reconnect": {
+    "code": "VSUP_BACKEND_CRASHED",
+    "message": "The supervisor shut down before this one-shot run completed; the task will not be resumed or replayed.",
+    "remediation": "Inspect the run's diagnostic events and start a new run.",
+    "retryable": false
+  },
+  "events_after_reconnect": 0,
+  "verdict": "PASS"
+}

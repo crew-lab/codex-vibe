@@ -7,9 +7,9 @@
   "authentication_hosted_inference": "PASS",
   "matrix_cases_1_through_5": "PASS",
   "desktop_active_disconnect": "INCONCLUSIVE: worker completed before disconnect",
-  "official_client_active_disconnect": "NOT RUN",
+  "official_client_active_disconnect": "PASS 56c3920b-6758-4751-8b57-f58b2803942e",
   "hosted_runs_budget": 7,
-  "matrix_runs_started": 6,
+  "matrix_runs_started": 7,
   "automatic_retries": 0,
   "usage_cost": "UNKNOWN",
   "stable_certification": false,
@@ -18,5 +18,6 @@
     "lifecycle": "PASS",
     "answer_acceptance": "FAIL",
     "private_source_evidence": "Not included in public bundle"
-  }
+  },
+  "disconnect_owner_decision": "One official-client observation suffices, adopted 2026-10-13"
 }
