@@ -40,7 +40,7 @@ Required, all on the exact rc.28 artifact: native readiness on the Codex desktop
 
 ## Next steps
 
-1. Publish the reviewed exact rc.28 target archive as a GitHub prerelease at runtime source `bef09855cd8104b979b962462ae9d87062ed8a9d`, with package, SBOM, generated acceptance report, checksums and dated target acceptance supplement. Do not rebuild silently or tag the evidence/tooling commit as the tested runtime.
+1. **Published:** [rc.28 prerelease](https://github.com/crew-lab/codex-vibe/releases/tag/v0.9.0-rc.28) at runtime source `bef09855cd8104b979b962462ae9d87062ed8a9d`, with package, SBOM, generated acceptance report, checksums and dated target supplement. Downloaded package identity matches the tested archive. See target evidence release-verification.json. The separate evidence/tooling commit is not the tested runtime source.
 2. Reconcile the active-disconnect contract: acceptance metadata calls for desktop and official-client observations; retain both until an explicit owner decision changes the gate. The desktop attempt consumed its allowance without proving interruption. No retry is authorized by the one remaining official-client allowance.
 3. Finish independently observed active-disconnect acceptance with an explicit bounded task, live ownership/process-group observer and evidence of a running worker before disconnect. Stop on first unexpected failure; do not replay tasks.
 4. Verify the declared Node floor on current candidate source or make an explicit supported-version decision. An older rc.24 floor result is not rc.28 proof.

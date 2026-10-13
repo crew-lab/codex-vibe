@@ -1,0 +1,31 @@
+{
+  "release_url": "https://github.com/crew-lab/codex-vibe/releases/tag/v0.9.0-rc.28",
+  "tag": "v0.9.0-rc.28",
+  "runtime_source": "bef09855cd8104b979b962462ae9d87062ed8a9d",
+  "prerelease": true,
+  "draft": false,
+  "assets": [
+    {
+      "name": "SHA256SUMS",
+      "sha256": "a99d3dc3061ce661ad8364e12050bfae89147ce16dc44b0c81df6b526bd31566"
+    },
+    {
+      "name": "acceptance.json",
+      "sha256": "bf0ae0d703dc3cf23d1424d8a2de4bfeb1723616ef9e7fd7e6925fe92ab9501f"
+    },
+    {
+      "name": "sbom.spdx.json",
+      "sha256": "432caa8a5b25ef16171e07eed942b16c5f77301d253001ae4715a5c031c3ef73"
+    },
+    {
+      "name": "target-acceptance.json",
+      "sha256": "f2d143ee43550dfa11ea63bb17fa05d15f0d8fca87a0dffde57e743b7b839c53"
+    },
+    {
+      "name": "vibe-supervisor-0.9.0-rc.28.tgz",
+      "sha256": "9179a091830e548d9ebd3c13bd6f12997f22a86bda6964d827c23e1a55773bbf"
+    }
+  ],
+  "downloaded_asset_verification": "PASS",
+  "stable_certification": false
+}
