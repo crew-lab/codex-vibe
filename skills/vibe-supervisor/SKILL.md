@@ -30,7 +30,38 @@ Every delegation starts with a native workspace readiness call on the connection
 
 Collect the desired outcome, concrete acceptance criteria, canonical allowed workspace, exact file scope, exclusions, and explicit Git base for edits. Never put credentials in task text. Check the real connected tool schemas and do not invoke fields or tools absent from that catalog. One started run owns the instance's active slot until backend close verifies termination. If close reports termination unverified, keep the run inspectable and do not start another run on that slot. Do not queue, retry automatically, or replay a task after restart or failure.
 
-Start one review or edit with bounded turns, deadline, output limits, wait, and the readiness receipt. Use cursor-based `vibe_status` calls on the same connection, then read `vibe_result`. Do not raise limits or rotate accounts after a failure. Ask the worker for a concise final answer and an inventory of scratch paths. Reviews should identify findings with file and location, trigger, and incorrect behavior, or state that no defect was found in the inspected scope.
+Start one review or edit with bounded turns, deadline, output limits, wait, and the readiness receipt. Use cursor-based `vibe_status` calls on the same connection, then read `vibe_result`. Do not raise limits or rotate accounts after a failure. Write the task text from a template below.
+
+## Write the task from a template
+
+A completed run is not a useful answer. The tasks that produced accepted answers on the target were narrow and checkable; the one real-project review ran safely but its answer was not accepted. Fill one in: replace each `<...>` and keep every line.
+
+Review:
+
+```text
+Read only <file>, <file>[, <file>]. Do not open other files.
+Question: <one question, e.g. whether parseLimit(value) rejects negative input as CONTRACT.md requires>.
+Evaluate these inputs or paths: <input>, <input>, <input>.
+For each finding give the file, the function or line, the input that triggers it, and the wrong behaviour against the stated requirement.
+"No defect found in the inspected scope" is a valid answer; do not invent a finding.
+No style advice, refactors or recommendations outside the question. No scratch files.
+Final answer: the conclusion first, then the findings, under <n> lines.
+```
+
+Edit:
+
+```text
+Read <file>, <file> first.
+Then create or change only: <path>, <path>. Do not touch any other file.
+Change: <what to add or change, with the exact function names and semantics>.
+Tests: <test file> using <framework>, covering <cases>.
+No shell, network or test execution.
+Final answer: what changed, then an inventory of changed and scratch files.
+```
+
+Match the limits to the template: a review of two or three files fits `max_turns` 12; raise turns only with the number of files to read. Record whether the answer was accepted, so the template can be improved.
+
+## Check the result
 
 For a review, check the final answer, stop reason, warnings, and integrity result. For an edit, inspect the full transcript and fresh exported patch, changed and residual files, and hashes while the worktree remains available. Verify the exact candidate in a separate disposable copy; do not run commands or tests inside the worker worktree or original source checkout. Accept only the reviewed delta. Coordinator verification does not turn an unsuccessful Vibe run into a Vibe success.
 
