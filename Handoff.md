@@ -32,11 +32,13 @@ Desktop active-disconnect case 6 is INCONCLUSIVE: the worker reached end_turn be
 
 See [target acceptance](docs/history/reviews/rc28-target-test-2026-10-13/STATUS.md), its redacted run records, exact fixture assignments and checksum manifest. Private project source and search-console evidence are not published here.
 
+The coordinator tools added by the target, `scripts/v1-fixture-verify.mjs` and `scripts/v1-disconnect-observer.mjs`, are tested with `npm run test:tools` (Node test runner), which `verify:release` now includes; vitest skips those two files.
+
 Registration uses the explicit selected config with --isolated. Group/world-writable configs fail closed; native handshake/readiness, not CLI version, identify the active desktop connection.
 
 ## 1.0 gates (owner decision 2026-10-12)
 
-Required, all on the exact rc.28 artifact: native readiness on the Codex desktop connection; five hosted runs (review, edit, review to the turn limit, edit to the turn limit, review), each started with a readiness receipt; one real active disconnect; provider authentication (recorded by the first hosted run). Not required: the clean-account install (1.0.1), CI on exactly Node 20.19.0 (passed locally), and the live-allowlist and boot-key observations (covered by deterministic tests).
+Required, all on the exact rc.28 artifact: native readiness on the Codex desktop connection; five hosted runs (review, edit, review to the turn limit, edit to the turn limit, review), each started with a readiness receipt; one real active disconnect; provider authentication (recorded by the first hosted run). Status after the 2026-10-13 sitting: native readiness, the five hosted runs and provider authentication are VERIFIED (`docs/acceptance.json`); the active disconnect is INCONCLUSIVE. Not required: the clean-account install (1.0.1), CI on exactly Node 20.19.0, and the live-allowlist and boot-key observations (covered by deterministic tests). Open owner decision: whether the disconnect gate needs one real disconnect (as decided on 2026-10-12) or both a desktop and an official-client observation (as `docs/acceptance.json` and next step 2 read).
 
 ## Next steps
 
@@ -44,12 +46,13 @@ Required, all on the exact rc.28 artifact: native readiness on the Codex desktop
 2. Reconcile the active-disconnect contract: acceptance metadata calls for desktop and official-client observations; retain both until an explicit owner decision changes the gate. The desktop attempt consumed its allowance without proving interruption. No retry is authorized by the one remaining official-client allowance.
 3. Finish independently observed active-disconnect acceptance with an explicit bounded task, live ownership/process-group observer and evidence of a running worker before disconnect. Stop on first unexpected failure; do not replay tasks.
 4. Verify the declared Node floor on current candidate source or make an explicit supported-version decision. An older rc.24 floor result is not rc.28 proof.
-5. Only then decide the final v1 source/package identity, exact-artifact validation and publication. Version/doc changes create new package bytes; do not automatically transfer hosted PASS to a new archive. No stable tag or release before required gates and owner go/no-go.
+5. Owner decision on 1.0 identity: the archives built from the same source on the two machines differ (`61ca4ee9…` here, `9179a091…` on the target), so packaging is not byte-reproducible, and the prepared branch `claude/v1.0.0` changes the version and docs, which makes new package bytes. Options: release the exact tested rc.28 archive as 1.0.0 evidence by policy (version string stays 0.9.0-rc.28), or bump to 1.0.0 and re-run a small confirmation subset on the new archive.
+6. Only then decide the final v1 source/package identity, exact-artifact validation and publication. Version/doc changes create new package bytes; do not automatically transfer hosted PASS to a new archive. No stable tag or release before required gates and owner go/no-go.
 
 ## After 1.0
 
 - Clean macOS account install (1.0.1).
-- Pruning of `--isolated` session directories and a router that tolerates one bad sibling or more than 128 sessions: in preparation on local branch `claude/session-pruning`, not merged.
+- Pruning of `--isolated` session directories and a router that tolerates one bad sibling or more than 128 sessions: ready on branch `claude/session-pruning` (on GitHub, `bdc3ca4`, based on rc.28; needs a rebase before merging).
 - From the reviews: receipt reuse wording; `runs cleanup` and failed-run retention wording; the config fingerprint using `os.homedir()` instead of `HOME`; the `setup` restart message naming the registered path; the MCP SDK's 4-second SIGKILL after stdin closes, which can cut a slow edit shutdown short (recovered by design on the next start).
 - Tooling waiting on the push token's `workflow` scope: `claude/release-workflow` (tag-triggered release) and `claude/ci-node-floor` (CI on exact Node 20.19.0 and 24).
 
