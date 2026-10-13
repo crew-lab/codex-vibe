@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import { test } from 'vitest';
 import {
   descendantsOf, historySnapshot, observerAncestry, parseProcessTable,
   parseSupervisorPid, readRunStates, sampleGroups, updateHistory, validateDataDirectory,
@@ -69,7 +69,7 @@ test('reads only the numeric pid from the supervisor lock and rejects malformed 
 
 test('requires a canonical data directory and a regular non-symlink owner lock', async (t) => {
   const dir = await realpath(await mkdtemp(path.join(os.tmpdir(), 'v1-observer-data-')));
-  t.after(async () => rm(dir, { recursive: true, force: true }));
+  t.onTestFinished(async () => rm(dir, { recursive: true, force: true }));
   await writeFile(path.join(dir, 'supervisor.lock'), '{"pid":42,"token":"must-not-leak"}');
   const validated = await validateDataDirectory(dir);
   assert.equal(validated.pid, 42);
@@ -86,7 +86,7 @@ test('requires a canonical data directory and a regular non-symlink owner lock',
 
 test('extracts only safe run state fields from the rc28 meta.json format', async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'v1-observer-run-'));
-  t.after(async () => rm(dir, { recursive: true, force: true }));
+  t.onTestFinished(async () => rm(dir, { recursive: true, force: true }));
   const runId = '123e4567-e89b-42d3-a456-426614174000';
   const runDir = path.join(dir, 'runs', runId);
   await mkdir(runDir, { recursive: true });

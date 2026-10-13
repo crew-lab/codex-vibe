@@ -7,7 +7,7 @@
     },
     {
       "path": "STATUS.md",
-      "sha256": "a6c6387ad1c5c8ae7d00f002f7d0225237d5a53165f839ec019239ed2695c11d"
+      "sha256": "2213b2ee2bd5a59b4ae0041b1d19ec8d2509d6ede6fbba67d891196eb413d94f"
     },
     {
       "path": "assignments.json",
@@ -48,6 +48,10 @@
     {
       "path": "native-readiness.json",
       "sha256": "81eec17fb8203e068c4b03e9a9dcf474b0410c845813c65a341f0d428bdeb24b"
+    },
+    {
+      "path": "release-verification.json",
+      "sha256": "c92edbc992dec3405e6ac72dbeb4b47dc377e674e4f1d60bc296da05ae7f2297"
     },
     {
       "path": "target-acceptance.json",
