@@ -3,7 +3,7 @@
   "files": [
     {
       "path": "REPORT.md",
-      "sha256": "8cb0f25c029898eb751b23a8767f5e8e77bb80820446bd5b07fe0081f3953b72"
+      "sha256": "e001abb9aa2c847a5d68750a6d74864493dfb72815098c52d5da1e91c28d16c7"
     },
     {
       "path": "baseline.json",
@@ -16,6 +16,10 @@
     {
       "path": "final-readiness.json",
       "sha256": "5c4a6426588b0df9b18a930b9179138780d33bc5376c1c59170c64db1cdaf41d"
+    },
+    {
+      "path": "publication-receipt.json",
+      "sha256": "97fa1cebcb3a3f57f77955a4ab411e3eb7ff4c2136035912ffde7b48f6f6479d"
     },
     {
       "path": "release-evidence.json",

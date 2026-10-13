@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-13",
+  "release_url": "https://github.com/crew-lab/codex-vibe/releases/tag/v1.0.0",
+  "tag": "v1.0.0",
+  "pr": "https://github.com/crew-lab/codex-vibe/pull/6",
+  "merge_commit": "6b3c3c78c3874ab273bfd2dd46f7ecfc1da712d9",
+  "frozen_source_commit": "f0f317e10d5d021f171ed38f5a85bb8e2354f12d",
+  "archive_sha256": "4e91e90bb7cb48c4411e1dc02820e91abddd690fc430f15a65ad6a9f3bd1c610",
+  "published_assets_downloaded_and_verified": 6,
+  "prerelease": false,
+  "draft": false,
+  "hosted_confirmation": "PASS",
+  "limits": [
+    "macOS Apple silicon and pinned Vibe 2.26.1",
+    "clean-account deferred",
+    "usage/cost UNKNOWN"
+  ]
+}
