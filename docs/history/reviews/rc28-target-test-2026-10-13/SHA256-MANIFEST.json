@@ -1,0 +1,57 @@
+{
+  "public_redacted_copy": true,
+  "files": [
+    {
+      "path": "RUNBOOK.md",
+      "sha256": "0bc1b23db6786ea49996b1adec5430ced5b2e339e51a084c0180f34a1f83af8a"
+    },
+    {
+      "path": "STATUS.md",
+      "sha256": "a6c6387ad1c5c8ae7d00f002f7d0225237d5a53165f839ec019239ed2695c11d"
+    },
+    {
+      "path": "assignments.json",
+      "sha256": "71c2947473c9fac0a0dfa042ae7f22737b88918c34a9005c53fd208dd52423c8"
+    },
+    {
+      "path": "matrix-1-result.json",
+      "sha256": "c425c3e56d836694abf6ea6c10f749ca03022cd7a245af328dfe8a5e695e102b"
+    },
+    {
+      "path": "matrix-2-result.json",
+      "sha256": "7d073dcdc06efa9199a18bf5c9a1d023b4b5f7fe07e02c0d9e2bd1e429491b85"
+    },
+    {
+      "path": "matrix-2-verification.json",
+      "sha256": "3de799974bbf7a4a1522dd949b75feea49019b13f2667b79ec0496fa583a05a6"
+    },
+    {
+      "path": "matrix-2.patch",
+      "sha256": "4cd8a0d91a8eff8bd214c6ceacff87548dd364a02cec0c516a492834519402b0"
+    },
+    {
+      "path": "matrix-3-result.json",
+      "sha256": "47bb46a12d7c728d5aed07a7b2fb570e04875d03027b1d638c7757eed81a2135"
+    },
+    {
+      "path": "matrix-4-result.json",
+      "sha256": "6aaf238a96d1a870a7452296975da58ec07497fbfeb809d2a52304646b39dc28"
+    },
+    {
+      "path": "matrix-5-result.json",
+      "sha256": "b0cf92eed0c545c949698b8464cea6fe01809f403c7fd9bd4dcbbc415dc63db8"
+    },
+    {
+      "path": "matrix-6-result.json",
+      "sha256": "4f06e80d69c4ee9a6abfcb1421e2e4d826c2ea512454208124100271437ccf1d"
+    },
+    {
+      "path": "native-readiness.json",
+      "sha256": "81eec17fb8203e068c4b03e9a9dcf474b0410c845813c65a341f0d428bdeb24b"
+    },
+    {
+      "path": "target-acceptance.json",
+      "sha256": "f2d143ee43550dfa11ea63bb17fa05d15f0d8fca87a0dffde57e743b7b839c53"
+    }
+  ]
+}

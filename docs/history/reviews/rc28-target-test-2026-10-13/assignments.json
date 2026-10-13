@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "authorization": "User explicitly authorized seven bounded runs on 2026-10-13",
+  "artifact_sha256": "9179a091830e548d9ebd3c13bd6f12997f22a86bda6964d827c23e1a55773bbf",
+  "cases": [
+    {
+      "case": 1,
+      "operation": "review",
+      "workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+      "base_ref": null,
+      "files": [
+        "CONTRACT.md",
+        "src/limit.mjs"
+      ],
+      "writable_files": [],
+      "task": "Read only CONTRACT.md and src/limit.mjs. Determine whether below(value, limit) implements strictly less than. Cite the function and evaluate (699.99,700), (700,700), (700.01,700), (-2,-1), (-1,-2). Report a concise evidence-backed conclusion; no invented defect or out-of-scope recommendations. No scratch files.",
+      "max_turns": 12,
+      "timeout_seconds": 180,
+      "maximum_runs": 1,
+      "retries": 0,
+      "expected": "end_turn; accurate conclusion; verified read-only integrity"
+    },
+    {
+      "case": 2,
+      "operation": "edit",
+      "workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+      "base_ref": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+      "files": [
+        "CONTRACT.md",
+        "src/limit.mjs"
+      ],
+      "writable_files": [
+        "src/at-least.mjs",
+        "tests/at-least.test.mjs"
+      ],
+      "task": "Read CONTRACT.md and src/limit.mjs first. Add only src/at-least.mjs exporting named function atLeast(value, limit) which returns value >= limit, and tests/at-least.test.mjs using node:test and node:assert/strict. Cover below/equal/above, negatives and equality. Do not change existing files. No shell/network or test execution. Give a concise final answer and changed/scratch file inventory.",
+      "max_turns": 12,
+      "timeout_seconds": 180,
+      "maximum_runs": 1,
+      "retries": 0,
+      "expected": "end_turn; exact two new files; independently verified >= semantics and tests"
+    },
+    {
+      "case": 3,
+      "operation": "review",
+      "workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+      "base_ref": null,
+      "files": [
+        "CONTRACT.md",
+        "src/limit.mjs"
+      ],
+      "writable_files": [],
+      "task": "Call read_file for CONTRACT.md first; in a separate subsequent tool call read src/limit.mjs before any conclusion. Read only CONTRACT.md and src/limit.mjs. Determine whether below(value, limit) implements strictly less than. Cite the function and evaluate (699.99,700), (700,700), (700.01,700), (-2,-1), (-1,-2). Report a concise evidence-backed conclusion; no invented defect or out-of-scope recommendations. No scratch files.",
+      "max_turns": 1,
+      "timeout_seconds": 180,
+      "maximum_runs": 1,
+      "retries": 0,
+      "expected": "max_turn_requests with incomplete warning; no writes; if genuinely completed classify NOT DEMONSTRATED"
+    },
+    {
+      "case": 4,
+      "operation": "edit",
+      "workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+      "base_ref": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+      "files": [
+        "CONTRACT.md",
+        "src/limit.mjs"
+      ],
+      "writable_files": [
+        "src/at-least.mjs",
+        "tests/at-least.test.mjs"
+      ],
+      "task": "Call read_file for CONTRACT.md first; in a separate subsequent tool call read src/limit.mjs before editing. Read CONTRACT.md and src/limit.mjs first. Add only src/at-least.mjs exporting named function atLeast(value, limit) which returns value >= limit, and tests/at-least.test.mjs using node:test and node:assert/strict. Cover below/equal/above, negatives and equality. Do not change existing files. No shell/network or test execution. Give a concise final answer and changed/scratch file inventory.",
+      "max_turns": 1,
+      "timeout_seconds": 180,
+      "maximum_runs": 1,
+      "retries": 0,
+      "expected": "max_turn_requests with incomplete warning; preserve/inspect partial export; never treat as completed edit"
+    },
+    {
+      "case": 5,
+      "operation": "review",
+      "workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+      "base_ref": null,
+      "files": [
+        "CONTRACT.md",
+        "src/limit.mjs"
+      ],
+      "writable_files": [],
+      "task": "Read only CONTRACT.md and src/limit.mjs. Determine whether below(value, limit) implements strictly less than. Cite the function and evaluate (699.99,700), (700,700), (700.01,700), (-2,-1), (-1,-2). Report a concise evidence-backed conclusion; no invented defect or out-of-scope recommendations. No scratch files.",
+      "max_turns": 12,
+      "timeout_seconds": 180,
+      "maximum_runs": 1,
+      "retries": 0,
+      "expected": "end_turn; accurate conclusion; no prior edit leakage; verified read-only integrity"
+    },
+    {
+      "case": 6,
+      "operation": "edit",
+      "workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+      "base_ref": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+      "files": [
+        "CONTRACT.md",
+        "src/limit.mjs"
+      ],
+      "writable_files": [
+        "src/at-least.mjs",
+        "tests/at-least.test.mjs"
+      ],
+      "task": "Read CONTRACT.md and src/limit.mjs first. Add only src/at-least.mjs exporting named function atLeast(value, limit) which returns value >= limit, and tests/at-least.test.mjs using node:test and node:assert/strict. Cover below/equal/above, negatives and equality. Do not change existing files. No shell/network or test execution. Give a concise final answer and changed/scratch file inventory.",
+      "max_turns": 12,
+      "timeout_seconds": 180,
+      "maximum_runs": 1,
+      "retries": 0,
+      "expected": "desktop active disconnect: failed saved run, no replay, process group gone, lock released, worktree retained until verified cleanup"
+    },
+    {
+      "case": 7,
+      "operation": "edit",
+      "workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+      "base_ref": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+      "files": [
+        "CONTRACT.md",
+        "src/limit.mjs"
+      ],
+      "writable_files": [
+        "src/at-least.mjs",
+        "tests/at-least.test.mjs"
+      ],
+      "task": "Read CONTRACT.md and src/limit.mjs first. Add only src/at-least.mjs exporting named function atLeast(value, limit) which returns value >= limit, and tests/at-least.test.mjs using node:test and node:assert/strict. Cover below/equal/above, negatives and equality. Do not change existing files. No shell/network or test execution. Give a concise final answer and changed/scratch file inventory.",
+      "max_turns": 12,
+      "timeout_seconds": 180,
+      "maximum_runs": 1,
+      "retries": 0,
+      "expected": "official-client active disconnect: failed saved run, no replay, process group gone, lock released, worktree retained until verified cleanup"
+    }
+  ]
+}
