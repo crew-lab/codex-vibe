@@ -2,7 +2,7 @@
 
 ## 1.0.0 — first stable release
 
-Codex delegates one bounded review or one isolated edit at a time to Mistral Vibe 2.26.1 through five MCP tools. The runtime source is identical to 0.9.0-rc.28 (`bef0985`), which was accepted on the target machine on 2026-10-13 with native readiness, five hosted runs with readiness receipts and provider authentication, and an official-client active disconnect on [EVIDENCE: date]. The 1.0.0 archive was confirmed with native readiness, one review and one edit on [EVIDENCE: date].
+Codex delegates one bounded review or one isolated edit at a time to Mistral Vibe 2.26.1 through five MCP tools. The runtime source is identical to 0.9.0-rc.28 (`bef0985`), which was accepted on the target machine on 2026-10-13 with native readiness, five hosted runs with readiness receipts and provider authentication, and an official-client active disconnect on 2026-10-13. The exact 1.0.0 archive requires native readiness, one review and one edit; its dated release-evidence supplement records whether that confirmation passed.
 
 - Reviews read and search an allowlisted workspace and report whether it changed; edits run in a supervisor-created detached worktree and return a patch that is never applied, committed or pushed. Shell and network tools are off. This is an application policy boundary, not an OS sandbox.
 - The connected server rereads the selected configuration before each start; `vibe_status` checks a workspace's readiness without inference and issues a receipt that a start can present.
