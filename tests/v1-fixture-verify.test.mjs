@@ -5,14 +5,14 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import test from 'node:test';
+import { test } from 'vitest';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const verifier = path.join(repoRoot, 'scripts/v1-fixture-verify.mjs');
 
 async function withCandidate(t, { source, includeTestFile = true }) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'v1-fixture-verify-'));
-  t.after(async () => rm(root, { recursive: true, force: true }));
+  t.onTestFinished(async () => rm(root, { recursive: true, force: true }));
   await mkdir(path.join(root, 'src'), { recursive: true });
   await mkdir(path.join(root, 'tests'), { recursive: true });
   if (source !== undefined) await writeFile(path.join(root, 'src/at-least.mjs'), source);
@@ -103,7 +103,7 @@ test('refuses directories inside a Git checkout before loading the candidate', a
 test('rejects a required file reached through an escaping parent symlink before executing it', async (t) => {
   const candidate = await withCandidate(t, { source: undefined });
   const outside = await mkdtemp(path.join(os.tmpdir(), 'v1-fixture-outside-'));
-  t.after(async () => rm(outside, { recursive: true, force: true }));
+  t.onTestFinished(async () => rm(outside, { recursive: true, force: true }));
   const marker = path.join(outside, 'executed-marker');
   const outsideSource = path.join(outside, 'at-least.mjs');
   await writeFile(outsideSource,
