@@ -6,7 +6,7 @@ The two scoped Garnebo reviews passed independent checks (11 parser/URL cases; 5
 
 Case 7 already passed independent active-disconnect observation on rc.28 and was closed with pristine-worktree removal. The owner adopted that single official-client observation and approved runtime-equivalent 1.0.0 confirmation. Clean-account installation remains deferred.
 
-Exact archive SHA256: 4e91e90bb7cb48c4411e1dc02820e91abddd690fc430f15a65ad6a9f3bd1c610. The package is installed privately and registered. The archive remains frozen; release-evidence.json is a dated external supplement to its packaging-time acceptance report. Source base plus reviewed shipped-document delta are recorded in source-identity.json. Final publication was authorized after the report; GitHub promotion is now pending. No stable tag/release existed at test completion.
+Exact archive SHA256: 4e91e90bb7cb48c4411e1dc02820e91abddd690fc430f15a65ad6a9f3bd1c610. The package is installed privately and registered. The archive remains frozen; release-evidence.json is a dated external supplement to its packaging-time acceptance report. Source base plus reviewed shipped-document delta are recorded in source-identity.json. Final publication was authorized after testing; v1.0.0 is now published. PR #6 merged after both CI checks passed, and all six downloaded release assets verified. No stable tag/release existed at test completion; publication-receipt.json records the later promotion.
 
 Usage/cost: UNKNOWN. No site changes, submissions, analytics/admin changes, account creation or scheduled follow-ups. No further hosted allowance remains.
 

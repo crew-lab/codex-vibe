@@ -4,7 +4,7 @@ Updated 2026-10-13. This document alone defines current priorities. [docs/histor
 
 ## Release identity and acceptance
 
-**1.0.0 is approved for publication.** Its exact tested archive SHA256 is `4e91e90bb7cb48c4411e1dc02820e91abddd690fc430f15a65ad6a9f3bd1c610`; frozen source snapshot `f0f317e10d5d021f171ed38f5a85bb8e2354f12d`. The archive is not rebuilt after confirmation. Main records later acceptance evidence separately; the package's generated acceptance report describes packaging-time state and the external release supplement records the later PASS.
+**1.0.0 is published:** [GitHub release](https://github.com/crew-lab/codex-vibe/releases/tag/v1.0.0). PR #6 merged; both current-head CI checks passed; all six downloaded release assets and tag/source identity verified. Its exact tested archive SHA256 is `4e91e90bb7cb48c4411e1dc02820e91abddd690fc430f15a65ad6a9f3bd1c610`; frozen source snapshot `f0f317e10d5d021f171ed38f5a85bb8e2354f12d`. The archive is not rebuilt after confirmation. Main records later acceptance evidence separately; the package's generated acceptance report describes packaging-time state and the external release supplement records the later PASS.
 
 Owner decisions 2026-10-13: one independently observed official-client disconnect satisfies the gate; release a genuine 1.0.0 version bump with unchanged runtime and native readiness plus one review and one edit confirmation. Case 7 PASSED (56c3920b-6758-4751-8b57-f58b2803942e), then closed with pristine-worktree removal. Desktop case 6 remains INCONCLUSIVE and is not presented as a pass.
 
@@ -32,7 +32,7 @@ Behaviour: [docs/functionality.md](docs/functionality.md); interface: [docs/refe
 
 ## Current priorities
 
-1. Publish the approved exact archive from the frozen source snapshot, with SBOM, packaging-time acceptance report, checksums and dated release supplement. Verify downloaded asset bytes and tag/source identity. Never replace it with an untested rebuild.
+1. Completed: published the exact archive from the frozen source snapshot with SBOM, packaging-time acceptance report, checksums and dated release supplement. All six downloaded assets verified; tag identifies f0f317e. See the dated publication receipt. Never replace it with an untested rebuild.
 2. Keep private rc.28 as rollback. The installed 1.0.0 package and its native connection are already verified; publication requires no extra hosted run.
 3. Continue usefulness evaluation only with separately authorized scope/budget. Task templates are in the shipped skill; no automatic retries or silent Luna substitution.
 4. After 1.0, follow the existing ordered roadmap below: operational documentation and clean-account install; Vibe export for measured usage; then Unified Harness compatibility. Each runtime change is a new candidate.
