@@ -13,3 +13,7 @@ The public packet omits private project source patches, GSC records, credentials
 ## Publication
 
 [rc.28 prerelease](https://github.com/crew-lab/codex-vibe/releases/tag/v0.9.0-rc.28) is published at the frozen runtime source. All five downloaded assets verified; package/SBOM/generated-report checksums match the original release manifest. See release-verification.json. This publication does not clear active-disconnect or v1.0 gates.
+
+## CI integration repair
+
+Initial PR verification failed because the two coordinator node:test files were discovered by Vitest as empty suites. They now use the repository Vitest test API and cleanup hooks. Full local verify:release subsequently passed; the earlier failure is preserved here rather than omitted. This repair changes coordinator tests only, not the installed or published runtime archive.
