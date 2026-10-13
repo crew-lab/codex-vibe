@@ -32,6 +32,8 @@ Desktop active-disconnect case 6 is INCONCLUSIVE: the worker reached end_turn be
 
 See [target acceptance](docs/history/reviews/rc28-target-test-2026-10-13/STATUS.md), its redacted run records, exact fixture assignments and checksum manifest. Private project source and search-console evidence are not published here.
 
+GitHub synchronization: PR #5 merged at `40bacab8d0f0209f0f63990540ea275eed3b190d`. Upstream commit `97be697` reconciled the coordinator tests with Vitest and removed the conflicting separate Node runner. The recent status update preserves that solution and reconciles compatibility/acceptance history with the verified target evidence. The frozen published runtime is unchanged. No new hosted run was started; official-client case 7 is the remaining authorized case, while a desktop retry requires separate approval.
+
 The coordinator tools added by the target, `scripts/v1-fixture-verify.mjs` and `scripts/v1-disconnect-observer.mjs`, are tested by the normal vitest suite.
 
 Registration uses the explicit selected config with --isolated. Group/world-writable configs fail closed; native handshake/readiness, not CLI version, identify the active desktop connection.

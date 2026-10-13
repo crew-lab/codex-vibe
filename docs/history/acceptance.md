@@ -2,7 +2,17 @@
 
 `npm run verify:release` runs deterministic repository checks, the Vitest suite, the Vibe-free Python tests (`npm run test:python`), build, acceptance checks, a secret-pattern scan, and an SPDX inventory. `npm run smoke:install` packs and installs the tarball offline in a temporary prefix, then initializes the installed stdio server and lists tools with the official MCP client. Supply an existing populated npm cache through `VIBE_SUPERVISOR_TEST_NPM_CACHE`; the smoke test never falls back to network access.
 
-The machine-readable report is `docs/acceptance.json`. Local fake-peer ACP coverage, including the 100-run adversarial lifecycle soak, has passed. It establishes protocol and supervisor lifecycle behavior against the fake peer only. These gates remain **UNVERIFIED** and must not be reported as passing: a 100-run soak against hosted Vibe, hosted ACP cancellation/restart/load and callback behavior, macOS Intel, and a clean OS account. Hosted programmatic review and native Codex desktop visibility passed on 2026-10-05 for the local patched rc.2 build, as recorded below. The integration is currently opt-in; programmatic is the default.
+The machine-readable report is `docs/acceptance.json`. rc.28 evidence verifies native readiness, provider authentication and the five hosted fixture cases; active disconnect remains unverified. Historical ACP, continuation, multi-tool and soak entries below describe old versions, not the current five-tool one-shot product.
+
+## 2026-10-13 — rc.28 evidence and source reconciliation
+
+The target archive SHA256 is `9179a091830e548d9ebd3c13bd6f12997f22a86bda6964d827c23e1a55773bbf`, runtime source `bef0985`. Five hosted fixture cases passed without retries or repairs. The isolated edit passed independent checks in a disposable export. Both one-turn cases stopped with max_turn_requests and incomplete warnings as intended; these are limit-behavior passes, not completed tasks.
+
+Desktop case 6 is INCONCLUSIVE because it completed before interruption; official-client case 7 is NOT RUN. This update starts no hosted run and claims no stable certification. A separate real-project review passed lifecycle but failed answer acceptance. See [target evidence](reviews/rc28-target-test-2026-10-13/STATUS.md).
+
+[PR #5](https://github.com/crew-lab/codex-vibe/pull/5) merged at `40bacab` after both current-head checks passed. Concurrent main changes introduced a separate Node runner for coordinator tests; the PR's Vitest imports conflicted with that runner in the combined source. Upstream commit `97be697` resolved the combined-source conflict by retaining Vitest test/cleanup APIs, removing the separate Node runner and including all 13 coordinator cases in the normal suite. That upstream solution is preserved. No installed or published runtime bytes change. Failures remain recorded rather than counted as passing.
+
+The preparing machine recorded exact Node 20.19.0 verification on `7c7ba0e`, with rc.28-equivalent runtime. This evidence is separate from target installed-package identity.
 
 ## Live delegation attempt, 2026-10-03
 
