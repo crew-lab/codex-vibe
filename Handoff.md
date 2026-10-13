@@ -1,6 +1,6 @@
 # Current handoff
 
-Updated 2026-10-12. This document alone defines current priorities. [docs/history/](docs/history/) keeps only what the current work uses: the rc.28 brief, runbook and evidence template, the acceptance log, the latest reviews, the 2.26.1 compatibility audit, the install notes and the 1.0 article draft. Everything older (earlier handoffs, plans, phase evidence, rc.2 to rc.17 test records) was removed from the tree on 2026-10-12 and is in Git history at `c510513`.
+Updated 2026-10-13. This document alone defines current priorities. [docs/history/](docs/history/) keeps only what the current work uses: the rc.28 brief, runbook and evidence template, the acceptance log, the latest reviews, the 2.26.1 compatibility audit, the install notes and the 1.0 article draft. Everything older (earlier handoffs, plans, phase evidence, rc.2 to rc.17 test records) was removed from the tree on 2026-10-12 and is in Git history at `c510513`.
 
 ## What this is
 
@@ -22,21 +22,17 @@ Behaviour: [docs/functionality.md](docs/functionality.md); interface: [docs/refe
 
 ## Status
 
-**Candidate: `0.9.0-rc.28`**, built on the preparing machine, not yet installed or run on the target machine. What changed since the last installed build (rc.23) is in [CHANGELOG.md](CHANGELOG.md): authoritative per-start policy reread and no-inference readiness with signed receipts (rc.24), accurate error codes and JSON error replies (rc.25), a reliable test suite and shutdown/settle fixes (rc.26), edits that fit large repositories and an export that cannot miss same-second edits (rc.27), and export and cleanup that see every change regardless of `core.ignoreStat`, assume-unchanged or skip-worktree (rc.28).
+**Candidate: `0.9.0-rc.28`**, installed on the macOS Apple-silicon target and exercised through native Codex. Runtime source is `bef09855cd8104b979b962462ae9d87062ed8a9d`. The primary target checkout is an older dirty tree; preserve it and use a clean source copy for integration.
 
-Verification on the preparing machine, fake backends only: `package:rc` passed (629 tests, 2 skipped; Python tests; lint, typecheck, build; acceptance; secret scan; SBOM; offline installed-package smoke test), and ten consecutive full suite runs on a clean clone passed. Exact Node 20.19.0 passed `verify:release` locally (on rc.24's source). Two cold reviews and a readiness assessment are in `docs/history/reviews/` (`rc24-…`, `rc27-…`, `v1-readiness-assessment-…`); their remaining items are listed under After 1.0 below.
+Preparing-machine verification passed (629 tests, 2 skipped, Python tests, lint, typecheck, build, secret scan, SBOM and offline package smoke). The target rebuilt that unchanged revision offline, verified installed bytes and obtained native review/edit readiness. Exact target archive SHA256 is `9179a091830e548d9ebd3c13bd6f12997f22a86bda6964d827c23e1a55773bbf`; do not confuse it with the preparing-machine archive.
 
-Hosted evidence: Vibe 2.26.1 ran inference once, on rc.22 (run `cb51c05f`, `end_turn`). Nothing after rc.22 has run with inference; that is what the target-machine sitting closes.
+Hosted target evidence: all five fixture matrix cases passed without retries or repairs. These cover useful normal reviews, a correct isolated edit verified in a disposable export, and both expected incomplete turn-limit outcomes. A separate real-project review proves authenticated inference and read-only lifecycle but its findings failed acceptance; downstream Luna work does not change that failure.
 
-Artifacts: `/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/0.9.0-rc.28/` on the preparing machine (Git-ignored); check with `shasum -a 256 -c SHA256SUMS`:
+Desktop active-disconnect case 6 is INCONCLUSIVE: the worker reached end_turn before interruption. It was closed and its dirty worktree retained. Official-client disconnect case 7 is NOT RUN. One authorized allowance remains; no automatic retry of case 6 is allowed. Usage/cost is UNKNOWN. **rc.28 remains a prerelease, not stable v1.0.**
 
-```text
-vibe-supervisor-0.9.0-rc.28.tgz  sha256 61ca4ee91067e2bbf8a7dbf2f14baf3f3667a661c8c587d4fd9b02323fe7e6cd
-sbom.spdx.json                   sha256 13b6a16f2b6cc88f568452fb08a305911e7569605d0178ff986429c61e277ac0
-acceptance.json                  sha256 1afa534349c75bd4ada07271ada71ec2fd8541f585cd482b878cefcb65510c5e
-```
+See [target acceptance](docs/history/reviews/rc28-target-test-2026-10-13/STATUS.md), its redacted run records, exact fixture assignments and checksum manifest. Private project source and search-console evidence are not published here.
 
-Upgrading from rc.23: a group- or world-writable config is refused (set it to 0600), and the Codex registration needs a reconnect to load the new code.
+Registration uses the explicit selected config with --isolated. Group/world-writable configs fail closed; native handshake/readiness, not CLI version, identify the active desktop connection.
 
 ## 1.0 gates (owner decision 2026-10-12)
 
@@ -44,10 +40,11 @@ Required, all on the exact rc.28 artifact: native readiness on the Codex desktop
 
 ## Next steps
 
-1. **Owner:** publish rc.28 as a tagged GitHub prerelease. Neither `gh` account on the preparing machine can create releases on `crew-lab/codex-vibe`; only the Keychain token behind `make push` can push. Tags currently stop at rc.22.
-2. **Target machine**, following the [brief](docs/history/rc28-target-brief.md) and the [runbook](docs/history/rc28-target-runbook.md): install rc.28 next to rc.23 (authorized), reconnect Codex, run readiness, then the five hosted runs and the disconnect (separately authorized budget). Stop at the first failure; no retry, raised limits, account rotation or Luna substitution; change no code.
-3. **Record** the evidence in `docs/history/reviews/rc28-target-test-<date>/` and `docs/history/acceptance.md`, and fill the `[EVIDENCE: …]` placeholders on branch `claude/v1.0.0` (on GitHub; version, changelog, README, compatibility and acceptance for 1.0.0, no code change). Push it with `make push-branch BRANCH=claude/v1.0.0`.
-4. **Go or no-go (owner).** If the sitting passed with no code change: `verify:release` and `package:rc` on `claude/v1.0.0`, merge into main, `make push`, tag `v1.0.0` and publish the release. Any code change after the hosted runs means a new candidate and repeating them. Finish the launch article from [draft-1.0.md](docs/history/article/draft-1.0.md) with the real numbers.
+1. Publish the reviewed exact rc.28 target archive as a GitHub prerelease at runtime source `bef09855cd8104b979b962462ae9d87062ed8a9d`, with package, SBOM, generated acceptance report, checksums and dated target acceptance supplement. Do not rebuild silently or tag the evidence/tooling commit as the tested runtime.
+2. Reconcile the active-disconnect contract: acceptance metadata calls for desktop and official-client observations; retain both until an explicit owner decision changes the gate. The desktop attempt consumed its allowance without proving interruption. No retry is authorized by the one remaining official-client allowance.
+3. Finish independently observed active-disconnect acceptance with an explicit bounded task, live ownership/process-group observer and evidence of a running worker before disconnect. Stop on first unexpected failure; do not replay tasks.
+4. Verify the declared Node floor on current candidate source or make an explicit supported-version decision. An older rc.24 floor result is not rc.28 proof.
+5. Only then decide the final v1 source/package identity, exact-artifact validation and publication. Version/doc changes create new package bytes; do not automatically transfer hosted PASS to a new archive. No stable tag or release before required gates and owner go/no-go.
 
 ## After 1.0
 

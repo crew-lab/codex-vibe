@@ -1,0 +1,41 @@
+diff --git a/src/at-least.mjs b/src/at-least.mjs
+new file mode 100644
+index 0000000..da8a44a
+--- /dev/null
++++ b/src/at-least.mjs
+@@ -0,0 +1 @@
++export function atLeast(value, limit) { return value >= limit; }
+diff --git a/tests/at-least.test.mjs b/tests/at-least.test.mjs
+new file mode 100644
+index 0000000..065cabd
+--- /dev/null
++++ b/tests/at-least.test.mjs
+@@ -0,0 +1,28 @@
++import { strict as assert } from 'node:assert';
++import { describe, test } from 'node:test';
++import { atLeast } from '../src/at-least.mjs';
++
++const { equal } = assert;
++
++describe('atLeast', () => {
++  test('below', () => {
++    equal(atLeast(3, 5), false);
++    equal(atLeast(-10, -5), false);
++  });
++
++  test('equal', () => {
++    equal(atLeast(5, 5), true);
++    equal(atLeast(-5, -5), true);
++    equal(atLeast(0, 0), true);
++  });
++
++  test('above', () => {
++    equal(atLeast(7, 5), true);
++    equal(atLeast(-5, -10), true);
++  });
++
++  test('negatives', () => {
++    equal(atLeast(-3, -5), true);
++    equal(atLeast(-5, -3), false);
++  });
++});

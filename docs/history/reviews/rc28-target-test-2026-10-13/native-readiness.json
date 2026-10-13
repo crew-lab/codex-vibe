@@ -1,0 +1,89 @@
+{
+  "date": "2026-10-13",
+  "inference": false,
+  "checks": [
+    {
+      "server_version": "0.9.0-rc.28",
+      "server_instance_id": "8a5b66de-e560-43d9-add0-6c3b1277c730",
+      "session_id": "session-17KMUe",
+      "policy_path": "<private-supervisor-home>/rc20-config/config.toml",
+      "policy_revision": "1b44e421b46ad2443563e8b5625f1ad4859870bfe02397fcb86acbeb41db3966",
+      "restart_required": false,
+      "boot_drift": [],
+      "operation": "review",
+      "requested_workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+      "workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+      "eligible": true,
+      "blockers": [],
+      "active_slot": {
+        "busy": false
+      },
+      "runtime": {
+        "executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
+        "resolved_executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
+        "executable_found": true,
+        "pinned_version": "2.26.1",
+        "version_verified": false,
+        "note": "Vibe was not launched. The executable is resolved only; the exact version 2.26.1 is verified when a run starts and drift fails that run closed."
+      },
+      "receipt_expires_at": "2026-10-13T11:29:54.801Z",
+      "next_action": "Start the review with readiness_receipt before receipt_expires_at on this same connection. The receipt proves preparation only; it does not authorize the task or guarantee provider availability."
+    },
+    {
+      "server_version": "0.9.0-rc.28",
+      "server_instance_id": "8a5b66de-e560-43d9-add0-6c3b1277c730",
+      "session_id": "session-17KMUe",
+      "policy_path": "<private-supervisor-home>/rc20-config/config.toml",
+      "policy_revision": "1b44e421b46ad2443563e8b5625f1ad4859870bfe02397fcb86acbeb41db3966",
+      "restart_required": false,
+      "boot_drift": [],
+      "operation": "edit",
+      "requested_workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+      "workspace": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+      "base_ref": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+      "base_commit": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+      "eligible": true,
+      "blockers": [],
+      "active_slot": {
+        "busy": false
+      },
+      "runtime": {
+        "executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
+        "resolved_executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
+        "executable_found": true,
+        "pinned_version": "2.26.1",
+        "version_verified": false,
+        "note": "Vibe was not launched. The executable is resolved only; the exact version 2.26.1 is verified when a run starts and drift fails that run closed."
+      },
+      "receipt_expires_at": "2026-10-13T11:29:54.844Z",
+      "next_action": "Start the edit with readiness_receipt before receipt_expires_at on this same connection. The receipt proves preparation only; it does not authorize the task or guarantee provider availability."
+    },
+    {
+      "server_version": "0.9.0-rc.28",
+      "server_instance_id": "8a5b66de-e560-43d9-add0-6c3b1277c730",
+      "session_id": "session-17KMUe",
+      "policy_path": "<private-supervisor-home>/rc20-config/config.toml",
+      "policy_revision": "1b44e421b46ad2443563e8b5625f1ad4859870bfe02397fcb86acbeb41db3966",
+      "restart_required": false,
+      "boot_drift": [],
+      "operation": "review",
+      "requested_workspace": "<approved-second-workspace>",
+      "workspace": "<approved-second-workspace>",
+      "eligible": true,
+      "blockers": [],
+      "active_slot": {
+        "busy": false
+      },
+      "runtime": {
+        "executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
+        "resolved_executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
+        "executable_found": true,
+        "pinned_version": "2.26.1",
+        "version_verified": false,
+        "note": "Vibe was not launched. The executable is resolved only; the exact version 2.26.1 is verified when a run starts and drift fails that run closed."
+      },
+      "receipt_expires_at": "2026-10-13T11:29:54.851Z",
+      "next_action": "Start the review with readiness_receipt before receipt_expires_at on this same connection. The receipt proves preparation only; it does not authorize the task or guarantee provider availability."
+    }
+  ]
+}

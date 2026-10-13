@@ -1,0 +1,12 @@
+{
+  "source": "disposable export <temporary-export>/v1-matrix-case2-export",
+  "patch_sha256": "4cd8a0d91a8eff8bd214c6ceacff87548dd364a02cec0c516a492834519402b0",
+  "independent_predicate_checks": 9,
+  "worker_node_tests_passed": 4,
+  "acceptance": "PASS",
+  "coordinator_repairs": false,
+  "closed": true,
+  "worktree_removed": false,
+  "retained_reason": "Uncommitted or untracked files remain after export; worktree retained",
+  "cost_usage": "UNKNOWN"
+}
