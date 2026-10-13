@@ -38,7 +38,7 @@
     {
       "name": "node-floor-20.19.0",
       "status": "PASSED_LOCALLY",
-      "evidence": "Clean clone of main at 7cbb0ed on macOS arm64 under exactly Node v20.19.0 and npm 10.8.2: npm ci --offline from the populated cache succeeded and npm run verify:release passed (lint, typecheck, build, 60 files with 606 tests passed and 2 skipped, 72 Python tests, acceptance, secret scan, SBOM)."
+      "evidence": "2026-10-13, preparing machine (macOS arm64): clean clone of 7c7ba0e (runtime source identical to rc.28 bef0985) under exactly Node v20.19.0; npm ci and npm run verify:release passed (629 tests passed, 2 skipped; 72 Python tests; 13 tool tests; lint, typecheck, build, acceptance, secret scan, SBOM)."
     }
   ],
   "verified": [
