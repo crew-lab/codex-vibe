@@ -20,12 +20,13 @@ const SCENARIO_KEYS = new Set([
   'name', 'serverName', 'serverVersion', 'startup', 'watermark', 'sessionId', 'log', 'errors', 'runtime', 'harness',
   'harnessSelectionSource', 'effectiveConfig', 'effectiveFromEnv', 'thinkingLevels', 'modelWrite', 'readyInitially',
   'baselineStats', 'contextWindow', 'afterStop', 'eof', 'eofDelayMs', 'interrupt', 'extraFields', 'omit', 'effectWhileBlocked',
-  'badCursor', 'steps'
+  'badCursor', 'afterHandoff', 'steps'
 ]);
 const STEP_OPS = new Set([
   'say', 'reasoning', 'stats', 'call', 'unknownEntry', 'unknownNotification', 'staleEvent', 'delay', 'hold', 'wedge', 'crash',
-  'malformedLine', 'oversizedFrame', 'partialFrame', 'end'
+  'malformedLine', 'oversizedFrame', 'partialFrame', 'handoff', 'end'
 ]);
+const HANDOFF_KINDS = ['compacted', 'contextCleared'];
 const DECISION_TYPES = ['approve', 'approve_for_session', 'approve_permanently', 'deny', 'cancel_turn'];
 const APPROVING = new Set(['approve', 'approve_for_session', 'approve_permanently']);
 const CALLBACK_KINDS = ['approval', 'user_input', 'connector_auth'];
@@ -68,6 +69,7 @@ function parseScenario() {
   for (const step of steps) {
     if (!isObject(step) || !STEP_OPS.has(step.op)) throw new Error(`unknown scenario step: ${JSON.stringify(step)}`);
     if (step.op === 'call') checkCallStep(step);
+    if (step.op === 'handoff') checkHandoffStep(step);
     if (step.op === 'end') {
       if (step.status !== undefined && !TURN_STATUSES.includes(step.status)) throw new Error('end step status invalid');
       if (step.stopReason !== undefined && step.stopReason !== null && !STOP_REASONS.includes(step.stopReason)) throw new Error('end step stopReason invalid');
@@ -78,7 +80,15 @@ function parseScenario() {
   return parsed;
 }
 
+function checkHandoffStep(step) {
+  if (!HANDOFF_KINDS.includes(step.kind ?? 'compacted')) throw new Error('handoff step kind invalid');
+  if (step.newSessionId !== undefined && (typeof step.newSessionId !== 'string' || step.newSessionId.length === 0)) throw new Error('handoff step newSessionId invalid');
+  if (step.eventId !== undefined && !(Number.isInteger(step.eventId) && step.eventId > 0)) throw new Error('handoff step eventId invalid');
+  if (step.history !== undefined && !['keep', 'clear'].includes(step.history)) throw new Error('handoff step history invalid');
+}
+
 function checkCallStep(step) {
+  if (step.handoffWhileOpen !== undefined) checkHandoffStep(step.handoffWhileOpen);
   if (typeof step.tool !== 'string' || !['approval', 'auto', 'never'].includes(step.mode ?? 'approval')) throw new Error('call step needs tool and a valid mode');
   if (SHORT_TOOL_NAMES.includes(step.tool)) throw new Error(`call tool must be the Unified wire name, not the short name: ${step.tool}`);
   if (step.source !== undefined && !APPROVAL_SOURCES.includes(step.source)) throw new Error('call step source invalid');
@@ -234,7 +244,7 @@ const state = {
 };
 
 const now = () => CLOCK_BASE_MS + (state.clock += 1);
-const sessionId = () => scenario.sessionId ?? 'fake-session-0001';
+const sessionId = () => state.currentSessionId ?? scenario.sessionId ?? 'fake-session-0001';
 
 function emptyStats() {
   return {
@@ -572,6 +582,7 @@ async function runStep(step, turn, raceInterrupt) {
       return undefined;
     }
     case 'call': return runCall(step, turn, raceInterrupt, silent);
+    case 'handoff': await handoff(step); return undefined;
     case 'unknownEntry':
       await addEntry(baseEntry(turn, { type: step.kind ?? 'hologram', ...(step.entry ?? {}) }), { silent });
       return undefined;
@@ -612,6 +623,22 @@ async function say(step, turn, silent) {
   return undefined;
 }
 
+async function handoff(step) {
+  const previous = sessionId();
+  const next = step.newSessionId ?? `${previous}-next`;
+  state.currentSessionId = next;
+  const eventId = step.eventId ?? nextEventId();
+  state.eventId = eventId;
+  if (step.resetStats) Object.assign(state.stats, { sessionPromptTokens: 0, sessionCompletionTokens: 0, sessionCachedTokens: 0, modelCalls: state.stats.modelCalls === null ? null : 0 }, step.resetStats === true ? {} : step.resetStats);
+  if (step.history === 'clear') state.history = [];
+  else for (const entry of state.history) entry.sessionId = next;
+  const kind = step.kind ?? 'compacted';
+  const body = { oldSessionId: previous, state: sessionState(), sessionLog: sessionLog(), ...(kind === 'compacted' ? { summaryLength: 120 } : { planFilePath: null }) };
+  record('event', { name: 'handoff', handoffKind: kind, previous, next, eventId });
+  await send(notification(kind === 'compacted' ? 'session/compacted' : 'session/contextCleared', eventId, body));
+  await send(notification('session/statsUpdated', nextEventId(), { stats: clone(state.stats), contextWindow: scenario.contextWindow ?? 128000 }));
+}
+
 async function runCall(step, turn, raceInterrupt, silent) {
   const detail = effectDetail(step, state.session.cwd);
   const mode = step.mode ?? 'approval';
@@ -620,7 +647,7 @@ async function runCall(step, turn, raceInterrupt, silent) {
   const callId = `call-${sequence}`;
   const effect = baseEntry(turn, { id: `effect-${actionId}`, type: 'effect', title: step.tool, detail, state: { status: 'running', outputText: '' } });
   if (mode === 'auto') {
-    effect.state = { ...completedState(detail, step, step.approvalType ?? 'always', step.source ?? 'config'), ...(step.approvalMeta === false ? NO_APPROVAL_META : {}) };
+    effect.state = { ...completedState(detail, step, step.approvalType ?? 'always', step.source ?? 'config'), ...(step.approvalMeta === false ? NO_APPROVAL_META : {}), ...(step.callbackId === undefined ? {} : { callbackId: step.callbackId }) };
     await addEntry(effect, { silent });
     return undefined;
   }
@@ -650,7 +677,7 @@ async function runApproval(step, turn, effect, detail, callId, raceInterrupt) {
     relatedEntryId: effect.id,
     callbackId,
     title: `Approve ${step.tool}`,
-    detail: { kind: 'approval', effect: clone(detail), requiredPermissions: [], choices: [...DECISION_TYPES], pathScopeChoices: [], relatedEntryId: effect.id, reason: null },
+    detail: { kind: 'approval', effect: step.callbackInput === undefined ? clone(detail) : { ...clone(detail), input: normalizedInput(detail.kind, step.callbackInput) }, requiredPermissions: [], choices: [...DECISION_TYPES], pathScopeChoices: [], relatedEntryId: effect.id, reason: null },
     state: { status: 'open' }
   });
   await addEntry(callbackEntry);
@@ -662,6 +689,7 @@ async function runApproval(step, turn, effect, detail, callId, raceInterrupt) {
   state.pendingServerRequests.set(requestId, { resolve: ack.resolve, callbackId });
   await send({ jsonrpc: '2.0', id: requestId, method: 'callback/call', params: { callback: clone(callbackEntry) } });
   record('event', { name: 'callbackCall', callbackId, requestId, tool: step.tool });
+  if (step.handoffWhileOpen) await handoff(step.handoffWhileOpen);
   const ackResult = await raceInterrupt(ack.promise);
   if (ackResult === INTERRUPTED) return cancelCallback(effect, callbackEntry, callbackId);
   const acknowledged = isObject(ackResult?.result) && ackResult.result.callbackId === callbackId && ackResult.result.accepted === true;
@@ -675,7 +703,8 @@ async function runApproval(step, turn, effect, detail, callId, raceInterrupt) {
   const answered = { status: 'answered', output: decided.output ?? { type: 'approval', decision: { type: 'deny', pathScope: null }, feedback: null } };
   await patchEntry(callbackEntry, [{ op: 'replace', path: '/generationStatus', value: 'completed' }, { op: 'replace', path: '/state', value: answered }]);
   const finalState = approved ? completedState(detail, step, 'ask', 'user') : deniedState(detail, CALLBACK_DENIED, 'ask', 'user');
-  await patchEntry(effect, [{ op: 'replace', path: '/generationStatus', value: 'completed' }, { op: 'replace', path: '/state', value: finalState }]);
+  const alteration = step.alterAfterApproval === undefined ? [] : [{ op: 'replace', path: '/detail/input', value: normalizedInput(detail.kind, step.alterAfterApproval) }];
+  await patchEntry(effect, [...alteration, { op: 'replace', path: '/generationStatus', value: 'completed' }, { op: 'replace', path: '/state', value: finalState }]);
   if (decided.decision === 'cancel_turn') requestInterrupt();
   return undefined;
 }
@@ -763,6 +792,7 @@ function effectiveConfig() {
   if (scenario.effectiveFromEnv !== false) mergeDeep(base, envOverrides());
   if (session.thinkingWritten) base.models[session.modelAlias] = { thinking: session.reasoningEffort };
   if (scenario.effectiveConfig) mergeDeep(base, scenario.effectiveConfig);
+  if (state.currentSessionId && scenario.afterHandoff?.effectiveConfig) mergeDeep(base, scenario.afterHandoff.effectiveConfig);
   return base;
 }
 

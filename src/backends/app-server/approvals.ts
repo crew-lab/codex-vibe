@@ -1,9 +1,10 @@
+import { createHash } from 'node:crypto';
 import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { RunMode } from '../../contracts.js';
 import { isPathWithinRoot } from '../../security/paths.js';
 import type { JsonObject } from './jsonrpc.js';
-import { callbackAcknowledgement, effectFilePath, parseCallbackCall, type ApprovalDecisionType, type ApprovalRequest } from './protocol.js';
+import { EFFECT_PATH_FIELD, callbackAcknowledgement, effectFilePath, parseCallbackCall, type ApprovalDecisionType, type ApprovalRequest } from './protocol.js';
 
 export const REVIEW_TOOLS: readonly string[] = ['file_system.read_file'];
 export const EDIT_TOOLS: readonly string[] = ['file_system.read_file', 'file_system.write_file', 'file_system.search_replace'];
@@ -39,6 +40,9 @@ export type DenyReason =
   | 'decision_deadline'
   | 'duplicate_callback'
   | 'ledger_full'
+  | 'foreign_session'
+  | 'unlinked_callback'
+  | 'handler_revoked'
   | 'policy_error';
 
 export interface ApprovalVerdict {
@@ -49,10 +53,67 @@ export interface ApprovalVerdict {
 export interface ApprovalRecord {
   callbackId: string;
   relatedEntryId: string | null;
+  sessionId: string | null;
+  turnId: string | null;
   tool: string | null;
   path: string | null;
+  fingerprint: string | null;
   decision: ApprovalDecisionType;
   reason: DenyReason | null;
+}
+
+export interface ApprovalContext {
+  sessionId: string | null;
+  turnId: string | null;
+}
+
+const MAX_CANONICAL_DEPTH = 32;
+
+function canonicalize(value: unknown, depth: number): unknown {
+  if (depth > MAX_CANONICAL_DEPTH) throw new RangeError('input is nested too deeply to fingerprint');
+  if (Array.isArray(value)) return value.map((item) => canonicalize(item, depth + 1));
+  if (value !== null && typeof value === 'object') {
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(value).sort()) sorted[key] = canonicalize((value as Record<string, unknown>)[key], depth + 1);
+    return sorted;
+  }
+  return value;
+}
+
+export function canonicalJson(value: unknown): string {
+  return JSON.stringify(canonicalize(value, 0)) ?? 'null';
+}
+
+function normalizedChanges(input: Record<string, unknown>): unknown {
+  const normalize = (change: unknown): unknown => {
+    if (change === null || typeof change !== 'object' || Array.isArray(change)) return change;
+    const record = change as Record<string, unknown>;
+    return { oldString: record.oldString, newString: record.newString, replaceAll: record.replaceAll === true };
+  };
+  if (Array.isArray(input.changes)) return input.changes.map(normalize);
+  return [normalize(input)];
+}
+
+export function inputFingerprint(tool: string, input: Record<string, unknown>): string | null {
+  let material: unknown;
+  switch (tool) {
+    case 'file_system.read_file':
+      material = { tool, filePath: input[EFFECT_PATH_FIELD] };
+      break;
+    case 'file_system.write_file':
+      material = { tool, filePath: input[EFFECT_PATH_FIELD], content: input.content };
+      break;
+    case 'file_system.search_replace':
+      material = { tool, filePath: input[EFFECT_PATH_FIELD], changes: normalizedChanges(input) };
+      break;
+    default:
+      material = { tool, input };
+  }
+  try {
+    return createHash('sha256').update(canonicalJson(material)).digest('hex');
+  } catch {
+    return null;
+  }
 }
 
 export function profileTools(mode: RunMode): readonly string[] {
@@ -79,6 +140,10 @@ function restrictedSegment(segments: readonly string[]): 'path_reserved' | 'path
   for (const segment of segments) if (RESERVED_NAMES.has(segment.toLowerCase())) return 'path_reserved';
   for (const segment of segments) if (SENSITIVE_EXPRESSIONS.some((expression) => expression.test(segment))) return 'path_secret';
   return null;
+}
+
+export function restrictedRelativePath(relative: string): 'path_reserved' | 'path_secret' | null {
+  return restrictedSegment(relative.split(/[\\/]+/).filter((segment) => segment !== ''));
 }
 
 function isMissing(error: unknown): boolean {
@@ -159,11 +224,16 @@ export async function evaluateApproval(options: { mode: RunMode; workspace: stri
 export class ApprovalLedger {
   private readonly byCallback = new Map<string, ApprovalRecord>();
   private readonly byEffect = new Map<string, ApprovalRecord>();
+  private readonly pending = new Set<string>();
 
   constructor(private readonly maxRecords = DEFAULT_MAX_LEDGER_RECORDS) {}
 
   get size(): number {
     return this.byCallback.size;
+  }
+
+  get pendingCallbacks(): number {
+    return this.pending.size;
   }
 
   has(callbackId: string): boolean {
@@ -174,8 +244,17 @@ export class ApprovalLedger {
     return this.byCallback.size >= this.maxRecords;
   }
 
+  open(callbackId: string): void {
+    this.pending.add(callbackId);
+  }
+
+  close(callbackId: string): void {
+    this.pending.delete(callbackId);
+  }
+
   record(record: ApprovalRecord): boolean {
     if (this.isFull() || this.byCallback.has(record.callbackId)) return false;
+    if (record.relatedEntryId !== null && this.byEffect.has(record.relatedEntryId)) return false;
     this.byCallback.set(record.callbackId, record);
     if (record.relatedEntryId !== null) this.byEffect.set(record.relatedEntryId, record);
     return true;
@@ -199,6 +278,7 @@ export interface ApprovalHandlerOptions {
   workspace: string;
   deadlineMs?: number;
   ledger?: ApprovalLedger;
+  currentSessionId?: () => string;
   evaluate?: (request: ApprovalRequest) => Promise<ApprovalVerdict>;
 }
 
@@ -218,29 +298,68 @@ function withDeadline(work: Promise<ApprovalVerdict>, deadlineMs: number): Promi
   });
 }
 
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+export function callbackContext(params: JsonObject): ApprovalContext {
+  const callback = params.callback;
+  if (callback === null || typeof callback !== 'object' || Array.isArray(callback)) return { sessionId: null, turnId: null };
+  const record = callback as Record<string, unknown>;
+  return { sessionId: nonEmptyString(record.sessionId), turnId: nonEmptyString(record.turnId) };
+}
+
 export class ApprovalHandler {
   readonly ledger: ApprovalLedger;
   private readonly deadlineMs: number;
+  private readonly currentSessionId: (() => string) | undefined;
   private readonly evaluate: (request: ApprovalRequest) => Promise<ApprovalVerdict>;
+  private revoked = false;
 
   constructor(options: ApprovalHandlerOptions) {
     const deadlineMs = options.deadlineMs ?? DEFAULT_DECISION_DEADLINE_MS;
     if (!Number.isFinite(deadlineMs) || deadlineMs <= 0) throw new RangeError('deadlineMs must be a positive number');
     this.deadlineMs = deadlineMs;
     this.ledger = options.ledger ?? new ApprovalLedger();
+    this.currentSessionId = options.currentSessionId;
     this.evaluate = options.evaluate ?? ((request) => evaluateApproval(options, request));
   }
 
-  async decide(request: ApprovalRequest): Promise<ApprovalVerdict> {
+  get isRevoked(): boolean {
+    return this.revoked;
+  }
+
+  revoke(): void {
+    this.revoked = true;
+  }
+
+  settle(callbackId: string): void {
+    this.ledger.close(callbackId);
+  }
+
+  private async judge(request: ApprovalRequest, context: ApprovalContext, expectedSession: string | null): Promise<ApprovalVerdict> {
+    if (this.revoked) return { decision: 'deny', reason: 'handler_revoked' };
+    if (expectedSession !== null && context.sessionId !== null && context.sessionId !== expectedSession) return { decision: 'deny', reason: 'foreign_session' };
+    const verdict = await withDeadline(this.evaluate(request), this.deadlineMs);
+    if (this.revoked) return { decision: 'deny', reason: 'handler_revoked' };
+    if (verdict.decision === 'approve' && request.relatedEntryId === null) return { decision: 'deny', reason: 'unlinked_callback' };
+    return verdict;
+  }
+
+  async decide(request: ApprovalRequest, context: ApprovalContext = { sessionId: null, turnId: null }): Promise<ApprovalVerdict> {
     if (this.ledger.has(request.callbackId)) return { decision: 'deny', reason: 'duplicate_callback' };
     if (this.ledger.isFull()) return { decision: 'deny', reason: 'ledger_full' };
-    const verdict = await withDeadline(this.evaluate(request), this.deadlineMs);
+    const expectedSession = this.currentSessionId?.() ?? null;
+    const verdict = await this.judge(request, context, expectedSession);
     const filePath = request.effect ? effectFilePath(request.effect.input) : null;
     const recorded = this.ledger.record({
       callbackId: request.callbackId,
       relatedEntryId: request.relatedEntryId,
+      sessionId: context.sessionId ?? expectedSession,
+      turnId: context.turnId,
       tool: request.effect?.toolName ?? null,
       path: filePath === null ? null : filePath.slice(0, MAX_RECORDED_PATH_CHARS),
+      fingerprint: request.effect ? inputFingerprint(request.effect.toolName, request.effect.input) : null,
       decision: verdict.decision,
       reason: verdict.reason
     });
@@ -250,10 +369,11 @@ export class ApprovalHandler {
 
   begin(params: JsonObject): PendingApproval {
     const request = parseCallbackCall(params);
+    this.ledger.open(request.callbackId);
     return {
       callbackId: request.callbackId,
       acknowledgement: callbackAcknowledgement(request.callbackId),
-      verdict: this.decide(request)
+      verdict: this.decide(request, callbackContext(params))
     };
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApprovalLedger } from '../../src/backends/app-server/approvals.js';
+import { ApprovalLedger, inputFingerprint } from '../../src/backends/app-server/approvals.js';
 import {
   EffectValidator,
   EventProcessor,
@@ -30,9 +30,13 @@ function effect(id: string, tool: string, state: Json, input?: Json): EffectEntr
 const completed = (extra: Json = {}): Json => ({ status: 'completed', ...approved, ...extra });
 const denied = (extra: Json = {}): Json => ({ status: 'failed', error: { code: 'tool_denied', message: 'denied' }, decision: 'skip', approvalType: 'never', approvalSource: 'never', ...extra });
 
-function ledgerWith(...records: Array<[callbackId: string, effectId: string, tool: string, decision: 'approve' | 'deny']>): ApprovalLedger {
+const defaultInput: Json = { filePath: 'src/index.ts' };
+
+function ledgerWith(...records: Array<[callbackId: string, effectId: string, tool: string, decision: 'approve' | 'deny', input?: Json]>): ApprovalLedger {
   const ledger = new ApprovalLedger();
-  for (const [callbackId, relatedEntryId, tool, decision] of records) ledger.record({ callbackId, relatedEntryId, tool, path: null, decision, reason: decision === 'deny' ? 'path_secret' : null });
+  for (const [callbackId, relatedEntryId, tool, decision, input] of records) {
+    ledger.record({ callbackId, relatedEntryId, sessionId: SESSION, turnId: 't1', tool, path: null, fingerprint: inputFingerprint(tool, input ?? defaultInput), decision, reason: decision === 'deny' ? 'path_secret' : null });
+  }
   return ledger;
 }
 
@@ -70,9 +74,10 @@ describe('EffectValidator', () => {
   });
 
   it('is fatal when an approved effect is for a tool outside the profile', () => {
-    const inspection = new EffectValidator('review', ledgerWith(['cb', 'e1', write, 'approve'])).inspect(effect('e1', write, completed(), { filePath: 'a.ts', content: '' }));
+    const input = { filePath: 'a.ts', content: '' };
+    const inspection = new EffectValidator('review', ledgerWith(['cb', 'e1', write, 'approve', input])).inspect(effect('e1', write, completed(), input));
     expect(inspection).toMatchObject({ status: 'fatal', fatal: { code: 'unapproved_effect', tool: write } });
-    expect(new EffectValidator('edit', ledgerWith(['cb', 'e1', write, 'approve'])).inspect(effect('e1', write, completed(), { filePath: 'a.ts', content: '' }))).toMatchObject({ status: 'settled', outcome: 'executed' });
+    expect(new EffectValidator('edit', ledgerWith(['cb', 'e1', write, 'approve', input])).inspect(effect('e1', write, completed(), input))).toMatchObject({ status: 'settled', outcome: 'executed' });
   });
 
   it('records an off-profile denial as permission_denied_by_policy and keeps going', () => {
@@ -208,7 +213,7 @@ describe('EventProcessor notifications and entries', () => {
     expect(JSON.stringify(target.finalMessage())).not.toContain('thoughts');
   });
 
-  it('counts callback entries without retaining them', () => {
+  it('counts callback entries and tracks only whether they are still open', () => {
     const target = processor();
     send(target, added(8, { type: 'callback', id: 'cb1', turnId: 't1', callbackId: 'cb1', relatedEntryId: 'e1', detail: { kind: 'approval', effect: null }, state: { status: 'open' } }));
     expect(target.counters.callbacksSeen).toBe(1);
@@ -218,7 +223,7 @@ describe('EventProcessor notifications and entries', () => {
   it('adopts the new session id on compaction and ignores other sessions', () => {
     const target = processor();
     const handoff = target.handle('session/compacted', { eventId: 8, sessionId: 'session-2', oldSessionId: SESSION });
-    expect(handoff.signals).toEqual([{ type: 'session_handoff', kind: 'session/compacted', oldSessionId: SESSION, newSessionId: 'session-2' }]);
+    expect(handoff.signals).toEqual([{ type: 'session_handoff', kind: 'session/compacted', oldSessionId: SESSION, newSessionId: 'session-2', eventId: 8, historicalEffects: 0 }]);
     expect(target.sessionId).toBe('session-2');
     expect(types(target.handle('turn/started', { eventId: 9, sessionId: SESSION, turn: { ...turn, status: 'in_progress' } }))).toEqual([]);
     expect(target.counters.foreignSessionNotifications).toBe(1);
@@ -326,8 +331,9 @@ describe('EventProcessor effects and patches', () => {
 
   it('redacts secrets in signal paths and the final message', () => {
     const secret = 'sk-live-0123456789abcdef';
-    const target = processor({ secrets: [secret] }, ledgerWith(['cb', 'e1', read, 'approve']));
-    send(target, added(8, effectWire('e1', read, completed(), { filePath: `src/${secret}.ts` })));
+    const secretInput = { filePath: `src/${secret}.ts` };
+    const target = processor({ secrets: [secret] }, ledgerWith(['cb', 'e1', read, 'approve', secretInput]));
+    send(target, added(8, effectWire('e1', read, completed(), secretInput)));
     send(target, added(9, assistant('m1', `key is ${secret}`)));
     expect(JSON.stringify(target.effectRecords())).not.toContain(secret);
     expect(target.finalMessage()?.text).not.toContain(secret);
@@ -508,5 +514,245 @@ describe('against the scripted fake vibe-app-server', () => {
     expect(run.processor.finalMessage()).toMatchObject({ text: 'The review found no issues.', complete: true });
     expect(run.audit.finalMessage?.text).toBe('The review found no issues.');
     expect(run.processor.counters.skippedPatchOps).toBeGreaterThan(0);
+  });
+});
+
+describe('effect to callback fingerprint linking', () => {
+  const read = 'file_system.read_file';
+  const write = 'file_system.write_file';
+  const edit = 'file_system.search_replace';
+  const editInput = (newString: string, extra: Json = {}): Json => ({ filePath: 'src/a.ts', changes: [{ oldString: 'a', newString, replaceAll: false }], ...extra });
+  const inspect = (ledger: ApprovalLedger, tool: string, input: Json, state: Json = completed(), id = 'e1', mode: 'review' | 'edit' = 'edit') => new EffectValidator(mode, ledger).inspect(effect(id, tool, state, input));
+  const unapproved = (inspection: ReturnType<typeof inspect>): string => (inspection.status === 'fatal' ? inspection.fatal.message : inspection.status);
+
+  it('accepts an effect whose input equals the approved input', () => {
+    expect(inspect(ledgerWith(['cb', 'e1', edit, 'approve', editInput('b')]), edit, editInput('b'))).toMatchObject({ status: 'settled', outcome: 'executed' });
+  });
+
+  it('is fatal when the path, the written content or an edit change differs from what was approved', () => {
+    const cases: Array<[string, string, Json, Json]> = [
+      ['read path', read, { filePath: 'src/index.ts' }, { filePath: 'src/other.ts' }],
+      ['write path', write, { filePath: 'a.ts', content: 'x' }, { filePath: 'b.ts', content: 'x' }],
+      ['write content', write, { filePath: 'a.ts', content: 'x' }, { filePath: 'a.ts', content: 'y' }],
+      ['edit replacement', edit, editInput('b'), editInput('c')],
+      ['edit replaceAll', edit, editInput('b'), { filePath: 'src/a.ts', changes: [{ oldString: 'a', newString: 'b', replaceAll: true }] }],
+      ['edit extra change', edit, editInput('b'), { filePath: 'src/a.ts', changes: [{ oldString: 'a', newString: 'b' }, { oldString: 'c', newString: 'd' }] }]
+    ];
+    for (const [name, tool, approvedInput, executedInput] of cases) {
+      const inspection = inspect(ledgerWith(['cb', 'e1', tool, 'approve', approvedInput]), tool, executedInput);
+      expect(inspection.status, name).toBe('fatal');
+      expect(unapproved(inspection), name).toContain('the executed input differs from the approved input');
+      expect(inspection, name).toMatchObject({ fatal: { code: 'unapproved_effect', entryId: 'e1' } });
+    }
+  });
+
+  it('treats the single-change edit form like a one element change list and ignores read ranges', () => {
+    const approved = { filePath: 'src/a.ts', oldString: 'a', newString: 'b', replaceAll: false };
+    expect(inspect(ledgerWith(['cb', 'e1', edit, 'approve', approved]), edit, editInput('b'))).toMatchObject({ status: 'settled' });
+    expect(inspect(ledgerWith(['cb', 'e1', read, 'approve', { filePath: 'src/index.ts', offset: null, limit: 2000 }]), read, { filePath: 'src/index.ts', offset: 5, limit: 10 })).toMatchObject({ status: 'settled' });
+  });
+
+  it('is fatal when the approval was given for a different turn or in a session outside the run', () => {
+    const ledger = new ApprovalLedger();
+    ledger.record({ callbackId: 'cb', relatedEntryId: 'e1', sessionId: 'session-9', turnId: 't9', tool: read, path: null, fingerprint: inputFingerprint(read, defaultInput), decision: 'approve', reason: null });
+    const inspection = new EffectValidator('review', ledger).inspect(effect('e1', read, completed()), { fingerprint: inputFingerprint(read, defaultInput), sessionIds: new Set([SESSION]) });
+    expect(unapproved(inspection)).toContain('the approval belongs to a different turn');
+    expect(unapproved(inspection)).toContain('the approval belongs to a different session');
+  });
+
+  it('is fatal when an approval whose record has no fingerprint is used, or the effect input cannot be fingerprinted', () => {
+    const ledger = new ApprovalLedger();
+    ledger.record({ callbackId: 'cb', relatedEntryId: 'e1', sessionId: SESSION, turnId: 't1', tool: read, path: null, fingerprint: null, decision: 'approve', reason: null });
+    expect(unapproved(new EffectValidator('review', ledger).inspect(effect('e1', read, completed())))).toContain('differs');
+    expect(unapproved(new EffectValidator('review', ledgerWith(['cb', 'e1', read, 'approve'])).inspect(effect('e1', read, completed()), { fingerprint: null }))).toContain('differs');
+  });
+
+  it('is fatal when a second effect names the callback that was approved for the first', () => {
+    const ledger = ledgerWith(['cb', 'e1', read, 'approve']);
+    const validator = new EffectValidator('review', ledger);
+    expect(validator.inspect(effect('e1', read, completed()))).toMatchObject({ status: 'settled', outcome: 'executed' });
+    const second = validator.inspect(effect('e2', read, completed({ callbackId: 'cb' })));
+    expect(second).toMatchObject({ status: 'fatal', fatal: { code: 'unapproved_effect', entryId: 'e2' } });
+    expect(unapproved(second)).toContain('reuses an approval that belongs to another effect');
+  });
+
+  it('is fatal when the input of a retained effect is patched after approval, and tolerates display-only patches', () => {
+    const approvedInput = editInput('b');
+    const target = processor({ mode: 'edit' }, ledgerWith(['cb', 'e1', edit, 'approve', approvedInput]));
+    send(target, added(8, effectWire('e1', edit, { status: 'running' }, approvedInput, 'file_edit')));
+    expect(types(send(target, updated(9, 'e1', [{ op: 'replace', path: '/detail/display/summary', value: 'Editing' }])))).toEqual([]);
+    const result = send(target, updated(10, 'e1', [{ op: 'replace', path: '/detail/input/changes/0/newString', value: 'evil' }, { op: 'replace', path: '/state', value: completed() }]));
+    expect(result.signals).toMatchObject([{ type: 'fatal', fatal: { code: 'unapproved_effect', entryId: 'e1' } }]);
+  });
+
+  it('is fatal when an effect is re-added with a different input after it was approved', () => {
+    const target = processor({ mode: 'edit' }, ledgerWith(['cb', 'e1', edit, 'approve', editInput('b')]));
+    send(target, added(8, effectWire('e1', edit, { status: 'running' }, editInput('b'), 'file_edit')));
+    const result = send(target, added(9, effectWire('e1', edit, completed(), editInput('c'), 'file_edit')));
+    expect(result.signals).toMatchObject([{ type: 'fatal', fatal: { code: 'unapproved_effect' } }]);
+  });
+
+  it('settles an approved edit whose input arrives complete in the terminal entry', () => {
+    const target = processor({ mode: 'edit' }, ledgerWith(['cb', 'e1', edit, 'approve', editInput('b')]));
+    send(target, added(8, effectWire('e1', edit, { status: 'running' }, editInput('b'), 'file_edit')));
+    const result = send(target, updated(9, 'e1', [{ op: 'replace', path: '/state', value: completed() }]));
+    expect(result.signals).toMatchObject([{ type: 'tool_effect', outcome: 'executed', tool: edit }]);
+  });
+});
+
+describe('session handoff', () => {
+  const read = 'file_system.read_file';
+  const NEXT = 'session-2';
+  const handoffParams = (eventId: number | null, overrides: Json = {}): Json => ({ eventId, sessionId: NEXT, oldSessionId: SESSION, ...overrides });
+  const nextEnvelope = (eventId: number, extra: Json = {}): Json => ({ eventId, sessionId: NEXT, ...extra });
+  const callbackWire = (id: string, status: string, relatedEntryId = 'e1'): Json => ({ type: 'callback', id, turnId: 't1', callbackId: id, relatedEntryId, detail: { kind: 'approval', effect: null }, state: { status } });
+  const settledRead = (target: EventProcessor): void => {
+    send(target, added(8, effectWire('e1', read, { status: 'running' })));
+    send(target, updated(9, 'e1', [{ op: 'replace', path: '/state', value: completed() }]));
+  };
+  const asHistory = (...wires: Json[]): HistoryPage => parseHistoryListResult({ items: wires, nextCursor: null, previousCursor: null });
+
+  it('adopts the new session and its watermark, and remembers what was settled before it', () => {
+    const target = processor({}, ledgerWith(['cb', 'e1', read, 'approve']));
+    settledRead(target);
+    const result = target.handle('session/compacted', handoffParams(3));
+    expect(result.signals).toEqual([{ type: 'session_handoff', kind: 'session/compacted', oldSessionId: SESSION, newSessionId: NEXT, eventId: 3, historicalEffects: 1 }]);
+    expect(target.sessionId).toBe(NEXT);
+    expect(target.sessionIds).toEqual([SESSION, NEXT]);
+    expect(target.watermark).toBe(3);
+    expect(target.counters.handoffs).toBe(1);
+    expect(target.historicalEffects.get('e1')?.record).toEqual({ entryId: 'e1', tool: read, outcome: 'executed', path: 'src/index.ts' });
+    expect(target.effectRecords()).toEqual([{ entryId: 'e1', tool: read, outcome: 'executed', path: 'src/index.ts' }]);
+    expect(types(send(target, ['turn/started', nextEnvelope(4, { turn: { ...turn, status: 'in_progress' } })]))).toEqual(['turn_started']);
+  });
+
+  it('refuses a handoff while an effect has not finished', () => {
+    const target = processor({}, ledgerWith(['cb', 'e1', read, 'approve']));
+    send(target, added(8, effectWire('e1', read, { status: 'running' })));
+    const result = target.handle('session/contextCleared', handoffParams(3));
+    expect(result.signals).toMatchObject([{ type: 'fatal', fatal: { code: 'session_handoff_unsafe' } }]);
+    expect(target.fatal?.message).toContain('1 effect(s) have not finished');
+    expect(target.sessionId).toBe(SESSION);
+  });
+
+  it('refuses a handoff while a callback entry is open and accepts it once the entry was answered', () => {
+    const target = processor();
+    send(target, added(8, callbackWire('cb1', 'open')));
+    const refused = processor();
+    send(refused, added(8, callbackWire('cb1', 'open')));
+    expect(refused.handle('session/compacted', handoffParams(3)).signals).toMatchObject([{ type: 'fatal', fatal: { code: 'session_handoff_unsafe' } }]);
+    expect(refused.fatal?.message).toContain('a callback is still open');
+    send(target, updated(9, 'cb1', [{ op: 'replace', path: '/generationStatus', value: 'completed' }, { op: 'replace', path: '/state', value: { status: 'answered', output: {} } }]));
+    expect(target.handle('session/compacted', handoffParams(3)).signals).toMatchObject([{ type: 'session_handoff' }]);
+  });
+
+  it('closes a callback entry on a status patch and keeps it open for an unrelated patch', () => {
+    const target = processor();
+    send(target, added(8, callbackWire('cb1', 'open')));
+    send(target, updated(9, 'cb1', [{ op: 'replace', path: '/updatedAt', value: 5 }]));
+    expect(target.handle('session/compacted', handoffParams(3)).signals).toMatchObject([{ type: 'fatal' }]);
+    const closed = processor();
+    send(closed, added(8, callbackWire('cb1', 'open')));
+    send(closed, updated(9, 'cb1', [{ op: 'replace', path: '/state/status', value: 'cancelled' }]));
+    expect(closed.handle('session/compacted', handoffParams(3)).signals).toMatchObject([{ type: 'session_handoff' }]);
+  });
+
+  it('refuses a handoff while the handler still has a callback it has not answered', () => {
+    const ledger = new ApprovalLedger();
+    ledger.open('cb-open');
+    const target = processor({}, ledger);
+    expect(target.handle('session/compacted', handoffParams(3)).signals).toMatchObject([{ type: 'fatal', fatal: { code: 'session_handoff_unsafe' } }]);
+    ledger.close('cb-open');
+    expect(processor({}, ledger).handle('session/compacted', handoffParams(3)).signals).toMatchObject([{ type: 'session_handoff' }]);
+  });
+
+  it('refuses a handoff that does not replace the active session, has no watermark or arrives during a gap', () => {
+    const cases: Array<[string, Json]> = [
+      ['foreign old session', handoffParams(3, { oldSessionId: 'session-9' })],
+      ['same session id', handoffParams(3, { sessionId: SESSION })],
+      ['no watermark', handoffParams(null)]
+    ];
+    for (const [name, params] of cases) {
+      const target = processor();
+      expect(target.handle('session/compacted', params).signals, name).toMatchObject([{ type: 'fatal', fatal: { code: 'session_handoff_unsafe' } }]);
+      expect(target.sessionId, name).toBe(SESSION);
+    }
+    const gapped = processor();
+    send(gapped, added(12, assistant('m1', 'x')));
+    expect(gapped.awaitingResync).toBe(true);
+    expect(gapped.handle('session/compacted', handoffParams(3)).signals).toMatchObject([{ type: 'fatal', fatal: { code: 'session_handoff_unsafe' } }]);
+  });
+
+  it('accepts the replayed history of the new session without re-emitting or re-validating effects it already settled', async () => {
+    const target = processor({}, ledgerWith(['cb', 'e1', read, 'approve']));
+    settledRead(target);
+    target.handle('session/compacted', handoffParams(3));
+    const adopted = await target.adoptHistory(async () => asHistory(effectWire('e1', read, completed()), assistant('m1', 'summary')));
+    expect(adopted.signals).toEqual([]);
+    expect(target.fatal).toBeNull();
+    expect(target.finalMessage()?.text).toBe('summary');
+  });
+
+  it('is fatal when a historical effect comes back changed, and when a settled effect appears that was never approved', async () => {
+    const changed = processor({}, ledgerWith(['cb', 'e1', read, 'approve']));
+    settledRead(changed);
+    changed.handle('session/compacted', handoffParams(3));
+    const adoptedChanged = await changed.adoptHistory(async () => asHistory(effectWire('e1', read, completed({ approvalSource: 'bypass', approvalType: 'always' }))));
+    expect(adoptedChanged.signals).toMatchObject([{ type: 'fatal', fatal: { code: 'historical_effect_changed', entryId: 'e1' } }]);
+    const alteredInput = processor({}, ledgerWith(['cb', 'e1', read, 'approve']));
+    settledRead(alteredInput);
+    alteredInput.handle('session/compacted', handoffParams(3));
+    expect((await alteredInput.adoptHistory(async () => asHistory(effectWire('e1', read, completed(), { filePath: 'src/other.ts' })))).signals).toMatchObject([{ type: 'fatal', fatal: { code: 'historical_effect_changed' } }]);
+
+    const hidden = processor();
+    hidden.handle('session/contextCleared', handoffParams(3));
+    const adoptedHidden = await hidden.adoptHistory(async () => asHistory(effectWire('e5', read, completed({ approvalType: 'always', approvalSource: 'config' }))));
+    expect(adoptedHidden.signals).toMatchObject([{ type: 'fatal', fatal: { code: 'unapproved_effect', entryId: 'e5' } }]);
+  });
+
+  it('is fatal when the replayed history cannot be paged', async () => {
+    const target = processor();
+    target.handle('session/compacted', handoffParams(3));
+    const adopted = await target.adoptHistory(async () => parseHistoryListResult({ items: [], nextCursor: 'c', previousCursor: null }));
+    expect(adopted.signals).toMatchObject([{ type: 'fatal', fatal: { code: 'history_paging_failed' } }]);
+  });
+
+  it('keeps historical effects after the handoff and fails when an update changes one', () => {
+    const target = processor({}, ledgerWith(['cb', 'e1', read, 'approve']));
+    settledRead(target);
+    target.handle('session/compacted', handoffParams(3));
+    const result = send(target, ['history/entryUpdated', nextEnvelope(4, { turnId: 't1', entryId: 'e1', patch: [{ op: 'replace', path: '/detail/input/filePath', value: 'src/other.ts' }] })]);
+    expect(result.signals).toMatchObject([{ type: 'fatal', fatal: { code: 'historical_effect_changed', entryId: 'e1' } }]);
+  });
+
+  it('validates an effect first seen after the handoff against the new session only', () => {
+    const ledger = ledgerWith(['cb', 'e1', read, 'approve']);
+    const target = processor({}, ledger);
+    target.handle('session/compacted', handoffParams(3));
+    ledger.record({ callbackId: 'cb2', relatedEntryId: 'e2', sessionId: NEXT, turnId: 't1', tool: read, path: null, fingerprint: inputFingerprint(read, defaultInput), decision: 'approve', reason: null });
+    expect(send(target, ['history/entryAdded', nextEnvelope(4, { turnId: 't1', entry: effectWire('e2', read, completed()) })]).signals).toMatchObject([{ type: 'tool_effect', entryId: 'e2', outcome: 'executed' }]);
+    const stale = send(target, ['history/entryAdded', nextEnvelope(5, { turnId: 't1', entry: effectWire('e1', read, completed()) })]);
+    expect(stale.signals).toMatchObject([{ type: 'fatal', fatal: { code: 'unapproved_effect', entryId: 'e1' } }]);
+    expect(target.fatal?.message).toContain('the approval belongs to a different session');
+  });
+
+  it('refuses a resync that returns another session', () => {
+    const target = processor();
+    const state: SessionState = { eventId: 12, session: { id: 'session-9', harness: 'unified', cwd: '/w', model: null, reasoningEffort: null, statusType: 'running' }, history: [], historyBeforeCursor: null, turns: [], isQuiescent: false };
+    expect(target.resync(state).signals).toMatchObject([{ type: 'fatal', fatal: { code: 'session_handoff_unsafe' } }]);
+  });
+
+  it('audits a post-handoff history against what was observed before it and the sessions of the run', () => {
+    const target = processor({}, ledgerWith(['cb', 'e1', read, 'approve']));
+    settledRead(target);
+    target.handle('session/compacted', handoffParams(3));
+    const options = { mode: 'review' as const, ledger: ledgerWith(['cb', 'e1', read, 'approve']), sessionIds: target.sessionIds, historical: target.historicalEffects };
+    const same = auditHistory([parseHistoryEntry(effectWire('e1', read, completed()))], options);
+    expect(same.fatal).toBeNull();
+    expect(same.effects).toEqual([{ entryId: 'e1', tool: read, outcome: 'executed', path: 'src/index.ts' }]);
+    const altered = auditHistory([parseHistoryEntry(effectWire('e1', read, completed(), { filePath: 'src/other.ts' }))], options);
+    expect(altered.fatal).toMatchObject({ code: 'historical_effect_changed', entryId: 'e1' });
+    const foreign = auditHistory([parseHistoryEntry(effectWire('e1', read, completed()))], { mode: 'review', ledger: ledgerWith(['cb', 'e1', read, 'approve']), sessionIds: ['session-9'] });
+    expect(foreign.fatal).toMatchObject({ code: 'unapproved_effect' });
   });
 });

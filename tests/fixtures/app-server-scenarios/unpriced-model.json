@@ -1,0 +1,8 @@
+{
+  "name": "unpriced-model",
+  "baselineStats": { "inputPricePerMillion": null, "outputPricePerMillion": null, "cachedInputPricePerMillion": null },
+  "steps": [
+    { "op": "stats", "stats": { "modelCalls": 1, "sessionPromptTokens": 10, "sessionCompletionTokens": 5 } },
+    { "op": "say", "text": "Done." }
+  ]
+}

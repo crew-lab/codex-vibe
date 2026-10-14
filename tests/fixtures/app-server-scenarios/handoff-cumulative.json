@@ -1,0 +1,10 @@
+{
+  "name": "handoff-cumulative",
+  "baselineStats": { "inputPricePerMillion": 0.4, "outputPricePerMillion": 2, "cachedInputPricePerMillion": 0.04 },
+  "steps": [
+    { "op": "stats", "stats": { "modelCalls": 2, "sessionPromptTokens": 1000, "sessionCompletionTokens": 200, "sessionCachedTokens": 400 } },
+    { "op": "handoff", "kind": "contextCleared", "newSessionId": "fake-session-0002", "history": "clear" },
+    { "op": "stats", "stats": { "modelCalls": 3, "sessionPromptTokens": 1500, "sessionCompletionTokens": 300, "sessionCachedTokens": 500 } },
+    { "op": "say", "text": "Cleared and carried on." }
+  ]
+}

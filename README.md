@@ -54,7 +54,7 @@ Bind preparation, doctor, allow, and serve to the same explicit config. For a se
 3. Wait with `vibe_status`, inspect `vibe_result`, and verify the result independently. `completed` means execution ended, not that the work was accepted; read the stop reason (`turn_limit`, `token_limit`, `price_limit` and `refusal` are incomplete or non-answers). For edits, inspect the fresh patch and exact changed files while the worktree is available.
 4. Call `vibe_close` after review. Cleanup is reported only after current-export and ownership checks; inspect any retained-worktree reason.
 
-Patches are never applied automatically. The worker has no shell or network tools, and a review has a read tool but no search or listing tool, so name the files that matter in the task or `context_files`. Run checks in a separate verification copy. It cannot guarantee that a prompt will finish within the declared turn or time limit.
+Patches are never applied automatically. The worker has no shell or network tools, and a review has a read tool but no search tool: the prompt carries a bounded listing of the workspace's files (without reserved and secret files), so still name the files that matter in the task or `context_files`. Run checks in a separate verification copy. It cannot guarantee that a prompt will finish within the declared turn or time limit.
 
 ## Skills and references
 

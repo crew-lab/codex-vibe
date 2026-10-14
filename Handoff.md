@@ -10,11 +10,11 @@ Updated 2026-10-14. This document alone defines current priorities. [docs/histor
 
 ## 2.0 status
 
-2.0 lives on branch `claude/app-server-design`: one engine, a client of Vibe's `vibe-app-server` protocol. The legacy `vibe -p --legacy-harness` path, the Python launcher, the `backend` config key and the programmatic backend are removed. Steps 1 to 9 of the [design note](docs/history/app-server-client-design.md#10-work-breakdown) are done. A comparison with the parallel `codex/unified-harness-v2` branch chose this branch as the base and ports three of its pieces: handoff re-validation with usage continuity, more read-back checks, and effect-to-callback fingerprints. The owner also approved a bounded workspace file listing in review prompts. Everything was exercised against the scripted fake only; nothing was run against a real Vibe.
+2.0 lives on branch `claude/app-server-design`: one engine, a client of Vibe's `vibe-app-server` protocol. The legacy `vibe -p --legacy-harness` path, the Python launcher, the `backend` config key and the programmatic backend are removed. Steps 1 to 9 of the [design note](docs/history/app-server-client-design.md#10-work-breakdown) are done. A comparison with the parallel `codex/unified-harness-v2` branch chose this branch as the base and ported three of its pieces, now done: handoff re-validation with usage continuity, more read-back checks, and effect-to-callback fingerprints. The bounded workspace file listing in the prompt, approved by the owner, is done too. The target kit (step 10) is [docs/history/v2-target-brief.md](docs/history/v2-target-brief.md) with `scripts/v2-conformance-check.mjs`. Everything was exercised against the scripted fake only; nothing was run against a real Vibe.
 
 **What remains for 2.0.0:**
-1. The ports and the file listing, then a cold review of the branch.
-2. Step 10, the target kit: a brief and a no-inference conformance script for the target machine.
+1. A cold review of the branch.
+2. Step 10 is done; the target kit waits for the target machine.
 3. Merge the branch to main, which becomes the 2.0 line, and set the version to 2.0.0.
 4. Target gates, all unverified and listed in [compatibility](docs/compatibility.md#unverified-gates) and `docs/acceptance.json`, each with the owner's separate authorization: the pin manifest and the conformance check, native readiness, one hosted review and one edit, an observed MCP-client disconnect, `permission = "ask"` in the effective configuration, the effect of thinking off, the experiments fetch off, nested `run_typescript` calls, Node 20.19.0, and a clean-account installation.
 5. Owner decisions, delegated to Claude and settled on 2026-10-14 (each keeps what is built and tested):

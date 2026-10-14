@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -53,6 +54,7 @@ interface HarnessOptions {
   task?: string;
   contextFiles?: string[];
   workspaceFiles?: Record<string, string>;
+  gitRepository?: boolean;
 }
 
 class Harness {
@@ -83,6 +85,7 @@ class Harness {
       mkdirSync(path.dirname(path.join(this.workspace, name)), { recursive: true });
       writeFileSync(path.join(this.workspace, name), content);
     }
+    if (harness.gitRepository) execFileSync('git', ['init', '-q'], { cwd: this.workspace, stdio: 'ignore' });
     const scenarioFile = path.join(this.base, 'scenario.json');
     const document = typeof scenario === 'string' ? JSON.parse(readFileSync(path.join(scenarioDirectory, `${scenario}.json`), 'utf8')) as Json : scenario;
     const profileTools = Object.fromEntries(PROFILE_TOOLS[harness.mode ?? 'review'].map((tool) => [tool, { permission: TOOL_PERMISSION, denylist: workspaceDenylist(this.workspace) }]));
@@ -840,5 +843,221 @@ describe('app-server backend: probe and runtime check', () => {
     } finally {
       rmSync(base, { recursive: true, force: true });
     }
+  });
+});
+
+describe('app-server backend: session handoff', () => {
+  const NEXT = 'fake-session-0002';
+  const sessionOf = (frame: Json | undefined): unknown => (frame?.params as Json | undefined)?.sessionId;
+
+  it('follows a compaction mid-turn, reads the configuration back again and carries usage across the reset', async () => {
+    const harness = new Harness('handoff-usage');
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(terminal.update?.result?.summary).toBe('Finished after the handoff.');
+    expect(terminal.update?.result?.warnings).toEqual(['The Vibe session was compacted or cleared during the run; the supervisor followed the new session.']);
+    expect(terminal.update?.usage?.tokensUsed).toBe(1600);
+    expect(terminal.update?.usage?.cost?.amount).toBeCloseTo(0.00094, 9);
+
+    expect(harness.fixtureEvents('handoff')).toMatchObject([{ handoffKind: 'compacted', previous: 'fake-session-0001', next: NEXT }]);
+    expect(harness.frames('callback/result').map(sessionOf)).toEqual(['fake-session-0001', NEXT]);
+    expect(harness.frames('session/read').map(sessionOf)).toEqual([NEXT]);
+    const afterHandoff = harness.frames().filter((frame) => sessionOf(frame) === NEXT).map((frame) => frame.method);
+    expect(afterHandoff.slice(0, 5)).toEqual(['session/read', 'session/history/list', 'runtime/read', 'config/effective/read', 'config/read']);
+    expect(harness.eventsOfType('tool_call')).toHaveLength(2);
+    expect(new Set(harness.eventsOfType('tool_call').map((event) => event.data.entry_id)).size).toBe(2);
+    expect(harness.eventsOfType('diagnostic').find((event) => event.data.reason === 'session_handoff')?.data.text).toContain('read back again');
+    harness.expectCleanedUp();
+  });
+
+  it('keeps enforcing the token ceiling on the totals after the counters reset', async () => {
+    const harness = new Harness('handoff-usage', { options: { budgets: { maxTokens: 1500 } } });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(terminal.update?.result?.stopReason).toBe('token_limit');
+    expect(terminal.update?.usage?.tokensUsed).toBeGreaterThan(1500);
+    expect(harness.fixtureEvents('interrupt')).toHaveLength(1);
+    expect(harness.frames('turn/interrupt')[0]?.params).toMatchObject({ sessionId: NEXT });
+  });
+
+  it('follows a context clear whose counters kept growing, without counting the old session twice', async () => {
+    const harness = new Harness('handoff-cumulative');
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(terminal.update?.result?.summary).toBe('Cleared and carried on.');
+    expect(terminal.update?.usage?.tokensUsed).toBe(1800);
+    expect(harness.fixtureEvents('handoff')).toMatchObject([{ handoffKind: 'contextCleared' }]);
+  });
+
+  it('fails closed when the handoff arrives while a callback is open', async () => {
+    const harness = new Harness('handoff-pending-callback');
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'session_handoff_unsafe' } });
+    expect(errorOf(terminal).message).toContain('a callback is still open');
+    expect(harness.frames('session/read')).toHaveLength(0);
+    expect(harness.eventsOfType('message')).toHaveLength(0);
+    harness.expectCleanedUp();
+  });
+
+  it('fails closed when the handoff arrives with an effect that has not finished', async () => {
+    const harness = new Harness('handoff-unfinished-effect');
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal)).toMatchObject({ details: { reason: 'session_handoff_unsafe' } });
+    expect(errorOf(terminal).message).toContain('have not finished');
+    harness.expectCleanedUp();
+  });
+
+  it('fails when the new session does not carry the supervisor configuration', async () => {
+    const harness = new Harness({
+      name: 'handoff-config-drift',
+      afterHandoff: { effectiveConfig: { tools: { read_file: { permission: 'always' } } } },
+      steps: [{ op: 'handoff', kind: 'compacted', newSessionId: NEXT }, { op: 'hold' }]
+    });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'readback_mismatch', fields: ['config.tools.read_file.permission'] } });
+    expect(harness.fixtureEvents('interrupt').length).toBeLessThanOrEqual(1);
+    harness.expectCleanedUp();
+  });
+});
+
+describe('app-server backend: usage faults', () => {
+  it('fails the run when a usage counter goes backwards outside a handoff', async () => {
+    const harness = new Harness('counters-backwards');
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'usage_counter_regressed', counter: 'promptTokens', previous: 5000, observed: 100 } });
+    expect(harness.fixtureEvents('interrupt')).toHaveLength(1);
+    harness.expectCleanedUp();
+  });
+
+  it('fails before the first turn when a cost ceiling is set and the model has no prices', async () => {
+    const harness = new Harness('unpriced-model', { options: { budgets: { maxCost: 0.5 } } });
+    const failure = await rejection(harness.start());
+
+    expect(failure).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'price_unavailable', ceiling_usd: 0.5 } });
+    expect(failure.message).toContain('cannot be enforced');
+    expect(harness.frames('turn/start')).toHaveLength(0);
+    harness.expectCleanedUp();
+  });
+
+  it('still counts tokens of an unpriced model when no cost ceiling is set, and enforces a priced ceiling', async () => {
+    const unpriced = await new Harness('unpriced-model').run();
+    expect(unpriced.state).toBe('completed');
+    expect(unpriced.update?.usage?.tokensUsed).toBe(15);
+    expect(unpriced.update?.usage?.cost).toBeUndefined();
+    const priced = await new Harness('stats-usage', { options: { budgets: { maxCost: 100 } } }).run();
+    expect(priced.state).toBe('completed');
+    const tripped = await new Harness('stats-usage', { options: { budgets: { maxCost: 0.0001 } } }).run();
+    expect(tripped.update?.result?.stopReason).toBe('price_limit');
+  });
+});
+
+describe('app-server backend: effect to callback binding', () => {
+  it('fails when a second effect names the callback that was approved for the first', async () => {
+    const harness = new Harness('approval-reused');
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'unapproved_effect', tool: 'file_system.read_file', entry_id: 'effect-action-0002' } });
+    expect(errorOf(terminal).message).toContain('reuses an approval that belongs to another effect');
+    expect(harness.fixtureEvents('approvalAnswer')).toHaveLength(1);
+    harness.expectCleanedUp();
+  });
+
+  it('fails when the executed edit differs from the input the callback showed', async () => {
+    const harness = new Harness('args-altered', { mode: 'edit' });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal)).toMatchObject({ details: { reason: 'unapproved_effect', tool: 'file_system.search_replace' } });
+    expect(errorOf(terminal).message).toContain('the executed input differs from the approved input');
+    expect(harness.fixtureEvents('approvalAnswer')[0]).toMatchObject({ decision: 'approve' });
+    expect(harness.eventsOfType('tool_call')).toHaveLength(0);
+    harness.expectCleanedUp();
+  });
+
+  it('fails when the input of the effect entry is patched after the approval', async () => {
+    const harness = new Harness('args-altered-after-approval', { mode: 'edit' });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal)).toMatchObject({ details: { reason: 'unapproved_effect', tool: 'file_system.search_replace' } });
+    expect(errorOf(terminal).message).toContain('the executed input differs from the approved input');
+  });
+
+  it('accepts the unchanged edit the callback showed', async () => {
+    const harness = new Harness('edit-call', { mode: 'edit' });
+    expect((await harness.run()).state).toBe('completed');
+  });
+});
+
+describe('app-server backend: workspace file listing in the prompt', () => {
+  const files = {
+    'README.md': '# demo\n',
+    'docs/guide.md': 'guide\n',
+    'config/.env.production': 'A=1\n',
+    'keys/server.pem': 'pem\n',
+    '.vibeignore': '*\n',
+    '.gitignore': 'ignored.log\n',
+    'ignored.log': 'noise\n'
+  };
+  const promptOf = (harness: Harness): string => ((harness.frames('turn/start')[0]?.params as Json).message as Array<{ text: string }>)[0]?.text ?? '';
+
+  it('puts a bounded listing of the allowed files before the context paths and the task in a review', async () => {
+    const harness = new Harness('allowed-call', { gitRepository: true, workspaceFiles: files, contextFiles: ['/ws/a.ts'], task: 'Check them.' });
+    await harness.run();
+    const prompt = promptOf(harness);
+
+    expect(prompt.startsWith('Workspace files (paths relative to the workspace root):\n- .gitignore\n- README.md\n- docs/guide.md\n- src/index.ts\n\nApproved context path: /ws/a.ts\n\nTask:\nCheck them.')).toBe(true);
+    for (const hidden of ['.env', 'config/.env.production', 'keys/server.pem', '.vibeignore', 'ignored.log', '.git/']) expect(prompt, hidden).not.toContain(hidden);
+    expect(prompt).not.toContain('truncated');
+    expect(harness.eventsOfType('diagnostic').filter((event) => event.data.reason === 'file_listing_unavailable')).toHaveLength(0);
+  });
+
+  it('includes the same listing in an edit run', async () => {
+    const harness = new Harness('edit-call', { mode: 'edit', gitRepository: true, workspaceFiles: files });
+    await harness.run();
+    expect(promptOf(harness)).toContain('- docs/guide.md');
+  });
+
+  it('says plainly when the listing was truncated by the file count', async () => {
+    const harness = new Harness('allowed-call', { gitRepository: true, workspaceFiles: files, options: { listing: { maxFiles: 2 } } });
+    await harness.run();
+    const prompt = promptOf(harness);
+
+    expect(prompt).toContain('- .gitignore\n- README.md\n[Listing truncated: 2 more files not shown; the limit is 2 files or 32768 bytes.]');
+    expect(prompt).not.toContain('docs/guide.md');
+  });
+
+  it('says plainly when the listing was truncated by its byte budget', async () => {
+    const harness = new Harness('allowed-call', { gitRepository: true, workspaceFiles: files, options: { listing: { maxBytes: 90 } } });
+    await harness.run();
+    expect(promptOf(harness)).toMatch(/\[Listing truncated: \d+ more files? not shown; the limit is 1000 files or 90 bytes\.\]/);
+  });
+
+  it('leaves the prompt as it was outside a Git repository, without a diagnostic', async () => {
+    const harness = new Harness('allowed-call', { workspaceFiles: files });
+    await harness.run();
+    expect(promptOf(harness)).toBe('Review the repository.');
+    expect(harness.eventsOfType('diagnostic').filter((event) => event.data.reason === 'file_listing_unavailable')).toHaveLength(0);
+  });
+
+  it('leaves the listing out and reports it when Git output exceeds its cap', async () => {
+    const harness = new Harness('allowed-call', { gitRepository: true, workspaceFiles: files, options: { listing: { maxGitOutputBytes: 10 } } });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(promptOf(harness)).toBe('Review the repository.');
+    expect(harness.eventsOfType('diagnostic').find((event) => event.data.reason === 'file_listing_unavailable')?.data).toMatchObject({ detail: 'output_limit' });
   });
 });
