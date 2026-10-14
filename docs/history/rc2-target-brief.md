@@ -12,7 +12,7 @@ The fresh standard macOS account installation is the owner's, with the [prepared
 
 ## Steps
 
-1. **Build.** Check out the rc.2 commit on main, then `npm ci`, `npm run verify:release` and `VIBE_SUPERVISOR_TEST_NPM_CACHE=<populated cache> npm run package:rc`. Record the archive SHA-256 and confirm with `npm pack --dry-run` that no `docs/reviews` or `docs/history` file is in it.
+1. **Build.** Check out exactly `99ec1f0` (`git checkout --detach 99ec1f0`; later commits on main may not change shipped files, but build from this one), confirm `git rev-parse HEAD`, then `npm ci`, `npm run verify:release` and `VIBE_SUPERVISOR_TEST_NPM_CACHE=<populated cache> npm run package:rc`. Record the archive SHA-256 and confirm with `npm pack --dry-run` that no `docs/reviews` or `docs/history` file is in it.
 2. **Install** into a new private prefix next to rc.1, run `setup --dry-run`, and switch the registration only with authorization 1. Keep rc.1 for rollback.
 3. **Profile check (gate `installed-vibe-profile-check`).** From the checkout:
 
