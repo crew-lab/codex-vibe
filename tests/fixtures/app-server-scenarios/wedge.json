@@ -1,0 +1,7 @@
+{
+  "name": "wedge",
+  "steps": [
+    { "op": "say", "text": "About to hang." },
+    { "op": "wedge", "ignoreSigterm": true }
+  ]
+}

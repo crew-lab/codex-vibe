@@ -1,0 +1,7 @@
+{
+  "name": "auto-allowed-in-profile",
+  "steps": [
+    { "op": "call", "tool": "read_file", "mode": "auto", "source": "config", "input": { "filePath": "${cwd}/src/index.ts", "offset": null, "limit": 2000 } },
+    { "op": "say", "text": "Read without asking." }
+  ]
+}

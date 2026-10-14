@@ -1,0 +1,9 @@
+{
+  "name": "extra-fields",
+  "extraFields": true,
+  "steps": [
+    { "op": "call", "tool": "read_file", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts", "offset": null, "limit": 2000 } },
+    { "op": "stats", "stats": { "modelCalls": 1, "sessionPromptTokens": 10, "sessionCompletionTokens": 5 } },
+    { "op": "say", "text": "Done with extras." }
+  ]
+}

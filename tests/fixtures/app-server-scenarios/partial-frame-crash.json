@@ -1,0 +1,4 @@
+{
+  "name": "partial-frame-crash",
+  "steps": [ { "op": "partialFrame" }, { "op": "crash", "exitCode": 1 } ]
+}

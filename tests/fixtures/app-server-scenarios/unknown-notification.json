@@ -1,0 +1,7 @@
+{
+  "name": "unknown-notification",
+  "steps": [
+    { "op": "unknownNotification", "method": "session/futureThing", "params": { "detail": 1 } },
+    { "op": "say", "text": "Done." }
+  ]
+}
