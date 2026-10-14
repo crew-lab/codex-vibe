@@ -17,7 +17,14 @@ Updated 2026-10-14. This document alone defines current priorities. [docs/histor
 2. Step 10, the target kit: a brief and a no-inference conformance script for the target machine.
 3. Merge the branch to main, which becomes the 2.0 line, and set the version to 2.0.0.
 4. Target gates, all unverified and listed in [compatibility](docs/compatibility.md#unverified-gates) and `docs/acceptance.json`, each with the owner's separate authorization: the pin manifest and the conformance check, native readiness, one hosted review and one edit, an observed MCP-client disconnect, `permission = "ask"` in the effective configuration, the effect of thinking off, the experiments fetch off, nested `run_typescript` calls, Node 20.19.0, and a clean-account installation.
-5. Owner decisions: the error-code mapping; the pin check's reach (only the Vibe package; dependencies, `.pth`, the interpreter and `__pycache__` are not hashed); a denied off-profile call lets the run continue; a refusal counts as completed; the Node reaper, the Node Keychain lookup and the per-candidate manifest; whether readiness runs the full pin check; defaults for `limits.max_tokens` and `limits.max_cost_usd`.
+5. Owner decisions, delegated to Claude and settled on 2026-10-14 (each keeps what is built and tested):
+   - **Error codes:** `invalid_api_key` → `VSUP_AUTH_REQUIRED`; `invalid_model` → `VSUP_BACKEND_ERROR` classified as configuration; `context_too_long`, `response_too_long` and a `length` stop → `VSUP_OUTPUT_LIMIT`; `rate_limit` → `VSUP_RATE_LIMITED`.
+   - **Pin reach for 2.0.0:** the installed Vibe package's `RECORD` files only, against the manifest generated on the target; dependencies, `.pth`, the interpreter and `__pycache__` are documented as not covered. 2.0.1 adds a shipped manifest derived from the published wheel.
+   - **Off-profile calls:** a call Vibe or the handler denies is recorded and the run continues; a call that runs without the handler's approval ends the run.
+   - **Refusal:** completed, with a refusal warning.
+   - **Design choices:** the Node reaper, the Keychain lookup in Node, and the per-candidate manifest stay.
+   - **Readiness:** checks that `vibe-app-server` exists, not the full pin; the full pin runs at each run start and in `doctor`, so readiness stays fast.
+   - **Budgets:** `limits.max_tokens` and `limits.max_cost_usd` stay optional and unset by default.
 6. Mistral questions from the audit (narrowing the catalogue, a search builtin, omitting reasoning, honouring budgets) would remove work if answered.
 
 ## What this is
