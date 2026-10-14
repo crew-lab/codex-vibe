@@ -15,7 +15,7 @@ Shell and network tools are disabled. The supervisor's policy is not an OS sandb
 1. Select the intended installed artifact and configuration. If the explicit config does not exist, initialize it first with `vibe-supervisor allow --config <selected-config> <canonical-workspace>`; this creates a private config and adds only that workspace. Then use the same config for doctor and serve. An explicitly selected missing or invalid file on doctor/serve must fail with its path; do not fall back to another home configuration. The default reduced-release data root is `~/Library/Application Support/VibeSupervisor-oneshot` on macOS, `%APPDATA%/VibeSupervisor-oneshot` on Windows, or `${XDG_DATA_HOME:-~/.local/share}/vibe-supervisor-oneshot` on Linux. `VIBE_SUPERVISOR_HOME` is an explicit override. Do not reuse the legacy `VibeSupervisor` data root.
 2. Run `vibe-supervisor doctor --config <selected-config> --json`. This checks local prerequisites and pinned Vibe compatibility, not provider authentication or hosted inference. Keep the reported selected config and data path as separate facts.
 3. Choose a clean reviewed Git base: commit or stash the reviewed state, then pass its ref as `base_ref`. The supervisor never uses uncommitted source bytes as an edit base.
-4. For Codex, use the default isolated setup registration; an existing registration needs `--isolated` and reconnection to prevent other chats from competing for its storage lock. This does not change allowed roots. Connect to the selected server and verify its handshake version and exact five-tool catalog. A CLI version or doctor result does not establish the identity of an already-open desktop connection. Authentication is observed only during a real run.
+4. For Codex, use the default isolated setup registration; an existing registration needs `--isolated` and reconnection to prevent other chats from competing for its storage lock. This does not change allowed roots. Connect to the selected server; the readiness call below identifies it by `server_version` and proves the tools are callable, with or without a protocol handshake. A CLI version or doctor result does not establish the identity of an already-open desktop connection. Authentication is observed only during a real run.
 
 ## Check readiness on the connection
 
@@ -54,6 +54,7 @@ Edit:
 Read <file>, <file> first.
 Then create or change only: <path>, <path>. Do not touch any other file.
 Change: <what to add or change, with the exact function names and semantics>.
+Must reject or preserve: <each edge case, e.g. a trailing blank line, CRLF, an unsafe path>.
 Tests: <test file> using <framework>, covering <cases>.
 No shell, network or test execution.
 Final answer: what changed, then an inventory of changed and scratch files.
