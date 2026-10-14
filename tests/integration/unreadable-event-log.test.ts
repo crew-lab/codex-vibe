@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, RunState, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
 import { SCHEMA_VERSION } from '../../src/contracts.js';
-import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { eventToWire, runToWire } from '../../src/core/serialization.js';
 
@@ -17,7 +17,7 @@ afterEach(async () => {
 });
 
 class FakeBackend implements SupervisorBackend {
-  readonly kind = 'programmatic' as const;
+  readonly kind = 'app-server' as const;
   async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, _callbacks: BackendCallbacks): Promise<BackendStartResult> { return { handle: { runId: input.runId, backend: this.kind, opaque: {} }, initialState: 'running' }; }
   async cancel(_handle: BackendRunHandle) {}
@@ -29,7 +29,7 @@ type Cause = 'malformed' | 'unreadable' | 'oversized';
 const causes: Cause[] = ['malformed', 'unreadable', 'oversized'];
 
 function validLine(runId: string, seq: number): string {
-  return JSON.stringify(eventToWire({ schemaVersion: SCHEMA_VERSION, seq, timestamp: '2026-01-01T00:00:00.000Z', runId, backend: 'programmatic', source: 'vibe', type: 'tool_call', severity: 'info', data: { title: `call ${seq}` } }));
+  return JSON.stringify(eventToWire({ schemaVersion: SCHEMA_VERSION, seq, timestamp: '2026-01-01T00:00:00.000Z', runId, backend: 'app-server', source: 'vibe', type: 'tool_call', severity: 'info', data: { title: `call ${seq}` } }));
 }
 
 async function seedBroken(cause: Cause, state: RunState, ageDays = 0) {
@@ -38,11 +38,11 @@ async function seedBroken(cause: Cause, state: RunState, ageDays = 0) {
   await mkdir(source); await mkdir(path.join(data, 'runs'), { recursive: true, mode: 0o700 });
   const runId = randomUUID();
   const updated = new Date(Date.now() - ageDays * DAY).toISOString();
-  const maxEventBytes = cause === 'oversized' ? 1000 : LEGACY_CONFIG.limits.maxEventBytes;
+  const maxEventBytes = cause === 'oversized' ? 1000 : TEST_CONFIG.limits.maxEventBytes;
   const record: RunRecord = {
-    schemaVersion: SCHEMA_VERSION, runId, backend: 'programmatic', mode: 'review', state, sourceWorkspace: source, workerWorkspace: source,
+    schemaVersion: SCHEMA_VERSION, runId, backend: 'app-server', mode: 'review', state, sourceWorkspace: source, workerWorkspace: source,
     createdAt: updated, updatedAt: updated, finishedAt: updated, taskSha256: 'a'.repeat(64),
-    limits: { timeoutSeconds: 600, maxTurns: 5, maxEventBytes, maxTranscriptBytes: LEGACY_CONFIG.limits.maxTranscriptBytes, maxArtifactBytes: LEGACY_CONFIG.limits.maxArtifactBytes }
+    limits: { timeoutSeconds: 600, maxTurns: 5, maxEventBytes, maxTranscriptBytes: TEST_CONFIG.limits.maxTranscriptBytes, maxArtifactBytes: TEST_CONFIG.limits.maxArtifactBytes }
   };
   const directory = path.join(data, 'runs', runId);
   await mkdir(directory, { mode: 0o700 });
@@ -52,7 +52,7 @@ async function seedBroken(cause: Cause, state: RunState, ageDays = 0) {
   await writeFile(events, body, { mode: 0o600 });
   if (cause === 'unreadable') await chmod(events, 0o000);
   const before = cause === 'unreadable' ? undefined : await readFile(events);
-  return { source, data, runId, directory, events, before, config: { ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] } };
+  return { source, data, runId, directory, events, before, config: { ...TEST_CONFIG, allowedWorkspaceRoots: [source] } };
 }
 
 const exists = (file: string) => stat(file).then(() => true, () => false);

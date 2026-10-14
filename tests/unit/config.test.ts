@@ -8,7 +8,9 @@ import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
 import { bootBoundDrift } from "../../src/config/policy.js";
 import { validateConfig } from "../../src/config/validation.js";
 
-const base = { version: 1, backend: "programmatic" } as const;
+const manifestPaths = { vibe_pin_manifest: "/data/vibe-pin-manifest.json" } as const;
+const base = { version: 1, paths: manifestPaths } as const;
+const manifestToml = `[paths]\nvibe_pin_manifest = "/data/vibe-pin-manifest.json"\n`;
 const roots: string[] = [];
 const canonicalTmp = await realpath(tmpdir());
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))));
@@ -24,7 +26,7 @@ describe("supervisor config", () => {
     const root = await mkdtemp(join(canonicalTmp, "vsup-config-")); roots.push(root);
     const config = await loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } });
     expect(config).toEqual(DEFAULT_CONFIG);
-    expect(config.backend).toBe("app-server");
+    expect(config).not.toHaveProperty("backend");
     expect(config).not.toHaveProperty("maxConcurrentRuns");
     expect(config).not.toHaveProperty("security");
     expect(config).not.toHaveProperty("phase1");
@@ -33,7 +35,7 @@ describe("supervisor config", () => {
   it("loads valid TOML, preserving defaults for omitted fields", async () => {
     const root = await mkdtemp(join(canonicalTmp, "vsup-config-")); roots.push(root);
     const workspace = join(root, "workspace"); await mkdir(workspace);
-    await writeFile(join(root, "config.toml"), `version = 1\nbackend = "programmatic"\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[limits]\nmax_turns_review = 7\n`);
+    await writeFile(join(root, "config.toml"), `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[limits]\nmax_turns_review = 7\n${manifestToml}`);
     const config = await loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } });
     expect(config.allowedWorkspaceRoots).toEqual([workspace]);
     expect(config.limits.maxTurnsReview).toBe(7);
@@ -42,7 +44,7 @@ describe("supervisor config", () => {
 
   it("rejects keys removed in earlier releases like any unknown key", async () => {
     const root = await mkdtemp(join(canonicalTmp, "vsup-config-")); roots.push(root);
-    await writeFile(join(root, "config.toml"), 'version = 1\nbackend = "programmatic"\n[security]\nallow_network_tools = true\n');
+    await writeFile(join(root, "config.toml"), `version = 1\n[security]\nallow_network_tools = true\n${manifestToml}`);
     await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } })).rejects.toMatchObject({ supervisor: { code: "VSUP_CONFIG_INVALID" } });
     expect(() => validateConfig({ ...base, phase1: { allow_temporary_trust: true } })).toThrow(/phase1/);
     expect(() => validateConfig({ ...base, security: { allow_shell_in_review: true } })).toThrow(/security/);
@@ -52,14 +54,14 @@ describe("supervisor config", () => {
     expect(() => validateConfig({ ...base, max_queued_runs: 8 })).toThrow(/max_queued_runs/);
     expect(() => validateConfig({ ...base, retention: { preserve_failed_runs: false } })).toThrow(/preserve_failed_runs/);
     expect(() => validateConfig({ ...base, limits: { mcp_result_format: "both" } })).toThrow(/mcp_result_format/);
-    expect(() => validateConfig({ ...base, paths: { data_dir: "/var/vibe" } })).toThrow(/data_dir/);
+    expect(() => validateConfig({ ...base, paths: { ...manifestPaths, data_dir: "/var/vibe" } })).toThrow(/data_dir/);
   });
 
   it("rejects removed backend and scheduling keys", () => {
-    expect(() => validateConfig({ ...base, backend: "acp" })).toThrow(/backend/);
+    for (const value of ["acp", "app-server", "programmatic"]) expect(() => validateConfig({ ...base, backend: value }), value).toThrow(/backend/);
     expect(() => validateConfig({ ...base, max_concurrent_runs: 1 })).toThrow(/max_concurrent_runs/);
     expect(() => validateConfig({ ...base, worker_idle_ttl_seconds: 1 })).toThrow(/worker_idle_ttl_seconds/);
-    expect(() => validateConfig({ ...base, paths: { vibe_acp: "vibe-acp" } })).toThrow(/vibe_acp/);
+    expect(() => validateConfig({ ...base, paths: { ...manifestPaths, vibe_acp: "vibe-acp" } })).toThrow(/vibe_acp/);
   });
 
   it("enforces the tool bounds on the limits defaults", () => {
@@ -84,7 +86,7 @@ describe("supervisor config", () => {
     for (const root of [path.parse(parent).root, process.env.HOME ?? "~", "/Users", "/home", tmpdir(), ...sharedTemps, `${workspace}/../workspace`]) {
       expect(() => validateConfig({ ...base, allowed_workspace_roots: [root] }), root).toThrow();
     }
-    const writeConfig = async (allowedRoot: string) => writeFile(join(parent, "config.toml"), `version = 1\nbackend = "programmatic"\nallowed_workspace_roots = [${JSON.stringify(allowedRoot)}]\n`);
+    const writeConfig = async (allowedRoot: string) => writeFile(join(parent, "config.toml"), `version = 1\nallowed_workspace_roots = [${JSON.stringify(allowedRoot)}]\n${manifestToml}`);
     for (const root of [alias, canonicalTmp]) {
       await writeConfig(root);
       await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: parent } })).rejects.toMatchObject({ supervisor: { code: "VSUP_CONFIG_INVALID" } });
@@ -110,7 +112,7 @@ describe("supervisor config", () => {
     const parent = await mkdtemp(join(canonicalTmp, "vsup-config-")); roots.push(parent);
     const realRoot = join(parent, "real"); const linkRoot = join(parent, "link");
     await mkdir(realRoot);
-    await writeFile(join(realRoot, "config.toml"), "version = 1\n");
+    await writeFile(join(realRoot, "config.toml"), `version = 1\n${manifestToml}`);
     await symlink(realRoot, linkRoot);
     await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: linkRoot } })).rejects.toThrow("symlink");
   });
@@ -123,10 +125,10 @@ describe("path contracts", () => {
   });
 
   it("accepts an absolute executable path or a bare command name and rejects relative paths", () => {
-    expect(validateConfig({ ...base, paths: { vibe: "/opt/bin/vibe" } }).paths).toEqual({ vibe: "/opt/bin/vibe" });
+    expect(validateConfig({ ...base, paths: { ...manifestPaths, vibe: "/opt/bin/vibe" } }).paths).toEqual({ vibe: "/opt/bin/vibe", vibePinManifest: manifestPaths.vibe_pin_manifest });
     for (const value of ["bin/vibe", "./vibe", "../vibe", "~/bin/vibe"]) {
-      expect(() => validateConfig({ ...base, paths: { vibe: value } }), value).toThrow();
-      expect(() => validateConfig({ ...base, paths: { vibe_acp: value } }), value).toThrow();
+      expect(() => validateConfig({ ...base, paths: { ...manifestPaths, vibe: value } }), value).toThrow();
+      expect(() => validateConfig({ ...base, paths: { ...manifestPaths, vibe_acp: value } }), value).toThrow();
     }
   });
 });
@@ -145,7 +147,7 @@ describe("configuration selection and provenance", () => {
   it("fingerprints only the sanitized operational whitelist and resolves canonical config provenance", async () => {
     const root = await mkdtemp(join(canonicalTmp, "vsup-config-select-")); roots.push(root);
     const workspace = join(root, "workspace"); await mkdir(workspace);
-    await writeFile(join(root, "config.toml"), `version = 1\nbackend = "programmatic"\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[limits]\nmax_turns_review = 7\n`);
+    await writeFile(join(root, "config.toml"), `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[limits]\nmax_turns_review = 7\n${manifestToml}`);
     const result = await loadResolvedConfig({ configPath: join(root, "config.toml") });
     expect(result.configPath).toBe(await realpath(join(root, "config.toml")));
     expect(result.fingerprint).toMatch(/^[a-f0-9]{64}$/);
@@ -154,22 +156,20 @@ describe("configuration selection and provenance", () => {
   });
 });
 
-describe("backend selection and app-server keys", () => {
+describe("app-server keys", () => {
   const appServer = { version: 1, paths: { vibe_pin_manifest: "/data/vibe-pin-manifest.json" } };
 
-  it("defaults to the app-server backend and requires the pin manifest path for it", () => {
-    expect(DEFAULT_CONFIG.backend).toBe("app-server");
+  it("requires the pin manifest path", () => {
     expect(() => validateConfig({ version: 1 })).toThrow(/vibe_pin_manifest/);
-    expect(() => validateConfig({ version: 1, backend: "app-server" })).toThrow(/vibe_pin_manifest/);
-    expect(() => validateConfig({ version: 1, backend: "app-server", paths: { vibe: "/opt/bin/vibe" } })).toThrow(/vibe_pin_manifest/);
+    expect(() => validateConfig({ version: 1, paths: {} })).toThrow(/vibe_pin_manifest/);
+    expect(() => validateConfig({ version: 1, paths: { vibe: "/opt/bin/vibe" } })).toThrow(/vibe_pin_manifest/);
     const config = validateConfig(appServer);
-    expect(config.backend).toBe("app-server");
+    expect(config).not.toHaveProperty("backend");
     expect(config.paths).toEqual({ vibePinManifest: "/data/vibe-pin-manifest.json" });
   });
 
-  it("keeps the legacy backend selectable without a manifest and rejects unknown backends", () => {
-    expect(validateConfig({ version: 1, backend: "programmatic" }).backend).toBe("programmatic");
-    for (const value of ["acp", "App-Server", "", 1, null]) expect(() => validateConfig({ version: 1, backend: value, paths: appServer.paths }), String(value)).toThrow(/backend/);
+  it("no longer accepts a backend key in any form", () => {
+    for (const value of ["acp", "app-server", "programmatic", "", 1, null]) expect(() => validateConfig({ version: 1, backend: value, paths: appServer.paths }), String(value)).toThrow(/backend/);
   });
 
   it("maps paths.app_server and validates it like the other executable paths", () => {
@@ -198,9 +198,9 @@ describe("backend selection and app-server keys", () => {
   it("loads the new keys from TOML and reports a missing manifest as a stable configuration error", async () => {
     const root = await mkdtemp(join(canonicalTmp, "vsup-config-")); roots.push(root);
     const manifest = join(root, "vibe-pin-manifest.json");
-    await writeFile(join(root, "config.toml"), `version = 1\nbackend = "app-server"\n[limits]\nmax_tokens = 500000\nmax_cost_usd = 1.25\n[paths]\nvibe_pin_manifest = ${JSON.stringify(manifest)}\napp_server = "/opt/bin/vibe-app-server"\n`);
+    await writeFile(join(root, "config.toml"), `version = 1\n[limits]\nmax_tokens = 500000\nmax_cost_usd = 1.25\n[paths]\nvibe_pin_manifest = ${JSON.stringify(manifest)}\napp_server = "/opt/bin/vibe-app-server"\n`);
     const config = await loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } });
-    expect(config).toMatchObject({ backend: "app-server", limits: { maxTokens: 500000, maxCostUsd: 1.25 }, paths: { vibePinManifest: manifest, appServer: "/opt/bin/vibe-app-server" } });
+    expect(config).toMatchObject({ limits: { maxTokens: 500000, maxCostUsd: 1.25 }, paths: { vibePinManifest: manifest, appServer: "/opt/bin/vibe-app-server" } });
     await writeFile(join(root, "config.toml"), "version = 1\n");
     await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } })).rejects.toMatchObject({ supervisor: { code: "VSUP_CONFIG_INVALID", message: expect.stringContaining("vibe_pin_manifest") } });
   });
@@ -209,7 +209,6 @@ describe("backend selection and app-server keys", () => {
     const base = validateConfig(appServer);
     const revision = configFingerprint(base);
     const variants = [
-      validateConfig({ version: 1, backend: "programmatic" }),
       validateConfig({ ...appServer, paths: { ...appServer.paths, app_server: "/opt/bin/vibe-app-server" } }),
       validateConfig({ ...appServer, paths: { vibe_pin_manifest: "/data/other.json" } }),
       validateConfig({ ...appServer, limits: { max_tokens: 10 } }),
@@ -217,7 +216,6 @@ describe("backend selection and app-server keys", () => {
     ];
     for (const variant of variants) expect(configFingerprint(variant)).not.toBe(revision);
     expect(variants.map((variant) => bootBoundDrift(base, variant))).toEqual([
-      ["backend", "paths.vibe_pin_manifest"],
       ["paths.app_server"],
       ["paths.vibe_pin_manifest"],
       ["limits.max_tokens"],

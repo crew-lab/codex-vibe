@@ -107,7 +107,7 @@ describe('reviewed baseline preparation',{timeout:60_000},()=>{
   expect(new BaselinePreparationError('unexpected').message).not.toContain(home);
  });
  it('runs the documented CLI dry-run and create flows with a private config and manifest',async()=>{
-  const {root,source,parent,git,input}=await setup();const home=path.join(root,'cli-home');await mkdir(home,{mode:0o700});const configPath=path.join(home,'config.toml');const config=`version = 1\nbackend = "programmatic"\nallowed_workspace_roots = [${JSON.stringify(root)}]\n`;
+  const {root,source,parent,git,input}=await setup();const home=path.join(root,'cli-home');await mkdir(home,{mode:0o700});const configPath=path.join(home,'config.toml');const config=`version = 1\nallowed_workspace_roots = [${JSON.stringify(root)}]\n[paths]\nvibe_pin_manifest = "/unused/vibe-pin-manifest.json"\n`;
   await writeFile(configPath,config,{mode:0o600});await chmod(configPath,0o600);const manifest=path.join(root,'review.json');await writeFile(manifest,JSON.stringify(input),{mode:0o600});await chmod(manifest,0o600);
   const index=await readFile(path.join(source,'.git/index'));const status=await git('status','--porcelain');const ref=await git('rev-parse','HEAD');const configHash=digest(await readFile(configPath));const cli=path.resolve('scripts/prepare-reviewed-baseline.mjs');const env={...process.env,VIBE_SUPERVISOR_HOME:home};
   const dry=await exec('node',[cli,manifest],{cwd:root,env});const dryResult=JSON.parse(dry.stdout);expect(dry.stderr).toBe('');expect(dryResult.status).toBe('validated_dry_run');expect(await readdir(parent)).toEqual([]);
@@ -117,14 +117,14 @@ describe('reviewed baseline preparation',{timeout:60_000},()=>{
  it('uses the explicit artifact config for preparation despite obsolete default keys and needs no live connection',async()=>{
   const {root,parent,input}=await setup();const legacy=path.join(root,'legacy');const artifact=path.join(root,'artifact');await mkdir(legacy,{mode:0o700});await mkdir(artifact,{mode:0o700});
   const legacyBytes='version = 1\nbackend = "acp"\n';await writeFile(path.join(legacy,'config.toml'),legacyBytes,{mode:0o600});
-  const configPath=path.join(artifact,'config.toml');await writeFile(configPath,`version = 1\nbackend = "programmatic"\nallowed_workspace_roots = [${JSON.stringify(root)}]\n`,{mode:0o600});
+  const configPath=path.join(artifact,'config.toml');await writeFile(configPath,`version = 1\nallowed_workspace_roots = [${JSON.stringify(root)}]\n[paths]\nvibe_pin_manifest = "/unused/vibe-pin-manifest.json"\n`,{mode:0o600});
   const manifest=path.join(root,'review.json');await writeFile(manifest,JSON.stringify(input),{mode:0o600});const cli=path.resolve('scripts/prepare-reviewed-baseline.mjs');const env={...process.env,VIBE_SUPERVISOR_HOME:legacy,VIBE_SUPERVISOR_DIST_DIR:process.env.VIBE_SUPERVISOR_TEST_DIST};
   const dry=await exec('node',[cli,manifest,'--config',configPath],{cwd:root,env});const result=JSON.parse(dry.stdout);expect(result.status).toBe('validated_dry_run');expect(result.configuration.config_source).toBe('explicit');expect(result.configuration.config_path).toBe(configPath);expect(result.configuration.config_fingerprint).toMatch(/^[a-f0-9]{64}$/);expect(result.source_invariants.head).toMatch(/^[a-f0-9]{40,64}$/);expect(await readdir(parent)).toEqual([]);
   const created=await exec('node',[cli,manifest,'--config',configPath,'--create','--expect-manifest-sha256',result.manifest_sha256],{cwd:root,env});expect(JSON.parse(created.stdout).status).toBe('prepared');expect(await readFile(path.join(legacy,'config.toml'),'utf8')).toBe(legacyBytes);
  });
  it('allows an unrelated sibling creation while reading a private manifest without weakening path checks',async()=>{
   const {root,input}=await setup();const home=path.join(root,'config');await mkdir(home,{mode:0o700});
-  const config=path.join(home,'config.toml');await writeFile(config,`version = 1\nbackend = "programmatic"\nallowed_workspace_roots = [${JSON.stringify(root)}]\n`,{mode:0o600});
+  const config=path.join(home,'config.toml');await writeFile(config,`version = 1\nallowed_workspace_roots = [${JSON.stringify(root)}]\n[paths]\nvibe_pin_manifest = "/unused/vibe-pin-manifest.json"\n`,{mode:0o600});
   const manifest=path.join(root,'review.json');await writeFile(manifest,JSON.stringify(input),{mode:0o600});
   const sibling=path.join(root,'unrelated-sibling');const hook=path.join(root,'read-hook.mjs');
   await writeFile(hook,`import fs from 'node:fs/promises'; import {syncBuiltinESMExports} from 'node:module'; const original=fs.open; fs.open=async(...args)=>{const h=await original(...args); if(args[0]===${JSON.stringify(manifest)}){const read=h.readFile.bind(h); h.readFile=async(...params)=>{await fs.mkdir(${JSON.stringify(sibling)}); return read(...params);};} return h;}; syncBuiltinESMExports();`);
@@ -133,7 +133,7 @@ describe('reviewed baseline preparation',{timeout:60_000},()=>{
   expect(JSON.parse(result.stdout).status).toBe('validated_dry_run');expect((await lstat(sibling)).isDirectory()).toBe(true);
  });
  it('names an explicit missing config and never falls back to a valid default home',async()=>{
-  const {root,parent,input}=await setup();const home=path.join(root,'legacy');await mkdir(home,{mode:0o700});const fallback='version = 1\nbackend = "programmatic"\nallowed_workspace_roots = ['+JSON.stringify(root)+']\n';await writeFile(path.join(home,'config.toml'),fallback,{mode:0o600});
+  const {root,parent,input}=await setup();const home=path.join(root,'legacy');await mkdir(home,{mode:0o700});const fallback='version = 1\nallowed_workspace_roots = ['+JSON.stringify(root)+']\n[paths]\nvibe_pin_manifest = "/unused/vibe-pin-manifest.json"\n';await writeFile(path.join(home,'config.toml'),fallback,{mode:0o600});
   const missing=path.join(root,'missing-artifact.toml');const manifest=path.join(root,'review.json');await writeFile(manifest,JSON.stringify(input),{mode:0o600});const cli=path.resolve('scripts/prepare-reviewed-baseline.mjs');const env={...process.env,VIBE_SUPERVISOR_HOME:home,VIBE_SUPERVISOR_DIST_DIR:process.env.VIBE_SUPERVISOR_TEST_DIST};
   try{await exec('node',[cli,manifest,'--config',missing],{cwd:root,env});throw new Error('missing explicit config unexpectedly succeeded');}
   catch(error){const failure=error as {stderr?:string;stdout?:string};expect(failure.stdout).toBe('');expect(JSON.parse(failure.stderr??'')).toMatchObject({status:'preparation_failed',code:'VSBASE_CONFIG_INVALID',stage:'config',config_path:missing});}

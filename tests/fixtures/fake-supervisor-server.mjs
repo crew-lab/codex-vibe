@@ -9,8 +9,8 @@ const { RunManager } = await load('core/run-manager.js');
 const { spawnManaged } = await load('process/managed.js');
 const { startMcpStdio } = await load('mcp/server.js');
 
-class FakeProgrammaticBackend {
-  kind = 'programmatic';
+class FakeBackend {
+  kind = 'app-server';
 
   async probe() { return { available: true, backend: this.kind }; }
 
@@ -35,7 +35,7 @@ class FakeProgrammaticBackend {
 }
 
 const config = await loadConfig({ createDataDir: true });
-const manager = new RunManager(config, getDataDir(), [new FakeProgrammaticBackend()]);
+const manager = new RunManager(config, getDataDir(), [new FakeBackend()]);
 await manager.initialize();
 const handle = startMcpStdio(manager, { config, onError: (message) => process.stderr.write(`${message}\n`) });
 manager.startAutomaticRetention();

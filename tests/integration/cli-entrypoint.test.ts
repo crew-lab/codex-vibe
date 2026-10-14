@@ -1,10 +1,12 @@
 import { execFile } from 'node:child_process';
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { APP_VERSION } from '../../src/version.js';
+import { generatePinManifest, serializePinManifest } from '../../src/backends/app-server/pin.js';
+import { makeFakeVibeEnvironment } from '../unit/support/fake-vibe-environment.js';
 
 const exec = promisify(execFile);
 const roots: string[] = [];
@@ -39,14 +41,16 @@ describe('CLI executable entry point', () => {
   it('doctor selects the explicit artifact config over an obsolete default home and reports sanitized provenance', async () => {
     const root = await mkdtemp(path.join(await realpath(tmpdir()), 'vsup-cli-config-'));
     roots.push(root);
-    const legacy = path.join(root, 'legacy'); const selected = path.join(root, 'artifact'); const workspace = path.join(root, 'workspace'); const bin = path.join(root, 'bin');
-    await Promise.all([mkdir(legacy), mkdir(selected), mkdir(workspace), mkdir(bin)]);
+    const legacy = path.join(root, 'legacy'); const selected = path.join(root, 'artifact'); const workspace = path.join(root, 'workspace');
+    await Promise.all([mkdir(legacy), mkdir(selected), mkdir(workspace)]);
     const legacyBytes = 'version = 1\nbackend = "acp"\n';
     await writeFile(path.join(legacy, 'config.toml'), legacyBytes, { mode: 0o600 });
-    const vibe = path.join(bin, 'vibe'); await writeFile(vibe, '#!/bin/sh\nprintf "vibe 2.26.1\\n"\n'); await chmod(vibe, 0o700);
-    const config = `version = 1\nbackend = "programmatic"\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[paths]\nvibe = ${JSON.stringify(vibe)}\n`;
+    const fake = await makeFakeVibeEnvironment(root);
+    const manifest = path.join(selected, 'vibe-pin-manifest.json');
+    await writeFile(manifest, serializePinManifest(await generatePinManifest({ executable: fake.shim })), { mode: 0o600 });
+    const config = `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[paths]\nvibe = ${JSON.stringify(fake.vibeShim)}\nvibe_pin_manifest = ${JSON.stringify(manifest)}\n`;
     const configFile = path.join(selected, 'config.toml'); await writeFile(configFile, config, { mode: 0o600 });
-    const { stdout, stderr } = await exec(process.execPath, [cli, 'doctor', '--json', '--config', configFile], { env: { ...process.env, VIBE_SUPERVISOR_HOME: legacy, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}` } });
+    const { stdout, stderr } = await exec(process.execPath, [cli, 'doctor', '--json', '--config', configFile], { env: { ...process.env, VIBE_SUPERVISOR_HOME: legacy } });
     expect(stderr).toBe('');
     const report = JSON.parse(stdout) as { provenance: { application_entrypoint: string; runtime_module: string; config_path: string; config_source: string; config_fingerprint: string; data_directory: string }; checks: Array<{ name: string; ok: boolean }> };
     expect(report.provenance).toMatchObject({ config_path: configFile, config_source: 'explicit', data_directory: selected });

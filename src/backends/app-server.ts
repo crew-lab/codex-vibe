@@ -12,6 +12,7 @@ import { spawnManaged, type ManagedProcess } from '../process/managed.js';
 import { ReaperStartError, startReaper, type ReaperHandle, type ReaperOptions } from '../process/reaper.js';
 import { buildChildEnvironment } from '../security/environment.js';
 import { WorkspacePathError } from '../security/paths.js';
+import { assertNoProjectVibeExtensions } from '../security/workspace-guard.js';
 import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { APP_VERSION } from '../version.js';
 import { ApprovalHandler, type ApprovalHandlerOptions, type PendingApproval } from './app-server/approvals.js';
@@ -34,12 +35,12 @@ import {
 import { compareReadback, formatReadbackMismatches, type ReadbackMismatch } from './app-server/readback.js';
 import { buildSessionConfig, buildThinkingOffWrite, writeSessionFiles, type SessionConfigPlan } from './app-server/session-config.js';
 import { UsageTracker, turnBackstop, type BudgetCeilings } from './app-server/usage.js';
+import { resolveCommand, spawned } from './app-server/executable.js';
 import {
-  authFailureText, classifyFailureText, classifyStartFailure, rateLimitFailure, resolveCommand, spawned, stderrTailText,
+  authFailureText, classifyFailureText, classifyStartFailure, rateLimitFailure, stderrTailText,
   versionMismatchOnStderr, versionUnsupported
-} from './launcher.js';
-import { SUPPORTED_VIBE } from './pinned.js';
-import { assertNoProjectVibeExtensions } from './profile.js';
+} from './app-server/failure.js';
+import { SUPPORTED_VIBE } from './app-server/supported-vibe.js';
 
 const BACKEND_KIND: BackendKind = 'app-server';
 const APP_SERVER_BINARY = 'vibe-app-server';

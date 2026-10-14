@@ -51,7 +51,7 @@ afterEach(async () => {
 class FakeBackend implements SupervisorBackend {
   starts = 0;
   readonly callbacks = new Map<string, BackendCallbacks>();
-  constructor(readonly kind: 'app-server' | 'programmatic') {}
+  readonly kind = 'app-server' as const;
   async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     this.starts += 1;
@@ -65,7 +65,7 @@ class FakeBackend implements SupervisorBackend {
 }
 
 function appServerConfig(overrides: Partial<SupervisorConfig> = {}): SupervisorConfig {
-  return { ...DEFAULT_CONFIG, backend: 'app-server', paths: { vibePinManifest: '/unused/vibe-pin-manifest.json' }, ...overrides };
+  return { ...DEFAULT_CONFIG, paths: { vibePinManifest: '/unused/vibe-pin-manifest.json' }, ...overrides };
 }
 
 function track(manager: RunManager): RunManager {
@@ -96,7 +96,7 @@ describe('backend selection by configuration', () => {
     const base = scratch();
     const source = makeWorkspace(base);
     const data = path.join(base, 'data');
-    const backend = new FakeBackend('app-server');
+    const backend = new FakeBackend();
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), data, [backend]));
     const started = await manager.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 0 });
     expect(started.backend).toBe('app-server');
@@ -117,27 +117,13 @@ describe('backend selection by configuration', () => {
     const base = scratch();
     const source = makeWorkspace(base);
     const data = path.join(base, 'data');
-    const first = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), data, [new FakeBackend('app-server')]));
+    const first = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), data, [new FakeBackend()]));
     const started = await first.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 0 });
     await first.shutdown();
-    const second = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), data, [new FakeBackend('app-server')]));
+    const second = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), data, [new FakeBackend()]));
     await second.initialize();
     const status = await second.status({ run_id: started.run_id, after_seq: 0, max_events: 10, wait_seconds: 0 });
     expect(status).toMatchObject({ state: 'failed', backend: 'app-server', error: { code: 'VSUP_BACKEND_CRASHED' } });
-  });
-
-  it('fails the run closed when the selected backend is not the one that was supplied', async () => {
-    const base = scratch();
-    const source = makeWorkspace(base);
-    const legacyOnly = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), path.join(base, 'data'), [new FakeBackend('programmatic')]));
-    const started = await legacyOnly.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 5 });
-    expect(started).toMatchObject({ state: 'failed', backend: 'app-server', error: { code: 'VSUP_BACKEND_CRASHED', message: expect.stringContaining('app-server backend is unavailable') } });
-
-    const second = scratch();
-    const secondSource = makeWorkspace(second);
-    const appServerOnly = track(new RunManager({ ...appServerConfig({ allowedWorkspaceRoots: [secondSource] }), backend: 'programmatic' }, path.join(second, 'data'), [new FakeBackend('app-server')]));
-    const legacy = await appServerOnly.reviewStart({ task: 'Review.', cwd: secondSource, wait_seconds: 5 });
-    expect(legacy).toMatchObject({ state: 'failed', backend: 'programmatic', error: { code: 'VSUP_BACKEND_CRASHED', message: expect.stringContaining('programmatic backend is unavailable') } });
   });
 
   it('builds the app-server backend from the configuration and reports its runtime in readiness', async () => {
@@ -150,7 +136,6 @@ describe('backend selection by configuration', () => {
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source], paths: { appServer: executable, vibePinManifest: path.join(base, 'manifest.json') } }), path.join(base, 'data')));
     const ready = await manager.status({ workspace: source, operation: 'review', wait_seconds: 0 });
     expect(ready).toMatchObject({ eligible: true, runtime: { executable_found: true, resolved_executable: executable, pinned_version: '2.26.1', version_verified: false } });
-    expect(JSON.stringify(ready)).not.toContain('programmatic');
 
     const absent = scratch();
     const absentSource = makeWorkspace(absent);
@@ -160,17 +145,17 @@ describe('backend selection by configuration', () => {
     expect(blocked.blockers.map((blocker) => blocker.code)).toContain('VSUP_VIBE_NOT_FOUND');
   });
 
-  it('refuses to start after a reread configuration switches the backend', async () => {
+  it('refuses to start after a reread configuration changes the pin manifest', async () => {
     const base = scratch();
     const source = makeWorkspace(base);
     const data = path.join(base, 'data');
     mkdirSync(data, { mode: 0o700 });
     const configPath = path.join(data, 'config.toml');
-    const write = (backend: string) => writeFileSync(configPath, `version = 1\nbackend = "${backend}"\nallowed_workspace_roots = [${JSON.stringify(source)}]\n[paths]\nvibe_pin_manifest = "/unused/manifest.json"\n`, { mode: 0o600 });
-    write('app-server');
+    const write = (manifest: string) => writeFileSync(configPath, `version = 1\nallowed_workspace_roots = [${JSON.stringify(source)}]\n[paths]\nvibe_pin_manifest = ${JSON.stringify(manifest)}\n`, { mode: 0o600 });
+    write('/unused/vibe-pin-manifest.json');
     const { selectedConfigPolicy } = await import('../../src/config/policy.js');
-    const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), data, [new FakeBackend('app-server')], undefined, { policy: selectedConfigPolicy(configPath) }));
-    write('programmatic');
+    const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), data, [new FakeBackend()], undefined, { policy: selectedConfigPolicy(configPath) }));
+    write('/unused/other-manifest.json');
     await expect(manager.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 0 })).rejects.toMatchObject({ code: 'VSUP_RESTART_REQUIRED' });
   });
 });
@@ -186,7 +171,7 @@ describe('stop reasons from the app-server backend', () => {
   it.each(cases)('explains %s when the backend gave no summary and warns that the result may be incomplete', async (stopReason, pattern) => {
     const base = scratch();
     const source = makeWorkspace(base);
-    const backend = new FakeBackend('app-server');
+    const backend = new FakeBackend();
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), path.join(base, 'data'), [backend]));
     const started = await manager.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 0 });
     await waitFor(() => backend.starts, (value) => value === 1);
@@ -202,7 +187,7 @@ describe('stop reasons from the app-server backend', () => {
   it('keeps the backend summary when a limit stop still produced a final message', async () => {
     const base = scratch();
     const source = makeWorkspace(base);
-    const backend = new FakeBackend('app-server');
+    const backend = new FakeBackend();
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), path.join(base, 'data'), [backend]));
     const started = await manager.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 0 });
     await waitFor(() => backend.starts, (value) => value === 1);
@@ -213,7 +198,7 @@ describe('stop reasons from the app-server backend', () => {
   it('shows a denied tool call in status with its tool and reason', async () => {
     const base = scratch();
     const source = makeWorkspace(base);
-    const backend = new FakeBackend('app-server');
+    const backend = new FakeBackend();
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), path.join(base, 'data'), [backend]));
     const started = await manager.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 0 });
     await waitFor(() => backend.starts, (value) => value === 1);
@@ -257,7 +242,7 @@ describe('restart recovery of private Vibe state', () => {
     symlinkSync(outside, path.join(directory, 'tmp', 'link-out'));
     writeFileSync(path.join(directory, 'events.ndjson'), '');
     writeFileSync(path.join(directory, 'keep.txt'), 'kept');
-    const backend = new FakeBackend('app-server');
+    const backend = new FakeBackend();
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), data, [backend]));
     await manager.initialize();
     for (const name of ['child-home', 'vibe-home', 'tmp']) expect(existsSync(path.join(directory, name)), name).toBe(false);
@@ -279,7 +264,7 @@ describe('restart recovery of private Vibe state', () => {
     const record = interruptedRecord(source, 'failed');
     record.finishedAt = record.updatedAt;
     const directory = leaveRunDirectory(data, record);
-    const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), data, [new FakeBackend('app-server')]));
+    const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), data, [new FakeBackend()]));
     await manager.initialize();
     expect(existsSync(path.join(directory, 'tmp', 'nested', 'checkpoint.json'))).toBe(true);
   });
@@ -292,7 +277,7 @@ describe('restart recovery of private Vibe state', () => {
     const directory = leaveRunDirectory(data, record);
     const locked = path.join(directory, 'vibe-home', 'nested');
     chmodSync(locked, 0o000);
-    const backend = new FakeBackend('app-server');
+    const backend = new FakeBackend();
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), data, [backend]));
     try {
       await manager.initialize();
@@ -484,17 +469,6 @@ describe('doctor with the app-server backend', () => {
     expect(launched()).toBe(false);
   });
 
-  it('keeps checking the legacy executable when the programmatic backend is selected', async () => {
-    const base = scratch();
-    vi.stubEnv('VIBE_SUPERVISOR_HOME', path.join(base, 'data'));
-    const config = { ...doctorConfig(base), backend: 'programmatic' as const, paths: { vibe: path.join(base, 'no-such-vibe') } };
-    const never: (executable: string) => Promise<unknown> = async () => { throw new Error('the pin verifier must not run for the legacy backend'); };
-    const { backend } = wrapperBackend(base, config, never);
-    const report = await runDoctor(config, undefined, { backend });
-    expect(report.provenance.backend).toBe('programmatic');
-    expect(report.checks.find((check) => check.name === 'vibe')?.message).not.toContain('pinned manifest');
-  });
-
   it('builds the backend from the configuration when none is injected', async () => {
     const base = scratch();
     vi.stubEnv('VIBE_SUPERVISOR_HOME', path.join(base, 'data'));
@@ -514,7 +488,7 @@ describe('pin-manifest command', () => {
     mkdirSync(data, { mode: 0o700 });
     const manifest = path.join(data, 'vibe-pin-manifest.json');
     const configPath = path.join(data, 'config.toml');
-    writeFileSync(configPath, `version = 1\nbackend = "app-server"\nallowed_workspace_roots = []\n[paths]\nvibe = ${JSON.stringify(fake.vibeShim)}\nvibe_pin_manifest = ${JSON.stringify(manifest)}\n`, { mode: 0o600 });
+    writeFileSync(configPath, `version = 1\nallowed_workspace_roots = []\n[paths]\nvibe = ${JSON.stringify(fake.vibeShim)}\nvibe_pin_manifest = ${JSON.stringify(manifest)}\n`, { mode: 0o600 });
     return { base, data, configPath, manifest, shim: fake.shim, script: fake.script, site: fake.site };
   }
 

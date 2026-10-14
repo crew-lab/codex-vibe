@@ -116,7 +116,7 @@ describe('setup', () => {
   it('preserves existing config entries and does not overwrite configured paths', async () => {
     const box = await sandbox(); capture();
     const other = path.join(box.data, 'other-root'); await mkdir(other, { recursive: true });
-    await writeFile(box.config, `version = 1\nbackend = "programmatic"\nallowed_workspace_roots = [${JSON.stringify(other)}]\n\n[retention]\ndays = 3\n\n[paths]\nvibe = "/custom/vibe"\n`, { mode: 0o600 });
+    await writeFile(box.config, `version = 1\nallowed_workspace_roots = [${JSON.stringify(other)}]\n\n[retention]\ndays = 3\n\n[paths]\nvibe = "/custom/vibe"\n`, { mode: 0o600 });
     await runCli(['setup', '--workspace', box.workspace]);
     const parsed = parse(await readFile(box.config, 'utf8')) as ParsedConfig;
     expect(parsed.allowed_workspace_roots).toEqual([other, box.workspace]);
@@ -261,7 +261,7 @@ describe('allow and setup reload note', () => {
 });
 
 describe('config rewrite backup', () => {
-  const ORIGINAL = '# my comment\nversion = 1\nbackend = "programmatic"\nallowed_workspace_roots = []   # none yet\n';
+  const ORIGINAL = '# my comment\nversion = 1\nallowed_workspace_roots = []   # none yet\n[paths]\nvibe_pin_manifest = "/data/vibe-pin-manifest.json"\n';
 
   it('keeps an owner-only backup with the original bytes before allow rewrites the file', async () => {
     const box = await sandbox(); capture();
@@ -290,7 +290,7 @@ describe('allow comparisons and broad roots', () => {
     const box = await sandbox(); capture();
     const project = path.join(box.home, 'proj'); await mkdir(project);
     await mkdir(box.data, { recursive: true });
-    const original = 'version = 1\nbackend = "programmatic"\nallowed_workspace_roots = ["~/proj"]\n';
+    const original = 'version = 1\nallowed_workspace_roots = ["~/proj"]\n[paths]\nvibe_pin_manifest = "/data/vibe-pin-manifest.json"\n';
     await writeFile(box.config, original, { mode: 0o600 });
     await runCli(['allow', project]);
     expect(await readFile(box.config, 'utf8')).toBe(original);
@@ -342,7 +342,7 @@ describe('setup plans before writing', () => {
   it('leaves an existing supervisor config byte-identical when the Codex config is malformed', async () => {
     const box = await sandbox(); capture();
     await mkdir(box.data, { recursive: true });
-    const original = 'version = 1\nbackend = "programmatic"\nallowed_workspace_roots = []\n';
+    const original = 'version = 1\nallowed_workspace_roots = []\n[paths]\nvibe_pin_manifest = "/data/vibe-pin-manifest.json"\n';
     await writeFile(box.config, original, { mode: 0o600 });
     await mkdir(path.dirname(box.codex), { recursive: true });
     await writeFile(box.codex, 'not = [valid');

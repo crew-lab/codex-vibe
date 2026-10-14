@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
-import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 
 const canonicalTmp = await realpath(tmpdir());
@@ -11,7 +11,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
 class FakeBackend implements SupervisorBackend {
-  readonly kind = 'programmatic' as const;
+  readonly kind = 'app-server' as const;
   readonly callbacks = new Map<string, BackendCallbacks>();
   async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
@@ -23,12 +23,12 @@ class FakeBackend implements SupervisorBackend {
   async recover(_record: RunRecord) { return undefined; }
 }
 
-async function harness(overrides: Partial<typeof LEGACY_CONFIG> = {}) {
+async function harness(overrides: Partial<typeof TEST_CONFIG> = {}) {
   const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-durable-')); roots.push(parent);
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data');
   await mkdir(source); await writeFile(path.join(source, 'file.txt'), 'content\n');
   const backend = new FakeBackend();
-  const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source], ...overrides }, data, [backend]);
+  const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source], ...overrides }, data, [backend]);
   const started = await manager.reviewStart({ task: 'review', cwd: source });
   for (let attempt = 0; attempt < 500 && (await manager.status({ run_id: started.run_id })).state !== 'running'; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
   return { manager, backend, runId: started.run_id, callbacks: backend.callbacks.get(started.run_id)!, eventsFile: path.join(data, 'runs', started.run_id, 'events.ndjson'), metaFile: path.join(data, 'runs', started.run_id, 'meta.json') };
@@ -41,7 +41,7 @@ async function diskEvents(file: string): Promise<{ seq: number; type: string; da
 
 describe('buffered event persistence', () => {
   it('keeps order and seq for 1,000 events on disk and in memory, well under the old per-event cost', async () => {
-    const { manager, runId, callbacks, eventsFile } = await harness({ limits: { ...LEGACY_CONFIG.limits, maxEventBytes: 50_000_000 } });
+    const { manager, runId, callbacks, eventsFile } = await harness({ limits: { ...TEST_CONFIG.limits, maxEventBytes: 50_000_000 } });
     try {
       const began = performance.now();
       for (let index = 1; index <= 1000; index += 1) await callbacks.onEvent({ source: 'vibe', type: 'tool_call', severity: 'info', data: { title: `call ${index}` } });
@@ -92,7 +92,7 @@ describe('buffered event persistence', () => {
   });
 
   it('still fails the run with VSUP_OUTPUT_LIMIT when the event byte cap is reached', async () => {
-    const { manager, runId, callbacks } = await harness({ limits: { ...LEGACY_CONFIG.limits, maxEventBytes: 3000 } });
+    const { manager, runId, callbacks } = await harness({ limits: { ...TEST_CONFIG.limits, maxEventBytes: 3000 } });
     try {
       for (let index = 0; index < 40; index += 1) await callbacks.onEvent({ source: 'vibe', type: 'tool_call', severity: 'info', data: { title: 'x'.repeat(200) } });
       let status = await manager.status({ run_id: runId });

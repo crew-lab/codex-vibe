@@ -4,7 +4,7 @@ import { lstat, open, readdir, realpath, stat, type FileHandle } from 'node:fs/p
 import path from 'node:path';
 import { z } from 'zod';
 import { isPathWithinRoot } from '../../security/paths.js';
-import { SUPPORTED_VIBE } from '../pinned.js';
+import { SUPPORTED_VIBE } from './supported-vibe.js';
 
 export type PinFailureReason =
   | 'executable-invalid' | 'executable-missing' | 'shebang-unreadable' | 'shebang-unsupported'

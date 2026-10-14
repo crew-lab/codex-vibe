@@ -2,7 +2,6 @@ import path from "node:path";
 import { homedir } from "node:os";
 import { z } from "zod";
 import { assertWorkspaceRootScope } from "../security/paths.js";
-import { BACKEND_KINDS } from "../contracts.js";
 import type { SupervisorConfig } from "../contracts.js";
 import { MAX_TURNS_LIMIT } from "../mcp/schemas.js";
 
@@ -12,7 +11,6 @@ const executableString = pathString.refine((value) => path.isAbsolute(value) || 
 const absolutePathString = pathString.refine((value) => path.isAbsolute(value), "must be an absolute path");
 const configSchema = z.object({
   version: z.literal(1),
-  backend: z.enum(BACKEND_KINDS).default("app-server"),
   allowed_workspace_roots: z.array(rootString).max(100).default([]),
   retention: z.object({
     days: z.number().int().min(0).max(3650).default(7)
@@ -36,11 +34,11 @@ const configSchema = z.object({
     vibe_pin_manifest: absolutePathString.optional()
   }).strict().optional()
 }).strict().superRefine((value, context) => {
-  if (value.backend === "app-server" && value.paths?.vibe_pin_manifest === undefined) {
+  if (value.paths?.vibe_pin_manifest === undefined) {
     context.addIssue({
       code: "custom",
       path: ["paths", "vibe_pin_manifest"],
-      message: "is required when backend is app-server: set it to the absolute path of the pin manifest written by the pin-manifest command, or set backend = \"programmatic\" to keep the legacy backend."
+      message: "is required: set it to the absolute path of the pin manifest written by the pin-manifest command."
     });
   }
 });
@@ -53,7 +51,6 @@ export function validateConfig(input: unknown, home = process.env.HOME ?? proces
   }
   return {
     version: parsed.version,
-    backend: parsed.backend,
     allowedWorkspaceRoots: parsed.allowed_workspace_roots,
     retention: { days: parsed.retention.days },
     limits: {

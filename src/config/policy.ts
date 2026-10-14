@@ -25,7 +25,6 @@ export function fixedPolicy(config: SupervisorConfig): PolicySource {
 
 const BOOT_BOUND_SETTINGS: ReadonlyArray<readonly [string, (config: SupervisorConfig) => unknown]> = [
   ["version", (config) => config.version],
-  ["backend", (config) => config.backend],
   ["retention.days", (config) => config.retention.days],
   ["limits.review_timeout_seconds", (config) => config.limits.reviewTimeoutSeconds],
   ["limits.edit_timeout_seconds", (config) => config.limits.editTimeoutSeconds],

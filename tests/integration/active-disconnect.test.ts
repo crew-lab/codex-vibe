@@ -1,11 +1,12 @@
 import { execFile } from 'node:child_process';
-import { chmod, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { afterEach, describe, expect, it } from 'vitest';
+import { makeLaunchableFakeVibe } from '../unit/support/launchable-fake-vibe.js';
 
 const exec = promisify(execFile);
 const repo = path.resolve(import.meta.dirname, '..', '..');
@@ -56,23 +57,9 @@ async function sandbox() {
   await git(workspace, ['add', 'a.js']);
   await git(workspace, ['-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'init']);
 
-  const workerRecord = path.join(fake, 'worker.json');
-  const interpreter = path.join(fake, 'fake-python');
-  await writeFile(interpreter, [
-    `#!${process.execPath}`,
-    "const fs = require('node:fs'); const cp = require('node:child_process');",
-    "if (!String(process.argv[2]).endsWith('vibe_supervisor_launcher.py')) { process.stdout.write('vibe 2.26.1\\n'); process.exit(0); }",
-    "const grandchild = cp.spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });",
-    `fs.writeFileSync(${JSON.stringify(workerRecord)}, JSON.stringify({ pid: process.pid, grandchild: grandchild.pid }));`,
-    'setInterval(() => {}, 1000);',
-    ''
-  ].join('\n'));
-  await chmod(interpreter, 0o755);
-  const vibe = path.join(fake, 'vibe');
-  await writeFile(vibe, `#!${interpreter}\n`);
-  await chmod(vibe, 0o755);
-
-  await writeFile(path.join(data, 'config.toml'), `version = 1\nbackend = "programmatic"\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[paths]\nvibe = ${JSON.stringify(vibe)}\n`, { mode: 0o600 });
+  const launchable = await makeLaunchableFakeVibe(fake, { scenario: { name: 'hold', steps: [{ op: 'say', text: 'Working.' }, { op: 'hold' }] }, spawnGrandchild: true });
+  await writeFile(path.join(data, 'config.toml'), `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[paths]\nvibe = ${JSON.stringify(launchable.vibe)}\nvibe_pin_manifest = ${JSON.stringify(launchable.manifest)}\n`, { mode: 0o600 });
+  const workerRecord = launchable.workerRecord;
   return { parent, workspace, data, workerRecord };
 }
 
@@ -81,7 +68,7 @@ async function launch(box: Box, mode: Mode) {
     command: process.execPath,
     args: [cli, 'serve', '--stdio', ...(mode === 'isolated' ? ['--isolated'] : [])],
     stderr: 'pipe',
-    env: { ...(process.env as Record<string, string>), VIBE_SUPERVISOR_HOME: box.data }
+    env: { ...(process.env as Record<string, string>), VIBE_SUPERVISOR_HOME: box.data, MISTRAL_API_KEY: 'active-disconnect-credential-abcdefghijklmnop' }
   });
   const stderr: string[] = [];
   transport.stderr?.on('data', (chunk: Buffer) => { stderr.push(chunk.toString()); });
@@ -156,7 +143,7 @@ async function locks(box: Box): Promise<string[]> {
 
 const worktreeCount = async (box: Box) => (await git(box.workspace, ['worktree', 'list', '--porcelain'])).split('\n').filter((line) => line.startsWith('worktree ')).length - 1;
 
-describe.each<Mode>(['plain', 'isolated'])('active disconnect with a blocking fake Vibe (%s)', (mode) => {
+describe.each<Mode>(['plain', 'isolated'])('active disconnect with a blocking fake app-server (%s)', (mode) => {
   describe.each<Kind>(['review', 'edit'])('%s run', (kind) => {
     it.each<Disconnect>(['client-close', 'sigterm'])('%s ends the server, the worker process group, the lock and the run record', async (how) => {
       const box = await sandbox();

@@ -61,7 +61,6 @@ export function resolveConfigSelection(configPath?: string, env: NodeJS.ProcessE
 export function configFingerprint(config: SupervisorConfig): string {
   const semantic = {
     version: config.version,
-    backend: config.backend,
     allowedWorkspaceRoots: config.allowedWorkspaceRoots.map(root => resolve(root === "~" ? homedir() : root.startsWith("~/") ? join(homedir(), root.slice(2)) : root)),
     retention: { days: config.retention.days },
     limits: {
@@ -128,7 +127,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Super
   } catch (error) {
     if (error instanceof Error) {
       throw Object.assign(new Error(`Invalid supervisor configuration: ${error.message}`, { cause: error }), {
-        supervisor: supervisorError("VSUP_CONFIG_INVALID", `Invalid configuration file ${selection.configPath}: ${error.message} Supported fields are version, backend, allowed_workspace_roots, retention, limits (including max_tokens and max_cost_usd), and paths (vibe, app_server, vibe_pin_manifest); remove unsupported fields.`, { configPath: selection.configPath })
+        supervisor: supervisorError("VSUP_CONFIG_INVALID", `Invalid configuration file ${selection.configPath}: ${error.message} Supported fields are version, allowed_workspace_roots, retention, limits (including max_tokens and max_cost_usd), and paths (vibe, app_server, vibe_pin_manifest); remove unsupported fields.`, { configPath: selection.configPath })
       });
     }
     throw error;
