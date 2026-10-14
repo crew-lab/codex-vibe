@@ -31,6 +31,7 @@ The rule for every asset is the one the article evidence file already sets: a nu
 | Codex | Stable `rust-v0.162.1` (2026-10-09); MCP servers in `~/.codex/config.toml`; recent releases add managed worktrees and tool search | The host. Codex worktrees hold Codex's own work; ours isolate the other agent. |
 | MCP registry | Preview; latest release v1.8.1 (2026-08-06); accepts npm, PyPI, NuGet, Cargo, OCI and MCPB on GitHub or GitLab releases | Listing needs an MCPB bundle or an npm publish; neither exists today. |
 | Google Antigravity | App v2.23.1 (2026-10-13), CLI 1.3.1, IDE 2.5.5, SDK 0.1.21 and an official proprietary ACP server 1.4.0; 2.4 million weekly active users (Alphabet, 2026-07-22); an MCP client on every surface, tools Ask by default and lazy-loaded behind `call_mcp_tool` in the CLI; see the [Antigravity research](../research/antigravity-2026-10-14.md) | A second MCP client to earn, not a competitor on scope and never a worker: no surface gives a supervisor-owned approval boundary, a read-back or a pinnable engine, and its consumer terms forbid third-party software against its sign-in. Claim nothing until its gates are recorded. |
+| Review products | Claude Code Review (about $15 to $25 per review, severity tags, thumbs collection), Cursor Bugbot (about $1 to $1.50, a 70%+ resolution claim), Codex `/review`; see the [features research](../research/features-2026-10-14.md) | They review for you; we let your agent delegate a bounded review to another vendor's model and hand you the audit bundle and, from 2.1, the findings file |
 
 ## 2. Audiences and channels
 
@@ -38,6 +39,7 @@ The rule for every asset is the one the article evidence file already sets: a nu
 |---|---|---|---|---|---|
 | Codex users with a Mistral account: repo, README, release notes | A second opinion from another model family, inside Codex, that cannot touch your checkout | README hero, quickstart, demo recording, 2.0.0 notes | At the 2.0.0 tag, never before | Medium, mostly agent-doable | Release-asset downloads; issues from strangers |
 | MCP ecosystem: official registry, curated lists | One bounded Vibe review or edit for Codex; patch returned, never applied | `server.json` plus an MCPB bundle on a GitHub release ([draft](../docs/history/outreach-drafts.md#3-mcp-registry-entry-post-after-stable-101)); the bundle build is unproven | After 2.0.1 | High: build step, manifest, validation | Listing live; one install that cites it |
+| reviewdog and code-scanning users: README section, reviewdog discussions | Pipe a Mistral second opinion into the PR check you already have | `findings.json` and SARIF export (2.1) | After 2.1 ships | S | One external pipeline reported |
 | Mistral community: GitHub Discussions, Ideas | A programmatic consumer with recorded evidence asking concrete protocol questions | The drafted Discussion rewritten for 2.0 (it still describes the legacy harness); ask the audit's open questions: catalogue narrowing, a search builtin, omitting reasoning, budget enforcement, protocol stability | The week 2.0.0 ships, same day as Show HN or earlier | Low; owner posts | A maintainer reply; an answer that removes 2.0.1 work |
 | Hacker News: Show HN | The checklist for letting one agent delegate to another, the tool as the worked example | Submission plus the drafted first comment, refreshed for 2.0 | After a stranger can install 2.0.0; a weekday morning US time with the owner free to answer | Low to post, high to attend | Comments describing other setups; referrals; no vote solicitation |
 | dev.to and the blog series | Failure stories and the checks they produced; no product pitch | The 1.0 article rewritten for 2.0, AI-Assisted label; then the series in section 3 | Article at 2.0.0; series monthly | Medium per piece | Technical comments; one mention by someone else |
@@ -118,6 +120,7 @@ The repository is a portfolio piece about judgment rather than volume: 174 commi
 | External issues and PRs | 5 issues, 1 merged PR | One outside contributor is the milestone |
 | Referral traffic | 1,000 article reads; a front-page hour or none | Most Show HN posts never rank; plan for the thread |
 | Mistral community | One maintainer reply | Settles protocol questions |
+| Usefulness rate | Published monthly from `runs usefulness` once 2.1 exists | Replaces "three of six" with a measured number |
 | Talks | One acceptance in twelve months | CFP cycles are slow |
 
 ## 5. Risks and guardrails
@@ -131,6 +134,7 @@ The repository is a portfolio piece about judgment rather than volume: 174 commi
 - **AI-assistance disclosure.** One factual sentence everywhere; the platform's label where one exists; the owner's own reading and voice in the article, as the article README already requires. The risk is overclaiming the human share; the guardrail is describing the owner's actual role: scope, authorization, review, decisions.
 - **macOS only.** In the first paragraph of everything. Linux and Windows are unclaimed contribution areas, not roadmap.
 - **Answer quality and cost.** Six runs, three accepted; cost not recorded. Say both until 2.0 target evidence changes them. The usable advice is the template lesson: narrow scope, enumerated inputs and rejections.
+- **Comparisons with attack research.** The "Friendly Fire" result is cited only as "a class of failure our worker cannot reproduce because it has no shell and no network", never as "immune".
 
 ## 6. Next actions, in order
 
