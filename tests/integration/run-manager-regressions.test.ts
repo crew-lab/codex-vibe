@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -96,6 +96,54 @@ describe('RunManager regressions', () => {
       const result = await manager.result({ run_id: started.run_id });
       expect(result.artifacts).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'worker-diagnostics.json' })]));
     } finally { await manager.shutdown(); }
+  }, 30_000);
+
+  async function completeWithDiagnostics(plant: (diagnosticsPath: string, parent: string) => Promise<void>) {
+    const backend = new FakeBackend();
+    const { parent, source, data } = await makeParent();
+    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    try {
+      const started = await manager.reviewStart({ task: 'review', cwd: source });
+      await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
+      await plant(path.join(data, 'runs', started.run_id, 'worker-diagnostics.json'), parent);
+      await backend.callbacks.get(started.run_id)?.onState('completed', { result: { summary: 'done' } });
+      return await manager.result({ run_id: started.run_id });
+    } finally { await manager.shutdown(); }
+  }
+
+  function expectCompletedWithoutDiagnostics(result: Awaited<ReturnType<typeof completeWithDiagnostics>>) {
+    expect(result.state).toBe('completed');
+    const names = result.artifacts?.map((artifact) => artifact.name) ?? [];
+    expect(names).toEqual(expect.arrayContaining(['transcript.md', 'events.ndjson']));
+    expect(names).not.toContain('worker-diagnostics.json');
+    expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('worker diagnostics were not included')]));
+    expect(result.warnings).not.toEqual(expect.arrayContaining([expect.stringContaining('could not be finalized')]));
+  }
+
+  it('omits oversized worker diagnostics with a warning and keeps the other artifacts', async () => {
+    const result = await completeWithDiagnostics(async (diagnosticsPath) => {
+      await writeFile(diagnosticsPath, 'x'.repeat(64 * 1024 + 1), { mode: 0o600 });
+    });
+    expectCompletedWithoutDiagnostics(result);
+    expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('size limit')]));
+  }, 30_000);
+
+  it('omits a symlinked worker diagnostics file without reading its target', async () => {
+    const target = { path: '' };
+    const result = await completeWithDiagnostics(async (diagnosticsPath, parent) => {
+      target.path = path.join(parent, 'outside-secret.json');
+      await writeFile(target.path, JSON.stringify({ secret: 'outside-target-content' }), { mode: 0o600 });
+      await symlink(target.path, diagnosticsPath);
+    });
+    expectCompletedWithoutDiagnostics(result);
+    expect(JSON.stringify(result)).not.toContain('outside-target-content');
+    expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('unsafe or unreadable')]));
+  }, 30_000);
+
+  it('omits a worker diagnostics path that is not a regular file', async () => {
+    const result = await completeWithDiagnostics(async (diagnosticsPath) => { await mkdir(diagnosticsPath); });
+    expectCompletedWithoutDiagnostics(result);
+    expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('unsafe or unreadable')]));
   }, 30_000);
 
   it('turns a source workspace change during a review into a warning instead of failing the run', async () => {

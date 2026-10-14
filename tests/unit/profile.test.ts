@@ -26,6 +26,9 @@ describe('supervisor-owned agent profiles', () => {
     const config = parse(await readFile(file, 'utf8'));
     const names = mode === 'review' ? ['read_file', 'grep'] : ['read_file', 'grep', 'write_file', 'edit'];
     expect(config.enabled_tools).toEqual(names);
+    expect(JSON.parse(profile.env.VIBE_ENABLED_TOOLS as string)).toEqual(names);
+    expect(JSON.parse(profile.env.VIBE_DISABLED_SKILLS as string)).toEqual(['*']);
+    expect(profile.env.VIBE_ENABLED_SKILLS).toBeUndefined();
     expect(config.tools).toEqual(Object.fromEntries(names.map((name) => [name, { permission: 'never' }])));
     expect((await stat(file)).mode & 0o777).toBe(0o600);
     expect((await stat(path.dirname(file))).mode & 0o777).toBe(0o700);
@@ -70,6 +73,9 @@ describe.skipIf(!python)('installed Vibe 2.26.1 permissions (no inference)', () 
     const report = JSON.parse(result.stdout);
     expect(report.mode).toBe(mode === 'review' ? 'plan' : 'accept-edits');
     expect(report.effective_tools).toEqual(mode === 'review' ? ['grep', 'read_file'] : ['edit', 'grep', 'read_file', 'write_file']);
+    expect(report.pinned_sources).toEqual(['TOOL_CALL_RESOLUTION_SOURCE_SHA256', 'TOOL_INVENTORY_SOURCE_SHA256', 'TOOL_INVOKE_SOURCE_SHA256', 'TOOL_LOOKUP_SOURCE_SHA256', 'TOOL_SCHEMA_SOURCE_SHA256']);
+    expect(report.refused_outside_tool).toEqual({ tool: '<other>', outcome: 'refused' });
+    expect(report.exposed_skills).toEqual([]);
     expect(report.read_results).toEqual({
       ordinary: { tool: 'read_file', outcome: 'completed' },
       github_deploy: { tool: 'read_file', outcome: 'completed' },
