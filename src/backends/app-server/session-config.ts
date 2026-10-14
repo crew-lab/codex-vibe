@@ -12,6 +12,7 @@ export const PROFILE_TOOLS: Readonly<Record<RunMode, readonly string[]>> = {
 
 export const DISABLED_TOOLS: readonly string[] = ['ask_user_question', 'exit_plan_mode', 'cron'];
 export const AGENT_NAMES: Readonly<Record<RunMode, string>> = { review: 'supervisor-review', edit: 'supervisor-edit' };
+export const PRIVATE_DIRECTORY_NAMES = { home: 'child-home', vibeHome: 'vibe-home', tmp: 'tmp' } as const;
 export const TOOL_PERMISSION = 'ask';
 export const LOG_LEVEL = 'ERROR';
 
@@ -99,7 +100,7 @@ export function workspaceDenylist(workspace: string): string[] {
 
 export function sessionDirectories(runDirectory: string): SessionDirectories {
   const root = requireAbsolute(runDirectory, 'runDirectory');
-  return { home: path.join(root, 'child-home'), vibeHome: path.join(root, 'vibe-home'), tmp: path.join(root, 'tmp') };
+  return { home: path.join(root, PRIVATE_DIRECTORY_NAMES.home), vibeHome: path.join(root, PRIVATE_DIRECTORY_NAMES.vibeHome), tmp: path.join(root, PRIVATE_DIRECTORY_NAMES.tmp) };
 }
 
 function settingEnvironmentName(key: string): string {

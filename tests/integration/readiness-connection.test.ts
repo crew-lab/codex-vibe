@@ -33,7 +33,7 @@ describe('workspace readiness over a real --isolated stdio connection', () => {
     await writeFile(vibe, `#!/bin/sh\ntouch ${JSON.stringify(marker)}\n`);
     await chmod(vibe, 0o755);
     const configPath = path.join(data, 'config.toml');
-    await writeFile(configPath, `version = 1\nallowed_workspace_roots = [${JSON.stringify(first)}]\n[paths]\nvibe = ${JSON.stringify(vibe)}\n`, { mode: 0o600 });
+    await writeFile(configPath, `version = 1\nbackend = "programmatic"\nallowed_workspace_roots = [${JSON.stringify(first)}]\n[paths]\nvibe = ${JSON.stringify(vibe)}\n`, { mode: 0o600 });
     const env = { ...(process.env as Record<string, string>), VIBE_SUPERVISOR_HOME: data };
 
     const transport = new StdioClientTransport({ command: process.execPath, args: [cli, 'serve', '--stdio', '--isolated'], env, stderr: 'pipe' });

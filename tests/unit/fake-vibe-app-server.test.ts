@@ -8,7 +8,7 @@ const root = path.resolve(import.meta.dirname, '..', '..');
 const fixture = path.join(root, 'tests', 'fixtures', 'fake-vibe-app-server.mjs');
 const scenarioDirectory = path.join(root, 'tests', 'fixtures', 'app-server-scenarios');
 const watermark = 7;
-const secretValue = 'sk-test-not-a-real-credential-value';
+const secretValue = 'fake-credential-not-a-real-value';
 
 type Json = Record<string, unknown>;
 type Exit = { code: number | null; signal: NodeJS.Signals | null };

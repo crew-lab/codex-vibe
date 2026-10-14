@@ -24,6 +24,7 @@ import type { CurrentPolicy, PolicySource } from "../config/policy.js";
 import { ReadinessReceipts, receiptMismatch, receiptRejected } from "./readiness-receipt.js";
 import type { OpenedReceipt } from "./readiness-receipt.js";
 import { assertNoProjectVibeExtensions, assertSimpleGlobRoot } from "../backends/profile.js";
+import { PRIVATE_DIRECTORY_NAMES } from "../backends/app-server/session-config.js";
 import { eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
 import { changedSinceSnapshot, parseManifest, serializeManifest, snapshotWorkspace } from "./workspace-snapshot.js";
@@ -281,7 +282,7 @@ export class RunManager {
       };
       const record: RunRecord = {
         schemaVersion: SCHEMA_VERSION, supervisorVersion: APP_VERSION, runId: id,
-        backend: "programmatic", mode, state: "starting", sourceWorkspace: source,
+        backend: this.config.backend, mode, state: "starting", sourceWorkspace: source,
         workerWorkspace, createdAt: now, updatedAt: now,
         taskSha256: createHash("sha256").update(task).digest("hex"), policyRevision: policy.revision, admittedRoot: admitted.root, limits
       };
@@ -295,7 +296,7 @@ export class RunManager {
       runtime.starting.catch((error: unknown) => this.reportBackground(runtime, "launch", error));
       return {
         supervisor_version: runtime.record.supervisorVersion ?? null, run_id: id, policy_revision: policy.revision,
-        state: runtime.record.state, backend: "programmatic", mode,
+        state: runtime.record.state, backend: this.config.backend, mode,
         source_workspace: source, worker_workspace: workerWorkspace, created_at: now,
         next_action: this.nextAction(runtime.record, runtime.record.state),
         ...(mode === "edit" ? { base_ref: options.baseRef ?? "HEAD", ...(checkedBase ? { base_commit: checkedBase } : {}) } : {})
@@ -369,7 +370,7 @@ export class RunManager {
   }
 
   private async runtimeCheck(): Promise<RuntimeCheck | { status: "not_reported" }> {
-    const backend = this.backends.get("programmatic");
+    const backend = this.backends.get(this.config.backend);
     if (!backend?.runtimeCheck) return { status: "not_reported" };
     return backend.runtimeCheck();
   }
@@ -869,8 +870,13 @@ export class RunManager {
   }
 
   private async loadDefaultBackends(): Promise<void> {
-    const { ProgrammaticBackend } = await import("../backends/programmatic.js");
-    this.backends.set("programmatic", new ProgrammaticBackend(this.config));
+    if (this.config.backend === "programmatic") {
+      const { ProgrammaticBackend } = await import("../backends/programmatic.js");
+      this.backends.set("programmatic", new ProgrammaticBackend(this.config));
+      return;
+    }
+    const { AppServerBackend } = await import("../backends/app-server.js");
+    this.backends.set("app-server", new AppServerBackend(this.config));
   }
 
   private async launch(runtime: Runtime): Promise<void> {
@@ -888,8 +894,8 @@ export class RunManager {
         await this.persist(runtime);
       }
       if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
-      const backend = this.backends.get("programmatic");
-      if (!backend) throw codedError("VSUP_BACKEND_CRASHED", "The programmatic backend is unavailable.");
+      const backend = this.backends.get(this.config.backend);
+      if (!backend) throw codedError("VSUP_BACKEND_CRASHED", `The ${this.config.backend} backend is unavailable.`);
       runtime.backend = backend;
       await snapshotTask;
       if (snapshotTask) await this.persist(runtime);
@@ -1117,9 +1123,19 @@ export class RunManager {
     record.state = "failed";
     record.error = supervisorError("VSUP_BACKEND_CRASHED", "The supervisor restarted while this one-shot run was active. The task was not resumed or replayed.");
     record.updatedAt = now; record.finishedAt = now;
-    await this.writeFallbackResult(runtime, "failed", "The supervisor restarted while the run was active; no worker was resumed or task replayed.");
+    const leftover = await this.removeLeftoverPrivateState(runtime);
+    const restartWarning = "The supervisor restarted while the run was active; no worker was resumed or task replayed.";
+    await this.writeFallbackResult(runtime, "failed", leftover.removed ? restartWarning : `${restartWarning} ${PRIVATE_STATE_RETAINED_WARNING}`);
     try { await this.persist(runtime); }
     catch (error) { if (!this.degrade(runtime, error)) throw error; }
+  }
+
+  private async removeLeftoverPrivateState(runtime: Runtime): Promise<{ removed: boolean }> {
+    const names = Object.values(PRIVATE_DIRECTORY_NAMES);
+    const results = await Promise.allSettled(names.map((name) => rm(path.join(runtime.directory, name), { recursive: true, force: true, maxRetries: 2 })));
+    const failed = results.some((result) => result.status === "rejected");
+    if (failed) reportBackgroundFailure("recovery-private-state", new Error(`Private Vibe state of run ${runtime.record.runId} could not be deleted.`));
+    return { removed: !failed };
   }
 
   private reportBackground(runtime: Runtime | undefined, context: string, error: unknown): void {
@@ -1512,6 +1528,11 @@ async function isDiscardableRecord(file: string): Promise<boolean> {
 }
 
 function statusText(event: SupervisorEvent): { text?: string } {
+  if (event.type === "tool_denied") {
+    const tool = typeof event.data.tool === "string" ? event.data.tool : "tool";
+    const reason = typeof event.data.reason === "string" ? event.data.reason : "denied";
+    return { text: redactSecrets(`${tool}: ${reason}`).slice(0, STATUS_TEXT_CHARS) };
+  }
   if (event.source !== "supervisor" || !STATUS_TEXT_EVENT_TYPES.has(event.type)) return {};
   for (const key of ["text", "message", "reason"]) {
     const value = event.data[key];
@@ -1614,6 +1635,7 @@ const WORKER_DIAGNOSTICS_UNSAFE = "the file was unsafe or unreadable";
 const UNREADABLE_LOG_WARNING = "The event log of this run could not be read and was left untouched; it is not included in the artifacts";
 const ARTIFACTS_INCOMPLETE_WARNING = "Run artifacts could not be finalized; the listed artifacts may be missing or incomplete.";
 const CHANGED_WITH_WRITE_WARNING = "Possible read-only boundary violation: the review worker issued a write-capable tool call and the source workspace changed. Inspect the changed paths before trusting the review.";
+const PRIVATE_STATE_RETAINED_WARNING = "Private Vibe state left by the interrupted run could not be deleted and remains in the run directory.";
 const STOP_WARNING_PREFIX = "Vibe stopped with stop reason ";
 const MAX_STOP_REASON_CHARS = 64;
 
@@ -1626,8 +1648,11 @@ function completedSummary(stopReason: string | undefined, _backend: RunRecord["b
   switch (stopReason) {
     case undefined:
     case "end_turn": return "Vibe completed the delegated task.";
+    case "turn_limit":
     case "max_turn_requests": return "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; start a fresh run from a reviewed base if more work is needed.";
+    case "token_limit":
     case "max_tokens": return "Vibe stopped at the token limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; start a fresh run from a reviewed base if more work is needed.";
+    case "price_limit": return "Vibe stopped at the configured cost limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; start a fresh run from a reviewed base if more work is needed.";
     case "refusal": return "Vibe declined the request. Inspect the artifacts and stop_reason before trusting the result.";
     case "cancelled": return "The Vibe task was cancelled before it finished. Inspect the artifacts and stop_reason before starting a fresh run.";
     default: return `Vibe stopped with reason ${printableStopReason(stopReason)} instead of a normal final answer. Inspect the artifacts and stop_reason before trusting the result.`;

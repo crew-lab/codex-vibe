@@ -25,6 +25,7 @@ export function fixedPolicy(config: SupervisorConfig): PolicySource {
 
 const BOOT_BOUND_SETTINGS: ReadonlyArray<readonly [string, (config: SupervisorConfig) => unknown]> = [
   ["version", (config) => config.version],
+  ["backend", (config) => config.backend],
   ["retention.days", (config) => config.retention.days],
   ["limits.review_timeout_seconds", (config) => config.limits.reviewTimeoutSeconds],
   ["limits.edit_timeout_seconds", (config) => config.limits.editTimeoutSeconds],
@@ -35,7 +36,11 @@ const BOOT_BOUND_SETTINGS: ReadonlyArray<readonly [string, (config: SupervisorCo
   ["limits.max_artifact_bytes", (config) => config.limits.maxArtifactBytes],
   ["limits.worker_progress_timeout_seconds", (config) => config.limits.workerProgressTimeoutSeconds],
   ["limits.max_mcp_result_chars", (config) => config.limits.maxMcpResultChars],
-  ["paths.vibe", (config) => config.paths?.vibe ?? null]
+  ["limits.max_tokens", (config) => config.limits.maxTokens ?? null],
+  ["limits.max_cost_usd", (config) => config.limits.maxCostUsd ?? null],
+  ["paths.vibe", (config) => config.paths?.vibe ?? null],
+  ["paths.app_server", (config) => config.paths?.appServer ?? null],
+  ["paths.vibe_pin_manifest", (config) => config.paths?.vibePinManifest ?? null]
 ];
 
 export function bootBoundDrift(boot: SupervisorConfig, current: SupervisorConfig): string[] {

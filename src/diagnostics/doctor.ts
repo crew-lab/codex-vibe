@@ -8,12 +8,13 @@ import { createPrivateDir, expandHome, isPathWithinRoot } from '../security/path
 import { configFingerprint, executableSearchPath, getDataDir } from '../config/config.js';
 import { SUPPORTED_VIBE } from '../backends/pinned.js';
 import { inspectOwnerLock } from '../core/owner-lock.js';
-import type { SupervisorConfig } from '../contracts.js';
+import type { BackendKind, SupervisorBackend, SupervisorConfig } from '../contracts.js';
 import { APP_VERSION } from '../version.js';
 import { nodeVersionAtLeast } from '../runtime/node-version.js';
 
 export interface DoctorCheck { name: string; ok: boolean; status?: 'ok' | 'missing' | 'unverified'; version?: string; message: string; stderr_tail?: string }
-export interface DoctorReport { ok: boolean; generatedAt: string; provenance: { executable: string; application_entrypoint: string; runtime_module: string; app_version: string; vibe_version?: string; config_path: string; config_source: 'explicit' | 'environment' | 'default'; config_fingerprint: string; data_directory: string; storage_mode: 'selected-template' }; checks: DoctorCheck[] }
+export interface DoctorDependencies { backend?: SupervisorBackend }
+export interface DoctorReport { ok: boolean; generatedAt: string; provenance: { backend: BackendKind; executable: string; application_entrypoint: string; runtime_module: string; app_version: string; vibe_version?: string; config_path: string; config_source: 'explicit' | 'environment' | 'default'; config_fingerprint: string; data_directory: string; storage_mode: 'selected-template' }; checks: DoctorCheck[] }
 
 export function nodeRuntimeCheck(version: string): DoctorCheck {
   const ok = nodeVersionAtLeast(version, '20.19.0');
@@ -73,7 +74,18 @@ export function formatDoctorCheck(check: DoctorCheck): string {
   return `${check.status === 'unverified' ? 'UNVERIFIED' : check.ok ? 'PASS' : 'CHECK'} ${check.name}: ${check.message}${check.version ? ` (${check.version})` : ''}${check.stderr_tail ? `\n  Diagnostic detail: ${check.stderr_tail}` : ''}`;
 }
 
-export async function runDoctor(config: SupervisorConfig, provenance?: { configPath?: string; configSource?: 'explicit' | 'environment' | 'default'; dataDir?: string; fingerprint?: string }): Promise<DoctorReport> {
+async function appServerCheck(config: SupervisorConfig, injected: SupervisorBackend | undefined): Promise<DoctorCheck> {
+  const backend = injected ?? new (await import('../backends/app-server.js')).AppServerBackend(config);
+  const capabilities = await backend.probe();
+  if (capabilities.available) {
+    return { name: 'vibe', ok: true, status: 'ok', ...(capabilities.version ? { version: capabilities.version } : {}), message: `The installed vibe-app-server matches the pinned manifest for Vibe ${SUPPORTED_VIBE}; the installed files were hashed and Vibe was not launched.` };
+  }
+  const reason = typeof capabilities.details?.reason === 'string' ? capabilities.details.reason : 'The app-server pin check failed.';
+  const code = typeof capabilities.details?.code === 'string' ? ` [${capabilities.details.code}]` : '';
+  return { name: 'vibe', ok: false, message: `${reason}${code}${capabilities.executable ? ` (vibe-app-server: ${capabilities.executable})` : ''}` };
+}
+
+export async function runDoctor(config: SupervisorConfig, provenance?: { configPath?: string; configSource?: 'explicit' | 'environment' | 'default'; dataDir?: string; fingerprint?: string }, dependencies: DoctorDependencies = {}): Promise<DoctorReport> {
   const checks: DoctorCheck[] = [];
   checks.push(nodeRuntimeCheck(process.versions.node));
   checks.push({ name: 'platform', ok: true, version: `${process.platform} ${os.arch()}`, message: `Detected ${process.platform} on ${os.arch()}.` });
@@ -91,7 +103,10 @@ export async function runDoctor(config: SupervisorConfig, provenance?: { configP
     }
     const vibeLookup = findExecutable('vibe', config.paths?.vibe);
     const vibe = vibeLookup.path;
-    if (vibeLookup.rejected) checks.push({ name: 'vibe', ok: false, message: rejectedMessage('Vibe', vibeLookup.rejected) });
+    if (config.backend === 'app-server') {
+      try { checks.push(await appServerCheck(config, dependencies.backend)); }
+      catch { checks.push({ name: 'vibe', ok: false, message: 'The vibe-app-server pin check could not be completed.' }); }
+    } else if (vibeLookup.rejected) checks.push({ name: 'vibe', ok: false, message: rejectedMessage('Vibe', vibeLookup.rejected) });
     else if (vibe) {
       try {
         const version = await probe(vibe, ['--version'], tmpRoot);
@@ -130,7 +145,7 @@ export async function runDoctor(config: SupervisorConfig, provenance?: { configP
     else if (lock.owner === 'alive') checks.push({ name: 'lock', ok: true, message: `The data directory is held by supervisor pid ${lock.pid} (alive); another session needs its own VIBE_SUPERVISOR_HOME.` });
     else checks.push({ name: 'lock', ok: true, message: `The data directory lock belongs to pid ${lock.pid}, which is gone or was reused (stale); the next supervisor start takes it over.` });
   } catch { checks.push({ name: 'lock', ok: false, message: 'The supervisor owner lock could not be inspected.' }); }
-  checks.push({ name: 'authentication', ok: true, status: 'unverified', message: 'Vibe authentication was not inspected; Vibe may use its existing local sign-in or operating-system credential store.' });
+  checks.push({ name: 'authentication', ok: true, status: 'unverified', message: config.backend === 'app-server' ? 'The Mistral credential is resolved from the environment or the macOS Keychain when a run starts; doctor does not read it.' : 'Vibe authentication was not inspected; Vibe may use its existing local sign-in or operating-system credential store.' });
   checks.push({ name: 'codex-registration', ok: true, status: 'unverified', message: 'Codex desktop visibility is not verified by doctor; run `vibe-supervisor setup` and restart Codex after reviewing its changes.' });
   try { await import('@modelcontextprotocol/server'); checks.push({ name: 'mcp-server', ok: true, message: 'The MCP SDK dependency is installed.' }); }
   catch { checks.push({ name: 'mcp-server', ok: false, message: 'The MCP SDK dependency is unavailable.' }); }
@@ -138,6 +153,7 @@ export async function runDoctor(config: SupervisorConfig, provenance?: { configP
   const selectedPath = provenance?.configPath ?? path.join(dataDir, 'config.toml');
   const vibeVersion = checks.find((check) => check.name === 'vibe')?.version;
   return { ok: !requiredFailure, generatedAt: new Date().toISOString(), provenance: {
+    backend: config.backend,
     executable: process.execPath,
     application_entrypoint: fileURLToPath(new URL('../cli.js', import.meta.url)),
     runtime_module: fileURLToPath(import.meta.url),

@@ -44,7 +44,7 @@ describe('CLI executable entry point', () => {
     const legacyBytes = 'version = 1\nbackend = "acp"\n';
     await writeFile(path.join(legacy, 'config.toml'), legacyBytes, { mode: 0o600 });
     const vibe = path.join(bin, 'vibe'); await writeFile(vibe, '#!/bin/sh\nprintf "vibe 2.26.1\\n"\n'); await chmod(vibe, 0o700);
-    const config = `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[paths]\nvibe = ${JSON.stringify(vibe)}\n`;
+    const config = `version = 1\nbackend = "programmatic"\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[paths]\nvibe = ${JSON.stringify(vibe)}\n`;
     const configFile = path.join(selected, 'config.toml'); await writeFile(configFile, config, { mode: 0o600 });
     const { stdout, stderr } = await exec(process.execPath, [cli, 'doctor', '--json', '--config', configFile], { env: { ...process.env, VIBE_SUPERVISOR_HOME: legacy, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}` } });
     expect(stderr).toBe('');

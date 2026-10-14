@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 
 type Wire = { state?: string; result?: unknown; workspace_snapshot_sha256?: string; limits?: { max_turns?: number } };
@@ -48,12 +48,12 @@ class FakeBackend implements SupervisorBackend {
   async recover(_record: RunRecord) { return undefined; }
 }
 
-async function harness(overrides: Partial<typeof DEFAULT_CONFIG> = {}) {
+async function harness(overrides: Partial<typeof LEGACY_CONFIG> = {}) {
   const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-storage-')); roots.push(parent);
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data');
   await mkdir(source); await writeFile(path.join(source, 'file.txt'), 'content\n');
   const backend = new FakeBackend();
-  const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], ...overrides }, data, [backend]);
+  const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source], ...overrides }, data, [backend]);
   return { backend, manager, source, data };
 }
 

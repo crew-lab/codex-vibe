@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { ProgrammaticBackend } from '../../src/backends/programmatic.js';
 
@@ -43,7 +43,7 @@ describe('programmatic launcher errors identify missing runtime components', () 
     const { root, source, data } = await makeRoot();
     const script = path.join(root, 'vibe');
     await writeExecutable(script, '#!/nonexistent/dir/python3\n');
-    const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], paths: { vibe: script } };
+    const config = { ...LEGACY_CONFIG, allowedWorkspaceRoots: [source], paths: { vibe: script } };
     const backend = new ProgrammaticBackend(config);
     const probe = await backend.probe();
     expect(probe.available).toBe(false);
@@ -63,7 +63,7 @@ describe('programmatic launcher errors identify missing runtime components', () 
     await writeExecutable(script, '#!/usr/bin/env python3\n');
     const empty = path.join(root, 'empty-path'); await mkdir(empty);
     process.env.PATH = empty;
-    const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], paths: { vibe: script } };
+    const config = { ...LEGACY_CONFIG, allowedWorkspaceRoots: [source], paths: { vibe: script } };
     const backend = new ProgrammaticBackend(config);
     const probe = await backend.probe();
     expect(probe.available).toBe(false);
@@ -77,7 +77,7 @@ describe('programmatic launcher errors identify missing runtime components', () 
   it('reports a configured Vibe executable that does not exist', async () => {
     const { root, source, data } = await makeRoot();
     const missing = path.join(root, 'no-such-vibe');
-    const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], paths: { vibe: missing } };
+    const config = { ...LEGACY_CONFIG, allowedWorkspaceRoots: [source], paths: { vibe: missing } };
     const backend = new ProgrammaticBackend(config);
     const probe = await backend.probe();
     expect(probe.details).toMatchObject({ executable_missing: true });

@@ -41,7 +41,7 @@ import {
 import { SUPPORTED_VIBE } from './pinned.js';
 import { assertNoProjectVibeExtensions } from './profile.js';
 
-const BACKEND_KIND: BackendKind = 'programmatic';
+const BACKEND_KIND: BackendKind = 'app-server';
 const APP_SERVER_BINARY = 'vibe-app-server';
 const CLIENT_NAME = 'vibe-supervisor';
 const MAX_LINE_BYTES = 8 * 1024 * 1024;
@@ -802,25 +802,40 @@ class AppServerRun {
   }
 }
 
+export async function resolveAppServerExecutable(config: SupervisorConfig, override?: string): Promise<string> {
+  const configured = override ?? config.paths?.appServer;
+  if (configured) return path.isAbsolute(configured) ? configured : resolveCommand(configured, process.env);
+  const vibe = await resolveCommand(config.paths?.vibe ?? 'vibe', process.env);
+  return path.join(path.dirname(vibe), APP_SERVER_BINARY);
+}
+
+function configuredBudgets(config: SupervisorConfig): BudgetCeilings {
+  return {
+    ...(config.limits.maxTokens === undefined ? {} : { maxTokens: config.limits.maxTokens }),
+    ...(config.limits.maxCostUsd === undefined ? {} : { maxCost: config.limits.maxCostUsd })
+  };
+}
+
 export class AppServerBackend implements SupervisorBackend {
   readonly kind: BackendKind = BACKEND_KIND;
   private readonly timing: AppServerTiming;
+  private readonly runOptions: AppServerBackendOptions;
 
   constructor(private readonly config: SupervisorConfig, private readonly options: AppServerBackendOptions = {}) {
     this.timing = { ...DEFAULT_APP_SERVER_TIMING, ...options.timing };
+    this.runOptions = { ...options, budgets: options.budgets ?? configuredBudgets(config) };
   }
 
   private async appServerExecutable(): Promise<string> {
-    if (this.options.executable) return this.options.executable;
-    const vibe = await resolveCommand(this.config.paths?.vibe ?? 'vibe', process.env);
-    return path.join(path.dirname(vibe), APP_SERVER_BINARY);
+    return resolveAppServerExecutable(this.config, this.options.executable);
   }
 
   private async verifyPin(executable: string): Promise<void> {
     const { pin } = this.options;
     if (pin?.verify) { await pin.verify(executable); return; }
-    if (pin?.manifestPath) { await verifyPinnedInstall({ executable, manifestPath: pin.manifestPath }); return; }
-    throw new PinCheckError('manifest-unreadable', 'No pin manifest is configured, so the installed Vibe cannot be verified.');
+    const manifestPath = pin?.manifestPath ?? this.config.paths?.vibePinManifest;
+    if (manifestPath) { await verifyPinnedInstall({ executable, manifestPath }); return; }
+    throw new PinCheckError('manifest-unreadable', 'No pin manifest is configured, so the installed Vibe cannot be verified. Set paths.vibe_pin_manifest and write the manifest with the pin-manifest command.');
   }
 
   async probe(): Promise<BackendCapabilities> {
@@ -862,7 +877,7 @@ export class AppServerBackend implements SupervisorBackend {
       plan = buildSessionConfig({ mode: input.mode, workspace: input.workerWorkspace, runDirectory: input.runDirectory, maxTurns: input.limits.maxTurns });
     } catch (error) { throw toSupervisorError(error, []); }
     const run = new AppServerRun({
-      input, callbacks, options: this.options, timing: this.timing, executable, plan,
+      input, callbacks, options: this.runOptions, timing: this.timing, executable, plan,
       credential: resolution.credential, expectedVersion: this.options.expectedServerVersion ?? SUPPORTED_VIBE
     });
     return run.start();

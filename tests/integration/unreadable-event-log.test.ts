@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, RunState, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
 import { SCHEMA_VERSION } from '../../src/contracts.js';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { eventToWire, runToWire } from '../../src/core/serialization.js';
 
@@ -38,11 +38,11 @@ async function seedBroken(cause: Cause, state: RunState, ageDays = 0) {
   await mkdir(source); await mkdir(path.join(data, 'runs'), { recursive: true, mode: 0o700 });
   const runId = randomUUID();
   const updated = new Date(Date.now() - ageDays * DAY).toISOString();
-  const maxEventBytes = cause === 'oversized' ? 1000 : DEFAULT_CONFIG.limits.maxEventBytes;
+  const maxEventBytes = cause === 'oversized' ? 1000 : LEGACY_CONFIG.limits.maxEventBytes;
   const record: RunRecord = {
     schemaVersion: SCHEMA_VERSION, runId, backend: 'programmatic', mode: 'review', state, sourceWorkspace: source, workerWorkspace: source,
     createdAt: updated, updatedAt: updated, finishedAt: updated, taskSha256: 'a'.repeat(64),
-    limits: { timeoutSeconds: 600, maxTurns: 5, maxEventBytes, maxTranscriptBytes: DEFAULT_CONFIG.limits.maxTranscriptBytes, maxArtifactBytes: DEFAULT_CONFIG.limits.maxArtifactBytes }
+    limits: { timeoutSeconds: 600, maxTurns: 5, maxEventBytes, maxTranscriptBytes: LEGACY_CONFIG.limits.maxTranscriptBytes, maxArtifactBytes: LEGACY_CONFIG.limits.maxArtifactBytes }
   };
   const directory = path.join(data, 'runs', runId);
   await mkdir(directory, { mode: 0o700 });
@@ -52,7 +52,7 @@ async function seedBroken(cause: Cause, state: RunState, ageDays = 0) {
   await writeFile(events, body, { mode: 0o600 });
   if (cause === 'unreadable') await chmod(events, 0o000);
   const before = cause === 'unreadable' ? undefined : await readFile(events);
-  return { source, data, runId, directory, events, before, config: { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] } };
+  return { source, data, runId, directory, events, before, config: { ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] } };
 }
 
 const exists = (file: string) => stat(file).then(() => true, () => false);

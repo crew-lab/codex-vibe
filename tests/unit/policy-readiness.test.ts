@@ -46,7 +46,7 @@ class FakeBackend implements SupervisorBackend {
 }
 
 function toml(roots: string[], extra = ""): string {
-  return `version = 1\nallowed_workspace_roots = ${JSON.stringify(roots)}\n${extra}`;
+  return `version = 1\nbackend = "programmatic"\nallowed_workspace_roots = ${JSON.stringify(roots)}\n${extra}`;
 }
 
 async function replaceConfig(file: string, text: string): Promise<void> {

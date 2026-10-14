@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { hashWorkspace } from '../../src/core/workspace-snapshot.js';
 
@@ -85,7 +85,7 @@ describe('RunManager regressions', () => {
   it('returns the optional bounded worker diagnostics file as a result artifact', async () => {
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
@@ -101,7 +101,7 @@ describe('RunManager regressions', () => {
   async function completeWithDiagnostics(plant: (diagnosticsPath: string, parent: string) => Promise<void>) {
     const backend = new FakeBackend();
     const { parent, source, data } = await makeParent();
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
@@ -150,7 +150,7 @@ describe('RunManager regressions', () => {
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
     await writeFile(path.join(source, 'file.txt'), 'original\n');
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
@@ -172,7 +172,7 @@ describe('RunManager regressions', () => {
     const collector = collectUnhandledRejections();
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
@@ -195,7 +195,7 @@ describe('RunManager regressions', () => {
     const collector = collectUnhandledRejections();
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     const started = await manager.reviewStart({ task: 'review', cwd: source });
     await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
     await backend.callbacks.get(started.run_id)?.onState('completed', { result: { summary: 'done' } });
@@ -218,7 +218,7 @@ describe('RunManager regressions', () => {
     const collector = collectUnhandledRejections();
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     const started = await manager.reviewStart({ task: 'review', cwd: source });
     await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
     await backend.callbacks.get(started.run_id)?.onState('completed', { result: { summary: 'done' } });
@@ -239,7 +239,7 @@ describe('RunManager regressions', () => {
     const { source, data } = await makeParent();
     const locked = path.join(source, 'locked');
     await mkdir(locked); await writeFile(path.join(locked, 'secret.txt'), 'secret\n'); await chmod(locked, 0o000); unreadable.push(locked);
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       const running = await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running' || value.state === 'failed');
@@ -260,7 +260,7 @@ describe('RunManager regressions', () => {
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
     await writeFile(path.join(source, 'file.txt'), 'content\n');
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     persistFault.armed = true; persistFault.fired = false;
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
@@ -287,7 +287,7 @@ describe('RunManager regressions', () => {
     const collector = collectUnhandledRejections();
     const { source, data } = await makeParent();
     const backend = new FakeBackend();
-    const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], limits: { ...DEFAULT_CONFIG.limits, maxArtifactBytes: 10 } };
+    const config = { ...LEGACY_CONFIG, allowedWorkspaceRoots: [source], limits: { ...LEGACY_CONFIG.limits, maxArtifactBytes: 10 } };
     const manager = new RunManager(config, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
@@ -307,10 +307,10 @@ describe('RunManager regressions', () => {
   }, 30_000);
 
   describe('failed runs release their backend session exactly once', () => {
-    async function start(overrides: Partial<typeof DEFAULT_CONFIG> = {}) {
+    async function start(overrides: Partial<typeof LEGACY_CONFIG> = {}) {
       const backend = new FakeBackend();
       const { source, data } = await makeParent();
-      const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], ...overrides }, data, [backend]);
+      const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source], ...overrides }, data, [backend]);
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
       return { backend, manager, runId: started.run_id, data };
@@ -335,7 +335,7 @@ describe('RunManager regressions', () => {
     }, 30_000);
 
     it('when a completed run fails during artifact finalization', async () => {
-      const { backend, manager, runId } = await start({ limits: { ...DEFAULT_CONFIG.limits, maxArtifactBytes: 10 } });
+      const { backend, manager, runId } = await start({ limits: { ...LEGACY_CONFIG.limits, maxArtifactBytes: 10 } });
       try {
         await backend.callbacks.get(runId)?.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: 'findings that exceed ten bytes' } });
         await backend.callbacks.get(runId)?.onState('completed', { result: { summary: 'done' } });
@@ -362,7 +362,7 @@ describe('RunManager regressions', () => {
     }, 30_000);
 
     it('when the transcript limit fails the run', async () => {
-      const { backend, manager, runId } = await start({ limits: { ...DEFAULT_CONFIG.limits, maxTranscriptBytes: 8 } });
+      const { backend, manager, runId } = await start({ limits: { ...LEGACY_CONFIG.limits, maxTranscriptBytes: 8 } });
       try {
         await backend.callbacks.get(runId)?.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: 'this text is longer than the limit' } });
         const status = await waitFor(() => manager.status({ run_id: runId }), (value) => value.state === 'failed');
@@ -379,7 +379,7 @@ describe('RunManager regressions', () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], shouldAdvanceTime: true });
       const backend = new FakeBackend();
       const { source, data } = await makeParent();
-      const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+      const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
       try {
         const started = await manager.reviewStart({ task: 'review', cwd: source, timeout_seconds: 30 });
         await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running', 5_000);

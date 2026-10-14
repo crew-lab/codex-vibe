@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend } from "../../src/contracts.js";
-import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { RunManager } from "../../src/core/run-manager.js";
 
 const exec = promisify(execFile);
@@ -34,7 +34,7 @@ async function waitFor<T>(read: () => Promise<T> | T, done: (value: T) => boolea
   return value;
 }
 
-async function setup(options: { config?: Partial<typeof DEFAULT_CONFIG>; git?: boolean } = {}) {
+async function setup(options: { config?: Partial<typeof LEGACY_CONFIG>; git?: boolean } = {}) {
   const parent = await mkdtemp(join(canonicalTmp, "vsup-phase-c-")); roots.push(parent);
   const source = join(parent, "source"); const data = join(parent, "data");
   await mkdir(source);
@@ -47,7 +47,7 @@ async function setup(options: { config?: Partial<typeof DEFAULT_CONFIG>; git?: b
     await exec("git", ["commit", "-qm", "baseline"], { cwd: source });
   }
   const backend = new FakeBackend();
-  const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], ...options.config };
+  const config = { ...LEGACY_CONFIG, allowedWorkspaceRoots: [source], ...options.config };
   const manager = new RunManager(config, data, [backend]);
   return { parent, source, data, backend, manager, config };
 }
@@ -60,7 +60,7 @@ describe("limits defaults from the configuration", () => {
   }
 
   it("uses the configured turn and timeout defaults when a call omits them", async () => {
-    const limits = { ...DEFAULT_CONFIG.limits, maxTurnsReview: 7, reviewTimeoutSeconds: 90, maxTurnsEdit: 9, editTimeoutSeconds: 120 };
+    const limits = { ...LEGACY_CONFIG.limits, maxTurnsReview: 7, reviewTimeoutSeconds: 90, maxTurnsEdit: 9, editTimeoutSeconds: 120 };
     const { source, backend, manager } = await setup({ config: { limits }, git: true });
     try {
       await manager.reviewStart({ task: "review", cwd: source });

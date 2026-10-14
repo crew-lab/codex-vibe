@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend, SupervisorConfig } from "../../src/contracts.js";
-import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { RunManager } from "../../src/core/run-manager.js";
 import { bounded } from "../../src/mcp/tools.js";
 import { toolSchemas } from "../../src/mcp/schemas.js";
@@ -35,7 +35,7 @@ async function setup(backend = new FakeBackend(), overrides: Partial<SupervisorC
   const parent = await mkdtemp(join(canonicalTmp, "vsup-review-")); roots.push(parent);
   const source = join(parent, "source"); const data = join(parent, "data");
   await mkdir(source);
-  const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], ...overrides };
+  const config = { ...LEGACY_CONFIG, allowedWorkspaceRoots: [source], ...overrides };
   const manager = new RunManager(config, data, [backend]);
   return { parent, source, data, manager, backend };
 }
@@ -344,7 +344,7 @@ describe("result cap shaping", () => {
       expect(compact.patch).toBeUndefined();
       expect(compact.patch_path).toEqual(expect.stringContaining("diff.patch"));
       expect(compact.patch_bytes).toBeGreaterThan(3000);
-      expect(JSON.stringify(compact).length).toBeLessThanOrEqual(DEFAULT_CONFIG.limits.maxMcpResultChars);
+      expect(JSON.stringify(compact).length).toBeLessThanOrEqual(LEGACY_CONFIG.limits.maxMcpResultChars);
     } finally { await manager.shutdown(); }
   });
 
