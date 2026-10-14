@@ -48,7 +48,14 @@
       "status": "RUN_BY_focused-tests"
     }
   ],
-  "verified": [],
+  "verified": [
+    {
+      "name": "node-floor-20.19.0",
+      "status": "PASSED_LOCALLY",
+      "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the 2.0 source.",
+      "evidence": "2026-10-14, preparing machine (macOS arm64): the 2.0.0 working tree at the version bump (parent commit 4716747) under exactly Node v20.19.0 and npm 10.8.2; npm run verify:release passed (lint, typecheck, build, 83 test files / 1244 tests, acceptance, secret scan, SBOM with 193 entries). No GitHub CI: the workflow token scope is skipped."
+    }
+  ],
   "unverified": [
     {
       "name": "target-no-inference-conformance-check",
@@ -89,11 +96,6 @@
       "name": "nested-run-typescript-shape-and-gating",
       "status": "UNVERIFIED",
       "evidence_required": "The hosted-review probe in the target brief (step 6) shows that a write_file or edit called from inside run_typescript arrives as the same file_system.* effect and reaches deny. From Vibe's Rust tests and code reading only."
-    },
-    {
-      "name": "node-floor-20.19.0",
-      "status": "UNVERIFIED",
-      "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the 2.0 source."
     },
     {
       "name": "clean-account-install",

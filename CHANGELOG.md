@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased 2.0.0 — one engine: a client of Vibe's app-server
+## 2.0.0 — one engine: a client of Vibe's app-server
+
+Version set on 2026-10-14. The GitHub release follows the target-machine acceptance recorded in `docs/acceptance.json`.
 
 The supervisor now drives Mistral Vibe 2.26.1 as a client of `vibe-app-server` (JSON-RPC over stdio, one process per run) instead of patching Vibe's Python internals. The five MCP tools and every boundary stay; see [ADR 0004](docs/adr/0004-app-server-client.md). The runtime is new, so no 1.0.x hosted evidence transfers, and every 2.0 gate in `docs/acceptance.json` is open. 1.0.1 was skipped: 1.0.0 is the last 1.x release, with no maintenance line.
 
