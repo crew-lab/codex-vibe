@@ -96,7 +96,7 @@ export async function runScenario(options: DriverOptions): Promise<DriverResult>
   let resolveCompletion!: () => void;
   const completion = new Promise<void>((resolve) => { resolveCompletion = resolve; });
 
-  const handler = new ApprovalHandler({ mode, workspace, ...(options.deadlineMs === undefined ? {} : { deadlineMs: options.deadlineMs }), ...(options.evaluate ? { evaluate: options.evaluate } : {}) });
+  const handler = new ApprovalHandler({ mode, workspace, currentSessionId: () => sessionId, ...(options.deadlineMs === undefined ? {} : { deadlineMs: options.deadlineMs }), ...(options.evaluate ? { evaluate: options.evaluate } : {}) });
 
   const client = new JsonRpcClient({
     input: child.stdout,
@@ -121,7 +121,7 @@ export async function runScenario(options: DriverOptions): Promise<DriverResult>
     else if (signal.type === 'stats') {
       const update = usage.update(signal.stats, signal.contextWindow);
       usageUpdates.push(update.summary);
-      if (update.breach) interrupt();
+      if (update.breach || update.fault) interrupt();
     } else if (signal.type === 'fatal') interrupt();
     else if (signal.type === 'watermark_gap') {
       interrupt();
@@ -166,7 +166,7 @@ export async function runScenario(options: DriverOptions): Promise<DriverResult>
     await completion;
     await Promise.all(background);
     const finalStats = parseRuntimeReadResult(await call(buildRuntimeRead(sessionId))).runtime.stats;
-    const audit = await auditSessionHistory(async (page) => parseHistoryListResult(await call(buildSessionHistoryList(sessionId, page))), { mode, ledger: handler.ledger, ...(options.secrets ? { secrets: options.secrets } : {}) });
+    const audit = await auditSessionHistory(async (page) => parseHistoryListResult(await call(buildSessionHistoryList(sessionId, page))), { mode, ledger: handler.ledger, sessionIds: processor.sessionIds, historical: processor.historicalEffects, ...(options.secrets ? { secrets: options.secrets } : {}) });
     const conditions: SupervisorCondition[] = [...(options.conditions ?? [])];
     const fatal = processor.fatal ?? audit.fatal;
     if (fatal) conditions.push({ kind: 'unsafe_event', fatal });

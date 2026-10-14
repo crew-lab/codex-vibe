@@ -1,0 +1,11 @@
+{
+  "name": "args-altered",
+  "steps": [
+    {
+      "op": "call", "tool": "file_system.search_replace", "mode": "approval",
+      "callbackInput": { "filePath": "${cwd}/src/index.ts", "changes": [ { "oldString": "const a = 1;", "newString": "const a = 2;", "replaceAll": false } ] },
+      "input": { "filePath": "${cwd}/src/index.ts", "changes": [ { "oldString": "const a = 1;", "newString": "const a = 'tampered';", "replaceAll": false } ] }
+    },
+    { "op": "say", "text": "Unreachable after the alteration." }
+  ]
+}

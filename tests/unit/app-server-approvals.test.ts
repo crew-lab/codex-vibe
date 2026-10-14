@@ -7,11 +7,15 @@ import {
   ApprovalLedger,
   EDIT_TOOLS,
   REVIEW_TOOLS,
+  callbackContext,
+  canonicalJson,
   evaluateApproval,
+  inputFingerprint,
   isProfileTool,
   isWriteTool,
   judgeWorkspacePath,
-  profileTools
+  profileTools,
+  restrictedRelativePath
 } from '../../src/backends/app-server/approvals.js';
 import { ProtocolParseError, type ApprovalRequest } from '../../src/backends/app-server/protocol.js';
 import { runScenario } from './support/app-server-driver.js';
@@ -183,7 +187,7 @@ describe('evaluateApproval', () => {
 });
 
 describe('ApprovalLedger', () => {
-  const record = (callbackId: string, relatedEntryId: string | null) => ({ callbackId, relatedEntryId, tool: 'file_system.read_file', path: null, decision: 'approve' as const, reason: null });
+  const record = (callbackId: string, relatedEntryId: string | null) => ({ callbackId, relatedEntryId, sessionId: 's1', turnId: 't1', tool: 'file_system.read_file', path: null, fingerprint: null, decision: 'approve' as const, reason: null });
 
   it('indexes decisions by callback and by the effect entry they relate to', () => {
     const ledger = new ApprovalLedger();
@@ -207,6 +211,145 @@ describe('ApprovalLedger', () => {
   });
 });
 
+describe('ApprovalLedger bindings', () => {
+  const record = (callbackId: string, relatedEntryId: string | null) => ({ callbackId, relatedEntryId, sessionId: 's1', turnId: 't1', tool: 'file_system.read_file', path: null, fingerprint: null, decision: 'approve' as const, reason: null });
+
+  it('binds an effect to one approval: a second callback for the same effect is refused and the first stays', () => {
+    const ledger = new ApprovalLedger();
+    expect(ledger.record(record('c1', 'effect-1'))).toBe(true);
+    expect(ledger.record(record('c2', 'effect-1'))).toBe(false);
+    expect(ledger.forEffect('effect-1')?.callbackId).toBe('c1');
+    expect(ledger.has('c2')).toBe(false);
+  });
+
+  it('counts the callbacks that were opened and not yet settled', () => {
+    const ledger = new ApprovalLedger();
+    expect(ledger.pendingCallbacks).toBe(0);
+    ledger.open('c1');
+    ledger.open('c1');
+    ledger.open('c2');
+    expect(ledger.pendingCallbacks).toBe(2);
+    ledger.close('c1');
+    ledger.close('missing');
+    expect(ledger.pendingCallbacks).toBe(1);
+  });
+});
+
+describe('input fingerprints', () => {
+  const read = 'file_system.read_file';
+  const write = 'file_system.write_file';
+  const edit = 'file_system.search_replace';
+
+  it('is stable under key order and distinguishes the path, the content and every edit change', () => {
+    expect(canonicalJson({ b: 1, a: { d: [3, { y: 1, x: 2 }], c: null } })).toBe('{"a":{"c":null,"d":[3,{"x":2,"y":1}]},"b":1}');
+    const base = inputFingerprint(write, { filePath: 'a.ts', content: 'x' });
+    expect(base).toMatch(/^[0-9a-f]{64}$/);
+    expect(inputFingerprint(write, { content: 'x', filePath: 'a.ts', display: 'ignored' })).toBe(base);
+    expect(inputFingerprint(write, { filePath: 'b.ts', content: 'x' })).not.toBe(base);
+    expect(inputFingerprint(write, { filePath: 'a.ts', content: 'y' })).not.toBe(base);
+    expect(inputFingerprint(read, { filePath: 'a.ts' })).not.toBe(inputFingerprint(write, { filePath: 'a.ts', content: undefined }));
+  });
+
+  it('canonicalizes the edit batch and the single edit form to the same changes, with replaceAll defaulting to false', () => {
+    const batch = inputFingerprint(edit, { filePath: 'a.ts', changes: [{ oldString: 'a', newString: 'b', replaceAll: false }] });
+    expect(inputFingerprint(edit, { filePath: 'a.ts', oldString: 'a', newString: 'b' })).toBe(batch);
+    expect(inputFingerprint(edit, { filePath: 'a.ts', changes: [{ newString: 'b', oldString: 'a' }] })).toBe(batch);
+    expect(inputFingerprint(edit, { filePath: 'a.ts', changes: [{ oldString: 'a', newString: 'b', replaceAll: true }] })).not.toBe(batch);
+    expect(inputFingerprint(edit, { filePath: 'a.ts', changes: [{ oldString: 'a', newString: 'b' }, { oldString: 'c', newString: 'd' }] })).not.toBe(batch);
+  });
+
+  it('ignores read ranges, hashes the whole input of other tools and returns null for input too deep to hash', () => {
+    expect(inputFingerprint(read, { filePath: 'a.ts', offset: 1, limit: 5 })).toBe(inputFingerprint(read, { filePath: 'a.ts' }));
+    expect(inputFingerprint('file_system.bash', { command: 'ls' })).not.toBe(inputFingerprint('file_system.bash', { command: 'rm' }));
+    let deep: unknown = 'leaf';
+    for (let index = 0; index < 40; index += 1) deep = { next: deep };
+    expect(inputFingerprint('x', { deep })).toBeNull();
+  });
+});
+
+describe('restrictedRelativePath', () => {
+  it('reuses the approval matcher for reserved and secret path segments anywhere in a relative path', () => {
+    expect(restrictedRelativePath('src/index.ts')).toBeNull();
+    expect(restrictedRelativePath('.git/config')).toBe('path_reserved');
+    expect(restrictedRelativePath('a/.Vibe/x')).toBe('path_reserved');
+    expect(restrictedRelativePath('.vibeignore')).toBe('path_reserved');
+    expect(restrictedRelativePath('.env')).toBe('path_secret');
+    expect(restrictedRelativePath('config/.env.production')).toBe('path_secret');
+    expect(restrictedRelativePath('keys/server.PEM')).toBe('path_secret');
+    expect(restrictedRelativePath('nested\\deep\\id.key')).toBe('path_secret');
+    expect(restrictedRelativePath('environment.ts')).toBeNull();
+  });
+});
+
+describe('ApprovalHandler session and effect binding', () => {
+  const read = 'file_system.read_file';
+  const context = (sessionId: string | null, turnId: string | null) => ({ sessionId, turnId });
+
+  it('binds the decision to the session, turn, tool, effect id and the fingerprint of the shown input', async () => {
+    const handler = new ApprovalHandler({ mode: 'review', workspace, currentSessionId: () => 's1' });
+    const input = { filePath: 'src/index.ts', offset: null, limit: 2000 };
+    expect((await handler.decide(request(read, input, { callbackId: 'cb-a', relatedEntryId: 'effect-a' }), context('s1', 't1'))).decision).toBe('approve');
+    expect(handler.ledger.forEffect('effect-a')).toEqual({
+      callbackId: 'cb-a', relatedEntryId: 'effect-a', sessionId: 's1', turnId: 't1', tool: read, path: 'src/index.ts', fingerprint: inputFingerprint(read, input), decision: 'approve', reason: null
+    });
+  });
+
+  it('denies a callback from another session and records it, and defaults the session to the current one', async () => {
+    const handler = new ApprovalHandler({ mode: 'review', workspace, currentSessionId: () => 's2' });
+    expect(await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-x', relatedEntryId: 'effect-x' }), context('s1', 't1'))).toEqual({ decision: 'deny', reason: 'foreign_session' });
+    expect(handler.ledger.forCallback('cb-x')).toMatchObject({ decision: 'deny', reason: 'foreign_session', sessionId: 's1' });
+    await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-y', relatedEntryId: 'effect-y' }));
+    expect(handler.ledger.forCallback('cb-y')).toMatchObject({ decision: 'approve', sessionId: 's2', turnId: null });
+  });
+
+  it('follows the current session when it changes between callbacks', async () => {
+    let session = 's1';
+    const handler = new ApprovalHandler({ mode: 'review', workspace, currentSessionId: () => session });
+    expect((await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-1', relatedEntryId: 'e1' }), context('s1', 't1'))).decision).toBe('approve');
+    session = 's2';
+    expect((await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-2', relatedEntryId: 'e2' }), context('s1', 't1'))).reason).toBe('foreign_session');
+    expect((await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-3', relatedEntryId: 'e3' }), context('s2', 't1'))).decision).toBe('approve');
+  });
+
+  it('denies an approval that names no effect to link to', async () => {
+    const handler = new ApprovalHandler({ mode: 'review', workspace });
+    expect(await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-n', relatedEntryId: null }))).toEqual({ decision: 'deny', reason: 'unlinked_callback' });
+  });
+
+  it('denies a second callback for an effect that already has a decision', async () => {
+    const handler = new ApprovalHandler({ mode: 'review', workspace });
+    expect((await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-1', relatedEntryId: 'e1' }))).decision).toBe('approve');
+    expect(await handler.decide(request(read, { filePath: 'src/other.ts' }, { callbackId: 'cb-2', relatedEntryId: 'e1' }))).toEqual({ decision: 'deny', reason: 'duplicate_callback' });
+    expect(handler.ledger.forEffect('e1')?.callbackId).toBe('cb-1');
+  });
+
+  it('denies everything after it was revoked, including an approval that was still being evaluated', async () => {
+    let release: (() => void) | undefined;
+    const handler = new ApprovalHandler({ mode: 'review', workspace, evaluate: () => new Promise((resolve) => { release = () => resolve({ decision: 'approve', reason: null }); }) });
+    const inflight = handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-1', relatedEntryId: 'e1' }));
+    handler.revoke();
+    release?.();
+    expect(await inflight).toEqual({ decision: 'deny', reason: 'handler_revoked' });
+    expect(handler.isRevoked).toBe(true);
+    expect(await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-2', relatedEntryId: 'e2' }))).toEqual({ decision: 'deny', reason: 'handler_revoked' });
+  });
+
+  it('counts a begun callback as pending until it is settled', async () => {
+    const handler = new ApprovalHandler({ mode: 'review', workspace });
+    const params = { callback: { type: 'callback', id: 'cb-1', turnId: 't1', sessionId: 's1', callbackId: 'cb-1', relatedEntryId: 'e1', detail: { kind: 'approval', effect: { kind: 'file_read', toolName: read, input: { filePath: 'src/index.ts' } } }, state: { status: 'open' } } };
+    const pending = handler.begin(params);
+    expect(handler.ledger.pendingCallbacks).toBe(1);
+    await pending.verdict;
+    expect(handler.ledger.pendingCallbacks).toBe(1);
+    handler.settle('cb-1');
+    expect(handler.ledger.pendingCallbacks).toBe(0);
+    expect(handler.ledger.forCallback('cb-1')).toMatchObject({ sessionId: 's1', turnId: 't1' });
+    expect(callbackContext(params)).toEqual({ sessionId: 's1', turnId: 't1' });
+    expect(callbackContext({})).toEqual({ sessionId: null, turnId: null });
+    expect(callbackContext({ callback: [] })).toEqual({ sessionId: null, turnId: null });
+  });
+});
+
 describe('ApprovalHandler', () => {
   it('records every decision with the ids the validator links on', async () => {
     const handler = new ApprovalHandler({ mode: 'review', workspace });
@@ -214,7 +357,9 @@ describe('ApprovalHandler', () => {
     const denied = await handler.decide(request('file_system.read_file', { filePath: '.env' }, { callbackId: 'cb-b', relatedEntryId: 'effect-b' }));
     expect(allowed.decision).toBe('approve');
     expect(denied).toEqual({ decision: 'deny', reason: 'path_secret' });
-    expect(handler.ledger.forEffect('effect-a')).toEqual({ callbackId: 'cb-a', relatedEntryId: 'effect-a', tool: 'file_system.read_file', path: 'src/index.ts', decision: 'approve', reason: null });
+    expect(handler.ledger.forEffect('effect-a')).toEqual({
+      callbackId: 'cb-a', relatedEntryId: 'effect-a', sessionId: null, turnId: null, tool: 'file_system.read_file', path: 'src/index.ts', fingerprint: inputFingerprint('file_system.read_file', { filePath: 'src/index.ts' }), decision: 'approve', reason: null
+    });
     expect(handler.ledger.forCallback('cb-b')).toMatchObject({ decision: 'deny', reason: 'path_secret', relatedEntryId: 'effect-b' });
   });
 

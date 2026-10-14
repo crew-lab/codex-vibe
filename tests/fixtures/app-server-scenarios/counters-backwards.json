@@ -1,0 +1,9 @@
+{
+  "name": "counters-backwards",
+  "baselineStats": { "inputPricePerMillion": 0.4, "outputPricePerMillion": 2 },
+  "steps": [
+    { "op": "stats", "stats": { "modelCalls": 2, "sessionPromptTokens": 5000, "sessionCompletionTokens": 900 } },
+    { "op": "stats", "stats": { "modelCalls": 3, "sessionPromptTokens": 100, "sessionCompletionTokens": 50 } },
+    { "op": "hold" }
+  ]
+}

@@ -34,7 +34,8 @@ import {
 } from './app-server/protocol.js';
 import { compareReadback, formatReadbackMismatches, type ReadbackMismatch } from './app-server/readback.js';
 import { buildSessionConfig, buildThinkingOffWrite, writeSessionFiles, type SessionConfigPlan } from './app-server/session-config.js';
-import { UsageTracker, turnBackstop, type BudgetCeilings } from './app-server/usage.js';
+import { UsageTracker, describeUsageFault, turnBackstop, type BudgetCeilings, type UsageFault, type UsageUpdate } from './app-server/usage.js';
+import { buildWorkspaceListing, type ListingLimits, type WorkspaceListing } from './app-server/workspace-listing.js';
 import { resolveCommand, spawned } from './app-server/executable.js';
 import {
   authFailureText, classifyFailureText, classifyStartFailure, rateLimitFailure, stderrTailText,
@@ -90,6 +91,7 @@ export interface AppServerBackendOptions {
   resolveCredential?: () => Promise<CredentialResolution>;
   approvals?: { deadlineMs?: number; evaluate?: ApprovalHandlerOptions['evaluate'] };
   budgets?: BudgetCeilings;
+  listing?: Partial<ListingLimits>;
   turnBackstopMargin?: number;
   timing?: Partial<AppServerTiming>;
   reaper?: Partial<Pick<ReaperOptions, 'executable' | 'pollMs' | 'graceMs' | 'startupTimeoutMs' | 'stopTimeoutMs'>>;
@@ -167,9 +169,19 @@ function toSupervisorError(error: unknown, secrets: readonly string[]): Supervis
   return supervisorError('VSUP_INTERNAL', safe(describeFailure(error)));
 }
 
-function promptFor(input: StartRunInput): string {
-  const prefix = (input.contextFiles ?? []).map((file) => `Approved context path: ${file}`).join('\n');
+function promptFor(input: StartRunInput, listing: string | null): string {
+  const context = (input.contextFiles ?? []).map((file) => `Approved context path: ${file}`).join('\n');
+  const prefix = [listing, context].filter((part): part is string => part !== null && part.length > 0).join('\n\n');
   return prefix ? `${prefix}\n\nTask:\n${input.task}` : input.task;
+}
+
+function usageFaultError(fault: UsageFault): SupervisorError {
+  if (fault.kind === 'price_unavailable') {
+    return supervisorError('VSUP_BACKEND_ERROR', describeUsageFault(fault), { reason: 'price_unavailable', ceiling_usd: fault.ceiling });
+  }
+  return supervisorError('VSUP_BACKEND_ERROR', describeUsageFault(fault), {
+    reason: 'usage_counter_regressed', counter: fault.counter, previous: fault.previous, ...(Number.isNaN(fault.observed) ? {} : { observed: fault.observed })
+  });
 }
 
 interface RunParts {
@@ -181,6 +193,7 @@ interface RunParts {
   credential: ResolvedCredential;
   plan: SessionConfigPlan;
   expectedVersion: string;
+  listing: WorkspaceListing;
 }
 
 type TurnEnd = 'turn' | 'forced';
@@ -195,6 +208,7 @@ class AppServerRun {
   private readonly credential: ResolvedCredential;
   private readonly plan: SessionConfigPlan;
   private readonly expectedVersion: string;
+  private readonly listing: WorkspaceListing;
   private readonly secrets: string[];
   private readonly deadlineAt: number;
   private readonly handler: ApprovalHandler;
@@ -211,7 +225,6 @@ class AppServerRun {
   private reaper: ReaperHandle | undefined;
   private processor!: EventProcessor;
   private usage: UsageTracker | undefined;
-  private sessionStart: SessionStartResult | undefined;
   private openedSessionId = '';
   private turnId = '';
   private completedTurn: Turn | null = null;
@@ -243,6 +256,7 @@ class AppServerRun {
     this.credential = parts.credential;
     this.plan = parts.plan;
     this.expectedVersion = parts.expectedVersion;
+    this.listing = parts.listing;
     this.secrets = [parts.credential.secret()];
     this.deadlineAt = Date.now() + parts.input.limits.timeoutSeconds * 1000;
     this.stderrRedactor = new StreamingRedactor(this.secrets);
@@ -250,6 +264,7 @@ class AppServerRun {
     this.handler = new ApprovalHandler({
       mode: parts.input.mode,
       workspace: parts.input.workerWorkspace,
+      currentSessionId: () => this.sessionId,
       ...(parts.options.approvals?.deadlineMs === undefined ? {} : { deadlineMs: parts.options.approvals.deadlineMs }),
       ...(parts.options.approvals?.evaluate === undefined ? {} : { evaluate: parts.options.approvals.evaluate })
     });
@@ -267,6 +282,7 @@ class AppServerRun {
     try {
       await writeSessionFiles(this.plan);
       await this.spawnWorker();
+      this.reportListing();
       await this.handshake();
       await this.beginTurn();
     } catch (error) {
@@ -370,6 +386,12 @@ class AppServerRun {
     if (this.shuttingDown) await reaper.stop();
   }
 
+  private reportListing(): void {
+    const { unavailable } = this.listing;
+    if (unavailable === null || unavailable === 'not_repository') return;
+    this.emit('diagnostic', 'warning', { text: `The workspace file listing was left out of the prompt (${unavailable}).`, reason: 'file_listing_unavailable', detail: unavailable }, 'supervisor');
+  }
+
   private startupTimeout(): number {
     return Math.max(1, Math.min(this.timing.requestTimeoutMs, this.deadlineAt - Date.now()));
   }
@@ -385,7 +407,6 @@ class AppServerRun {
     const initialized = buildInitialized();
     this.client.notify(initialized.method, initialized.params);
     const started = await this.rpc(buildSessionStart(this.plan.agentConfig), parseSessionStartResult, this.startupTimeout());
-    this.sessionStart = started;
     this.openedSessionId = started.state.session.id;
     this.processor = new EventProcessor({
       sessionId: started.state.session.id,
@@ -400,22 +421,23 @@ class AppServerRun {
     this.client.setNotificationHandler(this.onNotification);
     const ready = await this.rpc(buildSessionReadyWait(this.sessionId), parseSessionReadyWaitResult, this.startupTimeout());
     if (!ready.ready) throw supervisorError('VSUP_BACKEND_ERROR', 'The Vibe session did not become ready.');
-    await this.readback(false);
+    await this.readback({ checkThinking: false, checkCounts: true, session: started });
     await this.rpc(buildThinkingOffWrite(this.sessionId), parseConfigModelWriteResult, this.startupTimeout());
-    const second = await this.readback(true);
-    this.usage = new UsageTracker(second.runtime.stats, {
+    const second = await this.readback({ checkThinking: true, checkCounts: false, session: started });
+    const tracker = new UsageTracker(second.runtime.stats, {
       maxModelCalls: turnBackstop(this.input.limits.maxTurns, this.options.turnBackstopMargin),
       ...this.options.budgets
     });
+    if (tracker.fault) throw usageFaultError(tracker.fault);
+    this.usage = tracker;
   }
 
-  private async readback(checkThinking: boolean): Promise<RuntimeReadResult> {
-    const sessionStart = this.sessionStart;
-    if (!sessionStart) throw supervisorError('VSUP_INTERNAL', 'The session start result is missing.');
+  private async readback(options: { checkThinking: boolean; checkCounts: boolean; session: SessionStartResult }): Promise<RuntimeReadResult> {
+    const { checkThinking, checkCounts, session: sessionStart } = options;
     const runtime = await this.rpc(buildRuntimeRead(this.sessionId), parseRuntimeReadResult, this.startupTimeout());
     const effective = await this.rpc(buildConfigEffectiveRead(this.sessionId), parseConfigEffectiveReadResult, this.startupTimeout());
     const mismatches: ReadbackMismatch[] = compareReadback(this.plan.expectation, { sessionStart, runtime, effective }, { checkThinking });
-    if (!checkThinking) {
+    if (checkCounts) {
       const config = await this.rpc(buildConfigRead(this.sessionId), parseConfigReadResult, this.startupTimeout());
       if ((config.hooksCount ?? 0) !== 0) mismatches.push({ path: 'config/read.hooksCount', expected: 0, actual: config.hooksCount });
       if ((config.skillsCount ?? 0) !== 0) mismatches.push({ path: 'config/read.skillsCount', expected: 0, actual: config.skillsCount });
@@ -429,7 +451,7 @@ class AppServerRun {
   }
 
   private async beginTurn(): Promise<void> {
-    const started = await this.rpc(buildTurnStart(this.sessionId, promptFor(this.input)), parseTurnStartResult, this.startupTimeout());
+    const started = await this.rpc(buildTurnStart(this.sessionId, promptFor(this.input, this.listing.text)), parseTurnStartResult, this.startupTimeout());
     if (this.startAbort) throw this.startAbort;
     this.turnId = started.turn.id;
     this.processor.advanceWatermark(started.lastEventId);
@@ -453,22 +475,62 @@ class AppServerRun {
   }
 
   private async answer(pending: PendingApproval): Promise<void> {
-    const verdict = await pending.verdict;
     try {
+      const verdict = await pending.verdict;
       await this.rpc(buildCallbackResult(this.sessionId, pending.callbackId, verdict.decision), (value) => parseAcceptedResult(value, 'callback/result result'), this.timing.requestTimeoutMs);
     } catch (error) {
       if (error instanceof JsonRpcServerError && BENIGN_SERVER_ERRORS.has(error.code)) return;
       throw error;
+    } finally {
+      this.handler.settle(pending.callbackId);
     }
   }
 
-  private readonly onNotification: NotificationHandler = (method, params) => {
-    for (const signal of this.processor.handle(method, params).signals) this.onSignal(signal);
+  private readonly onNotification: NotificationHandler = async (method, params) => {
+    let handoff: Extract<EventSignal, { type: 'session_handoff' }> | undefined;
+    for (const signal of this.processor.handle(method, params).signals) {
+      if (signal.type === 'session_handoff') handoff = signal;
+      else this.onSignal(signal);
+    }
+    if (handoff) await this.handoff(handoff);
   };
+
+  private async handoff(signal: Extract<EventSignal, { type: 'session_handoff' }>): Promise<void> {
+    const work = this.revalidateHandoff(signal).then(
+      () => undefined,
+      (error: unknown) => {
+        this.handler.revoke();
+        this.recordFailure(error);
+        this.interrupt();
+        this.turnDone.resolve('forced');
+      }
+    );
+    this.track(work);
+    await work;
+  }
+
+  private async revalidateHandoff(signal: Extract<EventSignal, { type: 'session_handoff' }>): Promise<void> {
+    const timeout = this.startupTimeout();
+    const session = await this.rpc(buildSessionRead(this.sessionId, { history: { limit: MAX_PAGE_LIMIT } }), parseSessionReadResult, timeout);
+    if (session.state.session.id !== signal.newSessionId) {
+      throw supervisorError('VSUP_BACKEND_ERROR', 'The Vibe session read after a handoff names a different session.', { reason: 'session_handoff_unsafe' });
+    }
+    const adopted = await this.processor.adoptHistory(
+      async (page) => this.rpc(buildSessionHistoryList(this.sessionId, page), parseHistoryListResult, this.startupTimeout()),
+      { pageLimit: MAX_PAGE_LIMIT }
+    );
+    for (const next of adopted.signals) this.onSignal(next);
+    if (this.processor.fatal) return;
+    await this.readback({ checkThinking: true, checkCounts: true, session });
+    this.usage?.markHandoff();
+    this.warnings.push('The Vibe session was compacted or cleared during the run; the supervisor followed the new session.');
+    this.emit('diagnostic', 'warning', { text: `Vibe replaced the session (${signal.kind}); its configuration was read back again and no callback or grant was carried over.`, reason: 'session_handoff' }, 'supervisor');
+  }
 
   private onSignal(signal: EventSignal): void {
     switch (signal.type) {
       case 'fatal':
+        this.handler.revoke();
         this.interrupt();
         return;
       case 'watermark_gap':
@@ -488,8 +550,6 @@ class AppServerRun {
         this.noteStats(signal.stats, signal.contextWindow);
         return;
       case 'session_handoff':
-        this.warnings.push('The Vibe session was compacted or cleared during the run; the supervisor followed the new session.');
-        this.emit('diagnostic', 'warning', { text: `Vibe replaced the session (${signal.kind}).`, reason: 'session_handoff' }, 'supervisor');
         return;
       case 'turn_retrying':
         this.emit('diagnostic', 'warning', { text: 'Vibe is retrying the turn.', reason: 'turn_retrying' }, 'supervisor');
@@ -510,7 +570,16 @@ class AppServerRun {
 
   private noteStats(stats: AgentStats, contextWindow: number | null): void {
     if (!this.usage) return;
-    const update = this.usage.update(stats, contextWindow);
+    this.applyUsage(this.usage.update(stats, contextWindow));
+  }
+
+  private applyUsage(update: UsageUpdate): void {
+    if (!this.usage) return;
+    if (update.fault) {
+      this.failure ??= usageFaultError(update.fault);
+      this.interrupt();
+      return;
+    }
     if (update.breach && !this.hasCondition('budget')) {
       this.addCondition({ kind: 'budget', limit: update.breach.limit });
       this.interrupt();
@@ -685,10 +754,13 @@ class AppServerRun {
     const timeout = this.timing.finalizeRequestTimeoutMs;
     try {
       const runtime = await this.rpc(buildRuntimeRead(this.sessionId), parseRuntimeReadResult, timeout);
-      this.usage?.update(runtime.runtime.stats);
+      if (this.usage) this.applyUsage(this.usage.update(runtime.runtime.stats));
       return await auditSessionHistory(
         async (page) => this.rpc(buildSessionHistoryList(this.sessionId, page), parseHistoryListResult, timeout),
-        { mode: this.input.mode, ledger: this.handler.ledger, turnId: turn.id, secrets: this.secrets, maxMessageChars: Math.min(200_000, this.input.limits.maxTranscriptBytes) }
+        {
+          mode: this.input.mode, ledger: this.handler.ledger, turnId: turn.id, secrets: this.secrets, maxMessageChars: Math.min(200_000, this.input.limits.maxTranscriptBytes),
+          sessionIds: this.processor.sessionIds, historical: this.processor.historicalEffects
+        }
       );
     } catch (error) {
       this.recordFailure(error);
@@ -697,7 +769,7 @@ class AppServerRun {
   }
 
   private decide(audit: HistoryAudit | null): RunOutcome {
-    if (this.conditions.length === 0) {
+    if (this.conditions.every((condition) => condition.kind === 'budget')) {
       if (this.failure) return { state: 'failed', error: this.failure, warnings: [] };
       if (this.gap) {
         return {
@@ -877,8 +949,9 @@ export class AppServerBackend implements SupervisorBackend {
     try {
       plan = buildSessionConfig({ mode: input.mode, workspace: input.workerWorkspace, runDirectory: input.runDirectory, maxTurns: input.limits.maxTurns });
     } catch (error) { throw toSupervisorError(error, []); }
+    const listing = await buildWorkspaceListing(input.workerWorkspace, this.options.listing);
     const run = new AppServerRun({
-      input, callbacks, options: this.runOptions, timing: this.timing, executable, plan,
+      input, callbacks, options: this.runOptions, timing: this.timing, executable, plan, listing,
       credential: resolution.credential, expectedVersion: this.options.expectedServerVersion ?? SUPPORTED_VIBE
     });
     return run.start();

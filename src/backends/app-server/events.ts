@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import type { RunMode } from '../../contracts.js';
 import { redactSecrets } from '../../security/redaction.js';
-import { isProfileTool, type ApprovalLedger } from './approvals.js';
+import { canonicalJson, inputFingerprint, isProfileTool, type ApprovalLedger } from './approvals.js';
 import type { JsonObject } from './jsonrpc.js';
 import {
   MAX_PAGE_LIMIT,
@@ -38,7 +39,9 @@ export type FatalCode =
   | 'malformed_notification'
   | 'patch_failed'
   | 'retention_exceeded'
-  | 'history_paging_failed';
+  | 'history_paging_failed'
+  | 'session_handoff_unsafe'
+  | 'historical_effect_changed';
 
 export interface EventFatal {
   code: FatalCode;
@@ -56,7 +59,7 @@ export type EventSignal =
   | { type: 'turn_started'; turn: Turn }
   | { type: 'turn_completed'; turn: Turn }
   | { type: 'stats'; stats: AgentStats; contextWindow: number | null }
-  | { type: 'session_handoff'; kind: 'session/compacted' | 'session/contextCleared'; oldSessionId: string; newSessionId: string }
+  | { type: 'session_handoff'; kind: 'session/compacted' | 'session/contextCleared'; oldSessionId: string; newSessionId: string; eventId: number; historicalEffects: number }
   | { type: 'turn_retrying' }
   | { type: 'warning' | 'server_error'; message: string | null; code: string | null };
 
@@ -70,6 +73,7 @@ export interface EventCounters {
   skippedPatchOps: number;
   updatesToUnretainedEntries: number;
   ignoredWhileAwaitingResync: number;
+  handoffs: number;
 }
 
 export interface FinalMessage {
@@ -84,6 +88,16 @@ export interface EffectRecord {
   tool: string;
   outcome: ToolOutcome;
   path: string | null;
+}
+
+export interface HistoricalEffect {
+  digest: string;
+  record: EffectRecord;
+}
+
+export interface EffectContext {
+  fingerprint: string | null;
+  sessionIds?: ReadonlySet<string> | undefined;
 }
 
 export type EffectInspection =
@@ -104,7 +118,7 @@ export class EffectValidator {
 
   constructor(private readonly mode: RunMode, private readonly ledger: ApprovalLedger) {}
 
-  inspect(entry: EffectEntry): EffectInspection {
+  inspect(entry: EffectEntry, context: EffectContext = { fingerprint: inputFingerprint(entry.detail.toolName, entry.detail.input) }): EffectInspection {
     const { state } = entry;
     const tool = entry.detail.toolName;
     if (PENDING_EFFECT_STATUSES.has(state.status)) return { status: 'pending' };
@@ -122,26 +136,31 @@ export class EffectValidator {
       return settle(this.ledger.forEffect(entry.id) ? 'permission_denied_by_handler' : 'permission_denied_by_policy');
     }
     if (state.status === 'failed' && state.decision !== 'execute') return settle('not_executed');
-    const problems = this.approvalProblems(entry);
+    const problems = this.approvalProblems(entry, context);
     if (problems.length > 0) {
       return { status: 'fatal', fatal: fatalOf('unapproved_effect', `${printable(tool)} was allowed or executed without a handler approval (${problems.join(', ')})`, tool, entry.id) };
     }
     return settle('executed');
   }
 
-  private approvalProblems(entry: EffectEntry): string[] {
+  private approvalProblems(entry: EffectEntry, context: EffectContext): string[] {
     const { state } = entry;
     const tool = entry.detail.toolName;
     const problems: string[] = [];
     if (!(state.decision === 'execute' && state.approvalType === 'ask' && state.approvalSource === 'user')) problems.push('approval metadata is not execute/ask/user');
     if (!isProfileTool(this.mode, tool)) problems.push('tool is outside the profile');
     const record = this.ledger.forEffect(entry.id);
-    if (!record) problems.push('no handler decision is linked to the entry');
-    else {
-      if (record.decision !== 'approve') problems.push('the handler denied it');
-      if (record.tool !== tool) problems.push('the handler decided for a different tool');
-      if (state.callbackId !== null && state.callbackId !== record.callbackId) problems.push('the entry names a different callback');
+    if (!record) {
+      problems.push('no handler decision is linked to the entry');
+      if (state.callbackId !== null && this.ledger.forCallback(state.callbackId)) problems.push('the entry reuses an approval that belongs to another effect');
+      return problems;
     }
+    if (record.decision !== 'approve') problems.push('the handler denied it');
+    if (record.tool !== tool) problems.push('the handler decided for a different tool');
+    if (state.callbackId !== null && state.callbackId !== record.callbackId) problems.push('the entry names a different callback');
+    if (record.turnId !== entry.turnId) problems.push('the approval belongs to a different turn');
+    if (record.sessionId !== null && context.sessionIds !== undefined && !context.sessionIds.has(record.sessionId)) problems.push('the approval belongs to a different session');
+    if (record.fingerprint === null || context.fingerprint === null || record.fingerprint !== context.fingerprint) problems.push('the executed input differs from the approved input');
     return problems;
   }
 }
@@ -164,12 +183,27 @@ function finalMessageOf(messages: readonly MessageEntry[], turnId: string | null
   return { entryId: chosen.id, text: redactSecrets(truncated ? raw.slice(0, maxChars) : raw, secrets), complete: chosen.generationStatus === 'completed', truncated };
 }
 
+export function historicalDigest(entry: EffectEntry, fingerprint: string | null): string {
+  const { state } = entry;
+  return createHash('sha256').update(canonicalJson({
+    tool: entry.detail.toolName,
+    status: state.status,
+    decision: state.decision,
+    approvalType: state.approvalType,
+    approvalSource: state.approvalSource,
+    errorCode: state.errorCode,
+    input: state.decision === 'execute' ? fingerprint : null
+  })).digest('hex');
+}
+
 export interface HistoryAuditOptions {
   mode: RunMode;
   ledger: ApprovalLedger;
   turnId?: string;
   secrets?: readonly string[];
   maxMessageChars?: number;
+  sessionIds?: readonly string[];
+  historical?: ReadonlyMap<string, HistoricalEffect>;
 }
 
 export interface HistoryAudit {
@@ -184,6 +218,7 @@ export interface HistoryAudit {
 export function auditHistory(entries: readonly HistoryEntry[], options: HistoryAuditOptions): HistoryAudit {
   const validator = new EffectValidator(options.mode, options.ledger);
   const secrets = options.secrets ?? [];
+  const sessionIds = options.sessionIds === undefined ? undefined : new Set(options.sessionIds);
   const audit: HistoryAudit = { fatal: null, entries: entries.length, reasoningDropped: 0, effects: [], pendingEffects: [], finalMessage: null };
   const messages: MessageEntry[] = [];
   for (const entry of entries) {
@@ -194,7 +229,17 @@ export function auditHistory(entries: readonly HistoryEntry[], options: HistoryA
     }
     if (entry.kind === 'message') { messages.push(entry); continue; }
     if (entry.kind !== 'effect') continue;
-    const inspection = validator.inspect(entry);
+    const fingerprint = inputFingerprint(entry.detail.toolName, entry.detail.input);
+    const known = options.historical?.get(entry.id);
+    if (known) {
+      if (historicalDigest(entry, fingerprint) !== known.digest) {
+        audit.fatal = fatalOf('historical_effect_changed', `effect ${printable(entry.id)} for ${printable(entry.detail.toolName)} differs from what was observed before the session handoff`, entry.detail.toolName, entry.id);
+        return audit;
+      }
+      audit.effects.push({ ...known.record });
+      continue;
+    }
+    const inspection = validator.inspect(entry, { fingerprint, sessionIds });
     if (inspection.status === 'fatal') { audit.fatal = inspection.fatal; return audit; }
     if (inspection.status === 'pending') audit.pendingEffects.push(entry.id);
     else audit.effects.push({ entryId: entry.id, tool: entry.detail.toolName, outcome: inspection.outcome, path: redactedPath(pathOf(entry), secrets) });
@@ -399,12 +444,20 @@ export interface EventResult {
   signals: EventSignal[];
 }
 
+interface RetainedEffect {
+  entry: EffectEntry;
+  fingerprint: string | null;
+}
+
 export class EventProcessor {
   private currentSessionId: string;
   private lastEventId: number;
   private gap: { expected: number; received: number } | null = null;
   private latchedFatal: EventFatal | null = null;
-  private readonly effects = new Map<string, EffectEntry>();
+  private readonly effects = new Map<string, RetainedEffect>();
+  private readonly historical = new Map<string, HistoricalEffect>();
+  private readonly openCallbacks = new Set<string>();
+  private readonly sessions: string[];
   private readonly messages = new Map<string, MessageEntry>();
   private validator: EffectValidator;
   private readonly unknownMethods = new Set<string>();
@@ -422,11 +475,13 @@ export class EventProcessor {
     callbacksSeen: 0,
     skippedPatchOps: 0,
     updatesToUnretainedEntries: 0,
-    ignoredWhileAwaitingResync: 0
+    ignoredWhileAwaitingResync: 0,
+    handoffs: 0
   };
 
   constructor(private readonly options: EventProcessorOptions) {
     this.currentSessionId = options.sessionId;
+    this.sessions = [options.sessionId];
     this.lastEventId = options.watermark;
     this.secrets = options.secrets ?? [];
     this.maxEffects = options.maxRetainedEffects ?? DEFAULT_MAX_RETAINED_EFFECTS;
@@ -452,6 +507,14 @@ export class EventProcessor {
     return this.gap !== null;
   }
 
+  get sessionIds(): readonly string[] {
+    return this.sessions;
+  }
+
+  get historicalEffects(): ReadonlyMap<string, HistoricalEffect> {
+    return this.historical;
+  }
+
   advanceWatermark(eventId: number): void {
     if (eventId > this.lastEventId) this.lastEventId = eventId;
   }
@@ -466,13 +529,28 @@ export class EventProcessor {
   }
 
   resync(state: SessionState): EventResult {
-    this.currentSessionId = state.session.id;
+    if (state.session.id !== this.currentSessionId) {
+      const result: EventResult = { signals: [] };
+      this.latch(fatalOf('session_handoff_unsafe', `a resync returned session ${printable(state.session.id)} instead of the active session ${printable(this.currentSessionId)}`), result);
+      return result;
+    }
     this.lastEventId = state.eventId;
     this.gap = null;
     this.effects.clear();
     this.messages.clear();
+    this.openCallbacks.clear();
     this.validator = new EffectValidator(this.options.mode, this.options.ledger);
     return this.seed(state.history);
+  }
+
+  async adoptHistory(fetchPage: (page: PageParams) => Promise<HistoryPage>, options: HistoryPagingOptions = {}): Promise<EventResult> {
+    const collected = await collectHistory(fetchPage, options);
+    if (!collected.ok) {
+      const result: EventResult = { signals: [] };
+      this.latch(collected.fatal, result);
+      return result;
+    }
+    return this.seed(collected.entries);
   }
 
   finalMessage(turnId: string | null = null): FinalMessage | null {
@@ -481,8 +559,10 @@ export class EventProcessor {
 
   effectRecords(): EffectRecord[] {
     const records: EffectRecord[] = [];
-    for (const entry of this.effects.values()) {
-      const inspection = this.validator.inspect(entry);
+    for (const { entry, fingerprint } of this.effects.values()) {
+      const known = this.historical.get(entry.id);
+      if (known) { records.push({ ...known.record }); continue; }
+      const inspection = this.validator.inspect(entry, this.contextFor(fingerprint));
       if (inspection.status === 'settled') records.push({ entryId: entry.id, tool: entry.detail.toolName, outcome: inspection.outcome, path: redactedPath(pathOf(entry), this.secrets) });
     }
     return records;
@@ -505,9 +585,7 @@ export class EventProcessor {
       return result;
     }
     if (notification.kind === 'session/compacted' || notification.kind === 'session/contextCleared') {
-      this.currentSessionId = notification.newSessionId;
-      result.signals.push({ type: 'session_handoff', kind: notification.kind, oldSessionId: notification.oldSessionId, newSessionId: notification.newSessionId });
-      this.observeSequence(notification.eventId, result);
+      this.handoff(notification, result);
       return result;
     }
     if (notification.sessionId !== null && notification.sessionId !== this.currentSessionId) {
@@ -517,6 +595,48 @@ export class EventProcessor {
     if (this.gap === null && !this.observeSequence(notification.eventId, result)) return result;
     this.dispatch(notification, params, result);
     return result;
+  }
+
+  private contextFor(fingerprint: string | null): EffectContext {
+    return { fingerprint, sessionIds: new Set([this.currentSessionId]) };
+  }
+
+  private handoff(notification: ServerNotification & { kind: 'session/compacted' | 'session/contextCleared' }, result: EventResult): void {
+    if (this.latchedFatal) return;
+    const refusals: string[] = [];
+    if (notification.oldSessionId !== this.currentSessionId) refusals.push('it does not replace the active session');
+    if (notification.newSessionId === this.currentSessionId) refusals.push('it keeps the same session id');
+    if (notification.eventId === null) refusals.push('it carries no watermark');
+    if (this.gap !== null) refusals.push('the event stream is awaiting a resync');
+    if (this.openCallbacks.size > 0 || this.options.ledger.pendingCallbacks > 0) refusals.push('a callback is still open');
+    const unfinished = [...this.effects.values()].filter(({ entry }) => PENDING_EFFECT_STATUSES.has(entry.state.status));
+    if (unfinished.length > 0) refusals.push(`${unfinished.length} effect(s) have not finished`);
+    if (refusals.length > 0 || notification.eventId === null) {
+      this.latch(fatalOf('session_handoff_unsafe', `${notification.kind} was refused: ${refusals.join('; ')}`), result);
+      return;
+    }
+    for (const { entry, fingerprint } of this.effects.values()) {
+      const inspection = this.validator.inspect(entry, this.contextFor(fingerprint));
+      if (inspection.status === 'fatal') { this.latch(inspection.fatal, result); return; }
+      if (inspection.status === 'settled') {
+        this.historical.set(entry.id, {
+          digest: historicalDigest(entry, fingerprint),
+          record: { entryId: entry.id, tool: entry.detail.toolName, outcome: inspection.outcome, path: redactedPath(pathOf(entry), this.secrets) }
+        });
+      }
+    }
+    this.currentSessionId = notification.newSessionId;
+    this.sessions.push(notification.newSessionId);
+    this.lastEventId = notification.eventId;
+    this.counters.handoffs += 1;
+    result.signals.push({
+      type: 'session_handoff',
+      kind: notification.kind,
+      oldSessionId: notification.oldSessionId,
+      newSessionId: notification.newSessionId,
+      eventId: notification.eventId,
+      historicalEffects: this.historical.size
+    });
   }
 
   private countUnknownIfUnrecognized(method: string, result: EventResult): void {
@@ -610,6 +730,8 @@ export class EventProcessor {
         return;
       case 'callback':
         this.counters.callbacksSeen += 1;
+        if (entry.status === 'open' || entry.status === null) this.openCallbacks.add(entry.id);
+        else this.openCallbacks.delete(entry.id);
         return;
       case 'unknown':
         this.latch(fatalOf('unknown_entry_kind', `history entry of unknown kind ${printable(entry.type)}`, null, entry.id), result);
@@ -618,11 +740,11 @@ export class EventProcessor {
         if (entry.role === 'assistant') this.retain(raw ?? toWire(entry), result);
         return;
       case 'effect':
-        this.retain(raw ?? toWire(entry), result);
+        this.retain(raw ?? toWire(entry), result, inputFingerprint(entry.detail.toolName, entry.detail.input));
     }
   }
 
-  private retain(wire: Json, result: EventResult): void {
+  private retain(wire: Json, result: EventResult, fingerprint: string | null = null): void {
     let entry: HistoryEntry;
     try {
       entry = parseHistoryEntry(slimWire(wire, this.maxMessageChars), 'retained entry');
@@ -632,7 +754,7 @@ export class EventProcessor {
       return;
     }
     if (entry.kind === 'message') this.retainMessage(entry);
-    else if (entry.kind === 'effect') this.retainEffect(entry, result);
+    else if (entry.kind === 'effect') this.retainEffect(entry, fingerprint, result);
   }
 
   private retainMessage(entry: MessageEntry): void {
@@ -645,27 +767,50 @@ export class EventProcessor {
     }
   }
 
-  private retainEffect(entry: EffectEntry, result: EventResult): void {
+  private retainEffect(entry: EffectEntry, fingerprint: string | null, result: EventResult): void {
     if (!this.effects.has(entry.id) && this.effects.size >= this.maxEffects) {
       this.latch(fatalOf('retention_exceeded', `more than ${this.maxEffects} effect entries in one run`, entry.detail.toolName, entry.id), result);
       return;
     }
-    this.effects.set(entry.id, entry);
-    this.inspect(entry, result);
+    const retained = { entry, fingerprint };
+    this.effects.set(entry.id, retained);
+    this.inspect(retained, result);
   }
 
-  private inspect(entry: EffectEntry, result: EventResult): void {
-    const inspection = this.validator.inspect(entry);
+  private inspect({ entry, fingerprint }: RetainedEffect, result: EventResult): void {
+    const known = this.historical.get(entry.id);
+    if (known) {
+      if (historicalDigest(entry, fingerprint) !== known.digest) {
+        this.latch(fatalOf('historical_effect_changed', `effect ${printable(entry.id)} for ${printable(entry.detail.toolName)} differs from what was observed before the session handoff`, entry.detail.toolName, entry.id), result);
+      }
+      return;
+    }
+    const inspection = this.validator.inspect(entry, this.contextFor(fingerprint));
     if (inspection.status === 'fatal') this.latch(inspection.fatal, result);
     else if (inspection.status === 'settled' && inspection.first) {
       result.signals.push({ type: 'tool_effect', entryId: entry.id, tool: entry.detail.toolName, outcome: inspection.outcome, path: redactedPath(pathOf(entry), this.secrets) });
     }
   }
 
+  private updateCallback(entryId: string, patch: readonly PatchOp[]): void {
+    for (const operation of patch) {
+      const segments = decodePointer(operation.path);
+      if (segments === null || segments[0] !== 'state') continue;
+      let status: unknown;
+      if (segments.length === 1 && isRecord(operation.value)) status = operation.value.status;
+      else if (segments.length === 2 && segments[1] === 'status') status = operation.value;
+      if (typeof status === 'string' && status !== 'open') this.openCallbacks.delete(entryId);
+    }
+  }
+
   private update(entryId: string, patch: readonly PatchOp[], result: EventResult): void {
+    if (this.openCallbacks.has(entryId)) {
+      this.updateCallback(entryId, patch);
+      return;
+    }
     const effect = this.effects.get(entryId);
     const message = this.messages.get(entryId);
-    const target = effect ?? message;
+    const target = effect?.entry ?? message;
     if (!target) {
       this.counters.updatesToUnretainedEntries += 1;
       return;
@@ -676,18 +821,21 @@ export class EventProcessor {
     }
     const kind = target.kind;
     const wire = toWire(target);
+    let fingerprint = effect?.fingerprint ?? null;
     try {
       for (const operation of patch) {
         const segments = decodePointer(operation.path);
         if (segments === null) throw new PatchError('patch path is invalid');
+        if (kind === 'effect' && segments[0] === 'detail' && (segments.length === 1 || segments[1] === 'input')) fingerprint = null;
         if (!isRetainedPath(kind, segments)) { this.counters.skippedPatchOps += 1; continue; }
         applyOperation(wire, operation, segments);
       }
       const next = parseHistoryEntry(slimWire(wire, this.maxMessageChars), 'retained entry');
       if (next.kind !== kind) throw new PatchError('patch changed the entry kind');
       if (next.kind === 'effect') {
-        this.effects.set(entryId, next);
-        this.inspect(next, result);
+        const retained = { entry: next, fingerprint };
+        this.effects.set(entryId, retained);
+        this.inspect(retained, result);
       } else if (next.kind === 'message') {
         this.messages.set(entryId, next);
       }
