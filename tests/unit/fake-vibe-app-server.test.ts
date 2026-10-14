@@ -234,9 +234,28 @@ describe('fake vibe-app-server handshake and strictness', () => {
   });
 
   it('refuses a camelCase violation in scenario call input so the fixture cannot drift to snake_case', async () => {
-    const client = new FakeClient({ steps: [{ op: 'call', tool: 'read_file', input: { file_path: '/x' } }] });
+    const client = new FakeClient({ steps: [{ op: 'call', tool: 'file_system.read_file', input: { file_path: '/x' } }] });
     expect((await client.exited).code).toBe(2);
     expect(client.stderr).toContain('camelCase');
+  });
+
+  it('refuses short tool names, unknown input keys and a malformed edit so scenarios stay on the Unified wire shapes', async () => {
+    const rows: Array<[Json, string]> = [
+      [{ op: 'call', tool: 'read_file', input: { filePath: '/x' } }, 'wire name'],
+      [{ op: 'call', tool: 'edit', input: { filePath: '/x' } }, 'wire name'],
+      [{ op: 'call', tool: 'file_system.read_file', input: { filePath: '/x', path: '/x' } }, 'unknown key'],
+      [{ op: 'call', tool: 'file_system.write_file', input: { filePath: '/x' } }, 'content must be a string'],
+      [{ op: 'call', tool: 'file_system.search_replace', input: { filePath: '/x', changes: [] } }, 'non-empty'],
+      [{ op: 'call', tool: 'file_system.search_replace', input: { filePath: '/x', changes: [{ oldString: 'a', new_string: 'b' }] } }, 'camelCase']
+    ];
+    for (const [step, message] of rows) {
+      const client = new FakeClient({ steps: [step] });
+      expect((await client.exited).code).toBe(2);
+      expect(client.stderr).toContain(message);
+    }
+    const generic = new FakeClient({ steps: [{ op: 'call', tool: 'file_system.read_file', generic: true, input: { path: '/x' } }] });
+    await generic.open();
+    expect(generic.exit).toBeNull();
   });
 
   it('accepts the scenario path from the environment as well as argv', async () => {
@@ -278,23 +297,42 @@ describe('fake vibe-app-server session and read-back', () => {
     expect(at(runtime, 'runtime.tools')).toEqual([{ name: 'read_file', isCustom: false }]);
     expect(at(runtime, 'runtime.skills')).toEqual([]);
     expect(at(runtime, 'runtime.mcp.sources')).toEqual([]);
+    expect(at(runtime, 'runtime.connectors')).toEqual({ connected: 0, total: null });
+    expect(at(runtime, 'runtime.experimentalHarness')).toBe(true);
     expect(at(runtime, 'runtime.hooksCount')).toBe(0);
     expect(at(runtime, 'runtime.issues')).toEqual([]);
     expect(at(runtime, 'runtime.bypassToolPermissions')).toBe(false);
     expect(at(runtime, 'runtime.stats.modelCalls')).toBeNull();
     expect(at(runtime, 'sessionLog.enabled')).toBe(false);
     const effective = await client.ok('config/effective/read', { sessionId: 'fake-session-0001' });
-    expect(effective.config).toMatchObject({ enable_subagents: false, disabled_skills: ['*'], session_logging: { enabled: false }, tools: { read_file: { permission: 'ask' } } });
+    expect(effective.config).toMatchObject({
+      enable_subagents: false, enable_background_processes: true, disabled_skills: ['*'], tools: { read_file: { permission: 'ask' } },
+      enabled_tools: ['read_file', 'edit'], disabled_tools: ['edit'], bypass_tool_permissions: false, active_model: '',
+      session_logging: { enabled: false, session_prefix: 'session', generate_titles: true }
+    });
+    expect(Object.keys(effective)).toEqual(['config']);
+    expect(Object.keys(effective.config as Json).every((key) => !/[A-Z]/.test(key))).toBe(true);
+    expect('auto_approve' in (effective.config as Json)).toBe(false);
     expect(JSON.stringify(effective)).not.toContain(secretValue);
     const selection = await client.ok('config/read', { sessionId: 'fake-session-0001' });
     expect(selection.harnessSelectionSource).toBe('default');
     expect(selection.hooksCount).toBe(0);
   });
 
-  it('treats autoApprove as bypass in the runtime read-back', async () => {
+  it('treats autoApprove as bypass in both read-backs', async () => {
     const client = new FakeClient('allowed-call');
     await client.open({ autoApprove: true });
     expect(at(await client.ok('runtime/read', { sessionId: 'fake-session-0001' }), 'runtime.bypassToolPermissions')).toBe(true);
+    expect(at(await client.ok('config/effective/read', { sessionId: 'fake-session-0001' }), 'config.bypass_tool_permissions')).toBe(true);
+  });
+
+  it('pins the active model in the effective config only after a model write names one', async () => {
+    const client = new FakeClient('allowed-call');
+    await client.open();
+    await client.ok('config/model/write', { sessionId: 'fake-session-0001', reasoningEffort: 'off' });
+    expect(at(await client.ok('config/effective/read', { sessionId: 'fake-session-0001' }), 'config.active_model')).toBe('');
+    await client.ok('config/model/write', { sessionId: 'fake-session-0001', modelAlias: 'mistral-medium-3.5' });
+    expect(at(await client.ok('config/effective/read', { sessionId: 'fake-session-0001' }), 'config.active_model')).toBe('mistral-medium-3.5');
   });
 
   it('applies a thinking-off model write to both read-backs, unless the scenario ignores it', async () => {
@@ -356,8 +394,14 @@ describe('fake vibe-app-server approvals', () => {
     expect(typeof request.id).toBe('number');
     expect(at(request, 'params.callback.detail.kind')).toBe('approval');
     expect(at(request, 'params.callback.detail.effect.kind')).toBe('file_read');
-    expect(at(request, 'params.callback.detail.effect.toolName')).toBe('read_file');
+    expect(at(request, 'params.callback.detail.effect.toolName')).toBe('file_system.read_file');
     expect(at(request, 'params.callback.detail.effect.input')).toEqual({ filePath: '/work/space/src/index.ts', offset: null, limit: 2000 });
+    expect(at(request, 'params.callback.detail.effect.display.message')).toBe('src/index.ts');
+    expect(at(request, 'params.callback.callbackId')).toBe('approval-call-0001');
+    expect(at(request, 'params.callback.id')).toBe('approval-call-0001');
+    expect(at(request, 'params.callback.relatedEntryId')).toBe('effect-action-0001');
+    expect(at(request, 'params.callback.title')).toBe('Approve file_system.read_file');
+    expect(at(request, 'params.callback.generationStatus')).toBe('in_progress');
     expect(at(request, 'params.callback.detail.choices')).toEqual(['approve', 'approve_for_session', 'approve_permanently', 'deny', 'cancel_turn']);
     expect(JSON.stringify(request)).not.toMatch(/file_path|callback_id|tool_name/);
     expect(at(request, 'params.callback.turnId')).toBe(turnId);
@@ -376,8 +420,12 @@ describe('fake vibe-app-server approvals', () => {
 
     const effect = (await client.ok('session/history/list', { sessionId: 'fake-session-0001' })).items as Json[];
     const call = effect.find((entry) => entry.type === 'effect')!;
+    expect(call.id).toBe('effect-action-0001');
     expect(at(call, 'state')).toMatchObject({ status: 'completed', decision: 'execute', approvalType: 'ask', approvalSource: 'user' });
     expect(at(call, 'state.output.filePath')).toBe('/work/space/src/index.ts');
+    const answered = effect.find((entry) => entry.type === 'callback')!;
+    expect(answered).toMatchObject({ id: 'approval-call-0001', relatedEntryId: call.id, generationStatus: 'completed' });
+    expect(at(answered, 'state')).toEqual({ status: 'answered', output: { type: 'approval', decision: { type: 'approve' }, feedback: null } });
     const message = effect.filter((entry) => entry.type === 'message');
     expect(message.map((entry) => at(entry, 'role'))).toEqual(['user', 'assistant']);
     expect(at(message[1], 'content.0.text')).toBe('The review found no issues.');
@@ -412,7 +460,7 @@ describe('fake vibe-app-server approvals', () => {
     expect(at(await client.completion(), 'params.turn.status')).toBe('completed');
     const entries = (await client.ok('session/history/list', { sessionId: 'fake-session-0001' })).items as Json[];
     const effects = entries.filter((entry) => entry.type === 'effect');
-    expect(effects.map((entry) => at(entry, 'detail.toolName'))).toEqual(['read_file', 'read_file', 'write_file']);
+    expect(effects.map((entry) => at(entry, 'detail.toolName'))).toEqual(['file_system.read_file', 'file_system.read_file', 'file_system.write_file']);
     expect(effects.map((entry) => at(entry, 'detail.input.filePath'))).toEqual(['/etc/passwd', '/work/space/.env', '/work/space/src/new.ts']);
     for (const effect of effects) {
       expect(effect.state).toMatchObject({ status: 'failed', decision: 'skip', error: { code: 'tool_denied', message: 'Tool execution denied by approval callback' } });
@@ -488,7 +536,7 @@ describe('fake vibe-app-server approvals', () => {
     await client.completion();
     expect(client.serverRequests).toEqual([]);
     const effect = (client.named('history/entryAdded').map((n) => at(n, 'params.entry')) as Json[]).find((entry) => entry.type === 'effect')!;
-    expect(at(effect, 'detail.toolName')).toBe('read_file');
+    expect(at(effect, 'detail.toolName')).toBe('file_system.read_file');
     expect(at(effect, 'detail.input.filePath')).toBe('/work/space/src/index.ts');
     expect(effect.state).toMatchObject({ status: 'completed', decision: 'execute', approvalType: 'always', approvalSource: 'config' });
   });
@@ -500,7 +548,7 @@ describe('fake vibe-app-server approvals', () => {
     await client.completion();
     expect(client.serverRequests).toEqual([]);
     const effect = (client.named('history/entryAdded').map((n) => at(n, 'params.entry')) as Json[]).find((entry) => entry.type === 'effect')!;
-    expect(at(effect, 'detail.toolName')).toBe('write_file');
+    expect(at(effect, 'detail.toolName')).toBe('file_system.write_file');
     expect(at(effect, 'detail.kind')).toBe('file_write');
     expect(effect.state).toMatchObject({ status: 'completed', decision: 'execute', approvalSource: 'bypass' });
   });
@@ -512,7 +560,65 @@ describe('fake vibe-app-server approvals', () => {
     expect(at(await client.completion(), 'params.turn.status')).toBe('completed');
     expect(client.serverRequests).toEqual([]);
     const effect = (client.named('history/entryAdded').map((n) => at(n, 'params.entry')) as Json[]).find((entry) => entry.type === 'effect')!;
-    expect(effect.state).toMatchObject({ status: 'skipped', decision: 'skip', approvalType: 'never', approvalSource: 'never' });
+    expect(effect.state).toMatchObject({
+      status: 'failed', decision: 'skip', approvalType: 'never', approvalSource: 'never',
+      error: { code: 'tool_denied', message: 'Tool execution denied by approval policy' }
+    });
+  });
+
+  it('shows an edit as one batched change with camelCase keys and a file_edit kind', async () => {
+    const client = new FakeClient('edit-call');
+    await client.open();
+    await client.startTurn();
+    const request = await client.serverRequest();
+    expect(at(request, 'params.callback.detail.effect.kind')).toBe('file_edit');
+    expect(at(request, 'params.callback.detail.effect.toolName')).toBe('file_system.search_replace');
+    expect(at(request, 'params.callback.detail.effect.input')).toEqual({
+      filePath: '/work/space/src/index.ts', changes: [{ oldString: 'const a = 1;', newString: 'const a = 2;', replaceAll: false }]
+    });
+    client.acknowledge(request);
+    await client.answer(request, 'approve');
+    await client.completion();
+    const call = ((await client.ok('session/history/list', { sessionId: 'fake-session-0001' })).items as Json[]).find((entry) => entry.type === 'effect')!;
+    expect(at(call, 'state.output.occurrences')).toHaveLength(1);
+  });
+
+  it('keeps a call the projection failed on generic with raw snake_case-era input, for a client to deny', async () => {
+    const client = new FakeClient('generic-effect-fallback');
+    await client.open();
+    await client.startTurn();
+    const request = await client.serverRequest();
+    expect(at(request, 'params.callback.detail.effect.kind')).toBe('tool');
+    expect(at(request, 'params.callback.detail.effect.toolName')).toBe('file_system.read_file');
+    expect(at(request, 'params.callback.detail.effect.input')).toEqual({ path: '/work/space/src/index.ts', offset: 0 });
+    client.acknowledge(request);
+    await client.answer(request, 'deny');
+    await client.completion();
+  });
+
+  it('shows an effect whose result carried no approval metadata as three nulls', async () => {
+    const client = new FakeClient('unrecorded-approval-meta');
+    await client.open();
+    await client.startTurn();
+    await client.completion();
+    const effect = (client.named('history/entryAdded').map((n) => at(n, 'params.entry')) as Json[]).find((entry) => entry.type === 'effect')!;
+    expect(effect.state).toMatchObject({ status: 'completed', decision: null, approvalType: null, approvalSource: null });
+  });
+
+  it('keeps the effect running while its callback is open, with blocked available as a scenario override', async () => {
+    const running = new FakeClient('approval-stall');
+    await running.open();
+    await running.startTurn();
+    await running.serverRequest();
+    const announced = (running.named('history/entryAdded').map((n) => at(n, 'params.entry')) as Json[]).find((entry) => entry.type === 'effect')!;
+    expect(announced).toMatchObject({ generationStatus: 'in_progress', state: { status: 'running' } });
+
+    const blocked = new FakeClient({ name: 'blocked', effectWhileBlocked: 'blocked', steps: [{ op: 'call', tool: 'file_system.read_file', input: { filePath: '/work/space/a.ts' } }] });
+    await blocked.open();
+    await blocked.startTurn();
+    const request = await blocked.serverRequest();
+    const effect = (blocked.named('history/entryAdded').map((n) => at(n, 'params.entry')) as Json[]).find((entry) => entry.type === 'effect')!;
+    expect(effect.state).toMatchObject({ status: 'blocked', callbackId: at(request, 'params.callback.callbackId') });
   });
 });
 
@@ -529,7 +635,7 @@ describe('fake vibe-app-server events', () => {
     expect(announced.some((entry) => entry.type === 'effect')).toBe(false);
     const listed = (await client.ok('session/history/list', { sessionId: 'fake-session-0001' })).items as Json[];
     const hidden = listed.find((entry) => entry.type === 'effect')!;
-    expect(at(hidden, 'detail.toolName')).toBe('write_file');
+    expect(at(hidden, 'detail.toolName')).toBe('file_system.write_file');
     expect(hidden.state).toMatchObject({ status: 'completed', decision: 'execute', approvalSource: 'bypass' });
   });
 
@@ -601,7 +707,7 @@ describe('fake vibe-app-server events', () => {
     expect(at(client.named('session/statsUpdated')[0], 'params.stats.futureField')).toBe('ignored');
   });
 
-  it('pages history in both directions', async () => {
+  it('pages history by entry id, newest page first, oldest first inside a page', async () => {
     const client = new FakeClient('allowed-call');
     await client.open();
     await client.startTurn();
@@ -609,14 +715,38 @@ describe('fake vibe-app-server events', () => {
     client.acknowledge(request);
     await client.answer(request, 'approve');
     await client.completion();
+    const list = (page: Json) => client.ok('session/history/list', { sessionId: 'fake-session-0001', page });
+    const ids = (result: Json) => (result.items as Json[]).map((entry) => entry.id);
     const all = (await client.ok('session/history/list', { sessionId: 'fake-session-0001' })).items as Json[];
-    const forward = await client.ok('session/history/list', { sessionId: 'fake-session-0001', page: { limit: 2, direction: 'forward' } });
-    expect((forward.items as Json[]).map((entry) => entry.id)).toEqual(all.slice(0, 2).map((entry) => entry.id));
-    expect(forward.nextCursor).toBe('2');
-    const backward = await client.ok('session/history/list', { sessionId: 'fake-session-0001', page: { limit: 2 } });
-    expect((backward.items as Json[]).map((entry) => entry.id)).toEqual(all.slice(-2).map((entry) => entry.id));
-    expect(backward.previousCursor).toBe(String(all.length - 2));
-    expect(at(await client.call('session/history/list', { sessionId: 'fake-session-0001', page: { cursor: '999' } }), 'error.code')).toBe('invalid_params');
+    expect(all.length).toBeGreaterThan(4);
+
+    const newest = await list({ limit: 2 });
+    expect(ids(newest)).toEqual(all.slice(-2).map((entry) => entry.id));
+    expect(newest.nextCursor).toBe(all.at(-2)!.id);
+    expect(newest.previousCursor).toBeNull();
+    const older = await list({ limit: 2, cursor: newest.nextCursor as string });
+    expect(ids(older)).toEqual(all.slice(-4, -2).map((entry) => entry.id));
+    expect(older.previousCursor).toBe(all.at(-3)!.id);
+    const oldest = await list({ limit: 500, cursor: older.nextCursor as string });
+    expect(ids(oldest)).toEqual(all.slice(0, -4).map((entry) => entry.id));
+    expect(oldest.nextCursor).toBeNull();
+
+    const afterFirst = await list({ limit: 2, direction: 'forward', cursor: all[0]!.id as string });
+    expect(ids(afterFirst)).toEqual(all.slice(1, 3).map((entry) => entry.id));
+    expect(afterFirst.nextCursor).toBe(all[2]!.id);
+    expect(afterFirst.previousCursor).toBe(all[1]!.id);
+    expect(ids(await list({ limit: 2, direction: 'forward' }))).toEqual(all.slice(-2).map((entry) => entry.id));
+
+    const unknown = await list({ cursor: 'no-such-entry' });
+    expect(unknown).toEqual({ items: [], nextCursor: null, previousCursor: null });
+    expect(at(await client.call('session/history/list', { sessionId: 'fake-session-0001', page: { limit: 501 } }), 'error.code')).toBe('invalid_params');
+    expect(ids(await client.ok('session/history/list', { sessionId: 'fake-session-0001', turnId: all[1]!.turnId as string }))).toEqual(all.filter((entry) => entry.turnId === all[1]!.turnId).map((entry) => entry.id));
+  });
+
+  it('raises invalid_params for an unknown page cursor only when the scenario asks for it', async () => {
+    const client = new FakeClient({ name: 'bad-cursor', badCursor: 'invalid_params', steps: [{ op: 'say', text: 'x' }] });
+    await client.open();
+    expect(at(await client.call('session/history/list', { sessionId: 'fake-session-0001', page: { cursor: 'missing' } }), 'error.code')).toBe('invalid_params');
   });
 });
 

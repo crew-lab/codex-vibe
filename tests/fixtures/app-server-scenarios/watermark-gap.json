@@ -1,7 +1,7 @@
 {
   "name": "watermark-gap",
   "steps": [
-    { "op": "call", "tool": "write_file", "mode": "auto", "source": "bypass", "silent": true, "input": { "filePath": "${cwd}/src/hidden.ts", "content": "hidden\n" } },
+    { "op": "call", "tool": "file_system.write_file", "mode": "auto", "source": "bypass", "silent": true, "input": { "filePath": "${cwd}/src/hidden.ts", "content": "hidden\n" } },
     { "op": "say", "text": "A write happened behind a gap." }
   ]
 }

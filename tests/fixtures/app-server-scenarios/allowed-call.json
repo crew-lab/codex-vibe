@@ -2,7 +2,7 @@
   "name": "allowed-call",
   "steps": [
     { "op": "reasoning", "text": "private reasoning that must stay out of persisted artifacts" },
-    { "op": "call", "tool": "read_file", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts", "offset": null, "limit": 2000 } },
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts", "offset": null, "limit": 2000 } },
     { "op": "stats", "stats": { "modelCalls": 2, "sessionPromptTokens": 1200, "sessionCompletionTokens": 300, "sessionCachedTokens": 200, "inputPricePerMillion": 0.4, "outputPricePerMillion": 2, "toolCallsAgreed": 1, "toolCallsSucceeded": 1 } },
     { "op": "say", "text": "The review found no issues.", "stream": true }
   ]
