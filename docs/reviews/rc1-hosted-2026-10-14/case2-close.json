@@ -1,0 +1,9 @@
+{
+  "supervisor_version": "1.0.1-rc.1",
+  "run_id": "0dacfbbc-65c8-441b-990e-021c7b524711",
+  "state": "closed",
+  "next_action": "The run is closed; start a new run for more work.",
+  "worktree_removed": false,
+  "worktree_retained_reason": "Uncommitted or untracked files remain after export; worktree retained",
+  "worktree_retained_path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-JNj2d8/worktrees/0dacfbbc-65c8-441b-990e-021c7b524711"
+}

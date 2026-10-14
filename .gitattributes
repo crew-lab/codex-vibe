@@ -1,0 +1,7 @@
+# Preserve raw evidence bytes, including unified-diff context and terminal logs.
+# Source and ordinary documentation retain normal whitespace checks.
+docs/reviews/practical-tool-fix-2026-10-13/*.patch -text -whitespace
+docs/reviews/practical-tool-fix-2026-10-13/*.log -text -whitespace
+docs/reviews/rc1-hosted-2026-10-14/**/*.patch -text -whitespace
+docs/reviews/rc1-hosted-2026-10-14/**/*.log -text -whitespace
+docs/reviews/rc1-integration-2026-10-14/*.patch -text -whitespace

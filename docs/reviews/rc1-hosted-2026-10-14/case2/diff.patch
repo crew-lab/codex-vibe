@@ -1,0 +1,40 @@
+diff --git a/.github/workflows/rollback.yml b/.github/workflows/rollback.yml
+index 2655a0c..4cb7062 100644
+--- a/.github/workflows/rollback.yml
++++ b/.github/workflows/rollback.yml
+@@ -52,9 +52,32 @@ jobs:
+       - name: Download and verify prior release
+         run: |
+           mkdir release-artifact release-artifact/release
+-          aws s3 cp "s3://${AWS_RELEASES_BUCKET}/releases/${RELEASE_SHA}/site.tar.gz" release-artifact/site.tar.gz --only-show-errors
+-          aws s3 cp "s3://${AWS_RELEASES_BUCKET}/releases/${RELEASE_SHA}/site.tar.gz.sha256" release-artifact/site.tar.gz.sha256 --only-show-errors
+-          (cd release-artifact && shasum -a 256 -c site.tar.gz.sha256 && tar -xzf site.tar.gz -C release)
++          aws s3 cp "s3://${AWS_RELEASES_BUCKET}/releases/${RELEASE_SHA}/site.tar.gz" release-artifact/garnebo-site-${RELEASE_SHA}.tar.gz --only-show-errors
++          aws s3 cp "s3://${AWS_RELEASES_BUCKET}/releases/${RELEASE_SHA}/site.tar.gz.sha256" release-artifact/garnebo-site-${RELEASE_SHA}.tar.gz.sha256 --only-show-errors
++          (
++            cd release-artifact
++            checksum_file="garnebo-site-${RELEASE_SHA}.tar.gz.sha256"
++            expected_archive="garnebo-site-${RELEASE_SHA}.tar.gz"
++            # Validate: exactly one LF-terminated line, no CRLF
++            test "$(wc -l < "$checksum_file")" -eq 1
++            ! grep -q $'\r' "$checksum_file"
++            # Read and validate line format
++            IFS= read -r line < "$checksum_file"
++            # Verify: 64-hex digest, two spaces, exact basename
++            if ! printf '%s' "$line" | grep -Eq '^[a-f0-9]{64}  garnebo-site-[a-f0-9]{40}\.tar\.gz$'; then
++              echo "::error::Checksum file has invalid format"
++              exit 1
++            fi
++            # Verify basename SHA matches RELEASE_SHA
++            file_sha=$(printf '%s' "$line" | sed 's/^[a-f0-9]\{64\}  garnebo-site-//;s/\.tar\.gz$//')
++            if [ "$file_sha" != "$RELEASE_SHA" ]; then
++              echo "::error::Checksum basename SHA does not match release SHA"
++              exit 1
++            fi
++            # Verify and extract
++            shasum -a 256 -c "$checksum_file"
++            tar -xzf "$expected_archive" -C release
++          )
+         env:
+           AWS_RELEASES_BUCKET: ${{ vars.AWS_RELEASES_BUCKET }}
+           RELEASE_SHA: ${{ inputs.release_sha }}

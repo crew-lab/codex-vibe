@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -112,6 +113,81 @@ class DiagnosticsTest(unittest.TestCase):
         for env in ({},):
             with patch.dict(os.environ, env, clear=True):
                 self.assertIsNone(LAUNCHER._start_diagnostics())
+
+    def test_enabled_start_creates_owner_only_metadata_recorder(self):
+        class ThreadStub:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+            def start(self):
+                pass
+        with patch.dict(os.environ, {LAUNCHER.DIAGNOSTICS_ENV: '1'}), \
+             patch.object(LAUNCHER, '__file__', str(Path(self.directory) / 'vibe_supervisor_launcher.py')), \
+             patch.object(LAUNCHER.threading, 'Thread', ThreadStub):
+            recorder = LAUNCHER._start_diagnostics()
+        self.assertNotIn(LAUNCHER.DIAGNOSTICS_ENV, os.environ)
+        self.assertIsNotNone(recorder)
+        recorder.tick()
+        self.assertEqual(self.data()['stages'], [{'stage': 'launch', 'elapsed_ms': 0}])
+        self.assertEqual(self.data()['tool_inventory'], [])
+        self.assertEqual(self.data()['tool_calls'], [])
+        self.assertEqual(self.file.stat().st_mode & 0o777, 0o600)
+
+    def test_tool_metadata_is_name_and_outcome_only_and_bounded(self):
+        self.recorder.record_tool_inventory(['read_file', 'grep', '../outside', 'provider_secret'])
+        self.recorder.record_tool_call('read_file', 'attempt')
+        self.recorder.record_tool_call('read_file', 'completed')
+        self.recorder.record_tool_call('bad/name', 'failed')
+        self.recorder.record_tool_call('read_file', 'permission-denied')
+        self.recorder.tick()
+        self.assertEqual(self.data()['tool_inventory'], ['<other>', 'grep', 'read_file'])
+        self.assertEqual(self.data()['tool_calls'], [
+            {'tool': 'read_file', 'outcome': 'attempt'},
+            {'tool': 'read_file', 'outcome': 'completed'},
+            {'tool': '<other>', 'outcome': 'failed'},
+        ])
+
+    def test_inventory_and_call_limits_are_marked(self):
+        self.recorder.record_tool_inventory(['read_file', 'grep'] * 65)
+        for _ in range(LAUNCHER.TOOL_CALL_LIMIT + 1):
+            self.recorder.record_tool_call('read_file', 'attempt')
+        self.recorder.tick()
+        report = self.data()
+        self.assertFalse(report['tool_inventory_truncated'])
+        self.assertTrue(report['tool_calls_truncated'])
+        self.assertEqual(len(report['tool_calls']), LAUNCHER.TOOL_CALL_LIMIT)
+
+    def test_final_flush_preserves_short_run_tool_outcomes(self):
+        self.recorder.record_tool_inventory(['read_file', 'grep'])
+        self.recorder.record_tool_call('read_file', 'attempt')
+        self.recorder.record_tool_call('read_file', 'completed')
+        LAUNCHER._finish_diagnostics(self.recorder)
+        report = self.data()
+        self.assertEqual(report['tool_calls'], [
+            {'tool': 'read_file', 'outcome': 'attempt'},
+            {'tool': 'read_file', 'outcome': 'completed'},
+        ])
+        self.assertEqual(report['tool_inventory'], ['grep', 'read_file'])
+        self.assertIsNone(self.recorder.descriptor)
+
+    def test_monitor_tick_and_final_flush_serialize_descriptor_lifecycle(self):
+        self.recorder.record_tool_inventory(['read_file'])
+        self.recorder.record_tool_call('read_file', 'attempt')
+        errors = []
+        monitor = threading.Thread(target=lambda: self._capture(errors, self.recorder.tick))
+        monitor.start()
+        self._capture(errors, lambda: LAUNCHER._finish_diagnostics(self.recorder))
+        monitor.join(timeout=2)
+        self.assertFalse(monitor.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(self.data()['tool_calls'], [{'tool': 'read_file', 'outcome': 'attempt'}])
+        self.assertIsNone(self.recorder.descriptor)
+
+    @staticmethod
+    def _capture(errors, callback):
+        try:
+            callback()
+        except Exception as error:
+            errors.append(error)
 
 if __name__ == '__main__':
     unittest.main()

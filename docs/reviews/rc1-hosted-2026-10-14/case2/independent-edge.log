@@ -1,0 +1,30 @@
+
+ RUN  v4.1.11 /private/tmp/rc1-case2-verified-export
+
+ ❯ tests/release/rollback-workflow.test.ts (18 tests | 2 failed | 16 skipped) 413ms
+   × independent trailing bytes junk must fail before extraction 261ms
+   × independent trailing bytes carriage-return must fail before extraction 152ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/release/rollback-workflow.test.ts > independent trailing bytes junk must fail before extraction
+ FAIL  tests/release/rollback-workflow.test.ts > independent trailing bytes carriage-return must fail before extraction
+AssertionError: {"step":"Download and verify prior release","command":"mkdir release-artifact release-artifact/release\naws s3 cp \"s3://${AWS_RELEASES_BUCKET}/releases/${RELEASE_SHA}/site.tar.gz\" release-artifact/garnebo-site-${RELEASE_SHA}.tar.gz --only-show-errors\naws s3 cp \"s3://${AWS_RELEASES_BUCKET}/releases/${RELEASE_SHA}/site.tar.gz.sha256\" release-artifact/garnebo-site-${RELEASE_SHA}.tar.gz.sha256 --only-show-errors\n(\n  cd release-artifact\n  checksum_file=\"garnebo-site-${RELEASE_SHA}.tar.gz.sha256\"\n  expected_archive=\"garnebo-site-${RELEASE_SHA}.tar.gz\"\n  # Validate: exactly one LF-terminated line, no CRLF\n  test \"$(wc -l < \"$checksum_file\")\" -eq 1\n  ! grep -q $'\\r' \"$checksum_file\"\n  # Read and validate line format\n  IFS= read -r line < \"$checksum_file\"\n  # Verify: 64-hex digest, two spaces, exact basename\n  if ! printf '%s' \"$line\" | grep -Eq '^[a-f0-9]{64}  garnebo-site-[a-f0-9]{40}\\.tar\\.gz$'; then\n    echo \"::error::Checksum file has invalid format\"\n    exit 1\n  fi\n  # Verify basename SHA matches RELEASE_SHA\n  file_sha=$(printf '%s' \"$line\" | sed 's/^[a-f0-9]\\{64\\}  garnebo-site-//;s/\\.tar\\.gz$//')\n  if [ \"$file_sha\" != \"$RELEASE_SHA\" ]; then\n    echo \"::error::Checksum basename SHA does not match release SHA\"\n    exit 1\n  fi\n  # Verify and extract\n  shasum -a 256 -c \"$checksum_file\"\n  tar -xzf \"$expected_archive\" -C release\n)\n","commandBytes":1290,"commandSha256":"e3f2eeef372d1b3eb529e44daa124845fd057697c7c47c43003dc9fbc456bf44","exitCode":0,"stdout":"garnebo-site-0123456789abcdef0123456789abcdef01234567.tar.gz: OK\n","stderr":"shasum: WARNING: 1 line is improperly formatted\n"}: expected +0 not to be +0 // Object.is equality
+ ❯ tests/release/rollback-workflow.test.ts:302:57
+    300|     await harness.writeFixture({checksum: `__ARCHIVE_SHA256__  garnebo…
+    301|     const result = await harness.runDownload();
+    302|     expect(result.exitCode, JSON.stringify(result)).not.toBe(0);
+       |                                                         ^
+    303|     await expect(readFile(harness.marker, 'utf8')).rejects.toMatchObje…
+    304|     await harness.unchangedDestination();
+ ❯ withHarness tests/release/rollback-workflow.test.ts:200:5
+ ❯ tests/release/rollback-workflow.test.ts:299:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 16 skipped (18)
+   Start at  08:20:43
+   Duration  512ms (transform 13ms, setup 0ms, import 34ms, tests 413ms, environment 0ms)
+

@@ -1,0 +1,166 @@
+{
+  "status": "AUTHORIZED_PENDING_NATIVE_RECONNECT",
+  "candidate": {
+    "version": "1.0.1-rc.1",
+    "archive_sha256": "2442e35579d30dbc9b28bab4abaddfbb0a7c1e782055ba83cc4187ca24946b98",
+    "runtime_equivalent_to_1_0_0": false
+  },
+  "total_maximum_runs": 6,
+  "stop": "first unexpected failure; no automatic retry or increased limits",
+  "diagnostics": "metadata only, optional trace enabled for acceptance; no provider traffic/reasoning/credentials",
+  "cases": [
+    {
+      "case": 1,
+      "operation": "review",
+      "source": {
+        "workspace": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/v1-native-fixture/rc28-acceptance",
+        "base_ref": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+        "dirty": "",
+        "input_sha256": {
+          "CONTRACT.md": "e365dee5459747455f8991c40fae3a8482f4989101ba1b01878d001f42a8262a",
+          "src/limit.mjs": "08ab53f9b60114b1a2ec4f45722f4190203ac6ba557d2bb39c2e694990b6aa5e"
+        }
+      },
+      "task": "Read only CONTRACT.md and src/limit.mjs. Determine whether below(value, limit) is true exactly when value is strictly less than limit. Inspect negative, equal, decimal and positive examples. Report only concrete defects against the contract with file and location, or say no defect found. No scratch files, edits, style advice or unrelated recommendations. Final answer under 12 lines.",
+      "max_turns": 12,
+      "acceptance": "Useful factually correct read-only answer, expected end_turn, no warnings, unchanged integrity, close/free slot.",
+      "timeout_seconds": 180,
+      "maximum_runs": 1,
+      "retries": 0
+    },
+    {
+      "case": 2,
+      "operation": "edit",
+      "source": {
+        "workspace": "/Users/roman/src/github.com/r-senchuk/garnebo/.claude/worktrees/garnebo-release-gap-vibe",
+        "base_ref": "776ddb2cf07c554fc49faa86fb8a0568f7f398f0",
+        "dirty": "",
+        "input_sha256": {
+          ".github/workflows/deploy.yml": "4b312dcc84fbbe8b9a1e598bca952909075f7a134e4db533c69e104a1ef21b27",
+          ".github/workflows/rollback.yml": "ff933b36667d2543a3ad8851e62f42b6cd10992749de3341daf0f8f1076af9e3"
+        }
+      },
+      "task": "Read only .github/workflows/deploy.yml and .github/workflows/rollback.yml first. Change only .github/workflows/rollback.yml. Keep existing S3 keys site.tar.gz and site.tar.gz.sha256. Download locally as garnebo-site-<release_sha>.tar.gz and its matching checksum file. Before verification or extraction, require the existing lowercase 40-character release SHA and exactly one checksum record: lowercase 64-character hex digest, two ASCII spaces, exact producer archive basename, then one LF. Reject CRLF, blank or extra records, malformed digests, different basenames and unsafe paths. Use that archive filename consistently. Preserve provenance validation and every unrelated action, permission, OIDC, concurrency, deployment, invalidation and cleanup setting. No other files, scratch files, shell, network or test execution. Final answer: concrete changes, changed-file inventory and unverified limitations.",
+      "max_turns": 12,
+      "writable_files": [
+        ".github/workflows/rollback.yml"
+      ],
+      "acceptance": "Nonempty scoped patch, independent source review and 16 actual-command rollback fixtures in disposable copy PASS without Luna/coordinator repair. No change to source snapshot.",
+      "timeout_seconds": 180,
+      "maximum_runs": 1,
+      "retries": 0,
+      "verification_only": {
+        "sourceCandidate": "28efb9d5d5ed3f811a63c365dbee469230dadf4e",
+        "files_sha256": {
+          "tests/release/rollback-workflow.test.ts": "be9a3e1fa157cdc1d88a3a8338d81c0809516373cbf509b0038055bb59c63e3c",
+          "scripts/verify-release.mjs": "a2cfd0eb9d67bc4c9fab1d9a546f9a6862b0381e0aeb145e924f6b55ec4d1936"
+        },
+        "prepared_directory": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/rc1-hosted-acceptance/verification-only",
+        "scope": "Overlay only in a disposable exported candidate verification copy. These files are not worker edits or accepted patch files. Reuse pinned existing Vitest/yaml dependencies offline. Execute actual workflow commands with local aws stub; no production endpoints or credentials."
+      }
+    },
+    {
+      "case": 3,
+      "operation": "review",
+      "source": {
+        "workspace": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/v1-native-fixture/rc28-acceptance",
+        "base_ref": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+        "dirty": "",
+        "input_sha256": {
+          "CONTRACT.md": "e365dee5459747455f8991c40fae3a8482f4989101ba1b01878d001f42a8262a",
+          "src/limit.mjs": "08ab53f9b60114b1a2ec4f45722f4190203ac6ba557d2bb39c2e694990b6aa5e"
+        }
+      },
+      "task": "Read only CONTRACT.md and src/limit.mjs. Determine whether below(value, limit) is true exactly when value is strictly less than limit. Inspect negative, equal, decimal and positive examples. Report only concrete defects against the contract with file and location, or say no defect found. No scratch files, edits, style advice or unrelated recommendations. Final answer under 12 lines.",
+      "max_turns": 1,
+      "acceptance": "Corroborated max_turn_requests incomplete settlement, source integrity unchanged. A worker claim alone cannot establish the limit.",
+      "timeout_seconds": 180,
+      "maximum_runs": 1,
+      "retries": 0
+    },
+    {
+      "case": 4,
+      "operation": "edit",
+      "source": {
+        "workspace": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/v1-native-fixture/rc28-acceptance",
+        "base_ref": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+        "dirty": "",
+        "input_sha256": {
+          "CONTRACT.md": "e365dee5459747455f8991c40fae3a8482f4989101ba1b01878d001f42a8262a",
+          "src/limit.mjs": "08ab53f9b60114b1a2ec4f45722f4190203ac6ba557d2bb39c2e694990b6aa5e"
+        }
+      },
+      "task": "Read CONTRACT.md first. Create only src/at-least.mjs and tests/at-least.test.mjs. Export atLeast(value, limit) returning value >= limit. Use node:test and node:assert/strict to cover below/equal/above including negative and decimal numbers. Do not mutate inputs. No other files or scratch files. No shell, network or test execution. Final answer: changed files and remaining work.",
+      "max_turns": 1,
+      "writable_files": [
+        "src/at-least.mjs",
+        "tests/at-least.test.mjs"
+      ],
+      "acceptance": "Corroborated max_turn_requests incomplete settlement, scope/integrity, independent fresh partial export if any. Not completed implementation.",
+      "timeout_seconds": 180,
+      "maximum_runs": 1,
+      "retries": 0
+    },
+    {
+      "case": 5,
+      "operation": "review",
+      "source": {
+        "workspace": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/v1-native-fixture/rc28-acceptance",
+        "base_ref": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+        "dirty": "",
+        "input_sha256": {
+          "CONTRACT.md": "e365dee5459747455f8991c40fae3a8482f4989101ba1b01878d001f42a8262a",
+          "src/limit.mjs": "08ab53f9b60114b1a2ec4f45722f4190203ac6ba557d2bb39c2e694990b6aa5e"
+        }
+      },
+      "task": "Read only CONTRACT.md and src/limit.mjs. Determine whether below(value, limit) is true exactly when value is strictly less than limit. Inspect negative, equal, decimal and positive examples. Report only concrete defects against the contract with file and location, or say no defect found. No scratch files, edits, style advice or unrelated recommendations. Final answer under 12 lines.",
+      "max_turns": 12,
+      "acceptance": "Same useful read-only contract after limit cases, no warnings, integrity/close/free slot.",
+      "timeout_seconds": 180,
+      "maximum_runs": 1,
+      "retries": 0
+    },
+    {
+      "case": 6,
+      "operation": "edit",
+      "source": {
+        "workspace": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/v1-native-fixture/rc22-disconnect-fixture",
+        "base_ref": "9e04d00353b368d84bfbd529d51333ef40ae2b83",
+        "dirty": "",
+        "input_sha256": {
+          "CONTRACT.md": "ef4b173b97ab6122eb218ed652782c350821514c31911036f01f6bbff12655ab",
+          "src/catalog.mjs": "062abb278ffa5965f18fbcc0e78d9d999cef1fc2eecd4965bf936eb40eeb4c12",
+          "src/catalog-store.mjs": "f37bb66ed7cebd932351a6faf3bfddb90f639545b0d5afb57439c7db151055af",
+          "src/filter.mjs": "0da5c99f66cd8d849e5eee4a687ff807b833036210a99df84a85e2c2b6dcd803",
+          "src/format.mjs": "cd77b4de6802432422f9c03640f83db37922108c5ea8ac139c13b69c561f4a58",
+          "src/limits.mjs": "722286f9a2f8027ead5cf0fb5bc888e83a4690087d57785a203a0af2e7bc66c3",
+          "src/normalize.mjs": "b74a3760d1112fe199abbf4c14075cff81bdad373c893ecaa3b61f0091384414",
+          "src/validate.mjs": "00b003c3233c3de683f683af9e11911acc733aa9410d9dea7b8b2702cf1329af",
+          "tests/catalog.test.mjs": "4d5d3097a29a2761e8ee576162d59b4037d4cbe96b76d47e32f904ec92f9ae24",
+          "docs/data-shape.md": "ca515c029d683b8371a8d6add02dd30399ff45ca40369dbba687ded4895336be",
+          "docs/ordering.md": "f92f6ff9488848b1bd532aa38afb75fe3b062dda3d9f5bf676c3617aa9bb5ecd"
+        }
+      },
+      "task": "Read only CONTRACT.md, src/catalog.mjs, src/catalog-store.mjs, src/filter.mjs, src/format.mjs, src/limits.mjs, src/normalize.mjs, src/validate.mjs, tests/catalog.test.mjs, docs/data-shape.md, docs/ordering.md. Create only src/rank-candidates.mjs and tests/rank-candidates.test.mjs. Export rankCandidates(candidates) matching CONTRACT.md: return a new array, descending priority then ascending name with default JS string ordering, missing priority zero, non-array input yields []. Preserve all input objects and array. Use node:test and node:assert/strict for these cases. No other edits or scratch files; no shell, network or test execution. Final answer: changed-file inventory and unverified remaining work.",
+      "max_turns": 12,
+      "acceptance": "Official-client disconnect while authoritative observer confirms active hosted edit work. Observe process group gone, lock released, failed record/no replay and retained owned edit worktree. Read saved export and close safely; cleanup only under original protected contract. Early settlement is INCONCLUSIVE and consumes allowance.",
+      "timeout_seconds": 180,
+      "maximum_runs": 1,
+      "retries": 0,
+      "writable_files": [
+        "src/rank-candidates.mjs",
+        "tests/rank-candidates.test.mjs"
+      ]
+    }
+  ],
+  "authorization": {
+    "userReply": "Authorize install and six bounded runs",
+    "maximumRuns": 6,
+    "used": 0,
+    "remaining": 6,
+    "retries": 0,
+    "stop": "first unexpected failure",
+    "publication": false,
+    "accountChanges": false
+  }
+}

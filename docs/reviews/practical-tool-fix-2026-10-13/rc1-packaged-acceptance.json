@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-13T21:13:57.814Z",
+  "deterministic_checks": [
+    {
+      "name": "private-package",
+      "status": "PASS",
+      "detail": "Package remains unpublished/private while the source is MIT licensed."
+    },
+    {
+      "name": "node-engine",
+      "status": "PASS",
+      "detail": "Node 24.21.0; package engine >=20.19"
+    },
+    {
+      "name": "runtime-shim",
+      "status": "PASS",
+      "detail": "Pinned Python launcher exists in the compiled package tree."
+    },
+    {
+      "name": "reduced-build-artifacts",
+      "status": "PASS",
+      "detail": "Removed ACP, policy-engine, and dynamic-deadline outputs are absent."
+    },
+    {
+      "name": "cli-build",
+      "status": "PASS",
+      "detail": "Compiled CLI entrypoint exists."
+    },
+    {
+      "name": "cli-version",
+      "status": "PASS",
+      "detail": "1.0.1-rc.1"
+    },
+    {
+      "name": "mcp-five-tool-catalog",
+      "status": "PASS",
+      "detail": "vibe_close, vibe_edit_start, vibe_result, vibe_review_start, vibe_status"
+    },
+    {
+      "name": "mcp-server-version",
+      "status": "PASS",
+      "detail": "1.0.1-rc.1"
+    },
+    {
+      "name": "test-fixture-excluded",
+      "status": "PASS",
+      "detail": "Test-only shim fixture is absent from dist."
+    }
+  ],
+  "verified_release_gates": [],
+  "unverified_release_gates": [
+    {
+      "name": "native-readiness-on-candidate",
+      "status": "NOT_RUN",
+      "reason": "On the intended Codex desktop connection, verify native readiness and exact server version 1.0.1-rc.1 against the frozen candidate artifact."
+    },
+    {
+      "name": "hosted-review-edit-matrix",
+      "status": "NOT_RUN",
+      "reason": "Run the authorized candidate-specific review/edit matrix with readiness receipts and independent patch verification on the exact frozen artifact."
+    },
+    {
+      "name": "provider-authentication-for-this-candidate",
+      "status": "NOT_RUN",
+      "reason": "Observe provider authentication during an authorized real run against this exact candidate."
+    },
+    {
+      "name": "active-disconnect-hosted",
+      "status": "NOT_RUN",
+      "reason": "Observe active disconnect handling through the official client on this exact candidate."
+    },
+    {
+      "name": "release-archive-confirmation",
+      "status": "NOT_RUN",
+      "reason": "Confirm native readiness and one review plus one independently verified edit on the exact candidate archive, with verified cleanup."
+    },
+    {
+      "name": "clean-account-install",
+      "status": "REQUIRED_NOT_RUN",
+      "reason": "Before stable 1.0.1, complete the documented fresh macOS Apple silicon account installation on a frozen, reviewable artifact, recording installation, registration, rollback, and cleanup."
+    },
+    {
+      "name": "node-floor-20.19.0",
+      "status": "UNVERIFIED",
+      "reason": "Run candidate verification on exactly Node 20.19.0. No such local binary was available; do not transfer the 1.0.0 result."
+    }
+  ]
+}

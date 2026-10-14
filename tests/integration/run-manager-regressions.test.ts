@@ -82,6 +82,22 @@ function collectUnhandledRejections() {
 const settle = (ms = 500) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe('RunManager regressions', () => {
+  it('returns the optional bounded worker diagnostics file as a result artifact', async () => {
+    const backend = new FakeBackend();
+    const { source, data } = await makeParent();
+    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    try {
+      const started = await manager.reviewStart({ task: 'review', cwd: source });
+      await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
+      const diagnosticsPath = path.join(data, 'runs', started.run_id, 'worker-diagnostics.json');
+      const diagnostics = JSON.stringify({ schema_version: 1, tool_inventory: ['grep', 'read_file'], tool_calls: [{ tool: 'read_file', outcome: 'completed' }] });
+      await writeFile(diagnosticsPath, diagnostics, { mode: 0o600 });
+      await backend.callbacks.get(started.run_id)?.onState('completed', { result: { summary: 'done' } });
+      const result = await manager.result({ run_id: started.run_id });
+      expect(result.artifacts).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'worker-diagnostics.json' })]));
+    } finally { await manager.shutdown(); }
+  }, 30_000);
+
   it('turns a source workspace change during a review into a warning instead of failing the run', async () => {
     const backend = new FakeBackend();
     const { source, data } = await makeParent();

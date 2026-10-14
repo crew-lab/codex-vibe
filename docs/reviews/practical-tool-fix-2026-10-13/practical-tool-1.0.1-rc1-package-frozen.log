@@ -1,0 +1,359 @@
+
+> vibe-supervisor@1.0.1-rc.1 package:rc
+> node scripts/package-rc.mjs
+
+
+> vibe-supervisor@1.0.1-rc.1 verify:release
+> npm run lint && npm run typecheck && npm run build && npm test && npm run test:python && npm run acceptance && npm run secret-scan && npm run sbom
+
+
+> vibe-supervisor@1.0.1-rc.1 lint
+> eslint .
+
+
+> vibe-supervisor@1.0.1-rc.1 typecheck
+> tsc --noEmit
+
+
+> vibe-supervisor@1.0.1-rc.1 build
+> node scripts/clean-dist.mjs && tsc && node scripts/copy-runtime-assets.mjs
+
+Copied the pinned Vibe launch shim into dist/backends/runtime.
+
+> vibe-supervisor@1.0.1-rc.1 test
+> vitest run
+
+
+ RUN  v4.0.18 /Users/roman/src/github.com/crew-lab/codex-vibe/tmp/practical-tool-diagnosis
+
+ ✓ tests/unit/workspace-snapshot.test.ts (10 tests) 4669ms
+     ✓ snapshots 20,000 small ignored files by metadata without hashing them  3551ms
+ ✓ tests/integration/close-cleanup.test.ts (9 tests) 6830ms
+     ✓ fails an interrupted run without replay and retains its dirty worktree  778ms
+     ✓ keeps the worktree of a completed run  501ms
+     ✓ retains exported dirty worktrees for cancelled and closed runs  1719ms
+     ✓ prints a manual cleanup command that a shell passes to git literally  701ms
+     ✓ is exported and then removed by close with cleanup_worktree  899ms
+     ✓ still keeps a worktree that holds ignored files, exporting the patch first  739ms
+     ✓ serializes concurrent close requests around worker cancellation and retains dirty output  1028ms
+ ✓ tests/integration/run-manager-regressions.test.ts (14 tests) 7965ms
+     ✓ returns the optional bounded worker diagnostics file as a result artifact  458ms
+     ✓ turns a source workspace change during a review into a warning instead of failing the run  438ms
+     ✓ records a diagnostic event when a backend reports a state transition that is invalid for the run  597ms
+     ✓ closing a completed one-shot run reports closed without a failed transition  976ms
+     ✓ shutting down with a completed but unclosed one-shot run produces no unhandled rejection  927ms
+     ✓ proceeds with a warning when the source workspace cannot be snapshotted  416ms
+     ✓ fails the run when saving the record right after a successful snapshot fails  416ms
+     ✓ hashWorkspace enforces the entry limit and bounds only the hashed bytes  502ms
+     ✓ releases the programmatic worker when artifact finalization fails a completed run  717ms
+       ✓ when the backend reports failed while its process is still alive  508ms
+       ✓ when a completed run fails during artifact finalization  527ms
+       ✓ when a failure is reported after the run already completed  525ms
+       ✓ when the transcript limit fails the run  532ms
+       ✓ when the deadline expires  425ms
+ ✓ tests/v1-disconnect-client.test.mjs (5 tests) 9291ms
+   ✓ disconnects an active edit through the official client and finds it failed and retained after reconnect  4639ms
+   ✓ starts the independent observer on the session directory before the run  4650ms
+ ✓ tests/unit/policy-readiness.test.ts (29 tests) 9341ms
+     ✓ sees a root approved after connect in the same manager's readiness and start without restart  336ms
+     ✓ denies only a deleted root while readiness, start and cleanup in the other root keep working  1094ms
+     ✓ keeps a missing git binary and a Git timeout distinct from an unresolved base_ref  807ms
+     ✓ rejects a receipt used for another operation, workspace or moved edit base  376ms
+     ✓ creates the edit worktree at the exact commit the receipt checked even if the ref moves  598ms
+     ✓ rejects a valid receipt when another start claimed the slot first  347ms
+     ✓ leaves the live run unaffected, applies the new policy to the next admission and still cleans the verified worktree under its frozen admission  877ms
+     ✓ still retains a dirty worktree after revocation because cleanup keeps its fresh export checks  963ms
+ ✓ tests/security/security-primitives.test.ts (16 tests) 5955ms
+     ✓ captures tracked staged and unstaged edits plus binary/newline filenames without mutating index  308ms
+     ✓ refuses cleanup after post-export changes and retains the worktree  508ms
+     ✓ retains a verified export worktree while it contains uncommitted output  618ms
+     ✓ uses non-force Git removal so a file created at the final removal boundary is preserved  939ms
+     ✓ keeps termination unverified when EPERM strands a managed descendant, then retries the owned group handle  1560ms
+     ✓ rejects termination within a bound when group and direct-child signaling fail  1510ms
+ ✓ tests/integration/worktree-close.test.ts (20 tests) 11801ms
+     ✓ records the exact detached worktree identity created for the run  515ms
+     ✓ retains exported edits and reports the worktree path and reason  1059ms
+     ✓ reaches closed and keeps the worktree when ignored files remain, saying why  890ms
+     ✓ continues to retain exported edits after ignored residue is removed  1210ms
+     ✓ reports worktree_removed false without a reason when cleanup was not requested  510ms
+     ✓ retains an exported dirty worktree after restart using the saved patch artifact  745ms
+     ✓ still refuses after a restart when the saved patch was tampered with  460ms
+     ✓ refuses after a restart when the worktree changed since the export  617ms
+     ✓ close during delayed worktree creation waits and reports verified cleanup  1148ms
+     ✓ keeps the owner lock through a short-deadline shutdown while Git creation is still pending  713ms
+     ✓ exports and keeps a tracked-file edit when the repository sets core.ignoreStat  1035ms
+     ✓ exports and keeps an edit to a skip-worktree entry  824ms
+     ✓ refuses cleanup and retention when one run is redirected to another valid owned worktree  969ms
+     ✓ maps git failures to their own codes and keeps VSUP_GIT_REQUIRED for a missing binary or non-repository  340ms
+ ✓ tests/integration/failure-reporting.test.ts (29 tests) 4844ms
+     ✓ persists the real code-3 turn-limit outcome as incomplete and releases its slot after close  364ms
+ ✓ tests/integration/token-shaping.test.ts (22 tests) 4538ms
+     ✓ an edit start keeps the worker path and returns the compact patch  630ms
+     ✓ inlines a small patch and trims artifacts and workspace  472ms
+     ✓ references a patch larger than 4000 bytes by path instead of inlining it  492ms
+     ✓ caps changed_files at 50 and reports the total  666ms
+     ✓ caps the inline transcript in compact mode and points at the file  491ms
+ ✓ tests/integration/event-log-failures.test.ts (4 tests) 3653ms
+     ✓ degrades with VSUP_STORAGE_ERROR when events.ndjson becomes a directory, without looping or a false output limit  1630ms
+     ✓ degrades with VSUP_STORAGE_ERROR when events.ndjson becomes a symlink, without looping or a false output limit  1672ms
+ ✓ tests/integration/storage-faults.test.ts (11 tests) 3954ms
+     ✓ fails the run with VSUP_STORAGE_ERROR when the completion persist hits ENOSPC, and keeps the pipeline moving  560ms
+     ✓ keeps the in-memory outcome and reports a warning while the state cannot be saved  553ms
+     ✓ lets the first persist of start() propagate VSUP_STORAGE_ERROR without creating a run  319ms
+     ✓ fails the run with EACCES when the run directory becomes unwritable mid-run  597ms
+     ✓ does not reject a programmatic run when recording an event fails  596ms
+ ✓ tests/integration/reviewed-baseline.test.ts (25 tests) 13750ms
+     ✓ dry-runs and creates exact reviewed snapshots without source/index/ref changes  830ms
+     ✓ ignores an inherited external index during snapshot staging  558ms
+     ✓ refuses stale hashes, binary overlays, symlinks and out-of-root parents  458ms
+     ✓ rejects ignored overlays, source Git filters and case collisions  437ms
+     ✓ refuses executable-mode mismatch and credential content  354ms
+     ✓ allows only the exact hash-bound root .env.example template in dry-run and created snapshots  932ms
+     ✓ creates exact file-to-directory transitions independent of manifest order  616ms
+     ✓ creates exact directory-to-file transitions independent of manifest order  576ms
+     ✓ binds template opt-in to effective reviewed bytes and rechecks dotenv syntax  570ms
+     ✓ rejects hash mismatch, arbitrary credential values, command substitution, other env files and real .env files  1738ms
+     ✓ runs the documented CLI dry-run and create flows with a private config and manifest  1043ms
+     ✓ uses the explicit artifact config for preparation despite obsolete default keys and needs no live connection  897ms
+     ✓ allows an unrelated sibling creation while reading a private manifest without weakening path checks  396ms
+     ✓ refuses a stale dry-run manifest when source refs change before snapshot creation  524ms
+     ✓ records an absent Git index explicitly for clean bases  408ms
+     ✓ writes a private sanitized failure receipt after a controlled late source hash change  1200ms
+ ✓ tests/integration/lazy-startup-retention.test.ts (8 tests) 3373ms
+     ✓ initializes 200 runs with 1 MiB event logs without reading events, and loads them on demand  2042ms
+     ✓ removes exactly the eligible runs and keeps worktrees and failed runs  341ms
+     ✓ keeps a live one-shot run while removing an old terminal control run  350ms
+     ✓ never removes a fresh completed run when retention is set to zero days, but still removes old terminal ones  333ms
+ ✓ tests/integration/settle.test.ts (11 tests) 2848ms
+     ✓ keeps shutdown ownership when termination is unverified and drains after a later owned-handle retry  1134ms
+ ✓ tests/integration/review-fixes.test.ts (18 tests) 2991ms
+     ✓ omits integrity for edit runs  407ms
+     ✓ compactResult gives a patch path when inlining would exceed the result cap  415ms
+     ✓ compactResult still inlines a patch that fits the cap  479ms
+ ✓ tests/integration/worktree-index-flags.test.ts (3 tests) 2235ms
+     ✓ refuses cleanup while an assume-unchanged edit is missing from the saved export  1148ms
+     ✓ exports a present skip-worktree file but not the absent entries of a sparse checkout  312ms
+     ✓ writes and expires no shared index while exporting a split-index worktree  773ms
+ ✓ tests/unit/setup.test.ts (35 tests) 1738ms
+ ✓ tests/security/export-equivalence.test.ts (4 tests) 2043ms
+     ✓ produces a patch that rebuilds the same tree as the reference patch  705ms
+     ✓ leaves the real index and the staged state untouched  362ms
+     ✓ exports 50 untracked files in constant time  707ms
+ ✓ tests/security/worktree-cleanup-order.test.ts (3 tests) 1632ms
+     ✓ accepts a reordered verified patch but retains its dirty worktree  576ms
+     ✓ still refuses a one-byte content change in the reordered patch comparison  579ms
+     ✓ still refuses a tampered saved artifact  476ms
+ ✓ tests/integration/active-disconnect.test.ts (8 tests) 15790ms
+       ✓ client-close ends the server, the worker process group, the lock and the run record  1717ms
+       ✓ sigterm ends the server, the worker process group, the lock and the run record  1662ms
+       ✓ client-close ends the server, the worker process group, the lock and the run record  2145ms
+       ✓ sigterm ends the server, the worker process group, the lock and the run record  2212ms
+       ✓ client-close ends the server, the worker process group, the lock and the run record  1713ms
+       ✓ sigterm ends the server, the worker process group, the lock and the run record  1669ms
+       ✓ client-close ends the server, the worker process group, the lock and the run record  2321ms
+       ✓ sigterm ends the server, the worker process group, the lock and the run record  2349ms
+ ✓ tests/unit/core-run-manager.test.ts (10 tests) 1835ms
+     ✓ exports an edit worktree patch and retains dirty output after close  933ms
+ ✓ tests/integration/status-result.test.ts (5 tests) 1461ms
+     ✓ keeps the protected fields when a large patch and many files exceed max_mcp_result_chars  768ms
+ ✓ tests/integration/stop-reason.test.ts (9 tests) 1340ms
+ ✓ tests/integration/event-durability.test.ts (5 tests) 1380ms
+     ✓ flushes on its own within the window  747ms
+ ✓ tests/integration/storage-degraded.test.ts (2 tests) 1304ms
+     ✓ keeps the warning while event flushes fail, then clears after a successful flush  655ms
+     ✓ retains accepted events in memory during a failed flush and flushes them on recovery  648ms
+ ✓ tests/security/export-false-positive.test.ts (5 tests) 1774ms
+     ✓ exports a patch whose context and changed lines merely look like credential declarations  368ms
+     ✓ refuses an added quoted password and keeps the files  434ms
+     ✓ refuses an added api key prefix and keeps the files  422ms
+ ✓ tests/integration/client-shutdown.test.ts (3 tests) 1490ms
+     ✓ completes one task, closes it, then EOF exits the server and settles owned resources  644ms
+     ✓ client.close while a run is active exits the server and terminates the owned Vibe process  447ms
+     ✓ SIGINT exits the server and terminates the owned Vibe process  399ms
+ ✓ tests/security/split-index.test.ts (2 tests) 973ms
+     ✓ leaves everything under the real git dir except objects and logs untouched  376ms
+     ✓ leaves the common git dir untouched for a linked worktree of a split-index repository  597ms
+ ✓ tests/integration/backend-fixes.test.ts (12 tests) 1532ms
+     ✓ omits the original-HOME variable from the programmatic probe and keeps it for start  304ms
+ ✓ tests/integration/phase-c-surface.test.ts (2 tests) 1028ms
+     ✓ uses the configured turn and timeout defaults when a call omits them  865ms
+ ✓ tests/unit/isolated-home.test.ts (18 tests) 1130ms
+ ✓ tests/integration/unreadable-event-log.test.ts (12 tests) 771ms
+ ✓ tests/integration/stability-fixes.test.ts (3 tests) 866ms
+     ✓ keeps the owner lock while a stuck run chain may still write, then releases it after the chain settles  591ms
+ ✓ tests/integration/event-flush-faults.test.ts (2 tests) 892ms
+     ✓ degrades the run, keeps the events in memory, and heals after a later meta write and flush  663ms
+ ✓ tests/integration/backend-labels.test.ts (3 tests) 611ms
+ ✓ tests/unit/profile.test.ts (5 tests) 993ms
+     ✓ checks real agent layering and path boundaries for review  461ms
+     ✓ checks real agent layering and path boundaries for edit  428ms
+ ✓ tests/integration/doctor-executable-lookup.test.ts (5 tests) 611ms
+ ✓ tests/integration/preparation-help.test.ts (1 test) 328ms
+   ✓ prints help without accessing invalid configuration or creating preparation output  328ms
+ ✓ tests/unit/event-log.test.ts (12 tests) 469ms
+     ✓ flushes on its own after the window  305ms
+ ✓ tests/integration/requested-outcome.test.ts (3 tests) 378ms
+ ✓ tests/integration/cli-entrypoint.test.ts (4 tests) 559ms
+ ✓ tests/v1-fixture-verify.test.mjs (7 tests) 470ms
+ ✓ tests/integration/readiness-connection.test.ts (1 test) 307ms
+     ✓ rereads the originally selected config, not the session snapshot, and never launches Vibe  307ms
+ ✓ tests/unit/cli.test.ts (4 tests) 299ms
+ ✓ tests/integration/status-paging.test.ts (4 tests) 276ms
+ ✓ tests/unit/owner-lock.test.ts (43 tests) 78ms
+ ✓ tests/unit/process-guards.test.ts (5 tests) 57ms
+ ✓ tests/unit/original-home.test.ts (3 tests) 87ms
+ ✓ tests/unit/config.test.ts (16 tests) 93ms
+ ✓ tests/unit/launcher.test.ts (20 tests) 169ms
+ ✓ tests/unit/docs-links.test.ts (1 test) 15ms
+ ✓ tests/integration/recovery.test.ts (3 tests) 226ms
+ ✓ tests/unit/redaction.test.ts (29 tests) 10ms
+ ✓ tests/integration/stderr-secrets.test.ts (1 test) 225ms
+ ✓ tests/v1-disconnect-observer.test.mjs (6 tests) 25ms
+ ✓ tests/integration/mcp-tools.test.ts (8 tests) 43ms
+ ✓ tests/unit/storage-error.test.ts (21 tests) 5ms
+ ✓ tests/unit/run-provenance.test.ts (8 tests) 3ms
+ ✓ tests/unit/errors-doc.test.ts (2 tests) 2ms
+ ✓ tests/unit/patch-credentials.test.ts (32 tests) 3ms
+ ✓ tests/unit/version.test.ts (5 tests) 16ms
+ ✓ tests/unit/tool-schemas.test.ts (4 tests) 4ms
+ ✓ tests/unit/node-version.test.ts (3 tests) 2ms
+ ✓ tests/integration/git-bounds.test.ts (4 tests) 24610ms
+     ✓ lets worktree creation take longer than the query bound but still bounds it  8005ms
+     ✓ lets patch export take longer than the query bound and reports a timeout past the heavy bound  16052ms
+     ✓ applies the configured artifact limit to the exported patch  332ms
+ ✓ tests/integration/progress-watchdog.test.ts (13 tests) 27871ms
+     ✓ fails a silent run with VSUP_NO_PROGRESS, names the silence, cancels the worker and frees the slot  1139ms
+     ✓ resets on every vibe event and lets a run that keeps talking complete  6435ms
+     ✓ does not count supervisor diagnostics as worker output  1134ms
+     ✓ is disabled by 0: no timer is armed, while a sibling with a tiny window trips  2727ms
+     ✓ exports and keeps the worktree of a silent edit run like a timeout does  1600ms
+     ✓ counts programmatic stdout lines that carry no assistant text and stderr output as activity  4253ms
+     ✓ records the last activity kind and the silence in the no_progress diagnostic  2252ms
+     ✓ does not add a no_progress diagnostic to a run being cancelled  2411ms
+     ✓ does not add a no_progress diagnostic to a run whose deadline fired  2092ms
+     ✓ does not cancel a completed run whose settling outlasts the window  1906ms
+     ✓ fails an interrupted one-shot run when shutdown outlasts the watchdog window  1915ms
+
+ Test Files  65 passed (65)
+      Tests  650 passed (650)
+   Start at  23:13:25
+   Duration  29.07s (transform 1.57s, setup 0ms, import 4.78s, tests 195.86s, environment 4ms)
+
+
+> vibe-supervisor@1.0.1-rc.1 test:python
+> python3 -m unittest src/backends/runtime/test_prompt_file.py src/backends/runtime/test_keychain_credential.py src/backends/runtime/test_worker_watchdog.py src/backends/runtime/test_worker_diagnostics.py src/backends/runtime/test_project_discovery.py
+
+
+> vibe-supervisor@1.0.1-rc.1 acceptance
+> node scripts/acceptance.mjs
+
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-13T21:13:55.749Z",
+  "deterministic_checks": [
+    {
+      "name": "private-package",
+      "status": "PASS",
+      "detail": "Package remains unpublished/private while the source is MIT licensed."
+    },
+    {
+      "name": "node-engine",
+      "status": "PASS",
+      "detail": "Node 24.21.0; package engine >=20.19"
+    },
+    {
+      "name": "runtime-shim",
+      "status": "PASS",
+      "detail": "Pinned Python launcher exists in the compiled package tree."
+    },
+    {
+      "name": "reduced-build-artifacts",
+      "status": "PASS",
+      "detail": "Removed ACP, policy-engine, and dynamic-deadline outputs are absent."
+    },
+    {
+      "name": "cli-build",
+      "status": "PASS",
+      "detail": "Compiled CLI entrypoint exists."
+    },
+    {
+      "name": "cli-version",
+      "status": "PASS",
+      "detail": "1.0.1-rc.1"
+    },
+    {
+      "name": "mcp-five-tool-catalog",
+      "status": "PASS",
+      "detail": "vibe_close, vibe_edit_start, vibe_result, vibe_review_start, vibe_status"
+    },
+    {
+      "name": "mcp-server-version",
+      "status": "PASS",
+      "detail": "1.0.1-rc.1"
+    },
+    {
+      "name": "test-fixture-excluded",
+      "status": "PASS",
+      "detail": "Test-only shim fixture is absent from dist."
+    }
+  ],
+  "verified_release_gates": [],
+  "unverified_release_gates": [
+    {
+      "name": "native-readiness-on-candidate",
+      "status": "NOT_RUN",
+      "reason": "On the intended Codex desktop connection, verify native readiness and exact server version 1.0.1-rc.1 against the frozen candidate artifact."
+    },
+    {
+      "name": "hosted-review-edit-matrix",
+      "status": "NOT_RUN",
+      "reason": "Run the authorized candidate-specific review/edit matrix with readiness receipts and independent patch verification on the exact frozen artifact."
+    },
+    {
+      "name": "provider-authentication-for-this-candidate",
+      "status": "NOT_RUN",
+      "reason": "Observe provider authentication during an authorized real run against this exact candidate."
+    },
+    {
+      "name": "active-disconnect-hosted",
+      "status": "NOT_RUN",
+      "reason": "Observe active disconnect handling through the official client on this exact candidate."
+    },
+    {
+      "name": "release-archive-confirmation",
+      "status": "NOT_RUN",
+      "reason": "Confirm native readiness and one review plus one independently verified edit on the exact candidate archive, with verified cleanup."
+    },
+    {
+      "name": "clean-account-install",
+      "status": "REQUIRED_NOT_RUN",
+      "reason": "Before stable 1.0.1, complete the documented fresh macOS Apple silicon account installation on a frozen, reviewable artifact, recording installation, registration, rollback, and cleanup."
+    },
+    {
+      "name": "node-floor-20.19.0",
+      "status": "UNVERIFIED",
+      "reason": "Run candidate verification on exactly Node 20.19.0. No such local binary was available; do not transfer the 1.0.0 result."
+    }
+  ]
+}
+
+> vibe-supervisor@1.0.1-rc.1 secret-scan
+> node scripts/secret-scan.mjs
+
+Secret scan passed: no recognized credential formats found.
+
+> vibe-supervisor@1.0.1-rc.1 sbom
+> node scripts/sbom.mjs
+
+Wrote SPDX SBOM with 193 locked package entries to dist/sbom.spdx.json.
+
+> vibe-supervisor@1.0.1-rc.1 smoke:install
+> node scripts/smoke-install.mjs
+
+{"status":"PASS","package":"vibe-supervisor","version":"1.0.1-rc.1","isolatedHome":true,"installedCliExecutable":"PASS","runtimeShim":"present","installedMcpInitializeAndListTools":"PASS","eofShutdown":"PASS","concurrentIsolatedMcp":"PASS","savedRunReconnectMcp":"PASS"}
+vibe-supervisor-1.0.1-rc.1.tgz
+
+RC package and reports written to /Users/roman/src/github.com/crew-lab/codex-vibe/tmp/practical-tool-diagnosis/release
+2442e35579d30dbc9b28bab4abaddfbb0a7c1e782055ba83cc4187ca24946b98  vibe-supervisor-1.0.1-rc.1.tgz
+7450887ed7db6f9af0fd02d1986bae193d06a6c3aa792951117a8e868368cb45  sbom.spdx.json
+d40854089b405e9fa7eea64f5a614fb28f2c945fdc8d83ad34e7a5ed3d63b985  acceptance.json

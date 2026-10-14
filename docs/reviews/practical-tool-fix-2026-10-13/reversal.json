@@ -1,0 +1,18 @@
+{
+  "base": "7b30feaf60e7b6038e2bd80c14974d7ff270330e",
+  "fileCount": 10,
+  "appliedBytesMatch": true,
+  "files": {
+    "docs/functionality.md": true,
+    "docs/security.md": true,
+    "src/backends/runtime/test_keychain_credential.py": true,
+    "src/backends/runtime/test_project_discovery.py": true,
+    "src/backends/runtime/test_worker_diagnostics.py": true,
+    "src/backends/runtime/vibe_supervisor_launcher.py": true,
+    "src/core/run-manager.ts": true,
+    "tests/fixtures/vibe-profile-check.py": true,
+    "tests/integration/run-manager-regressions.test.ts": true,
+    "tests/unit/profile.test.ts": true
+  },
+  "reversalClean": true
+}
