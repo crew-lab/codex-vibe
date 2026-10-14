@@ -1,8 +1,14 @@
 # Current handoff
 
-Updated 2026-10-13. This document alone defines current priorities. [docs/history/](docs/history/) keeps only what the current work uses: the rc.28 brief, runbook, evidence template and target evidence, the acceptance log, the latest reviews, the 2.26.1 compatibility audit, the install notes, the [competitive landscape](docs/history/competitive-landscape-2026-10-13.md), the [ecosystem notes](docs/history/ecosystem-2026-10-13.md) on Vibe, MCP and Codex, the [strategy](docs/history/strategy-2026-10-13.md) after rc.28 (owner's wins, community, propagation, case study), the [case 7 brief](docs/history/case7-disconnect-brief.md) and the 1.0 article draft. Everything older was removed from the tree on 2026-10-12 and is in Git history at `c510513`.
+Updated 2026-10-14. This document alone defines current priorities. [docs/history/](docs/history/) keeps only what the current work uses: the rc.28 brief, runbook, evidence template and target evidence, the acceptance log, the latest reviews, the 2.26.1 compatibility audit, the install notes, the [competitive landscape](docs/history/competitive-landscape-2026-10-13.md), the [ecosystem notes](docs/history/ecosystem-2026-10-13.md) on Vibe, MCP and Codex, the [strategy](docs/history/strategy-2026-10-13.md) after rc.28 (owner's wins, community, propagation, case study), the [case 7 brief](docs/history/case7-disconnect-brief.md) and the 1.0 article draft. Everything older was removed from the tree on 2026-10-12 and is in Git history at `c510513`.
 
 ## Release identity and acceptance
+
+**Active candidate: `1.0.1-rc.1`.** Its frozen archive SHA256 is `2442e35579d30dbc9b28bab4abaddfbb0a7c1e782055ba83cc4187ca24946b98`. Runtime differs from 1.0.0; the accepted evidence below is candidate-specific. Native readiness, effective tool use, accepted review/edit cases, bounded turn-limit behavior, exact Node-floor verification and an independently observed official-client disconnect are recorded in the [hosted report](docs/reviews/rc1-hosted-2026-10-14/REPORT.md). All seven authorized starts are used and closed, with zero retries. Original case 2 FAIL and case 6 raw helper FAIL remain preserved; separate review accepts the latter's runtime lifecycle observation. Costs remain UNKNOWN.
+
+The reviewed runtime/source is consolidated with dated evidence. A clean integration rehearsal reproduced 118 runtime files byte-for-byte and reversed the complete 22-file source delta to its baseline. [Integration report](docs/reviews/rc1-integration-2026-10-14/REPORT.md). The frozen archive was not rebuilt; current source acceptance documents are a later supplement to its packaging-time snapshot.
+
+**Stable 1.0.1 remains blocked on fresh-account acceptance and release requirements.** The owner requested a [prepared account-test packet](docs/reviews/rc1-integration-2026-10-14/FRESH-ACCOUNT.md) and will perform it later. Its same-account rehearsal is not the account gate. [Transfer receipt](docs/reviews/rc1-integration-2026-10-14/fresh-account-kit-receipt.json). Further hosted usage needs a new exact allowance; no automatic retry, account creation or credential copying is permitted. The cause of the older no-edit run remains UNKNOWN.
 
 **1.0.0 is published:** [GitHub release](https://github.com/crew-lab/codex-vibe/releases/tag/v1.0.0). PR #6 merged; both current-head CI checks passed; all six downloaded release assets and tag/source identity verified. Its exact tested archive SHA256 is `4e91e90bb7cb48c4411e1dc02820e91abddd690fc430f15a65ad6a9f3bd1c610`; frozen source snapshot `f0f317e10d5d021f171ed38f5a85bb8e2354f12d`. The archive is not rebuilt after confirmation. Main records later acceptance evidence separately; the package's generated acceptance report describes packaging-time state and the external release supplement records the later PASS.
 
@@ -32,10 +38,10 @@ Behaviour: [docs/functionality.md](docs/functionality.md); interface: [docs/refe
 
 ## Current priorities
 
-1. Completed: published the exact archive from the frozen source snapshot with SBOM, packaging-time acceptance report, checksums and dated release supplement. All six downloaded assets verified; tag identifies f0f317e. See the dated publication receipt. Never replace it with an untested rebuild.
-2. Keep private rc.28 as rollback. The installed 1.0.0 package and its native connection are already verified; publication requires no extra hosted run.
-3. Continue usefulness evaluation only with separately authorized scope/budget. Task templates are in the shipped skill; no automatic retries or silent Luna substitution.
-4. After 1.0, follow the existing ordered roadmap below: operational documentation and clean-account install; Vibe export for measured usage; then Unified Harness compatibility. Each runtime change is a new candidate.
+1. Verify the consolidated branch's current-head CI and source/patch identity; preserve the frozen archive and published 1.0.0. Push authorization does not authorize merge, tag or release publication.
+2. Complete the human-operated standard macOS account test using the prepared packet. No hosted allowance remains; prepare exact scopes and obtain applicable approval before any account-specific inference or agent-applied registration.
+3. Promote to stable 1.0.1 only after every required gate passes and the exact final source/archive is reviewed. A version or archive change requires its own applicable native/hosted confirmation. Do not replace or retag the existing releases.
+4. Continue the ordered roadmap below after the stable follow-up. Keep the fixed five-tool surface and existing security boundaries; use GPT-6 Luna High as the implementation backup when delegation is needed, and report worker/coordinator outcomes separately.
 
 ## After 1.0
 

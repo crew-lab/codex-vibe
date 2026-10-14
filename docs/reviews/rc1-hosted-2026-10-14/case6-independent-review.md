@@ -1,0 +1,15 @@
+# Independent case 6 evidence review
+
+Reviewed 2026-10-14. Run `20627eaf-caeb-4612-a879-2232ddcc4ee5`, candidate `1.0.1-rc.1`.
+
+**Runtime disconnect gate: PASS for this observation. Raw official-client helper verdict: FAIL, preserved.** These are separate conclusions. This review reads the existing evidence and helper/observer source; it performs no inference, rerun, repair, or runtime change.
+
+The [raw helper record](case6/case6-official-client.json) records five completed local reads, `running` state, and independent observer sample 18 at `06:54:42.412Z`, before official-client close at `06:54:42.578Z`. That sample shows supervisor PID 49266 and its Vibe worker PID/process group 49367 alive, the run running, and the storage lock present. The observer is in a separate process group and is not a supervisor descendant. This is active work before disconnect, rather than a run already settled before the trigger.
+
+The same continuous [observer trace](case6/observer-snapshot.jsonl) records sample 21 at `06:54:43.165Z`: the identified supervisor and worker are dead, worker group 49367 is empty, the lock is absent, and the saved run is failed. Supervisor group 49265 still contains only PID 49265, the helper/controller that launched the supervisor. It is an ancestor of the supervisor, not an owned worker descendant. The helper's closure predicate requires *every tracked group* to be empty and includes this shared controller group, so the still-running helper prevents its own predicate from passing. Its reported `supervisor_gone: false` and `lock_released: false` are derived from the absence of an all-groups-empty coherent sample, rather than direct observations that those two conditions remained false.
+
+Sample 107 at `06:55:04.780Z`, after helper exit, records both tracked groups empty, the supervisor and worker dead, lock absent, and the same saved failed run. Thus even the broader all-tracked-groups condition is independently recorded by the already-running observer. This is later evidence from the same run and trace, not a new hosted trial or a replacement raw verdict.
+
+The [native status](case6-status.json) and [result](case6-result.json) report `failed`, `VSUP_BACKEND_CRASHED`, and `retryable: false`, with the explicit statement that the task will not be resumed or replayed. There is no observed automatic replay. The retained supervisor-owned worktree was recorded before cleanup. [Fresh export verification](case6-export-verification.json) records a pristine worker, an empty patch matching the saved export, and the admitted source base. [Native close](case6-close.json) then reports `closed` and `worktree_removed: true`.
+
+The evidence supports termination of the observed owned worker group, release of the owning lock, failed settlement without observed replay, inspectable retained worktree, and protected cleanup for this single official-client disconnect. The raw helper did not pass and must continue to be shown as FAIL. This review does not establish general shutdown behavior across clients, platforms, or future runs, nor successful completion of the interrupted edit task.

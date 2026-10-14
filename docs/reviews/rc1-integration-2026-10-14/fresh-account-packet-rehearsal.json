@@ -1,0 +1,24 @@
+{
+  "verdict": "PACKET_REHEARSAL_PASS",
+  "freshAccountVerdict": "REQUIRED_NOT_RUN",
+  "sameExistingAccountOnly": true,
+  "networkUsed": false,
+  "hostedInferenceStarted": false,
+  "fixtureBase": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+  "installedFiles": {
+    "verdict": "PASS",
+    "candidate": "1.0.1-rc.1",
+    "packageFilesVerified": 140,
+    "dependencies": {
+      "@modelcontextprotocol/core": "2.3.0",
+      "@modelcontextprotocol/server": "2.3.0",
+      "smol-toml": "1.9.0",
+      "zod": "4.6.5"
+    },
+    "hostedInferenceStarted": false
+  },
+  "tamperedReadmeRejected": true,
+  "rehearsalCopy": "/private/tmp/vsup-clean-account-packet-rehearsal-5sxqeoot",
+  "dependenciesInstalledWith": "npm ci --ignore-scripts --offline using existing populated cache; clean-account instructions use a separate account-owned cache",
+  "noAccountOrRegistrationChanges": true
+}
