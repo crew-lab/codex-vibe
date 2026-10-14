@@ -1,6 +1,6 @@
 # Current handoff
 
-Updated 2026-10-14. This document alone defines current priorities. [docs/history/](docs/history/) keeps what the current work uses: the [2.0 path](docs/history/v2-path-2026-10-14.md), the [design note](docs/history/app-server-client-design.md), the [protocol audit](docs/history/app-server-protocol-audit-2026-10-14.md) and the [source answers](docs/history/app-server-source-answers-2026-10-14.md), with [ADR 0004](docs/adr/0004-app-server-client.md); the [usefulness log](docs/history/usefulness-log.md); the [outreach drafts](docs/history/outreach-drafts.md) and the [article draft](docs/history/article/draft-1.0.md). Target-machine evidence lives in [docs/reviews/](docs/reviews/), with placeholders from [REDACTION.md](docs/reviews/REDACTION.md). Everything older than 2026-10-12 is in Git history at `c510513`.
+Updated 2026-10-14. This document alone defines current priorities; the rules and the road ahead are in the [development strategy](docs/development-strategy.md). [docs/history/](docs/history/) keeps what the current work uses: the [2.0 path](docs/history/v2-path-2026-10-14.md), the [design note](docs/history/app-server-client-design.md), the [protocol audit](docs/history/app-server-protocol-audit-2026-10-14.md) and the [source answers](docs/history/app-server-source-answers-2026-10-14.md), with [ADR 0004](docs/adr/0004-app-server-client.md); the [usefulness log](docs/history/usefulness-log.md); the [outreach drafts](docs/history/outreach-drafts.md) and the [article draft](docs/history/article/draft-1.0.md). Target-machine evidence lives in [docs/reviews/](docs/reviews/), with placeholders from [REDACTION.md](docs/reviews/REDACTION.md). Everything older than 2026-10-12 is in Git history at `c510513`.
 
 ## Release identity and acceptance
 
@@ -12,10 +12,12 @@ Updated 2026-10-14. This document alone defines current priorities. [docs/histor
 
 2.0 lives on branch `claude/app-server-design`: one engine, a client of Vibe's `vibe-app-server` protocol. The legacy `vibe -p --legacy-harness` path, the Python launcher, the `backend` config key and the programmatic backend are removed. Steps 1 to 9 of the [design note](docs/history/app-server-client-design.md#10-work-breakdown) are done. A comparison with the parallel `codex/unified-harness-v2` branch chose this branch as the base and ported three of its pieces, now done: handoff re-validation with usage continuity, more read-back checks, and effect-to-callback fingerprints. The bounded workspace file listing in the prompt, approved by the owner, is done too. The target kit (step 10) is [docs/history/v2-target-brief.md](docs/history/v2-target-brief.md) with `scripts/v2-conformance-check.mjs`. Everything was exercised against the scripted fake only; nothing was run against a real Vibe.
 
-**What remains for 2.0.0:**
-1. A cold review of the branch.
-2. Step 10 is done; the target kit waits for the target machine.
-3. Merge the branch to main, which becomes the 2.0 line, and set the version to 2.0.0.
+A verification pass (2026-10-14) found docs and code in agreement on every config key, command, error code and gate, and `npm run verify:release` passing offline on Node 20.19.0. Its doc gaps are fixed in `3655cff`: no 1.x maintenance line in the ADRs, read-only reviews in the skill and ADR 0002, local verification in `acceptance.json`, the nested-call gate pointing at the hosted probe, every diagnostic reason documented, and no shipped doc linking into `docs/history/` or `docs/reviews/`.
+
+**What remains for 2.0.0** (steps A1 to A7 of the [development strategy](docs/development-strategy.md#releases)):
+1. A1, the cold review of the branch (running), and its fixes.
+2. A4, release wording and the changelog; A5, the version 2.0.0 in `package.json`, `package-lock.json` and `.codex-plugin/plugin.json`, with `verify:release` on Node 20.19.0 recorded as the `node-floor-20.19.0` gate.
+3. A6, merge to main (conflicts in `Handoff.md` only: take the branch version), with the owner's authorization to push; A7, `npm run package:rc` with the owner's populated npm cache path, and release notes.
 4. Target gates, all unverified and listed in [compatibility](docs/compatibility.md#unverified-gates) and `docs/acceptance.json`, each with the owner's separate authorization: the pin manifest and the conformance check, native readiness, one hosted review and one edit, an observed MCP-client disconnect, `permission = "ask"` in the effective configuration, the effect of thinking off, the experiments fetch off, nested `run_typescript` calls, Node 20.19.0, and a clean-account installation.
 5. Owner decisions, delegated to Claude and settled on 2026-10-14 (each keeps what is built and tested):
    - **Error codes:** `invalid_api_key` → `VSUP_AUTH_REQUIRED`; `invalid_model` → `VSUP_BACKEND_ERROR` classified as configuration; `context_too_long`, `response_too_long` and a `length` stop → `VSUP_OUTPUT_LIMIT`; `rate_limit` → `VSUP_RATE_LIMITED`.
@@ -47,11 +49,11 @@ Behaviour: [docs/functionality.md](docs/functionality.md); interface: [docs/refe
 
 ## Current priorities
 
-1. **2.0.0 on the branch:** the ports, the file listing, the cold review and the target kit ([2.0 status](#20-status)).
-2. **Merge to main** and set the version to 2.0.0.
+1. **2.0.0 on the branch:** the cold review and its fixes, release wording, the version bump ([2.0 status](#20-status)).
+2. **Merge to main** with the owner's authorization, then package with the owner's npm cache path.
 3. **2.0.0 on the target**, with the brief from step 10 and the owner's authorizations; then a frozen archive, the clean-account installation and the owner's publish authorization. Do not replace or retag existing releases.
-4. **2.0.1** on a branch prepared in advance: drop every other version and remove the development history, plus the items in the [2.0 path](docs/history/v2-path-2026-10-14.md).
-5. **Owner actions that unblock tooling:** delete the merged or superseded remote branches with the prepared command.
+4. **2.0.1** on a branch from main after 2.0.0 is tagged: move what the code relies on out of `docs/history/` first, then drop every other version and remove the development history, as ordered in the [development strategy](docs/development-strategy.md#releases).
+5. **Owner actions that unblock tooling:** delete the stale remote branches. Merged into main: `claude/v1.0.0-bump`, `claude/v1.0.1-docs`, `claude/v1.0.1-rc.2`, `claude/v1.0.1-unblock` and eleven `codex/*` branches (`connection-readiness-handoff`, `devto-development-article`, `lifecycle-triage`, `preparation-diagnostics`, `rc21-multichat-hotfix`, `rc23-reconnect-hotfix`, `rc7-testing-fixes`, `rc8-stall-diagnostics`, `turn-limit-diagnostics`, `v1-release-confirmation`, `v1-stable-strategy`). Superseded and unmerged: `codex/project-agents-isolation`, `codex/rc1-runtime-consolidation`, `codex/rc28-target-evidence`, `codex/skill-cleanup-update`, `claude/session-pruning`, and `claude/v1.0.0` (its tip is ahead of the `v1.0.0` tag; confirm first). Keep `codex/unified-harness-v2` until the 2.0.1 ports land.
    - **Skipped by the owner on 2026-10-14: the `workflow` token scope.** Until it is added, no workflow file can be pushed, so `claude/ci-checks` and `claude/release-workflow` stay local and the 2.0 line has no CI; every check runs locally with `npm run verify:release`. To unblock: at https://github.com/settings/tokens give the push token the `workflow` scope (fine-grained: "Workflows: Read and write" on `crew-lab/codex-vibe`), update the Keychain entry `crew-lab-codex-vibe-github-token` if the value changed, then push `claude/ci-checks` (rebased onto the 2.0 line) and watch its first run.
 6. **Article:** the owner reads [the draft](docs/history/article/draft-1.0.md); publish after 2.0.0 with the AI-assisted label, or drop it with 2.0.1.
 
