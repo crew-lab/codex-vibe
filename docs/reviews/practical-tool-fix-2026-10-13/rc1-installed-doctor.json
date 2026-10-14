@@ -1,0 +1,87 @@
+{
+  "ok": true,
+  "generatedAt": "2026-10-13T21:25:11.035Z",
+  "provenance": {
+    "executable": "/Users/roman/.nvm/versions/node/v24.21.0/bin/node",
+    "application_entrypoint": "/Users/roman/.local/share/vibe-supervisor/1.0.1-rc.1/node_modules/vibe-supervisor/dist/cli.js",
+    "runtime_module": "/Users/roman/.local/share/vibe-supervisor/1.0.1-rc.1/node_modules/vibe-supervisor/dist/diagnostics/doctor.js",
+    "app_version": "1.0.1-rc.1",
+    "vibe_version": "vibe 2.26.1",
+    "config_path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/config.toml",
+    "config_source": "explicit",
+    "config_fingerprint": "1b44e421b46ad2443563e8b5625f1ad4859870bfe02397fcb86acbeb41db3966",
+    "data_directory": "/Users/roman/.local/share/vibe-supervisor/rc20-config",
+    "storage_mode": "selected-template"
+  },
+  "checks": [
+    {
+      "name": "node",
+      "ok": true,
+      "version": "24.21.0",
+      "message": "Supported Node.js runtime (20.19.0 or newer)."
+    },
+    {
+      "name": "platform",
+      "ok": true,
+      "version": "darwin arm64",
+      "message": "Detected darwin on arm64."
+    },
+    {
+      "name": "git",
+      "ok": true,
+      "version": "git version 2.54.0 (Apple Git-157)",
+      "message": "Git is available."
+    },
+    {
+      "name": "macos",
+      "ok": true,
+      "version": "27.0.1",
+      "message": "macOS version detected."
+    },
+    {
+      "name": "vibe",
+      "ok": true,
+      "status": "ok",
+      "version": "vibe 2.26.1",
+      "message": "Exact supported Vibe version 2.26.1 verified in an isolated temporary home."
+    },
+    {
+      "name": "codex",
+      "ok": true,
+      "version": "codex-cli 0.162.1",
+      "message": "Codex CLI is available."
+    },
+    {
+      "name": "workspace-roots",
+      "ok": true,
+      "message": "2/2 allowed workspace root(s) resolve to existing directories."
+    },
+    {
+      "name": "data-directory",
+      "ok": true,
+      "message": "Supervisor data directory is writable."
+    },
+    {
+      "name": "lock",
+      "ok": true,
+      "message": "No supervisor currently holds the data directory."
+    },
+    {
+      "name": "authentication",
+      "ok": true,
+      "status": "unverified",
+      "message": "Vibe authentication was not inspected; Vibe may use its existing local sign-in or operating-system credential store."
+    },
+    {
+      "name": "codex-registration",
+      "ok": true,
+      "status": "unverified",
+      "message": "Codex desktop visibility is not verified by doctor; run `vibe-supervisor setup` and restart Codex after reviewing its changes."
+    },
+    {
+      "name": "mcp-server",
+      "ok": true,
+      "message": "The MCP SDK dependency is installed."
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+{"schema_version":1,"seq":1,"timestamp":"2026-10-14T06:41:11.981Z","run_id":"0cefc693-cb0b-4082-b79c-b32fe13767fc","backend":"programmatic","source":"vibe","type":"message","severity":"info","data":{"text":"<vibe_stop_event>Turn limit of 1 reached</vibe_stop_event>\n"}}
+{"schema_version":1,"seq":2,"timestamp":"2026-10-14T06:41:11.986Z","run_id":"0cefc693-cb0b-4082-b79c-b32fe13767fc","backend":"programmatic","source":"supervisor","type":"diagnostic","severity":"warning","data":{"text":"Stopped: turn_limit\n"}}

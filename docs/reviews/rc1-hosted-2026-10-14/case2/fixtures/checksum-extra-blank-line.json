@@ -1,0 +1,17 @@
+{
+  "caseName": "checksum-extra-blank-line",
+  "workflowSha256": "ff933b36667d2543a3ad8851e62f42b6cd10992749de3341daf0f8f1076af9e3",
+  "tarInvoked": false,
+  "tarMarker": null,
+  "commands": [
+    {
+      "step": "Download and verify prior release",
+      "command": "mkdir release-artifact release-artifact/release\naws s3 cp \"s3://${AWS_RELEASES_BUCKET}/releases/${RELEASE_SHA}/site.tar.gz\" release-artifact/site.tar.gz --only-show-errors\naws s3 cp \"s3://${AWS_RELEASES_BUCKET}/releases/${RELEASE_SHA}/site.tar.gz.sha256\" release-artifact/site.tar.gz.sha256 --only-show-errors\n(cd release-artifact && shasum -a 256 -c site.tar.gz.sha256 && tar -xzf site.tar.gz -C release)\n",
+      "commandBytes": 406,
+      "commandSha256": "3c83c112762c9cdfac40e228e09325ccbb37d619c98f214a163110e3470e66b3",
+      "exitCode": 1,
+      "stdout": "garnebo-site-0123456789abcdef0123456789abcdef01234567.tar.gz: FAILED open or read\n",
+      "stderr": "shasum: garnebo-site-0123456789abcdef0123456789abcdef01234567.tar.gz: No such file or directory\nshasum: WARNING: 1 line is improperly formatted\nshasum: WARNING: 1 listed file could not be read\n"
+    }
+  ]
+}

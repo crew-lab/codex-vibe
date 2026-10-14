@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "case": 6,
+  "operation": "edit",
+  "max_turns": 12,
+  "timeout_seconds": 180,
+  "timestamps": {
+    "connect": "2026-10-14T06:54:37.879Z",
+    "start": "2026-10-14T06:54:38.223Z",
+    "active_worker_confirmed": "2026-10-14T06:54:42.578Z",
+    "client_close": "2026-10-14T06:54:42.578Z",
+    "client_close_returned": "2026-10-14T06:54:42.915Z",
+    "server_exit_observed": "2026-10-14T06:54:42.918Z",
+    "reconnect": "2026-10-14T06:54:44.534Z"
+  },
+  "task_sha256": "494c625ecf91ba7623f3da04f6c9d2b81d7361c2b2a82b2145b4634cdd9c421c",
+  "server_pid": 49266,
+  "protocol_server_version": "1.0.1-rc.1",
+  "tool_catalog": [
+    "vibe_close",
+    "vibe_edit_start",
+    "vibe_result",
+    "vibe_review_start",
+    "vibe_status"
+  ],
+  "tool_catalog_verified": true,
+  "readiness": {
+    "server_version": "1.0.1-rc.1",
+    "server_instance_id": "1bab3b7d-9bbc-4dcc-9cec-3626adf284a7",
+    "session_id": "session-qhLOsa",
+    "policy_revision": "1b44e421b46ad2443563e8b5625f1ad4859870bfe02397fcb86acbeb41db3966",
+    "eligible": true,
+    "blockers": [],
+    "active_slot": {
+      "busy": false
+    },
+    "operation": "edit",
+    "base_commit": "9e04d00353b368d84bfbd529d51333ef40ae2b83"
+  },
+  "observer": {
+    "pid": 49291,
+    "output": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/rc1-hosted-acceptance/official-disconnect/case6-observer.jsonl",
+    "started": true
+  },
+  "run_id": "20627eaf-caeb-4612-a879-2232ddcc4ee5",
+  "completed_read_count_before_disconnect": 5,
+  "active_worker_confirmed": true,
+  "pre_disconnect_observer_confirmation": {
+    "confirmed": true,
+    "sequence": 18,
+    "timestamp": "2026-10-14T06:54:42.412Z",
+    "fresh": true,
+    "observer_detached_process_group": true,
+    "independent_from_server": true
+  },
+  "worker_diagnostics": {
+    "stages": [
+      "launch",
+      "import",
+      "prompt_consumption",
+      "persistence_setup",
+      "credential_resolution_complete",
+      "entrypoint_invocation"
+    ],
+    "tool_inventory": [
+      "edit",
+      "grep",
+      "read_file",
+      "write_file"
+    ],
+    "tool_calls": [
+      {
+        "tool": "read_file",
+        "outcome": "attempt"
+      },
+      {
+        "tool": "read_file",
+        "outcome": "attempt"
+      },
+      {
+        "tool": "read_file",
+        "outcome": "attempt"
+      },
+      {
+        "tool": "read_file",
+        "outcome": "attempt"
+      },
+      {
+        "tool": "read_file",
+        "outcome": "attempt"
+      },
+      {
+        "tool": "read_file",
+        "outcome": "completed"
+      },
+      {
+        "tool": "read_file",
+        "outcome": "completed"
+      },
+      {
+        "tool": "read_file",
+        "outcome": "completed"
+      },
+      {
+        "tool": "read_file",
+        "outcome": "completed"
+      },
+      {
+        "tool": "read_file",
+        "outcome": "completed"
+      }
+    ],
+    "tool_inventory_truncated": false,
+    "tool_calls_truncated": false
+  },
+  "state_before_disconnect": "running",
+  "server_exited": true,
+  "state_after_reconnect": "failed",
+  "error_code_after_reconnect": "VSUP_BACKEND_CRASHED",
+  "retryable_after_reconnect": false,
+  "last_seq_after_reconnect": 0,
+  "no_replay_confirmed": true,
+  "process_observation": {
+    "observer_started_before_run": true,
+    "independent_observer": true,
+    "observer_controller_pid": 49265,
+    "owned_worker_seen_alive": true,
+    "pre_disconnect_sample_sequence": 18,
+    "supervisor_gone": false,
+    "lock_released": false,
+    "owned_process_groups_gone": false,
+    "observed_run_state": null,
+    "coherent_sample_sequence": null,
+    "coherent_sample_timestamp": null
+  },
+  "retained_owned_worktree": {
+    "verified": true,
+    "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-qhLOsa/worktrees/20627eaf-caeb-4612-a879-2232ddcc4ee5",
+    "state": "failed"
+  },
+  "verdict": "FAIL"
+}

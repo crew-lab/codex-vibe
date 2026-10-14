@@ -1,0 +1,6 @@
+{
+  "verdict": "PASS expected-incomplete",
+  "executionComplete": false,
+  "contract": "corroboratedmax_turn_requests, warningpresent, sourceintegrityverified, safelyclosed",
+  "usageCost": "UNKNOWN"
+}

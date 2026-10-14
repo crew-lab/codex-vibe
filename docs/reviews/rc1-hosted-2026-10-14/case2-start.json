@@ -1,0 +1,76 @@
+{
+  "readiness": {
+    "server_version": "1.0.1-rc.1",
+    "server_instance_id": "21f2aa4f-9f9a-4944-802b-d6f83de06d13",
+    "session_id": "session-JNj2d8",
+    "policy_path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/config.toml",
+    "policy_revision": "1b44e421b46ad2443563e8b5625f1ad4859870bfe02397fcb86acbeb41db3966",
+    "restart_required": false,
+    "boot_drift": [],
+    "operation": "edit",
+    "requested_workspace": "/Users/roman/src/github.com/r-senchuk/garnebo/.claude/worktrees/garnebo-release-gap-vibe",
+    "workspace": "/Users/roman/src/github.com/r-senchuk/garnebo/.claude/worktrees/garnebo-release-gap-vibe",
+    "base_ref": "776ddb2cf07c554fc49faa86fb8a0568f7f398f0",
+    "base_commit": "776ddb2cf07c554fc49faa86fb8a0568f7f398f0",
+    "eligible": true,
+    "blockers": [],
+    "active_slot": {
+      "busy": false
+    },
+    "runtime": {
+      "executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
+      "resolved_executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
+      "executable_found": true,
+      "pinned_version": "2.26.1",
+      "version_verified": false,
+      "note": "Vibe was not launched. The executable is resolved only; the exact version 2.26.1 is verified when a run starts and drift fails that run closed."
+    },
+    "receipt_expires_at": "2026-10-14T06:24:24.943Z",
+    "next_action": "Start the edit with readiness_receipt before receipt_expires_at on this same connection. The receipt proves preparation only; it does not authorize the task or guarantee provider availability."
+  },
+  "start": {
+    "supervisor_version": "1.0.1-rc.1",
+    "run_id": "0dacfbbc-65c8-441b-990e-021c7b524711",
+    "policy_revision": "1b44e421b46ad2443563e8b5625f1ad4859870bfe02397fcb86acbeb41db3966",
+    "state": "starting",
+    "backend": "programmatic",
+    "mode": "edit",
+    "source_workspace": "/Users/roman/src/github.com/r-senchuk/garnebo/.claude/worktrees/garnebo-release-gap-vibe",
+    "worker_workspace": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-JNj2d8/worktrees/0dacfbbc-65c8-441b-990e-021c7b524711",
+    "created_at": "2026-10-14T06:14:28.752Z",
+    "next_action": "Call vibe_status with wait_seconds 120-300 until the run needs action.",
+    "base_ref": "776ddb2cf07c554fc49faa86fb8a0568f7f398f0",
+    "base_commit": "776ddb2cf07c554fc49faa86fb8a0568f7f398f0"
+  },
+  "assignment": {
+    "case": 2,
+    "operation": "edit",
+    "source": {
+      "workspace": "/Users/roman/src/github.com/r-senchuk/garnebo/.claude/worktrees/garnebo-release-gap-vibe",
+      "base_ref": "776ddb2cf07c554fc49faa86fb8a0568f7f398f0",
+      "dirty": "",
+      "input_sha256": {
+        ".github/workflows/deploy.yml": "4b312dcc84fbbe8b9a1e598bca952909075f7a134e4db533c69e104a1ef21b27",
+        ".github/workflows/rollback.yml": "ff933b36667d2543a3ad8851e62f42b6cd10992749de3341daf0f8f1076af9e3"
+      }
+    },
+    "task": "Read only .github/workflows/deploy.yml and .github/workflows/rollback.yml first. Change only .github/workflows/rollback.yml. Keep existing S3 keys site.tar.gz and site.tar.gz.sha256. Download locally as garnebo-site-<release_sha>.tar.gz and its matching checksum file. Before verification or extraction, require the existing lowercase 40-character release SHA and exactly one checksum record: lowercase 64-character hex digest, two ASCII spaces, exact producer archive basename, then one LF. Reject CRLF, blank or extra records, malformed digests, different basenames and unsafe paths. Use that archive filename consistently. Preserve provenance validation and every unrelated action, permission, OIDC, concurrency, deployment, invalidation and cleanup setting. No other files, scratch files, shell, network or test execution. Final answer: concrete changes, changed-file inventory and unverified limitations.",
+    "max_turns": 12,
+    "writable_files": [
+      ".github/workflows/rollback.yml"
+    ],
+    "acceptance": "Nonempty scoped patch, independent source review and 16 actual-command rollback fixtures in disposable copy PASS without Luna/coordinator repair. No change to source snapshot.",
+    "timeout_seconds": 180,
+    "maximum_runs": 1,
+    "retries": 0,
+    "verification_only": {
+      "sourceCandidate": "28efb9d5d5ed3f811a63c365dbee469230dadf4e",
+      "files_sha256": {
+        "tests/release/rollback-workflow.test.ts": "be9a3e1fa157cdc1d88a3a8338d81c0809516373cbf509b0038055bb59c63e3c",
+        "scripts/verify-release.mjs": "a2cfd0eb9d67bc4c9fab1d9a546f9a6862b0381e0aeb145e924f6b55ec4d1936"
+      },
+      "prepared_directory": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/rc1-hosted-acceptance/verification-only",
+      "scope": "Overlay only in a disposable exported candidate verification copy. These files are not worker edits or accepted patch files. Reuse pinned existing Vitest/yaml dependencies offline. Execute actual workflow commands with local aws stub; no production endpoints or credentials."
+    }
+  }
+}

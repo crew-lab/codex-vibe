@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "supervisor_version": "1.0.1-rc.1",
+  "run_id": "0dacfbbc-65c8-441b-990e-021c7b524711",
+  "state": "completed",
+  "backend": "programmatic",
+  "stop_reason": "end_turn",
+  "summary": "**Concrete changes:**\n\nChanged `.github/workflows/rollback.yml` in the `Download and verify prior release` step (lines 52-83):\n\n1. **Local filenames**: Download from S3 keys `site.tar.gz` and `site.tar.gz.sha256` now saved locally as `garnebo-site-${RELEASE_SHA}.tar.gz` and `garnebo-site-${RELEASE_SHA}.tar.gz.sha256`\n2. **Added strict checksum validation** before `shasum` and `tar`:\n   - Exactly one LF-terminated line (`wc -l` equals 1)\n   - No CRLF (`grep -q $'\\r'` fails)\n   - Line format: 64 lowercase hex digest + exactly two ASCII spaces + basename `garnebo-site-[a-f0-9]{40}.tar.gz` (regex)\n   - Basename SHA extracted and verified to match the input `RELEASE_SHA`\n3. **Extraction**: Uses the validated `garnebo-site-${RELEASE_SHA}.tar.gz` consistently\n\n**Changed-file inventory:**\n- `.github/workflows/rollback.yml` (single file modified)\n\n**Unverified limitations:**\n- Regex validation assumes `shasum -a 256` producer output format; non-standard checksum files will be rejected\n- Validation relies on bash substring extraction and GNU grep `-E`; behavior on non-GNU systems is unverified\n- Archive filename format `garnebo-site-<sha>.tar.gz` is hardcoded in validation regex; deviations from this exact pattern will fail\n- No validation of the local filesystem path for the downloaded files (assumes working directory is safe)",
+  "workspace": {
+    "source": "/Users/roman/src/github.com/r-senchuk/garnebo/.claude/worktrees/garnebo-release-gap-vibe",
+    "worker": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-JNj2d8/worktrees/0dacfbbc-65c8-441b-990e-021c7b524711"
+  },
+  "artifacts": [
+    {
+      "name": "diff.patch",
+      "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-JNj2d8/runs/0dacfbbc-65c8-441b-990e-021c7b524711/artifacts/diff.patch",
+      "sha256": "2d920dc68e70c8682efe10a5ca9efb8c222dd813dc79c5135da48e21b70dfa1e",
+      "bytes": 2377,
+      "media_type": "text/x-diff"
+    },
+    {
+      "name": "diff.stat",
+      "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-JNj2d8/runs/0dacfbbc-65c8-441b-990e-021c7b524711/artifacts/diff.stat",
+      "sha256": "c0552b56ffea87585b7642b9e88ef0a48cb146164b3980d6da6412bd57dc9430",
+      "bytes": 117,
+      "media_type": "text/plain"
+    },
+    {
+      "name": "changed-files.json",
+      "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-JNj2d8/runs/0dacfbbc-65c8-441b-990e-021c7b524711/artifacts/changed-files.json",
+      "sha256": "d7799b35d422212e5236837586041ea9332f8613b95099e367cc147a549e8834",
+      "bytes": 89,
+      "media_type": "application/json"
+    },
+    {
+      "name": "transcript.md",
+      "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-JNj2d8/runs/0dacfbbc-65c8-441b-990e-021c7b524711/transcript.md",
+      "sha256": "81f5ba2fcf8b6ab257a36febc2de6897282a62a58f04eb740f7e8b2838e8b57f",
+      "bytes": 1340,
+      "media_type": "text/markdown"
+    },
+    {
+      "name": "events.ndjson",
+      "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-JNj2d8/runs/0dacfbbc-65c8-441b-990e-021c7b524711/events.ndjson",
+      "sha256": "bc1a7d65820b30edafea69af0047ad55913de4936ffaf7a890438029f1f71c6d",
+      "bytes": 1572,
+      "media_type": "application/x-ndjson"
+    },
+    {
+      "name": "worker-diagnostics.json",
+      "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-JNj2d8/runs/0dacfbbc-65c8-441b-990e-021c7b524711/worker-diagnostics.json",
+      "sha256": "41b2ff5613acd972da05f1b724dd2e2bea2fb1cc30a82737663668206627b87c",
+      "bytes": 3214,
+      "media_type": "application/json"
+    }
+  ],
+  "changed_files": [
+    ".github/workflows/rollback.yml"
+  ],
+  "warnings": [],
+  "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done.",
+  "transcript": "**Concrete changes:**\n\nChanged `.github/workflows/rollback.yml` in the `Download and verify prior release` step (lines 52-83):\n\n1. **Local filenames**: Download from S3 keys `site.tar.gz` and `site.tar.gz.sha256` now saved locally as `garnebo-site-${RELEASE_SHA}.tar.gz` and `garnebo-site-${RELEASE_SHA}.tar.gz.sha256`\n2. **Added strict checksum validation** before `shasum` and `tar`:\n   - Exactly one LF-terminated line (`wc -l` equals 1)\n   - No CRLF (`grep -q $'\\r'` fails)\n   - Line format: 64 lowercase hex digest + exactly two ASCII spaces + basename `garnebo-site-[a-f0-9]{40}.tar.gz` (regex)\n   - Basename SHA extracted and verified to match the input `RELEASE_SHA`\n3. **Extraction**: Uses the validated `garnebo-site-${RELEASE_SHA}.tar.gz` consistently\n\n**Changed-file inventory:**\n- `.github/workflows/rollback.yml` (single file modified)\n\n**Unverified limitations:**\n- Regex validation assumes `shasum -a 256` producer output format; non-standard checksum files will be rejected\n- Validation relies on bash substring extraction and GNU grep `-E`; behavior on non-GNU systems is unverified\n- Archive filename format `garnebo-site-<sha>.tar.gz` is hardcoded in validation regex; deviations from this exact pattern will fail\n- No validation of the local filesystem path for the downloaded files (assumes working directory is safe)\n"
+}

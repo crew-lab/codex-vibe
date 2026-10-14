@@ -1,0 +1,41 @@
+{
+  "version": "1.0.1-rc.1",
+  "configuration": "/Users/roman/.codex/config.toml",
+  "beforeSha256": "3e2570bf3b0e559a710659416483b2d92c98fa0a82ff11f888deb84107fd6d23",
+  "afterSha256": "36a1b67eecaab3145b769ed16c0867326f611ac9059a7810ba219760bcb30e28",
+  "beforeEntry": {
+    "command": "/Users/roman/.nvm/versions/node/v24.21.0/bin/node",
+    "args": [
+      "/Users/roman/.local/share/vibe-supervisor/v1.0.0/node_modules/vibe-supervisor/dist/cli.js",
+      "serve",
+      "--stdio",
+      "--isolated",
+      "--config",
+      "/Users/roman/.local/share/vibe-supervisor/rc20-config/config.toml"
+    ],
+    "startup_timeout_sec": 30,
+    "tool_timeout_sec": 600
+  },
+  "afterEntry": {
+    "command": "/Users/roman/.nvm/versions/node/v24.21.0/bin/node",
+    "args": [
+      "/Users/roman/.local/share/vibe-supervisor/1.0.1-rc.1/node_modules/vibe-supervisor/dist/cli.js",
+      "serve",
+      "--stdio",
+      "--isolated",
+      "--config",
+      "/Users/roman/.local/share/vibe-supervisor/rc20-config/config.toml"
+    ],
+    "startup_timeout_sec": 30,
+    "tool_timeout_sec": 600,
+    "env": {
+      "VIBE_SUPERVISOR_DIAGNOSTICS": "1"
+    }
+  },
+  "otherEntriesBytePreserved": true,
+  "allowlistChanged": false,
+  "privateBackup": "/Users/roman/.local/share/vibe-supervisor/1.0.1-rc.1/registration-before.json",
+  "reconnectRequired": true,
+  "hostedRunsUsed": 0,
+  "hostedRunsAuthorized": 6
+}

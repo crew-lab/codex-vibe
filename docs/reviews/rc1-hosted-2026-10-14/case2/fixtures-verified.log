@@ -1,0 +1,9 @@
+
+ RUN  v4.1.11 /private/tmp/rc1-case2-verified-export
+
+
+ Test Files  1 passed (1)
+      Tests  16 passed (16)
+   Start at  08:20:09
+   Duration  1.89s (transform 13ms, setup 0ms, import 34ms, tests 1.79s, environment 0ms)
+

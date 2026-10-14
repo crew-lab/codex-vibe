@@ -1,0 +1,62 @@
+{
+  "caseName": "sha-validation",
+  "workflowSha256": "ff933b36667d2543a3ad8851e62f42b6cd10992749de3341daf0f8f1076af9e3",
+  "tarInvoked": false,
+  "tarMarker": null,
+  "commands": [
+    {
+      "step": "Validate requested release SHA",
+      "command": "test \"${#RELEASE_SHA}\" -eq 40 && printf '%s' \"$RELEASE_SHA\" | grep -Eq '^[a-f0-9]{40}$'",
+      "commandBytes": 87,
+      "commandSha256": "b3da58573d3278743723d0d6e87138121ce552ae41d8f05cb39d8020d8b07bf9",
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "step": "Validate requested release SHA",
+      "command": "test \"${#RELEASE_SHA}\" -eq 40 && printf '%s' \"$RELEASE_SHA\" | grep -Eq '^[a-f0-9]{40}$'",
+      "commandBytes": 87,
+      "commandSha256": "b3da58573d3278743723d0d6e87138121ce552ae41d8f05cb39d8020d8b07bf9",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "step": "Validate requested release SHA",
+      "command": "test \"${#RELEASE_SHA}\" -eq 40 && printf '%s' \"$RELEASE_SHA\" | grep -Eq '^[a-f0-9]{40}$'",
+      "commandBytes": 87,
+      "commandSha256": "b3da58573d3278743723d0d6e87138121ce552ae41d8f05cb39d8020d8b07bf9",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "step": "Validate requested release SHA",
+      "command": "test \"${#RELEASE_SHA}\" -eq 40 && printf '%s' \"$RELEASE_SHA\" | grep -Eq '^[a-f0-9]{40}$'",
+      "commandBytes": 87,
+      "commandSha256": "b3da58573d3278743723d0d6e87138121ce552ae41d8f05cb39d8020d8b07bf9",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "step": "Validate requested release SHA",
+      "command": "test \"${#RELEASE_SHA}\" -eq 40 && printf '%s' \"$RELEASE_SHA\" | grep -Eq '^[a-f0-9]{40}$'",
+      "commandBytes": 87,
+      "commandSha256": "b3da58573d3278743723d0d6e87138121ce552ae41d8f05cb39d8020d8b07bf9",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "step": "Validate requested release SHA",
+      "command": "test \"${#RELEASE_SHA}\" -eq 40 && printf '%s' \"$RELEASE_SHA\" | grep -Eq '^[a-f0-9]{40}$'",
+      "commandBytes": 87,
+      "commandSha256": "b3da58573d3278743723d0d6e87138121ce552ae41d8f05cb39d8020d8b07bf9",
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": ""
+    }
+  ]
+}

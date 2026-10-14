@@ -1,0 +1,83 @@
+{
+  "candidate": "vibe-supervisor@1.0.1-rc.1",
+  "candidatePath": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/practical-tool-diagnosis",
+  "baseCommit": "7b30feaf60e7b6038e2bd80c14974d7ff270330e",
+  "publishedStable": "1.0.0",
+  "runtimeEquivalenceToPublishedStable": false,
+  "historicalPracticalRunRootCause": "unknown; no tool-attempt evidence in the record",
+  "hostedInference": "not performed",
+  "providerRequests": 0,
+  "node": {
+    "used": "24.21.0",
+    "exactFloor": "20.19.0",
+    "exactFloorStatusAtFreeze": "UNVERIFIED",
+    "reason": "No exact Node 20.19.0 binary was available locally at freeze time."
+  },
+  "vibe": {
+    "version": "2.26.1",
+    "python": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/python",
+    "pythonVersion": "3.12.13"
+  },
+  "offlinePackageCache": {
+    "path": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/v1-npm-cache",
+    "populated": true,
+    "cacheFilesObserved": 354,
+    "fallbackToNetwork": false
+  },
+  "verification": {
+    "command": "VIBE_SUPERVISOR_TEST_NPM_CACHE=/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/v1-npm-cache VIBE_SUPERVISOR_TEST_VIBE_PYTHON=/Users/roman/.local/share/uv/tools/mistral-vibe/bin/python npm run package:rc",
+    "result": "PASS",
+    "nodeTestFiles": 65,
+    "nodeTests": 650,
+    "pythonTests": "PASS",
+    "lintTypecheckBuild": "PASS",
+    "secretScan": "PASS",
+    "sbomLockedPackageCount": 193,
+    "offlineInstalledPackageSmoke": "PASS",
+    "finalLog": "/private/tmp/practical-tool-1.0.1-rc1-package-frozen.log",
+    "finalLogSha256": "923bfc56a309125803489621d85fc35fdc8b378a28caa1f370139e0bb06adecb",
+    "initialPackageAttempt": "failed on compatibility heading link and plugin scaffold version; corrected, targeted 6 tests passed, final package run passed"
+  },
+  "artifacts": {
+    "archive": {
+      "path": "release/vibe-supervisor-1.0.1-rc.1.tgz",
+      "sha256": "2442e35579d30dbc9b28bab4abaddfbb0a7c1e782055ba83cc4187ca24946b98"
+    },
+    "sbom": {
+      "path": "release/sbom.spdx.json",
+      "sha256": "7450887ed7db6f9af0fd02d1986bae193d06a6c3aa792951117a8e868368cb45"
+    },
+    "acceptance": {
+      "path": "release/acceptance.json",
+      "sha256": "d40854089b405e9fa7eea64f5a614fb28f2c945fdc8d83ad34e7a5ed3d63b985",
+      "verifiedHostedOrNativeGates": 0,
+      "unverifiedGates": [
+        "native-readiness-on-candidate: NOT_RUN",
+        "hosted-review-edit-matrix: NOT_RUN",
+        "provider-authentication-for-this-candidate: NOT_RUN",
+        "active-disconnect-hosted: NOT_RUN",
+        "release-archive-confirmation: NOT_RUN",
+        "clean-account-install: REQUIRED_NOT_RUN",
+        "node-floor-20.19.0: UNVERIFIED"
+      ]
+    },
+    "checksums": {
+      "path": "release/SHA256SUMS",
+      "sha256": "e34ab46e7b909d914e97a5cf28dd7ba02e6509357c297bc4600a3ffb9485e266"
+    },
+    "publishedArchiveUnchanged": {
+      "path": "release/vibe-supervisor-1.0.0.tgz",
+      "sha256": "4e91e90bb7cb48c4411e1dc02820e91abddd690fc430f15a65ad6a9f3bd1c610"
+    }
+  },
+  "runtimeImplementationDiffSha256": "033c84efaa007fce1cbfeb69e9cfe5a172bed4e02efac90167954ab7594c85bb",
+  "runtimeTenFilePatch": {
+    "path": "/Users/roman/src/github.com/crew-lab/codex-vibe/docs/reviews/practical-tool-fix-2026-10-13/candidate.patch",
+    "sha256": "f638bea48dc93b90337f762924cddc166ecb757e2aa5240135e64fac0fe7cd76",
+    "candidateDiffIsByteIdentical": true
+  },
+  "lockfileDependencySetChanged": false,
+  "globalInstallOrConfigurationChanged": false,
+  "releasePublished": false,
+  "cleanAccountBeforeStable101": "REQUIRED"
+}

@@ -1,0 +1,22 @@
+{
+  "preparedAt": "2026-10-14T07:11:32.138063+00:00",
+  "bundle": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/vibe-supervisor-1.0.1-rc.1-fresh-account-kit.tar.gz",
+  "bundleSha256": "93f26aa82284de8c4a159b027d8ed01a208b3444d95d2d536ba46b1d8572dfd2",
+  "bundleBytes": 211965,
+  "files": {
+    "README.md": "27444e754655133e8b42b75b74dba72af9c63d0e9664e1824a74b6faed541136",
+    "SHA256SUMS": "33f49a8261f5ead5008310ee60248a95bad7b7778b3fd7676123e80fc1cfea2c",
+    "expected-package-files.json": "341ebd1f391b5e7d29a841b22cf91283ce8ff8aca51e87cfdf867a21c51e370b",
+    "fixture.bundle": "4d32e14dfefddbe4376de8f7a7f5ac6e0db87e316540405e6ad5be56f653ce03",
+    "package-lock.json": "aae3ab240b41a3d4395e9d427dd46d9fcdfbab935c635ac940ee95613aceb1a0",
+    "package.json": "0a03ec6337430a43717085fa632530026f59832e1962fcdb24ca1cc5d1670188",
+    "verify-install.mjs": "fd9cbe31e2b6ab42ab6b5ff4da6cabec62190076a73c5e9107dd00c445d7d255",
+    "vibe-supervisor-1.0.1-rc.1.tgz": "2442e35579d30dbc9b28bab4abaddfbb0a7c1e782055ba83cc4187ca24946b98"
+  },
+  "candidateArchiveSha256": "2442e35579d30dbc9b28bab4abaddfbb0a7c1e782055ba83cc4187ca24946b98",
+  "credentialsRuntimeCacheIncluded": false,
+  "ownerDecision": "Prepare packet; owner will test later",
+  "freshAccountGate": "REQUIRED_NOT_RUN",
+  "hostedAllowanceRemaining": 0,
+  "userGlobalChanges": false
+}

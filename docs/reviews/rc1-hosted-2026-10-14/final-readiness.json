@@ -1,0 +1,28 @@
+{
+  "server_version": "1.0.1-rc.1",
+  "server_instance_id": "21f2aa4f-9f9a-4944-802b-d6f83de06d13",
+  "session_id": "session-JNj2d8",
+  "policy_path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/config.toml",
+  "policy_revision": "1b44e421b46ad2443563e8b5625f1ad4859870bfe02397fcb86acbeb41db3966",
+  "restart_required": false,
+  "boot_drift": [],
+  "operation": "edit",
+  "requested_workspace": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/v1-native-fixture/rc22-disconnect-fixture",
+  "workspace": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/v1-native-fixture/rc22-disconnect-fixture",
+  "base_ref": "9e04d00353b368d84bfbd529d51333ef40ae2b83",
+  "base_commit": "9e04d00353b368d84bfbd529d51333ef40ae2b83",
+  "eligible": true,
+  "blockers": [],
+  "active_slot": {
+    "busy": false
+  },
+  "runtime": {
+    "executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
+    "resolved_executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
+    "executable_found": true,
+    "pinned_version": "2.26.1",
+    "version_verified": false,
+    "note": "Vibe was not launched. The executable is resolved only; the exact version 2.26.1 is verified when a run starts and drift fails that run closed."
+  },
+  "next_action": "Start the edit with readiness_receipt before receipt_expires_at on this same connection. The receipt proves preparation only; it does not authorize the task or guarantee provider availability."
+}

@@ -1,0 +1,50 @@
+{
+  "candidatePath": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/practical-tool-diagnosis",
+  "baseCommit": "7b30feaf60e7b6038e2bd80c14974d7ff270330e",
+  "historicalRunId": "4ba5e305-de28-41a4-b6d5-a2de983fddcf",
+  "diagnosis": "unknown; historical record has no tool-attempt evidence",
+  "hostedInference": "not performed",
+  "vibe": {
+    "version": "2.26.1",
+    "python": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/python",
+    "pythonVersion": "3.12.13",
+    "providerNetwork": "disabled in offline fixture"
+  },
+  "patch": {
+    "path": "/Users/roman/src/github.com/crew-lab/codex-vibe/docs/reviews/practical-tool-fix-2026-10-13/candidate.patch",
+    "sha256": "f638bea48dc93b90337f762924cddc166ecb757e2aa5240135e64fac0fe7cd76",
+    "matchingLocalCopy": "/private/tmp/practical-tool-diagnosis-candidate.patch"
+  },
+  "verification": {
+    "command": "VIBE_SUPERVISOR_TEST_VIBE_PYTHON=/Users/roman/.local/share/uv/tools/mistral-vibe/bin/python npm run verify:release",
+    "node": "24.21.0",
+    "result": "pass",
+    "nodeTestFiles": 65,
+    "nodeTests": 650,
+    "pythonTests": 77,
+    "secretScan": "pass",
+    "sbomLockedPackages": 193,
+    "log": "/private/tmp/practical-tool-diagnosis-verify-release.log",
+    "logSha256": "9f22b8fa79c23cd893f4d3560c21bec6a260acbee609f9d61d2a0794f806b052",
+    "initialSandboxRun": "7 failures due to process/PID inspection EPERM; escalated rerun passed"
+  },
+  "scope": {
+    "lockfileChanged": false,
+    "packageManifestChanged": false,
+    "hostedRequests": 0,
+    "generatedSourceChanges": false,
+    "committedOrPushed": false
+  },
+  "sourceFiles": [
+    "docs/functionality.md",
+    "docs/security.md",
+    "src/backends/runtime/test_keychain_credential.py",
+    "src/backends/runtime/test_project_discovery.py",
+    "src/backends/runtime/test_worker_diagnostics.py",
+    "src/backends/runtime/vibe_supervisor_launcher.py",
+    "src/core/run-manager.ts",
+    "tests/fixtures/vibe-profile-check.py",
+    "tests/integration/run-manager-regressions.test.ts",
+    "tests/unit/profile.test.ts"
+  ]
+}

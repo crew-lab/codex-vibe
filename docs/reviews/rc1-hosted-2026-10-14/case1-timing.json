@@ -1,0 +1,8 @@
+{
+  "runId": "4145d2f6-225d-4878-a531-e64c870e058e",
+  "createdAt": "2026-10-14T06:12:40.953Z",
+  "finalMessageAt": "2026-10-14T06:12:46.464Z",
+  "secondsToFinalMessage": 5.511,
+  "scope": "excludes subsequent coordinator verification and close",
+  "usageCost": "UNKNOWN"
+}

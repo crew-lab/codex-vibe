@@ -1,0 +1,19 @@
+✔ accepts coherent post-helper-exit evidence while preserving the original raw FAIL (0.880542ms)
+✔ rejects closure while the controller is still present in the shared supervisor group (0.156125ms)
+✔ rejects a reused supervisor PID with a different start identity (0.084833ms)
+✔ rejects an unknown live member in any tracked process group (0.084292ms)
+✔ rejects a coherent-looking sample while the owner lock remains present (0.096166ms)
+✔ rejects closure records correlated to a different run ID (0.537875ms)
+✔ rejects a supervisor sample that has the right PID but the wrong server start identity (0.10975ms)
+✔ projects the candidate worker-diagnostics stage field and metadata-only calls (0.7395ms)
+✔ requires the exact five-tool candidate catalog (0.117291ms)
+✔ uses the latest same-run observer sample and recognizes a detached sibling observer (0.219958ms)
+✔ requires one coherent final observer sample for exit, lock, groups and failed run (0.30375ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 101.033

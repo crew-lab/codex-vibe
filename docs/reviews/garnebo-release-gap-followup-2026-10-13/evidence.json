@@ -1,0 +1,1087 @@
+{
+  "role": "Independent final-export reviewer",
+  "observedAt": "2026-10-13T20:59:59.093806+00:00",
+  "candidate": "/private/tmp/garnebo-release-gaps-2026-10-13/candidate-current",
+  "checks": {
+    "candidate identity": {
+      "passed": true,
+      "detail": {
+        "head": "28efb9d5d5ed3f811a63c365dbee469230dadf4e",
+        "status": ""
+      }
+    },
+    "source input manifest": {
+      "passed": true,
+      "detail": {
+        "count": 338,
+        "mismatches": []
+      }
+    },
+    "inherited site content preservation": {
+      "passed": true,
+      "detail": {
+        "count": 189,
+        "mismatches": []
+      }
+    },
+    "export identity": {
+      "passed": true,
+      "detail": {
+        "inventorySha256": "c5fc5234003a0b30cc36d77927e5df1e370e80ff0329ecefefdfde863ff113e6",
+        "manifest": {
+          "schemaVersion": 1,
+          "sourceSha": "28efb9d5d5ed3f811a63c365dbee469230dadf4e",
+          "buildTimestamp": "2026-10-13T20:37:11.663Z",
+          "repository": null,
+          "workflowRun": null,
+          "inventory": {
+            "path": ".well-known/garnebo-file-checksums.txt",
+            "sha256": "c5fc5234003a0b30cc36d77927e5df1e370e80ff0329ecefefdfde863ff113e6",
+            "algorithm": "sha256",
+            "excludedPaths": [
+              ".well-known/garnebo-deployment.json",
+              ".well-known/garnebo-file-checksums.txt"
+            ]
+          }
+        }
+      }
+    },
+    "complete export byte inventory": {
+      "passed": true,
+      "detail": {
+        "count": 320,
+        "mismatches": [],
+        "extraFiles": [],
+        "missingFiles": []
+      }
+    },
+    "existing release verification": {
+      "passed": true,
+      "detail": "[release-verify] verified 320 files for 28efb9d5d5ed3f811a63c365dbee469230dadf4e"
+    },
+    "existing route verification": {
+      "passed": true,
+      "detail": "[validate-routes] \u2705 all routes accounted for across 2 locale(s)."
+    },
+    "actual static localized routes": {
+      "passed": true,
+      "detail": {
+        "pages": 36,
+        "failures": []
+      }
+    },
+    "sitemap canonical set": {
+      "passed": true,
+      "detail": {
+        "urls": 30,
+        "duplicateCount": 0
+      }
+    },
+    "quote stable and legacy IDs": {
+      "passed": true,
+      "detail": "PASS: seven stable IDs, 14 legacy labels with and without one slash; duplicate/query/hash preserved"
+    },
+    "generated quote selection implementation": {
+      "passed": true,
+      "detail": {
+        "sevenIdsPresent": true,
+        "note": "Quote form is a client-rendered Suspense subtree; static primary quote copy exists, interactive form IDs checked in inherited source and compiled chunks. No claim of hydrated form or submission interception."
+      }
+    },
+    "ten city pages scoped schema": {
+      "passed": true,
+      "detail": {
+        "failures": [],
+        "pages": 10
+      }
+    },
+    "eight service and guide CTA exports": {
+      "passed": true,
+      "detail": [
+        {
+          "path": "it/servizi/demolizioni-rimozione-macerie/index.html",
+          "expectedService": "demolition",
+          "mainQuoteAnchorCount": 3,
+          "allPrefilledAnchorCount": 4,
+          "passed": true
+        },
+        {
+          "path": "en/services/light-demolition-debris-removal/index.html",
+          "expectedService": "demolition",
+          "mainQuoteAnchorCount": 3,
+          "allPrefilledAnchorCount": 4,
+          "passed": true
+        },
+        {
+          "path": "it/servizi/posa-piastrelle-ceramica/index.html",
+          "expectedService": "tile",
+          "mainQuoteAnchorCount": 3,
+          "allPrefilledAnchorCount": 4,
+          "passed": true
+        },
+        {
+          "path": "en/services/ceramic-tile-installation/index.html",
+          "expectedService": "tile",
+          "mainQuoteAnchorCount": 3,
+          "allPrefilledAnchorCount": 4,
+          "passed": true
+        },
+        {
+          "path": "it/servizi/cartongesso/index.html",
+          "expectedService": "drywall",
+          "mainQuoteAnchorCount": 3,
+          "allPrefilledAnchorCount": 4,
+          "passed": true
+        },
+        {
+          "path": "en/services/drywall-construction/index.html",
+          "expectedService": "drywall",
+          "mainQuoteAnchorCount": 3,
+          "allPrefilledAnchorCount": 4,
+          "passed": true
+        },
+        {
+          "path": "it/guide/sostituzione-piastrelle-bagno-senza-demolizione/index.html",
+          "expectedService": "tile",
+          "mainQuoteAnchorCount": 4,
+          "allPrefilledAnchorCount": 5,
+          "passed": true
+        },
+        {
+          "path": "en/guide/replacing-damaged-tiles-bologna/index.html",
+          "expectedService": "tile",
+          "mainQuoteAnchorCount": 4,
+          "allPrefilledAnchorCount": 5,
+          "passed": true
+        }
+      ]
+    }
+  },
+  "defects": [],
+  "commands": [
+    {
+      "argv": [
+        "git",
+        "rev-parse",
+        "HEAD"
+      ],
+      "exitCode": 0,
+      "stdout": "28efb9d5d5ed3f811a63c365dbee469230dadf4e\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "status",
+        "--short"
+      ],
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/verify-release.mjs"
+      ],
+      "exitCode": 0,
+      "stdout": "[release-verify] verified 320 files for 28efb9d5d5ed3f811a63c365dbee469230dadf4e\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "scripts/validate-routes.mjs"
+      ],
+      "exitCode": 0,
+      "stdout": "[validate-routes] \u2705 all routes accounted for across 2 locale(s).\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "-e",
+        "console.log(JSON.stringify(require('./scripts/localized-routes.cjs').localizedPathnames))"
+      ],
+      "exitCode": 0,
+      "stdout": "{\"/\":{\"it\":\"/\",\"en\":\"/\"},\"/services\":{\"it\":\"/servizi\",\"en\":\"/services\"},\"/services/light-demolition-debris-removal\":{\"it\":\"/servizi/demolizioni-rimozione-macerie\",\"en\":\"/services/light-demolition-debris-removal\"},\"/services/ceramic-tile-installation\":{\"it\":\"/servizi/posa-piastrelle-ceramica\",\"en\":\"/services/ceramic-tile-installation\"},\"/services/drywall-construction\":{\"it\":\"/servizi/cartongesso\",\"en\":\"/services/drywall-construction\"},\"/services/bologna\":{\"it\":\"/servizi/bologna\",\"en\":\"/services/bologna\"},\"/services/casalecchio-di-reno\":{\"it\":\"/servizi/casalecchio-di-reno\",\"en\":\"/services/casalecchio-di-reno\"},\"/services/san-lazzaro-di-savena\":{\"it\":\"/servizi/san-lazzaro-di-savena\",\"en\":\"/services/san-lazzaro-di-savena\"},\"/services/imola\":{\"it\":\"/servizi/imola\",\"en\":\"/services/imola\"},\"/services/valsamoggia\":{\"it\":\"/servizi/valsamoggia\",\"en\":\"/services/valsamoggia\"},\"/how-it-works\":{\"it\":\"/come-funziona\",\"en\":\"/how-it-works\"},\"/partner-with-garnebo\":{\"it\":\"/collaborazioni\",\"en\":\"/partner-with-garnebo\"},\"/quote\":{\"it\":\"/quote\",\"en\":\"/quote\"},\"/cookies\":{\"it\":\"/cookie-policy\",\"en\":\"/cookies\"},\"/privacy\":{\"it\":\"/privacy\",\"en\":\"/privacy\"},\"/terms\":{\"it\":\"/termini-di-servizio\",\"en\":\"/terms\"},\"/gallery\":{\"it\":\"/galleria\",\"en\":\"/gallery\"},\"/guide/sostituzione-piastrelle-bagno-senza-demolizione\":{\"it\":\"/guide/sostituzione-piastrelle-bagno-senza-demolizione\",\"en\":\"/guide/replacing-damaged-tiles-bologna\"}}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "node",
+        "--input-type=module",
+        "-e",
+        "import {SERVICE_IDS,resolveQuoteService,normalizeQuoteServiceUrl} from './src/lib/quoteService.ts'; import assert from 'node:assert/strict'; assert.deepEqual([...SERVICE_IDS].sort(),['cosmetic','demolition','drywall','flooring','design','not-sure','tile'].sort()); for(const id of SERVICE_IDS){assert.equal(resolveQuoteService(id),id);assert.equal(resolveQuoteService(id+'/'),null);}const legacy={'Ceramic & Gres Tile Installation':'tile','Drywall & Partition Walls':'drywall','Cosmetic Refreshes':'cosmetic','Light Demolition & Debris Removal':'demolition','Flooring Installation':'flooring','Interior Design & 3D Planning':'design','Not sure \u2014 help me figure it out':'not-sure','Posa Piastrelle Ceramica e Gres':'tile','Cartongesso e Pareti Divisorie':'drywall','Rifiniture e Pittura':'cosmetic','Demolizioni e Smaltimento':'demolition','Posa Pavimenti':'flooring','Interior Design e Progettazione 3D':'design','Non sono sicuro \u2014 aiutami a capire':'not-sure'};for(const [label,id] of Object.entries(legacy)){assert.equal(resolveQuoteService(label),id);assert.equal(resolveQuoteService(label+'/'),id);const u=new URL('https://www.garnebo.com/it/quote/?service='+encodeURIComponent(label+'/')+'&service=design&utm_source=review#fragment');const n=normalizeQuoteServiceUrl(u);assert.deepEqual(n.searchParams.getAll('service'),[id,'design']);assert.equal(n.searchParams.get('utm_source'),'review');assert.equal(n.hash,'#fragment');}console.log('PASS: seven stable IDs, 14 legacy labels with and without one slash; duplicate/query/hash preserved');"
+      ],
+      "exitCode": 0,
+      "stdout": "PASS: seven stable IDs, 14 legacy labels with and without one slash; duplicate/query/hash preserved\n",
+      "stderr": "(node:40671) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///private/tmp/garnebo-release-gaps-2026-10-13/candidate-current/src/lib/quoteService.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /private/tmp/garnebo-release-gaps-2026-10-13/candidate-current/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+    },
+    {
+      "argv": [
+        "git",
+        "status",
+        "--short"
+      ],
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "reviewedBrowserEvidence": {
+    "sha256": "d304db18e27bc285dbd984b067de3936632ada908e5a79e7b88c49edc3d952ae",
+    "source": "28efb9d5d5ed3f811a63c365dbee469230dadf4e",
+    "recordCount": 93,
+    "selectionMismatches": [],
+    "legacyUrlMismatches": [],
+    "limitations": [
+      "No collector/request interception interface",
+      "No form submit button activated",
+      "Consent granted/withdrawn and loaded-Google transitions NOT RUN",
+      "Referrer and direct fragment assignment timing NOT VERIFIED",
+      "Historical mobile animation/capture failures retained in historical evidence"
+    ],
+    "status": "Reviewed coordinator evidence only; not independently replayed"
+  },
+  "pages": [
+    {
+      "logical": "/",
+      "path": "it/index.html",
+      "sha256": "4f60dd0b88173ce239436562b8ec35d6b8b0a6600ad42937f9a68be7aeba4729",
+      "canonical": [
+        "https://www.garnebo.com/it/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/",
+      "path": "en/index.html",
+      "sha256": "77890be5eeca5e914c8c571e6a34d5ad0e0df8a63d0ddf6a2de2d59d13054782",
+      "canonical": [
+        "https://www.garnebo.com/en/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/services",
+      "path": "it/servizi/index.html",
+      "sha256": "bed6175df4fd54d5c086206d4bda9d324f530d87dff5cafcdd30d94c7d4bf632",
+      "canonical": [
+        "https://www.garnebo.com/it/servizi/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/services",
+      "path": "en/services/index.html",
+      "sha256": "c130801aa639aaa3ea870ff1027cc7eb5079c4f471da94b435dbf9435b940333",
+      "canonical": [
+        "https://www.garnebo.com/en/services/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/services/light-demolition-debris-removal",
+      "path": "it/servizi/demolizioni-rimozione-macerie/index.html",
+      "sha256": "8112adbeecc2bed468f85070aa8734da31d979c8d64463e5b1d89c1f6cc2da5a",
+      "canonical": [
+        "https://www.garnebo.com/it/servizi/demolizioni-rimozione-macerie/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/demolizioni-rimozione-macerie/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/light-demolition-debris-removal/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/demolizioni-rimozione-macerie/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [
+        "demolition",
+        "demolition",
+        "demolition",
+        "demolition"
+      ],
+      "passed": true
+    },
+    {
+      "logical": "/services/light-demolition-debris-removal",
+      "path": "en/services/light-demolition-debris-removal/index.html",
+      "sha256": "880225a7328f27ffefff6e19552cfff845f23beb5e83d8b9963bca5ec431b90d",
+      "canonical": [
+        "https://www.garnebo.com/en/services/light-demolition-debris-removal/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/demolizioni-rimozione-macerie/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/light-demolition-debris-removal/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/demolizioni-rimozione-macerie/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [
+        "demolition",
+        "demolition",
+        "demolition",
+        "demolition"
+      ],
+      "passed": true
+    },
+    {
+      "logical": "/services/ceramic-tile-installation",
+      "path": "it/servizi/posa-piastrelle-ceramica/index.html",
+      "sha256": "337e1053029a762357a83140e45a09d66c67b41b821aef274e0a75e5223f2e75",
+      "canonical": [
+        "https://www.garnebo.com/it/servizi/posa-piastrelle-ceramica/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/posa-piastrelle-ceramica/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/ceramic-tile-installation/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/posa-piastrelle-ceramica/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [
+        "tile",
+        "tile",
+        "tile",
+        "tile"
+      ],
+      "passed": true
+    },
+    {
+      "logical": "/services/ceramic-tile-installation",
+      "path": "en/services/ceramic-tile-installation/index.html",
+      "sha256": "fc11ca894c6c9b981a264cb07b4e01a71f72c372d4419de8070a56654becd089",
+      "canonical": [
+        "https://www.garnebo.com/en/services/ceramic-tile-installation/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/posa-piastrelle-ceramica/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/ceramic-tile-installation/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/posa-piastrelle-ceramica/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [
+        "tile",
+        "tile",
+        "tile",
+        "tile"
+      ],
+      "passed": true
+    },
+    {
+      "logical": "/services/drywall-construction",
+      "path": "it/servizi/cartongesso/index.html",
+      "sha256": "a311df7279add7975099dea29fcff7f71a92af4b28cf6d474d5a4cec870ed174",
+      "canonical": [
+        "https://www.garnebo.com/it/servizi/cartongesso/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/cartongesso/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/drywall-construction/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/cartongesso/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [
+        "drywall",
+        "drywall",
+        "drywall",
+        "drywall"
+      ],
+      "passed": true
+    },
+    {
+      "logical": "/services/drywall-construction",
+      "path": "en/services/drywall-construction/index.html",
+      "sha256": "0023caa902199d965138de2b2e12247f50748fc04dd7f06bd946a575a5304bf0",
+      "canonical": [
+        "https://www.garnebo.com/en/services/drywall-construction/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/cartongesso/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/drywall-construction/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/cartongesso/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [
+        "drywall",
+        "drywall",
+        "drywall",
+        "drywall"
+      ],
+      "passed": true
+    },
+    {
+      "logical": "/services/bologna",
+      "path": "it/servizi/bologna/index.html",
+      "sha256": "517ffebaf0f2ef81a053e7c4a0c6d4a88dfa270171eff984dd579d1abdccba8d",
+      "canonical": [
+        "https://www.garnebo.com/it/servizi/bologna/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/bologna/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/bologna/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/bologna/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/services/bologna",
+      "path": "en/services/bologna/index.html",
+      "sha256": "ca09c3d5c2de5c21f7856ccb9874c1a7f53e53e487ea19db4063f468fb9b66c2",
+      "canonical": [
+        "https://www.garnebo.com/en/services/bologna/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/bologna/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/bologna/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/bologna/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/services/casalecchio-di-reno",
+      "path": "it/servizi/casalecchio-di-reno/index.html",
+      "sha256": "acb6a0e5bdba6baf4a1ddc1c2e17e32b3788530ab2a9c07833bc4bde629be20a",
+      "canonical": [
+        "https://www.garnebo.com/it/servizi/casalecchio-di-reno/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/casalecchio-di-reno/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/casalecchio-di-reno/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/casalecchio-di-reno/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/services/casalecchio-di-reno",
+      "path": "en/services/casalecchio-di-reno/index.html",
+      "sha256": "381dfb2b1a98e64e461f460edceb34b6b0877be8764f9563416e6e4ac284e0b1",
+      "canonical": [
+        "https://www.garnebo.com/en/services/casalecchio-di-reno/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/casalecchio-di-reno/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/casalecchio-di-reno/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/casalecchio-di-reno/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/services/san-lazzaro-di-savena",
+      "path": "it/servizi/san-lazzaro-di-savena/index.html",
+      "sha256": "1d8cedff421e5913352035dfcf49cb8f43270272c0396688ac0eb153b3d0e78d",
+      "canonical": [
+        "https://www.garnebo.com/it/servizi/san-lazzaro-di-savena/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/san-lazzaro-di-savena/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/san-lazzaro-di-savena/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/san-lazzaro-di-savena/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/services/san-lazzaro-di-savena",
+      "path": "en/services/san-lazzaro-di-savena/index.html",
+      "sha256": "09a28f77d751b17a741f5f6c0ea016c3e6fbda3dacf69f211ec423c8d93284b4",
+      "canonical": [
+        "https://www.garnebo.com/en/services/san-lazzaro-di-savena/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/san-lazzaro-di-savena/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/san-lazzaro-di-savena/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/san-lazzaro-di-savena/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/services/imola",
+      "path": "it/servizi/imola/index.html",
+      "sha256": "499f5fbb9c1e39487c7e577144deb4bfa3345e3c162e82431aa5f3d7ef13ad8f",
+      "canonical": [
+        "https://www.garnebo.com/it/servizi/imola/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/imola/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/imola/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/imola/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/services/imola",
+      "path": "en/services/imola/index.html",
+      "sha256": "22aad4bbfbad4034d19307e3c1a346f81ff0ccecd66105f2d72ebf2265d4e6db",
+      "canonical": [
+        "https://www.garnebo.com/en/services/imola/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/imola/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/imola/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/imola/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/services/valsamoggia",
+      "path": "it/servizi/valsamoggia/index.html",
+      "sha256": "8c629452e28c5de83bb26ab86ea6a548b6e294bab24cc2e8a8e7f3df73e851c7",
+      "canonical": [
+        "https://www.garnebo.com/it/servizi/valsamoggia/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/valsamoggia/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/valsamoggia/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/valsamoggia/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/services/valsamoggia",
+      "path": "en/services/valsamoggia/index.html",
+      "sha256": "ae89637c5e12c99ed3d6446245356b71b6255b45fd89a79687e9cd02bc5ba42e",
+      "canonical": [
+        "https://www.garnebo.com/en/services/valsamoggia/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/servizi/valsamoggia/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/services/valsamoggia/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/servizi/valsamoggia/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/how-it-works",
+      "path": "it/come-funziona/index.html",
+      "sha256": "78a77d93ed96b23281d3afe994c2edc33e5fab983d63c68946d3dd211e5a071d",
+      "canonical": [
+        "https://www.garnebo.com/it/come-funziona/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/come-funziona/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/how-it-works/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/come-funziona/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/how-it-works",
+      "path": "en/how-it-works/index.html",
+      "sha256": "be4b1252dfe7150d7239c20cedc8e8e46483513b825cf7ef745632283e941078",
+      "canonical": [
+        "https://www.garnebo.com/en/how-it-works/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/come-funziona/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/how-it-works/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/come-funziona/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/partner-with-garnebo",
+      "path": "it/collaborazioni/index.html",
+      "sha256": "b8c3b75bc71a9b9112f191ccd03aa0c8b2038ab8ac741e64f3c778e03f7c53e5",
+      "canonical": [
+        "https://www.garnebo.com/it/collaborazioni/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/collaborazioni/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/partner-with-garnebo/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/collaborazioni/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/partner-with-garnebo",
+      "path": "en/partner-with-garnebo/index.html",
+      "sha256": "106efb897c23c053fa870c569f721e8234fb16498217bb158ca40ef990ffbc18",
+      "canonical": [
+        "https://www.garnebo.com/en/partner-with-garnebo/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/collaborazioni/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/partner-with-garnebo/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/collaborazioni/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/quote",
+      "path": "it/quote/index.html",
+      "sha256": "5e965732fda4e4d99c973bb5abd6648292b421c8387fe57e83985322fd18a110",
+      "canonical": [
+        "https://www.garnebo.com/it/quote/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/quote/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/quote/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/quote/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/quote",
+      "path": "en/quote/index.html",
+      "sha256": "fa5f85a7f749dd69893852b28899b5cab463cd0597f423410ba2bd4b162d441b",
+      "canonical": [
+        "https://www.garnebo.com/en/quote/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/quote/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/quote/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/quote/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/cookies",
+      "path": "it/cookie-policy/index.html",
+      "sha256": "4ea182609004beb2b664103f4304f476a2ca24cdb4c40e0b2bee3695d670525b",
+      "canonical": [
+        "https://www.garnebo.com/it/cookie-policy/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/cookie-policy/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/cookies/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/cookie-policy/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/cookies",
+      "path": "en/cookies/index.html",
+      "sha256": "7bdf424c6e3a45cef6e225dcdb33a6b24a20ee2c8e310874b7477d144cd91f8a",
+      "canonical": [
+        "https://www.garnebo.com/en/cookies/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/cookie-policy/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/cookies/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/cookie-policy/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/privacy",
+      "path": "it/privacy/index.html",
+      "sha256": "35a2ee404f85d8e3dde22b1902ca72ad68b2542e602c1b808fbbcd5ca31e7ec5",
+      "canonical": [
+        "https://www.garnebo.com/it/privacy/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/privacy/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/privacy/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/privacy/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/privacy",
+      "path": "en/privacy/index.html",
+      "sha256": "e7086dbf9ab656742f9bfdf8fe065d4f1ed5a2b69daf5ec4d506b29c7545cd99",
+      "canonical": [
+        "https://www.garnebo.com/en/privacy/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/privacy/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/privacy/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/privacy/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/terms",
+      "path": "it/termini-di-servizio/index.html",
+      "sha256": "0f28c84295d2a2a503eba782543a873c01d11d90ece11e88399574fb23a30739",
+      "canonical": [
+        "https://www.garnebo.com/it/termini-di-servizio/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/termini-di-servizio/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/terms/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/termini-di-servizio/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/terms",
+      "path": "en/terms/index.html",
+      "sha256": "82f7a9e38e924a92e6a57d6d416a0b57ee287df5b4f70b96c60eb2a1f735c432",
+      "canonical": [
+        "https://www.garnebo.com/en/terms/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/termini-di-servizio/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/terms/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/termini-di-servizio/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/gallery",
+      "path": "it/galleria/index.html",
+      "sha256": "147f9f926ff31694fb1ccef37a4321946dc788ae0eff39ed31b914ef3ad93c5c",
+      "canonical": [
+        "https://www.garnebo.com/it/galleria/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/galleria/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/gallery/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/galleria/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/gallery",
+      "path": "en/gallery/index.html",
+      "sha256": "dc84a4af0dbb12792d2c76dd2a8a8d3c0d70f570ca077c792fc9f67c58287071",
+      "canonical": [
+        "https://www.garnebo.com/en/gallery/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/galleria/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/gallery/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/galleria/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [],
+      "passed": true
+    },
+    {
+      "logical": "/guide/sostituzione-piastrelle-bagno-senza-demolizione",
+      "path": "it/guide/sostituzione-piastrelle-bagno-senza-demolizione/index.html",
+      "sha256": "9c24d83dafaf85eeb7697fbdea0999a8cd3ec309dcb9766814dec06b35bb5385",
+      "canonical": [
+        "https://www.garnebo.com/it/guide/sostituzione-piastrelle-bagno-senza-demolizione/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/guide/sostituzione-piastrelle-bagno-senza-demolizione/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/guide/replacing-damaged-tiles-bologna/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/guide/sostituzione-piastrelle-bagno-senza-demolizione/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [
+        "tile",
+        "tile",
+        "tile",
+        "tile",
+        "tile"
+      ],
+      "passed": true
+    },
+    {
+      "logical": "/guide/sostituzione-piastrelle-bagno-senza-demolizione",
+      "path": "en/guide/replacing-damaged-tiles-bologna/index.html",
+      "sha256": "177cceb5d903760fb8447e5db925b8a036acf111650451939fd111ce4ff358fa",
+      "canonical": [
+        "https://www.garnebo.com/en/guide/replacing-damaged-tiles-bologna/"
+      ],
+      "alternates": {
+        "it": [
+          "https://www.garnebo.com/it/guide/sostituzione-piastrelle-bagno-senza-demolizione/"
+        ],
+        "en": [
+          "https://www.garnebo.com/en/guide/replacing-damaged-tiles-bologna/"
+        ],
+        "x-default": [
+          "https://www.garnebo.com/it/guide/sostituzione-piastrelle-bagno-senza-demolizione/"
+        ]
+      },
+      "primaryH1": true,
+      "serviceIds": [
+        "tile",
+        "tile",
+        "tile",
+        "tile",
+        "tile"
+      ],
+      "passed": true
+    }
+  ],
+  "finalCandidateStatus": "",
+  "privacy": "OPEN / UNAVAILABLE \u2014 no collector, provider, runtime modifier-click or submission interception acceptance performed",
+  "release": "BLOCKED \u2014 export acceptance cannot close privacy/runtime or external/deployment gates",
+  "verdict": "PASS"
+}

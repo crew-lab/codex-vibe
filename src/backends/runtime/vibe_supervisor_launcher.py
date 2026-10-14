@@ -411,6 +411,8 @@ DIAGNOSTICS_ENV = "VIBE_SUPERVISOR_DIAGNOSTICS"
 DIAGNOSTICS_FILE = "worker-diagnostics.json"
 MAX_DIAGNOSTICS_BYTES = 64 * 1024
 DIAGNOSTIC_STAGES = ("launch", "import", "prompt_consumption", "persistence_setup", "credential_resolution_complete", "entrypoint_invocation")
+TOOL_CALL_LIMIT = 256
+KNOWN_SUPERVISOR_TOOL_NAMES = frozenset(("read_file", "grep", "write_file", "edit"))
 
 
 class WorkerDiagnostics:
@@ -423,10 +425,15 @@ class WorkerDiagnostics:
         self.started = clock()
         self.stages: list[dict[str, Any]] = []
         self.snapshots: list[dict[str, Any]] = []
+        self.tool_inventory: list[str] = []
+        self.tool_calls: list[dict[str, str]] = []
+        self.tool_inventory_truncated = False
+        self.tool_calls_truncated = False
         self.next_snapshot = 0
         self.disabled = False
         self.descriptor: Optional[int] = None
         self.lock = threading.Lock()
+        self.io_lock = threading.Lock()
         self.roots = sorted(set(os.path.realpath(sysconfig.get_path(key)) for key in ("stdlib", "purelib")), key=len, reverse=True)
 
     def stage(self, name: str) -> None:
@@ -471,7 +478,33 @@ class WorkerDiagnostics:
             threads.pop()
         return result
 
+    def record_tool_inventory(self, names: Any) -> None:
+        if self.disabled or self.tool_inventory:
+            return
+        safe_names = sorted({name if name in KNOWN_SUPERVISOR_TOOL_NAMES else "<other>"
+                             for name in names if isinstance(name, str)})
+        if len(safe_names) > 128:
+            safe_names = safe_names[:128]
+            self.tool_inventory_truncated = True
+        with self.lock:
+            if not self.tool_inventory:
+                self.tool_inventory = safe_names
+
+    def record_tool_call(self, name: Any, outcome: str) -> None:
+        if self.disabled or outcome not in ("attempt", "completed", "failed"):
+            return
+        safe_name = name if isinstance(name, str) and name in KNOWN_SUPERVISOR_TOOL_NAMES else "<other>"
+        with self.lock:
+            if len(self.tool_calls) >= TOOL_CALL_LIMIT:
+                self.tool_calls_truncated = True
+            else:
+                self.tool_calls.append({"tool": safe_name, "outcome": outcome})
+
     def tick(self) -> None:
+        with self.io_lock:
+            self._tick_locked()
+
+    def _tick_locked(self) -> None:
         if self.disabled:
             return
         try:
@@ -488,7 +521,12 @@ class WorkerDiagnostics:
                 self.next_snapshot += 1
             with self.lock:
                 stages = list(self.stages)
-            data = json.dumps({"schema_version": 1, "stages": stages, "snapshots": self.snapshots}, separators=(",", ":")).encode("utf-8")
+                tool_inventory = list(self.tool_inventory)
+                tool_calls = list(self.tool_calls)
+            data = json.dumps({"schema_version": 1, "stages": stages, "snapshots": self.snapshots,
+                               "tool_inventory": tool_inventory, "tool_calls": tool_calls,
+                               "tool_inventory_truncated": self.tool_inventory_truncated,
+                               "tool_calls_truncated": self.tool_calls_truncated}, separators=(",", ":")).encode("utf-8")
             if len(data) > MAX_DIAGNOSTICS_BYTES:
                 raise ValueError("diagnostic size limit")
             info = os.fstat(self.descriptor)
@@ -504,9 +542,14 @@ class WorkerDiagnostics:
             os.ftruncate(self.descriptor, len(data))
         except Exception:
             self.disabled = True
-            self.close()
+            self._close_locked()
 
     def close(self) -> None:
+        with self.io_lock:
+            self.disabled = True
+            self._close_locked()
+
+    def _close_locked(self) -> None:
         if self.descriptor is not None:
             try:
                 os.close(self.descriptor)
@@ -532,10 +575,81 @@ def _start_diagnostics() -> Optional[WorkerDiagnostics]:
         return None
 
 
+def _patch_tool_diagnostics(diagnostics: Optional[WorkerDiagnostics]) -> None:
+    """Enforce the effective local inventory and optionally record metadata only."""
+    from vibe.core.tools.base import BaseTool
+    from vibe.core.tools.manager import ToolManager
+
+    invoke = getattr(BaseTool, "_vibe_supervisor_original_invoke", BaseTool.invoke)
+    inventory_property = getattr(ToolManager, "_vibe_supervisor_original_available_tools", ToolManager.available_tools)
+    if not inspect.isasyncgenfunction(invoke) or list(inspect.signature(invoke).parameters) != ["self", "ctx", "raw"]:
+        raise RuntimeError("Unsupported Vibe tool invocation API; refusing diagnostics patch")
+    if not isinstance(inventory_property, property) or inventory_property.fget is None or list(inspect.signature(inventory_property.fget).parameters) != ["self"]:
+        raise RuntimeError("Unsupported Vibe effective tool inventory API; refusing diagnostics patch")
+    if hashlib.sha256(inspect.getsource(invoke).encode("utf-8")).hexdigest() != "7e178d97a11840f13f87622b2c854c63c8204a6f8e52873d0aa3d96aa67f6312":
+        raise RuntimeError("Unsupported Vibe tool invocation implementation; refusing diagnostics patch")
+    if hashlib.sha256(inspect.getsource(inventory_property.fget).encode("utf-8")).hexdigest() != "93ca0fc756a12bd1f865fa8f7b65ac21ff00b111892ec12136b3818bb9437533":
+        raise RuntimeError("Unsupported Vibe effective tool inventory implementation; refusing diagnostics patch")
+
+    mode_tools = {
+        "plan": frozenset(("read_file", "grep")),
+        "accept-edits": frozenset(("read_file", "grep", "write_file", "edit")),
+    }
+    agent = os.environ.get("VIBE_DEFAULT_AGENT")
+    expected_tools = mode_tools.get(agent or "")
+    if expected_tools is None:
+        raise RuntimeError("Unsupported Vibe supervisor agent profile; refusing effective tool inventory")
+    try:
+        configured_tools = json.loads(os.environ.get("VIBE_ENABLED_TOOLS", ""))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("Invalid Vibe supervisor tool profile; refusing effective tool inventory") from exc
+    if not isinstance(configured_tools, list) or set(configured_tools) != expected_tools:
+        raise RuntimeError("Unexpected Vibe supervisor tool profile; refusing effective tool inventory")
+
+    def available_tools(self: Any) -> dict:
+        result = inventory_property.fget(self)
+        if set(result) != expected_tools:
+            raise RuntimeError("Effective Vibe tool inventory does not match the supervisor profile")
+        if diagnostics is not None:
+            diagnostics.record_tool_inventory(result.keys())
+        return result
+
+    ToolManager.available_tools = property(available_tools)
+    ToolManager._vibe_supervisor_original_available_tools = inventory_property
+    if diagnostics is not None:
+        async def invoke_with_diagnostics(self: Any, ctx: Any = None, **raw: Any):
+            name = self.get_name()
+            diagnostics.record_tool_call(name, "attempt")
+            try:
+                async for item in invoke(self, ctx, **raw):
+                    yield item
+            except Exception:
+                diagnostics.record_tool_call(name, "failed")
+                raise
+            else:
+                diagnostics.record_tool_call(name, "completed")
+        BaseTool.invoke = invoke_with_diagnostics
+    BaseTool._vibe_supervisor_original_invoke = invoke
+
+
+def _finish_diagnostics(diagnostics: Optional[WorkerDiagnostics]) -> None:
+    if diagnostics is None:
+        return
+    diagnostics.tick()
+    diagnostics.close()
+
+
 def main() -> None:
     original_home = os.environ.pop(ORIGINAL_HOME_ENV, None)
     _start_parent_watchdog()
     diagnostics = _start_diagnostics()
+    try:
+        _run_vibe_entrypoint(diagnostics, original_home)
+    finally:
+        _finish_diagnostics(diagnostics)
+
+
+def _run_vibe_entrypoint(diagnostics: Optional[WorkerDiagnostics], original_home: Optional[str]) -> None:
     import vibe
     if diagnostics:
         diagnostics.stage("import")
@@ -547,6 +661,7 @@ def main() -> None:
         diagnostics.stage("prompt_consumption")
     _patch_project_discovery()
     _patch_session_logger()
+    _patch_tool_diagnostics(diagnostics)
     if diagnostics:
         diagnostics.stage("persistence_setup")
     status = resolve_credential(os.environ, original_home)
