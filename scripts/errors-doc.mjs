@@ -47,6 +47,8 @@ export function renderErrorsDoc(remediation) {
     '',
     'An error carries `code`, `message`, `remediation`, `retryable` and sometimes `details`. `retryable` is `true` only when the failure is transient; every other code reports `false` unless the backend marks it otherwise. Failures that are not supervisor errors reach the client as `VSUP_INTERNAL` without detail.',
     '',
+    'When `retryable` is `false`, do not resend the same task with the same limits: the same input fails the same way. Change what the remedy names (the task, a limit, the configuration or the environment) and start one new run deliberately; the supervisor never retries or replays on its own.',
+    '',
     '| Code | Meaning | Remedy | Retryable |',
     '|---|---|---|---|',
     ...rows,

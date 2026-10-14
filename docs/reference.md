@@ -108,7 +108,7 @@ A start records the `policy_revision` it was admitted under in its run record an
 - `serve --stdio [--config <path>] [--isolated]` runs the MCP server.
 - `runs list|show|tail|cleanup` inspects or cleans saved runs according to ownership and fresh-export checks.
 
-Use `vibe-supervisor <command> --help` for current options. The explicit selected config and the connection already open in a desktop client are separate facts; verify the live handshake version and five-tool catalog on the owning connection.
+Use `vibe-supervisor <command> --help` for current options. The explicit selected config and the connection already open in a desktop client are separate facts; identify the owning connection by a `vibe_status` readiness call and its `server_version`, which works whether or not the client protocol has an initialization handshake, and confirm the five tools are callable there.
 
 ### Codex connection isolation
 
