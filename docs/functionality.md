@@ -85,12 +85,14 @@ Reasoning stays off disk by construction rather than by a switch, because Vibe h
 
 ## Events
 
-Besides `message` (the final answer) and `diagnostic`, a run records these tool events, each with bounded, redacted fields:
+Besides `message` (the final answer) and `diagnostic`, a run records these events, each with bounded, redacted fields:
 
 | Event | Fields | Meaning |
 |---|---|---|
 | `tool_call` | `name` (`read_file`, `write_file`, `edit`), `tool` (Vibe's wire name), `kind`, `outcome: executed`, `entry_id`, `path` | An approved, executed call on the profile. |
 | `tool_denied` | `tool`, `outcome`, `reason`, `entry_id`, `path` | A call that did not run. `outcome` is `permission_denied_by_handler` when the supervisor's handler answered deny (`reason` is its reason, such as `tool_not_in_profile`, `path_outside_workspace`, `path_secret` or `decision_deadline`), or `permission_denied_by_policy` when Vibe itself denied it before any approval request (for example a denylisted path), in which case `reason` repeats the outcome. |
+| `timeout` | `timeout_seconds` | The run exceeded its configured timeout and is failed with `VSUP_TIMEOUT`. |
+| `review_integrity` | `status` (`verified`, `changed` or `unverified`), `write_tool_observed`, `changed_paths`, `changed_paths_total`, `reason` | The end-of-run comparison of the source workspace with its launch snapshot, recorded for a review when the status is not `verified` or a write tool was seen. Severity is error only when the source changed and a write tool was observed. |
 
 `vibe_status` shows a `tool_denied` event as `<tool>: <reason>`. The wire names are `file_system.read_file`, `file_system.write_file` and `file_system.search_replace`. A denied write in a review is expected policy, not a failure; it shows that the worker tried a refused action. Supervisor `diagnostic` events carry a `reason`, listed in [compatibility](compatibility.md#diagnostic-reasons).
 

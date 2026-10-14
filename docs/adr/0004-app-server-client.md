@@ -10,7 +10,7 @@ The review profile gives the model `read_file` only; the supervisor puts a bound
 
 Reasoning stays off disk: session logging is off, so Vibe's store is a throwaway directory inside the run's private area; thinking is off; the supervisor closes stdin for a graceful stop and deletes the private area itself; after a supervisor crash, restart recovery deletes it before accepting work.
 
-This supersedes [ADR 0003](0003-vibe-launcher.md) at 2.0.0: the Python shim, its source pins and the legacy harness path are removed. Release 1.0.x continues on its own branch, security fixes only.
+This supersedes [ADR 0003](0003-vibe-launcher.md) at 2.0.0: the Python shim, its source pins and the legacy harness path are removed. Release 1.0.0 is the last 1.x release; there is no maintenance line for it.
 
 ## Consequences
 

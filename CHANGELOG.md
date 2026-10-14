@@ -15,7 +15,7 @@ The supervisor now drives Mistral Vibe 2.26.1 as a client of `vibe-app-server` (
 
 ## 1.0.1-rc.2 — tools refused at invocation, skills off, diagnostics that cannot fail a run
 
-Fixes from the [rc.1 cold review](docs/history/reviews/rc1-cold-review-2026-10-14.md) and its [tool-path answer](docs/history/reviews/tool-inventory-answer-2026-10-14.md). Runtime differs from rc.1, so its hosted evidence does not transfer; see `docs/acceptance.json`.
+Fixes from the rc.1 cold review and its tool-path answer, both kept in the source repository. Runtime differs from rc.1, so its hosted evidence does not transfer; see `docs/acceptance.json`.
 
 - Any tool outside the exact review or edit profile is refused when it is invoked, whether or not diagnostics are on. The inventory check stays; this second check does not depend on how Vibe reached the tool.
 - The launcher also pins the sources of Vibe's tool-schema builder, tool-call resolver and `ToolManager.get`; drift fails closed.

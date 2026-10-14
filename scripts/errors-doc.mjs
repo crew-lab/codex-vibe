@@ -7,7 +7,7 @@ export const errorsDocPath = path.join(root, 'docs', 'errors.md');
 
 export const MEANINGS = {
   VSUP_CONFIG_INVALID: 'The selected configuration file is missing, unsafe (symlinked, foreign-owned, group/world-writable or over 1 MiB), cannot be parsed, or has a missing or invalid field.',
-  VSUP_VIBE_NOT_FOUND: 'The Vibe executable, its Python launcher interpreter or the vibe-app-server executable is missing.',
+  VSUP_VIBE_NOT_FOUND: 'The Vibe executable, the vibe-app-server executable or the interpreter named on the first line of its script is missing.',
   VSUP_VIBE_VERSION_UNSUPPORTED: 'The installed Vibe is not the pinned version, or its installed files do not match the pin manifest (details.reason names the failed check).',
   VSUP_AUTH_REQUIRED: 'Vibe reported a missing or rejected credential (401, unauthorized, missing API key).',
   VSUP_WORKSPACE_INVALID: 'The workspace or a context file does not exist or lies outside every allowed root, contains project .vibe, a symlink or non-directory .agents, a symlinked .vibeignore or glob characters in its path, or an edit run did not start at the git repository root; details.unavailable_root names an allowed root whose directory no longer exists.',

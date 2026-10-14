@@ -88,7 +88,7 @@
     {
       "name": "nested-run-typescript-shape-and-gating",
       "status": "UNVERIFIED",
-      "evidence_required": "One no-inference scenario shows that a write_file or edit called from inside run_typescript arrives as the same file_system.* effect and reaches deny. From Vibe's Rust tests and code reading only."
+      "evidence_required": "The hosted-review probe in the target brief (step 6) shows that a write_file or edit called from inside run_typescript arrives as the same file_system.* effect and reaches deny. From Vibe's Rust tests and code reading only."
     },
     {
       "name": "node-floor-20.19.0",
@@ -104,8 +104,8 @@
   ],
   "not_required_for_2_0": [],
   "delivery_requirements": {
-    "source_ci": "Verify current-head GitHub CI for the 2.0 source.",
-    "stable_promotion": "Every gate above, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required. Main still waits on 1.0.1.",
+    "source_ci": "There is no GitHub CI and the workflow scope is skipped; npm run verify:release passes locally on the release commit.",
+    "stable_promotion": "Every gate above, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required. 1.0.0 is the last 1.x release with no maintenance line; 2.0.0 is next, and this branch merges to main after the cold review.",
     "hosted_allowance_remaining": 0,
     "published_1_0_0_unchanged": true
   },
