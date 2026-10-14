@@ -116,6 +116,8 @@ async function writeConfig(file: string, text: string, created: boolean): Promis
   await rename(temp, file);
 }
 
+export const MISSING_PIN_MANIFEST_NOTE = 'paths.vibe_pin_manifest is not set, so every run fails closed until it is. Set it to an absolute path in this config, write the manifest there with `vibe-supervisor pin-manifest`, and restart the server.';
+
 export async function planWorkspaceConfig(canonical: string, options: { resolveExecutables: boolean; configPath?: string }): Promise<WorkspacePlan> {
   const file = resolveConfigSelection(options.configPath).configPath;
   const existing = await readConfigSource(file);
@@ -127,8 +129,9 @@ export async function planWorkspaceConfig(canonical: string, options: { resolveE
   const manifestChanged = created || options.resolveExecutables ? ensurePinManifestPath(document, file, notes) : false;
   const pathsChanged = resolvedChanged || manifestChanged;
   try {
-    const config = validateConfig(document);
+    const config = validateConfig(document, undefined, { requirePinManifest: options.resolveExecutables });
     await validateWorkspaceRootsAtUse(config.allowedWorkspaceRoots);
+    if (config.paths?.vibePinManifest === undefined) notes.push(MISSING_PIN_MANIFEST_NOTE);
   }
   catch (error) { throw configInvalid(`Invalid supervisor configuration at ${file}; no changes were made: ${(error as Error).message} Supported fields are version, allowed_workspace_roots, retention, limits (including max_tokens and max_cost_usd), and paths (vibe, app_server, vibe_pin_manifest). Remove unsupported fields instead of relying on them.`); }
   const changed = created || added || pathsChanged;
@@ -246,5 +249,6 @@ export async function allowCommand(args: string[]): Promise<void> {
   if (!workspace || workspace.startsWith('--')) return fail('Usage: vibe-supervisor allow [--config <path>] <dir>', 2);
   const update = await updateWorkspaceConfig(workspace, { resolveExecutables: false, ...(configPath ? { configPath } : {}) });
   say(update.added ? `Allowed workspace: ${update.canonical} (${update.file})` : `Workspace already allowed: ${update.canonical}`);
+  for (const note of update.notes) say(note);
   reportUpdate(update);
 }

@@ -143,6 +143,7 @@ export class JsonRpcClient {
   private readonly timedOut = new Set<number>();
   private readonly handlers = new Map<string, ServerRequestHandler>();
   private readonly queue: InboundItem[] = [];
+  private drainWaiters: Array<() => void> = [];
   private notificationHandler: NotificationHandler | undefined;
   private chunks: Buffer[] = [];
   private chunkBytes = 0;
@@ -233,6 +234,11 @@ export class JsonRpcClient {
     this.write({ jsonrpc: '2.0', method, params });
   }
 
+  drained(): Promise<void> {
+    if (this.stopped || (this.queue.length === 0 && !this.pumping)) return Promise.resolve();
+    return new Promise<void>((resolve) => { this.drainWaiters.push(resolve); });
+  }
+
   closeInput(): Promise<void> {
     if (this.inputClosed) return Promise.resolve();
     this.inputClosed = true;
@@ -256,6 +262,7 @@ export class JsonRpcClient {
     this.queue.length = 0;
     this.rejectAll(new JsonRpcClosedError('JSON-RPC client disposed'));
     this.detach();
+    this.releaseDrained();
     this.finish({ reason: 'disposed', partialBytes: this.chunkBytes });
   }
 
@@ -432,11 +439,19 @@ export class JsonRpcClient {
       }
     } finally {
       this.pumping = false;
+      this.releaseDrained();
     }
     if (this.eof && !this.stopped && this.queue.length === 0) {
       this.detach();
       this.finish({ reason: 'eof', partialBytes: this.chunkBytes });
     }
+  }
+
+  private releaseDrained(): void {
+    if (!this.stopped && (this.queue.length > 0 || this.pumping)) return;
+    const waiters = this.drainWaiters;
+    this.drainWaiters = [];
+    for (const release of waiters) release();
   }
 
   private async serve(item: Extract<InboundItem, { kind: 'request' }>): Promise<void> {
@@ -489,6 +504,7 @@ export class JsonRpcClient {
     this.chunks = [];
     this.rejectAll(error);
     this.detach();
+    this.releaseDrained();
     try {
       this.options.onFatal?.(error);
     } catch (callbackError) {

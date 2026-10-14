@@ -205,6 +205,21 @@ describe("app-server keys", () => {
     await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } })).rejects.toMatchObject({ supervisor: { code: "VSUP_CONFIG_INVALID", message: expect.stringContaining("vibe_pin_manifest") } });
   });
 
+  it("accepts a missing manifest path only when the caller asks for the lenient reading, and keeps every other check", async () => {
+    expect(validateConfig({ version: 1 }, undefined, { requirePinManifest: false }).paths).toEqual({});
+    expect(validateConfig({ version: 1, paths: { vibe: "/opt/bin/vibe" } }, undefined, { requirePinManifest: false }).paths).toEqual({ vibe: "/opt/bin/vibe" });
+    expect(() => validateConfig({ version: 1, surprise: true }, undefined, { requirePinManifest: false })).toThrow(/surprise/);
+    expect(() => validateConfig({ version: 1, paths: { vibe_pin_manifest: "relative.json" } }, undefined, { requirePinManifest: false })).toThrow(/vibe_pin_manifest/);
+    expect(() => validateConfig({ version: 1 })).toThrow(/pin-manifest/);
+
+    const root = await mkdtemp(join(canonicalTmp, "vsup-config-")); roots.push(root);
+    await writeFile(join(root, "config.toml"), "version = 1\n");
+    await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } })).rejects.toMatchObject({ supervisor: { code: "VSUP_CONFIG_INVALID" } });
+    await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: root }, requirePinManifest: false })).resolves.toMatchObject({ version: 1, paths: {} });
+    const resolved = await loadResolvedConfig({ env: { VIBE_SUPERVISOR_HOME: root }, requirePinManifest: false });
+    expect(resolved.config.paths).toEqual({});
+  });
+
   it("includes the new settings in the policy revision and treats them as boot-bound", () => {
     const base = validateConfig(appServer);
     const revision = configFingerprint(base);

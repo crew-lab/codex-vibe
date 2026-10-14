@@ -1061,3 +1061,184 @@ describe('app-server backend: workspace file listing in the prompt', () => {
     expect(harness.eventsOfType('diagnostic').find((event) => event.data.reason === 'file_listing_unavailable')?.data).toMatchObject({ detail: 'output_limit' });
   });
 });
+
+const SILENT_WRITE = { op: 'call', tool: 'file_system.write_file', mode: 'auto', source: 'bypass', silent: true, input: { filePath: '${cwd}/src/hidden.ts', content: 'hidden\n' } };
+const OVER_CEILING = { op: 'stats', stats: { modelCalls: 1, sessionPromptTokens: 5000, sessionCompletionTokens: 10 } };
+
+describe('app-server backend: audit after a forced limit stop', () => {
+  it('audits the history after a budget interrupt the server ignored and catches an unapproved write', async () => {
+    const harness = new Harness(
+      { name: 'budget-hidden-write', interrupt: 'ignore', steps: [OVER_CEILING, SILENT_WRITE, { op: 'hold' }] },
+      { options: { budgets: { maxTokens: 100 } } }
+    );
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'unapproved_effect', tool: 'file_system.write_file' } });
+    expect(harness.frames('session/history/list').length).toBeGreaterThanOrEqual(1);
+    harness.expectCleanedUp();
+  });
+
+  it('does not report a clean completed budget stop when the audit could not run', async () => {
+    const harness = new Harness(
+      { name: 'budget-audit-fails', interrupt: 'ignore', errors: { 'session/history/list': { code: 'internal_error', message: 'history unavailable' } }, steps: [OVER_CEILING, { op: 'hold' }] },
+      { options: { budgets: { maxTokens: 100 } } }
+    );
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal).code).toBe('VSUP_BACKEND_ERROR');
+    expect(terminal.update?.result).toBeUndefined();
+    harness.expectCleanedUp();
+  });
+
+  it('still completes a budget stop with the incomplete-result warning when the audit passes', async () => {
+    const harness = new Harness(
+      { name: 'budget-clean-forced', interrupt: 'ignore', steps: [OVER_CEILING, { op: 'say', text: 'Partial.' }, { op: 'hold' }] },
+      { options: { budgets: { maxTokens: 100 } } }
+    );
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(terminal.update?.result?.stopReason).toBe('token_limit');
+    expect(terminal.update?.result?.warnings?.length).toBeGreaterThan(0);
+    expect(harness.frames('session/history/list').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('audits the history at the deadline and reports the unapproved write instead of a plain timeout', async () => {
+    const harness = new Harness({ name: 'deadline-hidden-write', interrupt: 'ignore', steps: [SILENT_WRITE, { op: 'hold' }] }, { limits: { timeoutSeconds: 1 } });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'unapproved_effect' } });
+    harness.expectCleanedUp();
+  }, 20_000);
+});
+
+describe('app-server backend: stop requests revoke the approval handler', () => {
+  const lateCall = { op: 'call', tool: 'file_system.read_file', mode: 'approval', input: { filePath: '${cwd}/src/index.ts', offset: null, limit: 2000 } };
+
+  async function lateCallRun(scenario: Json, harnessOptions: HarnessOptions, stop: (harness: Harness, started: BackendStartResult) => Promise<void>): Promise<{ harness: Harness; evaluated: number }> {
+    let evaluated = 0;
+    const harness = new Harness(scenario, {
+      ...harnessOptions,
+      options: {
+        ...harnessOptions.options,
+        timing: { interruptGraceMs: 1500, ...harnessOptions.options?.timing },
+        approvals: { evaluate: async () => { evaluated += 1; return { decision: 'approve', reason: null }; } }
+      }
+    });
+    const started = await harness.start();
+    await waitFor(() => harness.frames('turn/start'), (frames) => frames.length > 0);
+    await stop(harness, started);
+    await waitFor(() => harness.fixtureEvents('approvalAnswer'), (answers) => answers.length > 0, 3000);
+    return { harness, evaluated };
+  }
+
+  it('denies a callback that arrives after a cancel without consulting the policy', async () => {
+    const { harness, evaluated } = await lateCallRun(
+      { name: 'late-after-cancel', interrupt: 'ignore', steps: [{ op: 'delay', ms: 300 }, lateCall, { op: 'hold' }] },
+      {},
+      async (run, started) => { void run.backend.cancel(started.handle); }
+    );
+    await harness.terminal;
+
+    expect(evaluated).toBe(0);
+    expect(harness.fixtureEvents('approvalAnswer')[0]).toMatchObject({ decision: 'deny' });
+  });
+
+  it('denies a callback that arrives after the budget interrupt', async () => {
+    const { harness, evaluated } = await lateCallRun(
+      { name: 'late-after-budget', interrupt: 'ignore', steps: [OVER_CEILING, { op: 'delay', ms: 300 }, lateCall, { op: 'hold' }] },
+      { options: { budgets: { maxTokens: 100 } } },
+      async () => undefined
+    );
+    await harness.terminal;
+
+    expect(evaluated).toBe(0);
+    expect(harness.fixtureEvents('approvalAnswer')[0]).toMatchObject({ decision: 'deny' });
+  });
+
+  it('denies a callback that arrives after the deadline interrupt', async () => {
+    const { harness, evaluated } = await lateCallRun(
+      { name: 'late-after-deadline', interrupt: 'ignore', steps: [{ op: 'delay', ms: 1300 }, lateCall, { op: 'hold' }] },
+      { limits: { timeoutSeconds: 1 }, options: { timing: { interruptGraceMs: 2500 } } },
+      async () => undefined
+    );
+    await harness.terminal;
+
+    expect(evaluated).toBe(0);
+    expect(harness.fixtureEvents('approvalAnswer')[0]).toMatchObject({ decision: 'deny' });
+  }, 20_000);
+});
+
+describe('app-server backend: protocol failures outrank a later stop request', () => {
+  const gapThenHold = { name: 'gap-then-hold', interrupt: 'ignore', steps: [{ op: 'reasoning', text: 'hidden', silent: true }, { op: 'say', text: 'After the gap.' }, { op: 'hold' }] };
+
+  it('keeps the watermark gap error and mentions the cancel that came after it', async () => {
+    const harness = new Harness(gapThenHold, { options: { timing: { interruptGraceMs: 3000 } } });
+    const started = await harness.start();
+    await waitFor(() => harness.frames('session/read'), (frames) => frames.length > 0);
+    void harness.backend.cancel(started.handle);
+    const terminal = await harness.terminal;
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'watermark_gap', also: ['cancelled'] } });
+    expect(errorOf(terminal).message).toContain('also cancelled');
+    harness.expectCleanedUp();
+  });
+
+  it('keeps the watermark gap error when the deadline arrives after it', async () => {
+    const harness = new Harness(gapThenHold, { limits: { timeoutSeconds: 1 }, options: { timing: { interruptGraceMs: 3000 } } });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'watermark_gap', also: ['deadline'] } });
+    harness.expectCleanedUp();
+  }, 20_000);
+
+  it('still reports a plain timeout when no protocol failure came first', async () => {
+    const harness = new Harness({ name: 'plain-deadline', interrupt: 'ignore', steps: [{ op: 'hold' }] }, { limits: { timeoutSeconds: 1 } });
+    const terminal = await harness.run();
+
+    expect(errorOf(terminal).code).toBe('VSUP_TIMEOUT');
+  }, 20_000);
+});
+
+describe('app-server backend: notifications in the turn/start response chunk', () => {
+  it('lets the queued notifications advance the watermark instead of dropping them as stale', async () => {
+    const harness = new Harness({ name: 'early-notifications', notifyBeforeTurnResponse: 6, steps: [{ op: 'say', text: 'Done.' }] });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(terminal.update?.result?.summary).toBe('Done.');
+    expect(harness.eventsOfType('diagnostic').filter((event) => event.data.reason === 'ignored_notifications')).toEqual([]);
+    harness.expectCleanedUp();
+  });
+});
+
+describe('app-server backend: configuration counts and unfinished effects', () => {
+  it.each(['hooksCount', 'skillsCount'])('treats a missing %s in config/read as a read-back mismatch', async (field) => {
+    const harness = new Harness({ name: `no-${field}`, omit: { 'config/read': [field] }, steps: [{ op: 'say', text: 'unreachable' }] });
+    const failure = await rejection(harness.start());
+
+    expect(failure.code).toBe('VSUP_BACKEND_ERROR');
+    expect(failure.details).toMatchObject({ reason: 'readback_mismatch' });
+    expect(failure.details?.fields).toContain(`config/read.${field}`);
+    expect(harness.frames('turn/start')).toHaveLength(0);
+    harness.expectCleanedUp();
+  });
+
+  it.each(['running', 'blocked'])('fails closed when the turn completes while an effect is still %s', async (status) => {
+    const harness = new Harness({
+      name: `completed-with-${status}-effect`,
+      steps: [{ op: 'call', tool: 'file_system.read_file', mode: 'pending', status, input: { filePath: '${cwd}/src/index.ts' } }, { op: 'say', text: 'Done.' }]
+    });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'unfinished_effect' } });
+    expect(terminal.update?.result).toBeUndefined();
+    harness.expectCleanedUp();
+  });
+});

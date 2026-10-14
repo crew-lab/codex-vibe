@@ -24,11 +24,11 @@ export function parseDoctorArgs(args: string[]): { json: boolean; config?: strin
 
 async function loadForDoctor(configPath: string | undefined): Promise<{ config: SupervisorConfig; selection: ReturnType<typeof resolveConfigSelection>; fingerprint: string }> {
   if (!configPath) {
-    const resolved = await loadResolvedConfig();
+    const resolved = await loadResolvedConfig({ requirePinManifest: false });
     return { config: resolved.config, selection: resolved, fingerprint: resolved.fingerprint };
   }
   const selection = resolveConfigSelection(configPath);
-  const resolved = await loadResolvedConfig({ configPath: selection.configPath });
+  const resolved = await loadResolvedConfig({ configPath: selection.configPath, requirePinManifest: false });
   return { config: resolved.config, selection, fingerprint: resolved.fingerprint };
 }
 

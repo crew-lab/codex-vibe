@@ -17,7 +17,7 @@ import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { APP_VERSION } from '../version.js';
 import { ApprovalHandler, type ApprovalHandlerOptions, type PendingApproval } from './app-server/approvals.js';
 import { resolveCredential, type CredentialResolution, type ResolvedCredential } from './app-server/credentials.js';
-import { EventProcessor, auditSessionHistory, type EffectRecord, type EventSignal, type HistoryAudit } from './app-server/events.js';
+import { EventProcessor, auditSessionHistory, unfinishedEffectFatal, type EffectRecord, type EventFatal, type EventSignal, type HistoryAudit } from './app-server/events.js';
 import {
   JsonRpcClient, JsonRpcClosedError, JsonRpcFatalError, JsonRpcServerError, JsonRpcTimeoutError,
   type JsonObject, type NotificationHandler
@@ -60,6 +60,7 @@ const TOOL_NAMES: Readonly<Record<string, string>> = {
   'file_system.search_replace': 'edit'
 };
 const TOOL_KINDS: Readonly<Record<string, string>> = { read_file: 'read', write_file: 'edit', edit: 'edit' };
+const STOP_REQUEST_KINDS: ReadonlySet<SupervisorCondition['kind']> = new Set(['budget', 'cancelled', 'deadline']);
 const BENIGN_SERVER_ERRORS: ReadonlySet<string> = new Set(['stale_turn', 'conflict', 'not_found', 'callback_closed']);
 
 export interface AppServerTiming {
@@ -230,6 +231,7 @@ class AppServerRun {
   private completedTurn: Turn | null = null;
   private processRecord: ProcessRecord | undefined;
   private failure: SupervisorError | undefined;
+  private integrityFailure: SupervisorError | undefined;
   private gap: { expected: number; received: number } | undefined;
   private startAbort: SupervisorError | undefined;
   private deadlineTimer: NodeJS.Timeout | undefined;
@@ -288,7 +290,6 @@ class AppServerRun {
     } catch (error) {
       const failure = this.startAbort ?? await this.classifyStartError(error);
       await this.cleanup().catch((cleanupError: unknown) => reportBackgroundFailure('app-server-start-cleanup', cleanupError));
-      await this.reaper?.stop().catch(() => undefined);
       throw failure;
     }
     const process = this.processRecord;
@@ -300,6 +301,7 @@ class AppServerRun {
   }
 
   async cancel(): Promise<void> {
+    this.handler.revoke();
     if (!this.concludeStarted) this.addCondition({ kind: 'cancelled' });
     if (!this.turnStarted) {
       this.hurry();
@@ -313,6 +315,7 @@ class AppServerRun {
   }
 
   async terminateNow(): Promise<void> {
+    this.handler.revoke();
     if (!this.concludeStarted) this.addCondition({ kind: 'cancelled' });
     this.hurry();
     if (!this.turnStarted) this.abortStartup(supervisorError('VSUP_CANCELLED', 'The run was cancelled before the turn started.'));
@@ -322,6 +325,7 @@ class AppServerRun {
 
   async close(): Promise<void> {
     if (this.cleaned) return;
+    this.handler.revoke();
     if (this.cleaning === undefined && !this.concludeStarted) await this.cancel();
     else await this.cleanup();
   }
@@ -342,6 +346,7 @@ class AppServerRun {
         stdio: ['pipe', 'pipe', 'pipe'],
         maxStdoutBytes: inboundBudget + STDOUT_MARGIN_BYTES,
         maxStderrBytes: Math.min(input.limits.maxEventBytes, STDERR_CAP_BYTES),
+        retainStdout: false,
         onLimit: (stream) => this.onProcessLimit(stream),
         onStderr: (chunk) => this.onStderr(chunk)
       });
@@ -439,8 +444,8 @@ class AppServerRun {
     const mismatches: ReadbackMismatch[] = compareReadback(this.plan.expectation, { sessionStart, runtime, effective }, { checkThinking });
     if (checkCounts) {
       const config = await this.rpc(buildConfigRead(this.sessionId), parseConfigReadResult, this.startupTimeout());
-      if ((config.hooksCount ?? 0) !== 0) mismatches.push({ path: 'config/read.hooksCount', expected: 0, actual: config.hooksCount });
-      if ((config.skillsCount ?? 0) !== 0) mismatches.push({ path: 'config/read.skillsCount', expected: 0, actual: config.skillsCount });
+      if (config.hooksCount !== 0) mismatches.push({ path: 'config/read.hooksCount', expected: 0, actual: config.hooksCount });
+      if (config.skillsCount !== 0) mismatches.push({ path: 'config/read.skillsCount', expected: 0, actual: config.skillsCount });
     }
     if (mismatches.length > 0) {
       throw supervisorError('VSUP_BACKEND_ERROR', `Vibe did not apply the supervisor session configuration: ${formatReadbackMismatches(mismatches)}`, {
@@ -454,6 +459,7 @@ class AppServerRun {
     const started = await this.rpc(buildTurnStart(this.sessionId, promptFor(this.input, this.listing.text)), parseTurnStartResult, this.startupTimeout());
     if (this.startAbort) throw this.startAbort;
     this.turnId = started.turn.id;
+    await settlesWithin(this.client.drained(), this.startupTimeout());
     this.processor.advanceWatermark(started.lastEventId);
     this.turnStarted = true;
     if (started.turn.status !== 'in_progress') this.onTurnCompleted(started.turn);
@@ -465,7 +471,7 @@ class AppServerRun {
       let pending: PendingApproval;
       try { pending = this.handler.begin(params); }
       catch (error) {
-        this.failure ??= toSupervisorError(error, this.secrets);
+        this.markIntegrityFailure(toSupervisorError(error, this.secrets));
         this.interrupt();
         throw error;
       }
@@ -576,11 +582,12 @@ class AppServerRun {
   private applyUsage(update: UsageUpdate): void {
     if (!this.usage) return;
     if (update.fault) {
-      this.failure ??= usageFaultError(update.fault);
+      this.markIntegrityFailure(usageFaultError(update.fault));
       this.interrupt();
       return;
     }
     if (update.breach && !this.hasCondition('budget')) {
+      this.handler.revoke();
       this.addCondition({ kind: 'budget', limit: update.breach.limit });
       this.interrupt();
     }
@@ -615,6 +622,7 @@ class AppServerRun {
   }
 
   private onDeadline(): void {
+    this.handler.revoke();
     this.addCondition({ kind: 'deadline' });
     if (!this.turnStarted) this.abortStartup(supervisorError('VSUP_TIMEOUT', 'The run exceeded its configured timeout before the turn started.'));
     else this.interrupt();
@@ -659,10 +667,16 @@ class AppServerRun {
     if (error instanceof JsonRpcFatalError) {
       if (error.kind === 'output_limit') this.addCondition({ kind: 'output_limit', detail: error.code });
       else if (error.kind === 'io') { if (!this.shuttingDown && !this.hasCondition('cancelled')) this.addCondition({ kind: 'backend_crashed', detail: error.code }); }
-      else this.failure ??= fatalToError(error);
+      else this.markIntegrityFailure(fatalToError(error));
       return;
     }
+    if (error instanceof ProtocolParseError) { this.markIntegrityFailure(toSupervisorError(error, this.secrets)); return; }
     this.failure ??= toSupervisorError(error, this.secrets);
+  }
+
+  private markIntegrityFailure(error: SupervisorError): void {
+    this.failure ??= error;
+    this.integrityFailure ??= error;
   }
 
   private track(promise: Promise<unknown>): void {
@@ -714,7 +728,7 @@ class AppServerRun {
     this.clearTimers();
     await settlesWithin(Promise.allSettled([...this.background]), BACKGROUND_WAIT_MS);
     const audit = await this.finalRead(how);
-    const fatal = this.processor.fatal ?? audit?.fatal ?? null;
+    const fatal = this.processor.fatal ?? audit?.fatal ?? this.unfinishedEffects(audit);
     if (fatal) this.addCondition({ kind: 'unsafe_event', fatal });
     if (this.hasCondition('backend_crashed')) await this.settleExit();
     let outcome = this.decide(audit);
@@ -748,17 +762,26 @@ class AppServerRun {
     } catch (error) { reportBackgroundFailure('app-server-terminal-state', error); }
   }
 
+  private unfinishedEffects(audit: HistoryAudit | null): EventFatal | null {
+    if (!audit || audit.pendingEffects.length === 0 || this.hasCondition('deadline')) return null;
+    return unfinishedEffectFatal(audit.pendingEffects);
+  }
+
   private async finalRead(how: TurnEnd): Promise<HistoryAudit | null> {
+    if (this.hasCondition('cancelled') || this.hasCondition('backend_crashed') || this.hasCondition('output_limit') || this.processor.fatal) return null;
     const turn = this.completedTurn;
-    if (how !== 'turn' || turn === null || this.hasCondition('cancelled') || this.hasCondition('backend_crashed') || this.hasCondition('output_limit') || this.processor.fatal) return null;
-    const timeout = this.timing.finalizeRequestTimeoutMs;
+    const forced = how !== 'turn' || turn === null;
+    if (forced && !(this.hasCondition('budget') || this.hasCondition('deadline'))) return null;
+    const turnId = turn?.id ?? this.turnId;
+    if (turnId === '') return null;
+    const timeout = forced ? this.timing.interruptTimeoutMs : this.timing.finalizeRequestTimeoutMs;
     try {
       const runtime = await this.rpc(buildRuntimeRead(this.sessionId), parseRuntimeReadResult, timeout);
       if (this.usage) this.applyUsage(this.usage.update(runtime.runtime.stats));
       return await auditSessionHistory(
         async (page) => this.rpc(buildSessionHistoryList(this.sessionId, page), parseHistoryListResult, timeout),
         {
-          mode: this.input.mode, ledger: this.handler.ledger, turnId: turn.id, secrets: this.secrets, maxMessageChars: Math.min(200_000, this.input.limits.maxTranscriptBytes),
+          mode: this.input.mode, ledger: this.handler.ledger, turnId, secrets: this.secrets, maxMessageChars: Math.min(200_000, this.input.limits.maxTranscriptBytes),
           sessionIds: this.processor.sessionIds, historical: this.processor.historicalEffects
         }
       );
@@ -769,18 +792,32 @@ class AppServerRun {
   }
 
   private decide(audit: HistoryAudit | null): RunOutcome {
-    if (this.conditions.every((condition) => condition.kind === 'budget')) {
-      if (this.failure) return { state: 'failed', error: this.failure, warnings: [] };
-      if (this.gap) {
-        return {
-          state: 'failed', warnings: [],
-          error: supervisorError('VSUP_BACKEND_ERROR', 'The Vibe event stream skipped events, so the run was stopped and could not be trusted.', { reason: 'watermark_gap', expected: this.gap.expected, received: this.gap.received })
-        };
-      }
+    if (this.conditions.every((condition) => STOP_REQUEST_KINDS.has(condition.kind))) {
+      const budgetOnly = this.conditions.every((condition) => condition.kind === 'budget');
+      const error = (budgetOnly ? this.failure : this.integrityFailure) ?? this.gapError();
+      if (error) return { state: 'failed', error: this.mentionStops(error), warnings: [] };
     }
     const outcome = mapOutcome({ turn: this.completedTurn, conditions: this.conditions, hasFinalMessage: audit?.finalMessage != null });
+    if (outcome.state === 'completed' && audit === null && this.hasCondition('budget')) {
+      return {
+        state: 'failed', warnings: [],
+        error: supervisorError('VSUP_BACKEND_ERROR', 'The run stopped at a limit and the final history audit could not run, so the effects of the run are unverified.', { reason: 'audit_unavailable' })
+      };
+    }
     if (outcome.error?.code === 'VSUP_BACKEND_CRASHED') return { ...outcome, error: this.refineCrash(outcome.error) };
     return outcome;
+  }
+
+  private gapError(): SupervisorError | undefined {
+    if (!this.gap) return undefined;
+    return supervisorError('VSUP_BACKEND_ERROR', 'The Vibe event stream skipped events, so the run was stopped and could not be trusted.', { reason: 'watermark_gap', expected: this.gap.expected, received: this.gap.received });
+  }
+
+  private mentionStops(error: SupervisorError): SupervisorError {
+    const stops = this.conditions.filter((condition) => condition.kind !== 'budget').map((condition) => condition.kind);
+    if (stops.length === 0) return error;
+    const sentence = stops.map((kind) => (kind === 'cancelled' ? 'was also cancelled' : 'also reached its deadline')).join(' and ');
+    return { ...error, message: `${error.message} The run ${sentence}.`, details: { ...error.details, also: stops } };
   }
 
   private refineCrash(error: SupervisorError): SupervisorError {
@@ -848,10 +885,11 @@ class AppServerRun {
 
   private async performCleanup(): Promise<void> {
     this.shuttingDown = true;
+    this.handler.revoke();
     this.clearTimers();
     const child = this.child;
     if (child) {
-      await settlesWithin(this.client.closeInput(), CLOSE_INPUT_WAIT_MS);
+      if (this.client) await settlesWithin(this.client.closeInput(), CLOSE_INPUT_WAIT_MS);
       if (!this.hurriedFlag) await Promise.race([child.done.then(() => undefined, () => undefined), sleep(this.timing.stdinGraceMs), this.hurried.promise]);
       if (child.child.pid !== undefined) await child.terminate(this.hurriedFlag ? 0 : this.timing.terminateGraceMs);
     }
@@ -903,12 +941,16 @@ export class AppServerBackend implements SupervisorBackend {
     return resolveAppServerExecutable(this.config, this.options.executable);
   }
 
-  private async verifyPin(executable: string): Promise<void> {
+  private async verifyPin(executable: string): Promise<string> {
     const { pin } = this.options;
-    if (pin?.verify) { await pin.verify(executable); return; }
+    if (pin?.verify) {
+      const verified = await pin.verify(executable);
+      const reported = (verified as { executable?: unknown } | null | undefined)?.executable;
+      return typeof reported === 'string' && path.isAbsolute(reported) ? reported : executable;
+    }
     const manifestPath = pin?.manifestPath ?? this.config.paths?.vibePinManifest;
-    if (manifestPath) { await verifyPinnedInstall({ executable, manifestPath }); return; }
-    throw new PinCheckError('manifest-unreadable', 'No pin manifest is configured, so the installed Vibe cannot be verified. Set paths.vibe_pin_manifest and write the manifest with the pin-manifest command.');
+    if (manifestPath) return (await verifyPinnedInstall({ executable, manifestPath })).executable;
+    throw new PinCheckError('manifest-unreadable', 'No pin manifest is configured, so the installed Vibe cannot be verified. Set paths.vibe_pin_manifest in the selected config to an absolute path, write the manifest there with `vibe-supervisor pin-manifest`, and restart the server.');
   }
 
   async probe(): Promise<BackendCapabilities> {
@@ -939,7 +981,8 @@ export class AppServerBackend implements SupervisorBackend {
     let executable: string;
     try { executable = await this.appServerExecutable(); }
     catch { throw supervisorError('VSUP_VIBE_NOT_FOUND', 'The vibe-app-server executable could not be located next to the configured Vibe.'); }
-    try { await this.verifyPin(executable); }
+    let verifiedExecutable: string;
+    try { verifiedExecutable = await this.verifyPin(executable); }
     catch (error) { throw toSupervisorError(error, []); }
     const resolution = await (this.options.resolveCredential ?? resolveCredential)();
     if (!resolution.credential) {
@@ -951,7 +994,7 @@ export class AppServerBackend implements SupervisorBackend {
     } catch (error) { throw toSupervisorError(error, []); }
     const listing = await buildWorkspaceListing(input.workerWorkspace, this.options.listing);
     const run = new AppServerRun({
-      input, callbacks, options: this.runOptions, timing: this.timing, executable, plan, listing,
+      input, callbacks, options: this.runOptions, timing: this.timing, executable: verifiedExecutable, plan, listing,
       credential: resolution.credential, expectedVersion: this.options.expectedServerVersion ?? SUPPORTED_VIBE
     });
     return run.start();

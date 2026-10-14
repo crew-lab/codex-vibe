@@ -9,7 +9,7 @@ const pathString = z.string().min(1).max(4096);
 const rootString = pathString.refine((value) => path.isAbsolute(value) || value === "~" || value.startsWith("~/"), "must be an absolute path or start with ~/");
 const executableString = pathString.refine((value) => path.isAbsolute(value) || !/[\\/]/.test(value), "must be an absolute path or a bare command name");
 const absolutePathString = pathString.refine((value) => path.isAbsolute(value), "must be an absolute path");
-const configSchema = z.object({
+const baseSchema = z.object({
   version: z.literal(1),
   allowed_workspace_roots: z.array(rootString).max(100).default([]),
   retention: z.object({
@@ -33,18 +33,24 @@ const configSchema = z.object({
     app_server: executableString.optional(),
     vibe_pin_manifest: absolutePathString.optional()
   }).strict().optional()
-}).strict().superRefine((value, context) => {
+}).strict();
+
+const strictSchema = baseSchema.superRefine((value, context) => {
   if (value.paths?.vibe_pin_manifest === undefined) {
     context.addIssue({
       code: "custom",
       path: ["paths", "vibe_pin_manifest"],
-      message: "is required: set it to the absolute path of the pin manifest written by the pin-manifest command."
+      message: "is required: set it to the absolute path of the pin manifest, write the manifest there with `vibe-supervisor pin-manifest --output <that path>`, then restart the server."
     });
   }
 });
 
-export function validateConfig(input: unknown, home = process.env.HOME ?? process.env.USERPROFILE ?? homedir()): SupervisorConfig {
-  const parsed = configSchema.parse(input);
+export interface ValidateConfigOptions {
+  requirePinManifest?: boolean;
+}
+
+export function validateConfig(input: unknown, home = process.env.HOME ?? process.env.USERPROFILE ?? homedir(), options: ValidateConfigOptions = {}): SupervisorConfig {
+  const parsed = (options.requirePinManifest === false ? baseSchema : strictSchema).parse(input);
   for (const root of parsed.allowed_workspace_roots) {
     try { assertWorkspaceRootScope(root, home); }
     catch (error) { throw new Error(`allowed_workspace_roots contains an unsafe root: ${(error as Error).message}`); }

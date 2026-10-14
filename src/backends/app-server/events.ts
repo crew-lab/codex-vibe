@@ -41,7 +41,8 @@ export type FatalCode =
   | 'retention_exceeded'
   | 'history_paging_failed'
   | 'session_handoff_unsafe'
-  | 'historical_effect_changed';
+  | 'historical_effect_changed'
+  | 'unfinished_effect';
 
 export interface EventFatal {
   code: FatalCode;
@@ -113,6 +114,10 @@ function printable(value: string, limit = 80): string {
   return value.replace(/[^\x20-\x7e]/g, '?').slice(0, limit);
 }
 
+export function unfinishedEffectFatal(entryIds: readonly string[]): EventFatal {
+  return fatalOf('unfinished_effect', `${entryIds.length} effect(s) had not finished when the turn ended (${entryIds.slice(0, 3).map((id) => printable(id)).join(', ')}); their outcome cannot be verified`, null, entryIds[0] ?? null);
+}
+
 export class EffectValidator {
   private readonly settledKeys = new Map<string, string>();
 
@@ -128,7 +133,14 @@ export class EffectValidator {
       this.settledKeys.set(entry.id, key);
       return { status: 'settled', outcome, first };
     };
-    if (state.status === 'cancelled' || state.status === 'skipped') return settle('not_executed');
+    if (state.status === 'cancelled' || state.status === 'skipped') {
+      if (state.decision !== 'execute') return settle('not_executed');
+      const problems = this.approvalProblems(entry, context);
+      if (problems.length > 0) {
+        return { status: 'fatal', fatal: fatalOf('unapproved_effect', `${printable(tool)} was marked ${printable(state.status)} after an execute decision without a matching handler approval (${problems.join(', ')})`, tool, entry.id) };
+      }
+      return settle('not_executed');
+    }
     if (state.status !== 'completed' && state.status !== 'failed') {
       return { status: 'fatal', fatal: fatalOf('unknown_effect_status', `effect ${printable(entry.id)} for ${printable(tool)} has unknown status ${printable(state.status)}`, tool, entry.id) };
     }

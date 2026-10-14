@@ -103,6 +103,18 @@ describe('EffectValidator', () => {
     expect(validator.inspect(effect('e3', read, { status: 'failed', error: { code: 'not_found' }, decision: null, approvalType: null, approvalSource: null }))).toMatchObject({ outcome: 'not_executed' });
   });
 
+  it('checks a cancelled or skipped effect that carries an execute decision against the ledger', () => {
+    for (const status of ['cancelled', 'skipped']) {
+      const state = { status, ...approved };
+      const unapproved = new EffectValidator('review', new ApprovalLedger()).inspect(effect('e1', read, state));
+      expect(unapproved, status).toMatchObject({ status: 'fatal', fatal: { code: 'unapproved_effect', tool: read, entryId: 'e1' } });
+      const offProfile = new EffectValidator('review', ledgerWith(['cb', 'e1', write, 'approve', { filePath: 'a.ts', content: '' }])).inspect(effect('e1', write, state, { filePath: 'a.ts', content: '' }));
+      expect(offProfile, status).toMatchObject({ status: 'fatal', fatal: { code: 'unapproved_effect', tool: write } });
+      const linked = new EffectValidator('review', ledgerWith(['cb', 'e1', read, 'approve'])).inspect(effect('e1', read, state));
+      expect(linked, status).toMatchObject({ status: 'settled', outcome: 'not_executed' });
+    }
+  });
+
   it('is fatal for an effect status it does not know', () => {
     expect(new EffectValidator('review', new ApprovalLedger()).inspect(effect('e1', read, { status: 'succeeded' }))).toMatchObject({ status: 'fatal', fatal: { code: 'unknown_effect_status' } });
   });

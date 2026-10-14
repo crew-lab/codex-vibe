@@ -113,6 +113,8 @@ const SHUTDOWN_TERMINATE_MS = 10_000;
 const SHUTDOWN_START_DRAIN_MS = 180_000;
 const BACKEND_RELEASE_DEADLINE_MS = 7_500;
 const START_PREPARATION_DEADLINE_MS = 30_000;
+const RECOVERY_WORKER_WINDOW_MS = 6000;
+const RECOVERY_REAPER_DEADLINE_SLACK_MS = 15_000 + START_PREPARATION_DEADLINE_MS;
 const CLEANABLE_STATES: ReadonlySet<RunState> = new Set<RunState>(["failed", "cancelled", "closed"]);
 const STATUS_TEXT_EVENT_TYPES: ReadonlySet<string> = new Set(["diagnostic", "review_integrity", "timeout", "permission_denied_by_policy"]);
 const STATUS_TEXT_CHARS = 400;
@@ -122,6 +124,7 @@ const DEFAULT_REMEDIATION = "Inspect the run status and supervisor diagnostics, 
 export interface RunManagerOptions {
   policy?: PolicySource;
   sessionId?: string;
+  recoveryWorkerWindowMs?: number;
 }
 
 type StartOptions = { maxTurns: number; timeoutSeconds: number; contextFiles?: string[]; baseRef?: string; readinessReceipt?: string };
@@ -145,12 +148,15 @@ export class RunManager {
   private readonly unreadableRecords = new Set<string>();
   private readonly policy: PolicySource;
   private readonly sessionId: string | undefined;
+  private readonly recoveryWorkerWindowMs: number;
+  private workerWindowEndsAt: number | undefined;
   private readonly receipts = new ReadinessReceipts();
 
   constructor(private readonly config: SupervisorConfig, private readonly dataDir: string, backends: readonly SupervisorBackend[] = [], preAcquiredLock?: OwnerLock, options: RunManagerOptions = {}) {
     this.ownerLock = preAcquiredLock;
     this.policy = options.policy ?? fixedPolicy(config);
     this.sessionId = options.sessionId;
+    this.recoveryWorkerWindowMs = options.recoveryWorkerWindowMs ?? RECOVERY_WORKER_WINDOW_MS;
     this.runRoot = path.join(path.resolve(dataDir), "runs");
     for (const backend of backends) this.backends.set(backend.kind, backend);
   }
@@ -1116,18 +1122,31 @@ export class RunManager {
     const previous = record.state;
     if (isTerminal(previous) || previous === "completed") return;
     const now = new Date().toISOString();
+    const lastSeen = [record.createdAt, record.updatedAt, record.launchedAt];
     record.state = "failed";
     record.error = supervisorError("VSUP_BACKEND_CRASHED", "The supervisor restarted while this one-shot run was active. The task was not resumed or replayed.");
     record.updatedAt = now; record.finishedAt = now;
-    const leftover = await this.removeLeftoverPrivateState(runtime);
+    const leftover = await this.removeLeftoverPrivateState(runtime, lastSeen);
     const restartWarning = "The supervisor restarted while the run was active; no worker was resumed or task replayed.";
     await this.writeFallbackResult(runtime, "failed", leftover.removed ? restartWarning : `${restartWarning} ${PRIVATE_STATE_RETAINED_WARNING}`);
     try { await this.persist(runtime); }
     catch (error) { if (!this.degrade(runtime, error)) throw error; }
   }
 
-  private async removeLeftoverPrivateState(runtime: Runtime): Promise<{ removed: boolean }> {
+  private async awaitWorkerWindow(record: RunRecord, lastSeen: ReadonlyArray<string | undefined>): Promise<void> {
+    if (this.recoveryWorkerWindowMs <= 0) return;
+    const latest = Math.max(...lastSeen.map((stamp) => (stamp === undefined ? 0 : Date.parse(stamp) || 0)));
+    const reaperDeadline = latest + record.limits.timeoutSeconds * 1000 + RECOVERY_REAPER_DEADLINE_SLACK_MS;
+    if (Date.now() >= reaperDeadline + this.recoveryWorkerWindowMs) return;
+    this.workerWindowEndsAt ??= Date.now() + this.recoveryWorkerWindowMs;
+    const remaining = this.workerWindowEndsAt - Date.now();
+    if (remaining > 0) await new Promise<void>((resolve) => { setTimeout(resolve, remaining); });
+  }
+
+  private async removeLeftoverPrivateState(runtime: Runtime, lastSeen: ReadonlyArray<string | undefined>): Promise<{ removed: boolean }> {
     const names = Object.values(PRIVATE_DIRECTORY_NAMES);
+    const present = await Promise.all(names.map((name) => lstat(path.join(runtime.directory, name)).then(() => true, () => false)));
+    if (present.some(Boolean)) await this.awaitWorkerWindow(runtime.record, lastSeen);
     const results = await Promise.allSettled(names.map((name) => rm(path.join(runtime.directory, name), { recursive: true, force: true, maxRetries: 2 })));
     const failed = results.some((result) => result.status === "rejected");
     if (failed) reportBackgroundFailure("recovery-private-state", new Error(`Private Vibe state of run ${runtime.record.runId} could not be deleted.`));
