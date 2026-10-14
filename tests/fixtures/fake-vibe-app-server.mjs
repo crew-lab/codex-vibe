@@ -19,7 +19,8 @@ const STORE_PREFIX = 'vibe-session-logging-disabled-';
 const SCENARIO_KEYS = new Set([
   'name', 'serverName', 'serverVersion', 'startup', 'watermark', 'sessionId', 'log', 'errors', 'runtime', 'harness',
   'harnessSelectionSource', 'effectiveConfig', 'effectiveFromEnv', 'thinkingLevels', 'modelWrite', 'readyInitially',
-  'baselineStats', 'contextWindow', 'afterStop', 'eof', 'eofDelayMs', 'interrupt', 'extraFields', 'omit', 'steps'
+  'baselineStats', 'contextWindow', 'afterStop', 'eof', 'eofDelayMs', 'interrupt', 'extraFields', 'omit', 'effectWhileBlocked',
+  'badCursor', 'steps'
 ]);
 const STEP_OPS = new Set([
   'say', 'reasoning', 'stats', 'call', 'unknownEntry', 'unknownNotification', 'staleEvent', 'delay', 'hold', 'wedge', 'crash',
@@ -32,6 +33,14 @@ const CLIENT_TOOLS = ['filesystem/read', 'filesystem/write', 'terminal'];
 const ENTRYPOINTS = ['cli', 'acp', 'desktop', 'programmatic', 'unknown'];
 const TURN_STATUSES = ['in_progress', 'completed', 'failed', 'interrupted'];
 const STOP_REASONS = ['limit', 'length'];
+const APPROVAL_SOURCES = ['config', 'smart', 'user', 'bypass', 'never'];
+const WIRE_TOOLS = {
+  'file_system.read_file': 'file_read',
+  'file_system.write_file': 'file_write',
+  'file_system.search_replace': 'file_edit',
+  'file_system.bash': 'shell'
+};
+const SHORT_TOOL_NAMES = ['read_file', 'write_file', 'edit', 'search_replace', 'bash'];
 
 class RpcError extends Error {
   constructor(code, message, data) {
@@ -58,11 +67,7 @@ function parseScenario() {
   if (!Array.isArray(steps) || steps.length > MAX_STEPS) throw new Error('scenario steps must be an array within the step limit');
   for (const step of steps) {
     if (!isObject(step) || !STEP_OPS.has(step.op)) throw new Error(`unknown scenario step: ${JSON.stringify(step)}`);
-    if (step.op === 'call') {
-      if (typeof step.tool !== 'string' || !['approval', 'auto', 'never'].includes(step.mode ?? 'approval')) throw new Error('call step needs tool and a valid mode');
-      assertCamelCase(step.input ?? {}, 'call input');
-      if (step.output !== undefined) assertCamelCase(step.output, 'call output');
-    }
+    if (step.op === 'call') checkCallStep(step);
     if (step.op === 'end') {
       if (step.status !== undefined && !TURN_STATUSES.includes(step.status)) throw new Error('end step status invalid');
       if (step.stopReason !== undefined && step.stopReason !== null && !STOP_REASONS.includes(step.stopReason)) throw new Error('end step stopReason invalid');
@@ -71,6 +76,38 @@ function parseScenario() {
     if (step.op === 'delay' && !(Number.isInteger(step.ms) && step.ms >= 0 && step.ms <= MAX_DELAY_MS)) throw new Error('delay ms out of range');
   }
   return parsed;
+}
+
+function checkCallStep(step) {
+  if (typeof step.tool !== 'string' || !['approval', 'auto', 'never'].includes(step.mode ?? 'approval')) throw new Error('call step needs tool and a valid mode');
+  if (SHORT_TOOL_NAMES.includes(step.tool)) throw new Error(`call tool must be the Unified wire name, not the short name: ${step.tool}`);
+  if (step.source !== undefined && !APPROVAL_SOURCES.includes(step.source)) throw new Error('call step source invalid');
+  if (step.output !== undefined) assertCamelCase(step.output, 'call output');
+  if (step.generic === true || !(step.tool in WIRE_TOOLS)) return;
+  assertCamelCase(step.input ?? {}, 'call input');
+  checkInputShape(WIRE_TOOLS[step.tool], step.input ?? {});
+}
+
+function checkInputShape(kind, input) {
+  const keys = (allowed) => { for (const key of Object.keys(input)) if (!allowed.includes(key)) throw new Error(`${kind} input has an unknown key: ${key}`); };
+  const text = (value, name, min = 0) => { if (typeof value !== 'string' || value.length < min) throw new Error(`${kind} input ${name} must be a string`); };
+  const optionalInt = (value, name) => { if (value !== undefined && value !== null && !Number.isInteger(value)) throw new Error(`${kind} input ${name} must be an integer or null`); };
+  if (kind === 'file_read') { keys(['filePath', 'offset', 'limit']); text(input.filePath, 'filePath', 1); optionalInt(input.offset, 'offset'); optionalInt(input.limit, 'limit'); return; }
+  if (kind === 'file_write') { keys(['filePath', 'content']); text(input.filePath, 'filePath', 1); text(input.content, 'content'); return; }
+  if (kind === 'shell') { keys(['command']); text(input.command, 'command'); return; }
+  text(input.filePath, 'filePath', 1);
+  if (input.changes !== undefined) {
+    keys(['filePath', 'changes']);
+    if (!Array.isArray(input.changes) || input.changes.length < 1) throw new Error('file_edit input changes must be a non-empty list');
+    for (const change of input.changes) {
+      if (!isObject(change)) throw new Error('file_edit change must be an object');
+      for (const key of Object.keys(change)) if (!['oldString', 'newString', 'replaceAll'].includes(key)) throw new Error(`file_edit change has an unknown key: ${key}`);
+      text(change.oldString, 'oldString', 1); text(change.newString, 'newString');
+    }
+    return;
+  }
+  keys(['filePath', 'oldString', 'newString', 'replaceAll']);
+  text(input.oldString, 'oldString', 1); text(input.newString, 'newString');
 }
 
 function assertCamelCase(value, where) {
@@ -189,7 +226,6 @@ const state = {
   storePath: null,
   stats: null,
   turnCounter: 0,
-  callbackCounter: 0,
   callCounter: 0,
   entryCounter: 0,
   wedged: false,
@@ -396,25 +432,35 @@ function deferred() {
   return { promise, resolve };
 }
 
-function effectKind(tool) {
-  if (/(^|\.)read_file$/.test(tool)) return 'file_read';
-  if (/(^|\.)write_file$/.test(tool)) return 'file_write';
-  if (/(^|\.)(edit|search_replace)$/.test(tool)) return 'file_edit';
-  if (/(^|\.)(bash|shell)$/.test(tool)) return 'shell';
-  return 'tool';
+function effectKind(step) {
+  return step.generic === true ? 'tool' : (WIRE_TOOLS[step.tool] ?? 'tool');
 }
 
-function effectDetail(step) {
-  const kind = effectKind(step.tool);
-  const input = step.input ?? {};
-  const target = input.filePath ?? input.command ?? '';
-  const verbs = { file_read: ['Reading', 'Read'], file_write: ['Writing', 'Wrote'], file_edit: ['Editing', 'Edited'], shell: ['Running', 'Ran'], tool: ['Calling', 'Called'] }[kind];
-  return {
-    kind,
-    toolName: step.tool,
-    display: { summary: `${verbs[0]} ${target}`.trim(), content: null, suffix: '', verb: verbs[0], message: null, settledVerb: verbs[1], settledMessage: null, statusText: verbs[0] },
-    input
-  };
+const displayPath = (filePath, cwd) => (cwd && typeof filePath === 'string' && filePath.startsWith(`${cwd}/`) ? filePath.slice(cwd.length + 1) : filePath);
+
+function normalizedInput(kind, input) {
+  if (kind === 'file_read') return { filePath: input.filePath, offset: input.offset ?? null, limit: input.limit === undefined ? 2000 : input.limit };
+  if (kind === 'file_edit' && input.changes !== undefined) {
+    return { filePath: input.filePath, changes: input.changes.map((change) => ({ oldString: change.oldString, newString: change.newString, replaceAll: change.replaceAll ?? false })) };
+  }
+  if (kind === 'file_edit') return { filePath: input.filePath, oldString: input.oldString, newString: input.newString, replaceAll: input.replaceAll ?? false };
+  return input;
+}
+
+function callDisplay(kind, tool, input, cwd) {
+  const shown = displayPath(input.filePath, cwd);
+  const file = (activeVerb, verb, settledVerb, statusText, content = null) => ({ summary: `${activeVerb} ${shown}`, content, suffix: '', verb, message: shown, settledVerb, settledMessage: shown, statusText });
+  if (kind === 'file_read') return file('Reading', 'Reading', 'Read', 'Reading file');
+  if (kind === 'file_write') return file('Writing', 'Creating', 'Created', 'Writing file', input.content);
+  if (kind === 'file_edit') return file('Editing', 'Editing', 'Edited', 'Editing file');
+  if (kind === 'shell') return { summary: `bash: ${input.command}`, content: null, suffix: '', verb: 'Running', message: input.command, settledVerb: 'Ran', settledMessage: input.command, statusText: 'Running command' };
+  return { summary: tool, content: null, suffix: '', verb: 'Running', message: tool, settledVerb: 'Ran', settledMessage: tool, statusText: `Running ${tool}` };
+}
+
+function effectDetail(step, cwd) {
+  const kind = effectKind(step);
+  const input = normalizedInput(kind, step.input ?? {});
+  return { kind, toolName: step.tool, display: callDisplay(kind, step.tool, input, cwd), input };
 }
 
 function defaultOutput(detail) {
@@ -427,6 +473,8 @@ function defaultOutput(detail) {
 }
 
 const resultDisplay = (detail, success, message) => ({ success, verb: detail.display.settledVerb, message, warnings: [], approvalNote: null, suffix: '' });
+
+const NO_APPROVAL_META = { decision: null, approvalType: null, approvalSource: null };
 
 function completedState(detail, step, approvalType, approvalSource) {
   return {
@@ -441,10 +489,10 @@ function completedState(detail, step, approvalType, approvalSource) {
   };
 }
 
-function deniedState(detail, approvalType, approvalSource) {
+function deniedState(detail, message, approvalType, approvalSource) {
   return {
     status: 'failed',
-    error: { message: 'Tool execution denied by approval callback', code: 'tool_denied', details: null },
+    error: { message, code: 'tool_denied', details: null },
     output: null,
     outputText: '',
     durationMs: 0,
@@ -455,9 +503,8 @@ function deniedState(detail, approvalType, approvalSource) {
   };
 }
 
-function skippedState(detail, reason, approvalSource) {
-  return { status: 'skipped', reason, display: resultDisplay(detail, false, reason), decision: 'skip', approvalType: 'never', approvalSource };
-}
+const CALLBACK_DENIED = 'Tool execution denied by approval callback';
+const POLICY_DENIED = 'Tool execution denied by approval policy';
 
 function substitute(value, cwd) {
   if (typeof value === 'string') return value.replaceAll('${cwd}', cwd ?? '');
@@ -566,38 +613,43 @@ async function say(step, turn, silent) {
 }
 
 async function runCall(step, turn, raceInterrupt, silent) {
-  const detail = effectDetail(step);
+  const detail = effectDetail(step, state.session.cwd);
   const mode = step.mode ?? 'approval';
-  const callId = step.id ?? `call-${String(++state.callCounter).padStart(4, '0')}`;
-  const effect = baseEntry(turn, { id: callId, type: 'effect', title: step.tool, detail, state: { status: 'pending' } });
+  const sequence = String(++state.callCounter).padStart(4, '0');
+  const actionId = step.id ?? `action-${sequence}`;
+  const callId = `call-${sequence}`;
+  const effect = baseEntry(turn, { id: `effect-${actionId}`, type: 'effect', title: step.tool, detail, state: { status: 'running', outputText: '' } });
   if (mode === 'auto') {
-    effect.state = completedState(detail, step, step.approvalType ?? 'always', step.source ?? 'config');
+    effect.state = { ...completedState(detail, step, step.approvalType ?? 'always', step.source ?? 'config'), ...(step.approvalMeta === false ? NO_APPROVAL_META : {}) };
     await addEntry(effect, { silent });
     return undefined;
   }
   if (mode === 'never') {
-    effect.state = skippedState(detail, 'Tool permission is never', 'never');
+    effect.state = { ...deniedState(detail, POLICY_DENIED, 'never', step.source ?? 'never'), ...(step.approvalMeta === false ? NO_APPROVAL_META : {}) };
     await addEntry(effect, { silent });
     return undefined;
   }
-  return runApproval(step, turn, effect, detail, raceInterrupt);
+  return runApproval(step, turn, effect, detail, callId, raceInterrupt);
 }
 
-async function runApproval(step, turn, effect, detail, raceInterrupt) {
+async function runApproval(step, turn, effect, detail, callId, raceInterrupt) {
   if (!state.clientCallbackKinds.includes('approval')) {
     stderr('fake-vibe-app-server: client did not declare the approval callback kind; cancelling the serve task');
     fatal('approval callback undeliverable: client capability missing', 1);
     return INTERRUPTED;
   }
   if (state.pendingServerRequests.size >= MAX_PENDING_SERVER_REQUESTS) fatal('too many pending server requests', 70);
-  const callbackId = `cb-${String(++state.callbackCounter).padStart(4, '0')}`;
-  effect.state = { status: 'blocked', callbackId, outputText: '' };
+  const callbackId = `approval-${callId}`;
+  effect.generationStatus = 'in_progress';
+  effect.state = scenario.effectWhileBlocked === 'blocked' ? { status: 'blocked', callbackId, outputText: '' } : { status: 'running', outputText: '' };
   await addEntry(effect);
   const callbackEntry = baseEntry(turn, {
+    id: callbackId,
     type: 'callback',
+    generationStatus: 'in_progress',
     relatedEntryId: effect.id,
     callbackId,
-    title: `Allow ${step.tool}?`,
+    title: `Approve ${step.tool}`,
     detail: { kind: 'approval', effect: clone(detail), requiredPermissions: [], choices: [...DECISION_TYPES], pathScopeChoices: [], relatedEntryId: effect.id, reason: null },
     state: { status: 'open' }
   });
@@ -620,17 +672,18 @@ async function runApproval(step, turn, effect, detail, raceInterrupt) {
   state.pendingCallbacks.delete(callbackId);
   state.session.status = { type: 'running', activeTurnId: turn.id };
   const approved = APPROVING.has(decided.decision);
-  await patchEntry(callbackEntry, [{ op: 'replace', path: '/state', value: { status: 'answered', output: decided.output ?? { type: 'approval', decision: { type: 'deny', pathScope: null }, feedback: null } } }]);
-  const finalState = approved ? completedState(detail, step, 'ask', 'user') : deniedState(detail, 'ask', 'user');
-  await patchEntry(effect, [{ op: 'replace', path: '/state', value: finalState }]);
+  const answered = { status: 'answered', output: decided.output ?? { type: 'approval', decision: { type: 'deny', pathScope: null }, feedback: null } };
+  await patchEntry(callbackEntry, [{ op: 'replace', path: '/generationStatus', value: 'completed' }, { op: 'replace', path: '/state', value: answered }]);
+  const finalState = approved ? completedState(detail, step, 'ask', 'user') : deniedState(detail, CALLBACK_DENIED, 'ask', 'user');
+  await patchEntry(effect, [{ op: 'replace', path: '/generationStatus', value: 'completed' }, { op: 'replace', path: '/state', value: finalState }]);
   if (decided.decision === 'cancel_turn') requestInterrupt();
   return undefined;
 }
 
 async function cancelCallback(effect, callbackEntry, callbackId) {
   state.pendingCallbacks.delete(callbackId);
-  await patchEntry(callbackEntry, [{ op: 'replace', path: '/state', value: { status: 'cancelled', reason: 'turn interrupted' } }]);
-  await patchEntry(effect, [{ op: 'replace', path: '/state', value: { status: 'cancelled', reason: 'turn interrupted', outputText: '', durationMs: 0, display: null, decision: null, approvalType: 'ask', approvalSource: null } }]);
+  await patchEntry(callbackEntry, [{ op: 'replace', path: '/generationStatus', value: 'completed' }, { op: 'replace', path: '/state', value: { status: 'cancelled', reason: 'turn interrupted' } }]);
+  await patchEntry(effect, [{ op: 'replace', path: '/generationStatus', value: 'completed' }, { op: 'replace', path: '/state', value: { status: 'cancelled', reason: 'turn interrupted', outputText: '', durationMs: 0, display: null, ...NO_APPROVAL_META } }]);
   return INTERRUPTED;
 }
 
@@ -686,21 +739,26 @@ function envOverrides() {
 
 function effectiveConfig() {
   const session = state.session;
+  const options = session.agentConfig;
   const base = {
-    active_model: session.modelAlias,
+    active_model: session.modelPinned ? session.modelAlias : '',
     models: { [session.modelAlias]: { thinking: session.reasoningEffort } },
+    enabled_tools: options.enabledTools ?? [],
+    disabled_tools: options.disabledTools ?? [],
+    mcp_servers: options.mcpServers ?? [],
     enable_subagents: true,
     enable_background_processes: true,
-    managed_shell_tools_enabled: true,
+    managed_shell_tools_enabled: false,
     enable_connectors: true,
+    enabled_skills: [],
     disabled_skills: [],
-    mcp_servers: [],
+    skill_paths: [],
+    tool_paths: [],
     enable_telemetry: true,
     enable_update_checks: true,
-    session_logging: { enabled: true },
+    session_logging: { save_dir: '/fixture/vibe-home/logs/session', session_prefix: 'session', enabled: true, generate_titles: true },
     tools: {},
-    auto_approve: session.agentConfig.autoApprove ?? false,
-    api_key: '<redacted>'
+    bypass_tool_permissions: scenario.runtime?.bypassToolPermissions ?? options.autoApprove ?? false
   };
   if (scenario.effectiveFromEnv !== false) mergeDeep(base, envOverrides());
   if (session.thinkingWritten) base.models[session.modelAlias] = { thinking: session.reasoningEffort };
@@ -736,7 +794,7 @@ function runtimeSnapshot() {
     contextWindow: scenario.contextWindow ?? 128000,
     issues: runtime.issues ?? [],
     hooksCount: runtime.hooksCount ?? 0,
-    connectors: runtime.connectors ?? { connected: 0, total: 0 },
+    connectors: runtime.connectors ?? { connected: 0, total: null },
     mcp: { sources: runtime.mcpSources ?? [], discoveryErrors: {}, connectorError: null, manageConnectorsUrl: null },
     bypassToolPermissions: runtime.bypassToolPermissions ?? (session.agentConfig.autoApprove ?? false),
     experimentalHarness: runtime.experimentalHarness ?? true
@@ -792,19 +850,22 @@ function removeStore() {
   state.storePath = null;
 }
 
-function paginate(items, pageRequest = {}) {
-  const limit = pageRequest.limit ?? 200;
-  const direction = pageRequest.direction ?? 'backward';
-  const cursorIndex = pageRequest.cursor === undefined || pageRequest.cursor === null ? null : Number.parseInt(pageRequest.cursor, 10);
-  if (cursorIndex !== null && !(cursorIndex >= 0 && cursorIndex <= items.length)) throw new RpcError('invalid_params', 'Invalid cursor', { errorCount: 1, issues: [{ path: ['page', 'cursor'], message: 'Invalid cursor' }] });
-  if (direction === 'forward') {
-    const start = cursorIndex ?? 0;
-    const end = Math.min(items.length, start + limit);
-    return { items: items.slice(start, end), nextCursor: end < items.length ? String(end) : null, previousCursor: start > 0 ? String(start) : null };
-  }
-  const end = cursorIndex ?? items.length;
-  const start = Math.max(0, end - limit);
-  return { items: items.slice(start, end), nextCursor: null, previousCursor: start > 0 ? String(start) : null };
+function paginate(items, request = {}) {
+  const limit = request.limit ?? 200;
+  const direction = request.direction ?? 'backward';
+  const cursor = request.cursor ?? null;
+  const index = cursor === null ? -1 : items.findIndex((entry) => entry.id === cursor);
+  if (cursor !== null && index < 0 && scenario.badCursor === 'invalid_params') throw new RpcError('invalid_params', 'Invalid cursor', { errorCount: 1, issues: [{ path: ['page', 'cursor'], message: 'Invalid cursor' }] });
+  let page;
+  if (cursor === null) page = items.slice(-limit);
+  else if (index < 0) page = [];
+  else if (direction === 'forward') page = items.slice(index + 1, index + 1 + limit);
+  else page = items.slice(Math.max(0, index - limit), index);
+  const first = page.length > 0 ? items.indexOf(page[0]) : -1;
+  const last = page.length > 0 ? items.indexOf(page.at(-1)) : -1;
+  const older = first > 0 ? page[0].id : null;
+  const newer = last >= 0 && last < items.length - 1 ? page.at(-1).id : null;
+  return direction === 'forward' ? { items: page, nextCursor: newer, previousCursor: older } : { items: page, nextCursor: older, previousCursor: newer };
 }
 
 const handlers = {
@@ -822,7 +883,7 @@ const handlers = {
     state.session = {
       createdAt: now(), agentConfig: config, cwd: config.cwd ?? config.workdir ?? null, status: { type: 'idle' }, activeTurn: null,
       turnContext: null, turns: [], ready: scenario.readyInitially === true, stopped: false,
-      modelAlias: 'mistral-medium-3.5', reasoningEffort: 'high', thinkingWritten: false
+      modelAlias: 'mistral-medium-3.5', modelPinned: false, reasoningEffort: 'high', thinkingWritten: false
     };
     ensureStore();
     record('event', { name: 'sessionStart', agentConfig: config, initializedNotificationSeen: state.initializedNotificationSeen });
@@ -862,7 +923,7 @@ const handlers = {
     if (params.reasoningEffort && !levels.includes(params.reasoningEffort)) throw new RpcError('invalid_params', 'Invalid reasoning effort', { errorCount: 1, issues: [{ path: ['reasoningEffort'], message: `Input should be one of: ${levels.join(', ')}` }] });
     const write = scenario.modelWrite ?? {};
     if (!write.ignore) {
-      if (params.modelAlias) state.session.modelAlias = params.modelAlias;
+      if (params.modelAlias) { state.session.modelAlias = params.modelAlias; state.session.modelPinned = true; }
       if (params.reasoningEffort) { state.session.reasoningEffort = params.reasoningEffort; state.session.thinkingWritten = true; }
     }
     record('event', { name: 'modelWrite', modelAlias: params.modelAlias ?? null, reasoningEffort: params.reasoningEffort ?? null, ignored: write.ignore === true });

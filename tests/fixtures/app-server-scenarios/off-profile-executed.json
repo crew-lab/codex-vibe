@@ -1,7 +1,7 @@
 {
   "name": "off-profile-executed",
   "steps": [
-    { "op": "call", "tool": "write_file", "mode": "auto", "source": "bypass", "input": { "filePath": "${cwd}/src/leak.ts", "content": "oops\n" } },
+    { "op": "call", "tool": "file_system.write_file", "mode": "auto", "source": "bypass", "input": { "filePath": "${cwd}/src/leak.ts", "content": "oops\n" } },
     { "op": "say", "text": "Wrote a file without asking." }
   ]
 }

@@ -1,9 +1,9 @@
 {
   "name": "forbidden-call-approval",
   "steps": [
-    { "op": "call", "tool": "read_file", "mode": "approval", "input": { "filePath": "/etc/passwd", "offset": null, "limit": 2000 } },
-    { "op": "call", "tool": "read_file", "mode": "approval", "input": { "filePath": "${cwd}/.env", "offset": null, "limit": 2000 } },
-    { "op": "call", "tool": "write_file", "mode": "approval", "input": { "filePath": "${cwd}/src/new.ts", "content": "export {};\n" } },
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "/etc/passwd", "offset": null, "limit": 2000 } },
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "${cwd}/.env", "offset": null, "limit": 2000 } },
+    { "op": "call", "tool": "file_system.write_file", "mode": "approval", "input": { "filePath": "${cwd}/src/new.ts", "content": "export {};\n" } },
     { "op": "say", "text": "Some reads were refused." }
   ]
 }

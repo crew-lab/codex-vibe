@@ -1,0 +1,7 @@
+{
+  "name": "generic-effect-fallback",
+  "steps": [
+    { "op": "call", "tool": "file_system.read_file", "generic": true, "mode": "approval", "input": { "path": "${cwd}/src/index.ts", "offset": 0 } },
+    { "op": "say", "text": "A call the projection left generic." }
+  ]
+}
