@@ -23,7 +23,7 @@ import { fixedPolicy, readCurrentPolicy } from "../config/policy.js";
 import type { CurrentPolicy, PolicySource } from "../config/policy.js";
 import { ReadinessReceipts, receiptMismatch, receiptRejected } from "./readiness-receipt.js";
 import type { OpenedReceipt } from "./readiness-receipt.js";
-import { assertNoProjectVibeExtensions, assertSimpleGlobRoot } from "../backends/profile.js";
+import { assertNoProjectVibeExtensions, assertSimpleGlobRoot } from "../security/workspace-guard.js";
 import { PRIVATE_DIRECTORY_NAMES } from "../backends/app-server/session-config.js";
 import { eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
@@ -92,6 +92,7 @@ type StartResult = {
   result?: Record<string, unknown>;
 };
 
+const BACKEND_KIND: BackendKind = "app-server";
 const START_ENVELOPE_RESERVE_CHARS = 1500;
 const STATUS_RESULT_RESERVE_CHARS = 100;
 const MAX_META_BYTES = 1_048_576;
@@ -282,7 +283,7 @@ export class RunManager {
       };
       const record: RunRecord = {
         schemaVersion: SCHEMA_VERSION, supervisorVersion: APP_VERSION, runId: id,
-        backend: this.config.backend, mode, state: "starting", sourceWorkspace: source,
+        backend: BACKEND_KIND, mode, state: "starting", sourceWorkspace: source,
         workerWorkspace, createdAt: now, updatedAt: now,
         taskSha256: createHash("sha256").update(task).digest("hex"), policyRevision: policy.revision, admittedRoot: admitted.root, limits
       };
@@ -296,7 +297,7 @@ export class RunManager {
       runtime.starting.catch((error: unknown) => this.reportBackground(runtime, "launch", error));
       return {
         supervisor_version: runtime.record.supervisorVersion ?? null, run_id: id, policy_revision: policy.revision,
-        state: runtime.record.state, backend: this.config.backend, mode,
+        state: runtime.record.state, backend: BACKEND_KIND, mode,
         source_workspace: source, worker_workspace: workerWorkspace, created_at: now,
         next_action: this.nextAction(runtime.record, runtime.record.state),
         ...(mode === "edit" ? { base_ref: options.baseRef ?? "HEAD", ...(checkedBase ? { base_commit: checkedBase } : {}) } : {})
@@ -370,7 +371,7 @@ export class RunManager {
   }
 
   private async runtimeCheck(): Promise<RuntimeCheck | { status: "not_reported" }> {
-    const backend = this.backends.get(this.config.backend);
+    const backend = this.backends.get(BACKEND_KIND);
     if (!backend?.runtimeCheck) return { status: "not_reported" };
     return backend.runtimeCheck();
   }
@@ -870,11 +871,6 @@ export class RunManager {
   }
 
   private async loadDefaultBackends(): Promise<void> {
-    if (this.config.backend === "programmatic") {
-      const { ProgrammaticBackend } = await import("../backends/programmatic.js");
-      this.backends.set("programmatic", new ProgrammaticBackend(this.config));
-      return;
-    }
     const { AppServerBackend } = await import("../backends/app-server.js");
     this.backends.set("app-server", new AppServerBackend(this.config));
   }
@@ -894,8 +890,8 @@ export class RunManager {
         await this.persist(runtime);
       }
       if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
-      const backend = this.backends.get(this.config.backend);
-      if (!backend) throw codedError("VSUP_BACKEND_CRASHED", `The ${this.config.backend} backend is unavailable.`);
+      const backend = this.backends.get(BACKEND_KIND);
+      if (!backend) throw codedError("VSUP_BACKEND_CRASHED", `The ${BACKEND_KIND} backend is unavailable.`);
       runtime.backend = backend;
       await snapshotTask;
       if (snapshotTask) await this.persist(runtime);
@@ -1219,7 +1215,6 @@ export class RunManager {
       if (!info.isFile()) throw asStorageError(Object.assign(new Error("Unsafe event log"), { code: info.isSymbolicLink() ? "ELOOP" : info.isDirectory() ? "EISDIR" : "ENOTSUP", path: eventsPath }), runtime.directory, { eventLog: true });
     } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") await this.atomicWriteText(eventsPath, ""); else throw error; }
     const artifacts: NonNullable<RunRecord["result"]>["artifacts"] = [];
-    let workerDiagnosticsOmission: string | undefined;
     if (patchInfo) {
       artifacts.push(await describeArtifact("diff.patch", patchInfo.patchPath, "text/x-diff"));
       artifacts.push(await describeArtifact("diff.stat", patchInfo.statPath, "text/plain"));
@@ -1228,20 +1223,6 @@ export class RunManager {
     }
     artifacts.push(await describeArtifact("transcript.md", path.join(runtime.directory, "transcript.md"), "text/markdown"));
     if (!runtime.logUnavailable) artifacts.push(await describeArtifact("events.ndjson", path.join(runtime.directory, "events.ndjson"), "application/x-ndjson"));
-    const workerDiagnosticsPath = path.join(runtime.directory, "worker-diagnostics.json");
-    try {
-      const info = await lstat(workerDiagnosticsPath);
-      if (info.isSymbolicLink() || !info.isFile()) workerDiagnosticsOmission = WORKER_DIAGNOSTICS_UNSAFE;
-      else if (info.size > MAX_WORKER_DIAGNOSTICS_BYTES) workerDiagnosticsOmission = WORKER_DIAGNOSTICS_OVERSIZED;
-      else {
-        const described = await describeArtifact("worker-diagnostics.json", workerDiagnosticsPath, "application/json");
-        const currentBytes = artifacts.reduce((sum, artifact) => sum + artifact.bytes, 0);
-        if (described.bytes <= MAX_WORKER_DIAGNOSTICS_BYTES && currentBytes + described.bytes <= runtime.record.limits.maxArtifactBytes) artifacts.push(described);
-        else workerDiagnosticsOmission = WORKER_DIAGNOSTICS_OVERSIZED;
-      }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") workerDiagnosticsOmission = WORKER_DIAGNOSTICS_UNSAFE;
-    }
     const artifactBytes = artifacts.reduce((sum, artifact) => sum + artifact.bytes, 0);
     if (artifactBytes > runtime.record.limits.maxArtifactBytes) throw codedError("VSUP_OUTPUT_LIMIT", "Run artifacts exceeded the configured byte limit.");
     const stopReason = runtime.record.result?.stopReason;
@@ -1250,7 +1231,6 @@ export class RunManager {
     const stopWarning = resultState === "completed" ? stopReasonWarning(stopReason) : undefined;
     const carriedWarnings = withoutStopReasonWarnings(runtime.record.result?.warnings ?? []);
     if (runtime.logUnavailable) carriedWarnings.push(`${UNREADABLE_LOG_WARNING} (${runtime.logUnavailable.reason})`);
-    if (workerDiagnosticsOmission) carriedWarnings.push(`Optional worker diagnostics were not included: ${workerDiagnosticsOmission}.`);
     runtime.record.result = {
       ...(stopReason ? { stopReason } : {}),
       summary,
@@ -1629,9 +1609,6 @@ async function describeArtifact(name: string, file: string, mediaType: string): 
   return { name, path: file, sha256: createHash("sha256").update(bytes).digest("hex"), bytes: bytes.byteLength, mediaType } as NonNullable<RunRecord["result"]>["artifacts"] extends (infer A)[] | undefined ? A : never;
 }
 
-const MAX_WORKER_DIAGNOSTICS_BYTES = 64 * 1024;
-const WORKER_DIAGNOSTICS_OVERSIZED = "the file exceeded the artifact size limit";
-const WORKER_DIAGNOSTICS_UNSAFE = "the file was unsafe or unreadable";
 const UNREADABLE_LOG_WARNING = "The event log of this run could not be read and was left untouched; it is not included in the artifacts";
 const ARTIFACTS_INCOMPLETE_WARNING = "Run artifacts could not be finalized; the listed artifacts may be missing or incomplete.";
 const CHANGED_WITH_WRITE_WARNING = "Possible read-only boundary violation: the review worker issued a write-capable tool call and the source workspace changed. Inspect the changed paths before trusting the review.";
@@ -1648,10 +1625,8 @@ function completedSummary(stopReason: string | undefined, _backend: RunRecord["b
   switch (stopReason) {
     case undefined:
     case "end_turn": return "Vibe completed the delegated task.";
-    case "turn_limit":
-    case "max_turn_requests": return "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; start a fresh run from a reviewed base if more work is needed.";
-    case "token_limit":
-    case "max_tokens": return "Vibe stopped at the token limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; start a fresh run from a reviewed base if more work is needed.";
+    case "turn_limit": return "Vibe stopped at the turn limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; start a fresh run from a reviewed base if more work is needed.";
+    case "token_limit": return "Vibe stopped at the token limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; start a fresh run from a reviewed base if more work is needed.";
     case "price_limit": return "Vibe stopped at the configured cost limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; start a fresh run from a reviewed base if more work is needed.";
     case "refusal": return "Vibe declined the request. Inspect the artifacts and stop_reason before trusting the result.";
     case "cancelled": return "The Vibe task was cancelled before it finished. Inspect the artifacts and stop_reason before starting a fresh run.";

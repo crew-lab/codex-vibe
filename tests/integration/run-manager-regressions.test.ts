@@ -1,10 +1,10 @@
-import { chmod, mkdtemp, mkdir, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
-import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { hashWorkspace } from '../../src/core/workspace-snapshot.js';
 
@@ -39,7 +39,7 @@ afterEach(async () => {
 });
 
 class FakeBackend implements SupervisorBackend {
-  readonly kind = 'programmatic' as const;
+  readonly kind = 'app-server' as const;
   readonly callbacks = new Map<string, BackendCallbacks>();
   readonly cancelled: string[] = [];
   readonly closed: string[] = [];
@@ -82,75 +82,28 @@ function collectUnhandledRejections() {
 const settle = (ms = 500) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe('RunManager regressions', () => {
-  it('returns the optional bounded worker diagnostics file as a result artifact', async () => {
+  it('lists only the supervisor-written artifacts and ignores any other file planted in the run directory', async () => {
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
-    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
-      const diagnosticsPath = path.join(data, 'runs', started.run_id, 'worker-diagnostics.json');
-      const diagnostics = JSON.stringify({ schema_version: 1, tool_inventory: ['grep', 'read_file'], tool_calls: [{ tool: 'read_file', outcome: 'completed' }] });
-      await writeFile(diagnosticsPath, diagnostics, { mode: 0o600 });
+      await writeFile(path.join(data, 'runs', started.run_id, 'worker-diagnostics.json'), JSON.stringify({ planted: 'outside-content' }), { mode: 0o600 });
       await backend.callbacks.get(started.run_id)?.onState('completed', { result: { summary: 'done' } });
       const result = await manager.result({ run_id: started.run_id });
-      expect(result.artifacts).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'worker-diagnostics.json' })]));
+      const names = result.artifacts?.map((artifact) => artifact.name) ?? [];
+      expect(names).toEqual(expect.arrayContaining(['transcript.md', 'events.ndjson']));
+      expect(names).not.toContain('worker-diagnostics.json');
+      expect(JSON.stringify(result)).not.toContain('outside-content');
     } finally { await manager.shutdown(); }
-  }, 30_000);
-
-  async function completeWithDiagnostics(plant: (diagnosticsPath: string, parent: string) => Promise<void>) {
-    const backend = new FakeBackend();
-    const { parent, source, data } = await makeParent();
-    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
-    try {
-      const started = await manager.reviewStart({ task: 'review', cwd: source });
-      await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
-      await plant(path.join(data, 'runs', started.run_id, 'worker-diagnostics.json'), parent);
-      await backend.callbacks.get(started.run_id)?.onState('completed', { result: { summary: 'done' } });
-      return await manager.result({ run_id: started.run_id });
-    } finally { await manager.shutdown(); }
-  }
-
-  function expectCompletedWithoutDiagnostics(result: Awaited<ReturnType<typeof completeWithDiagnostics>>) {
-    expect(result.state).toBe('completed');
-    const names = result.artifacts?.map((artifact) => artifact.name) ?? [];
-    expect(names).toEqual(expect.arrayContaining(['transcript.md', 'events.ndjson']));
-    expect(names).not.toContain('worker-diagnostics.json');
-    expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('worker diagnostics were not included')]));
-    expect(result.warnings).not.toEqual(expect.arrayContaining([expect.stringContaining('could not be finalized')]));
-  }
-
-  it('omits oversized worker diagnostics with a warning and keeps the other artifacts', async () => {
-    const result = await completeWithDiagnostics(async (diagnosticsPath) => {
-      await writeFile(diagnosticsPath, 'x'.repeat(64 * 1024 + 1), { mode: 0o600 });
-    });
-    expectCompletedWithoutDiagnostics(result);
-    expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('size limit')]));
-  }, 30_000);
-
-  it('omits a symlinked worker diagnostics file without reading its target', async () => {
-    const target = { path: '' };
-    const result = await completeWithDiagnostics(async (diagnosticsPath, parent) => {
-      target.path = path.join(parent, 'outside-secret.json');
-      await writeFile(target.path, JSON.stringify({ secret: 'outside-target-content' }), { mode: 0o600 });
-      await symlink(target.path, diagnosticsPath);
-    });
-    expectCompletedWithoutDiagnostics(result);
-    expect(JSON.stringify(result)).not.toContain('outside-target-content');
-    expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('unsafe or unreadable')]));
-  }, 30_000);
-
-  it('omits a worker diagnostics path that is not a regular file', async () => {
-    const result = await completeWithDiagnostics(async (diagnosticsPath) => { await mkdir(diagnosticsPath); });
-    expectCompletedWithoutDiagnostics(result);
-    expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('unsafe or unreadable')]));
   }, 30_000);
 
   it('turns a source workspace change during a review into a warning instead of failing the run', async () => {
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
     await writeFile(path.join(source, 'file.txt'), 'original\n');
-    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
@@ -172,7 +125,7 @@ describe('RunManager regressions', () => {
     const collector = collectUnhandledRejections();
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
-    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
@@ -195,7 +148,7 @@ describe('RunManager regressions', () => {
     const collector = collectUnhandledRejections();
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
-    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     const started = await manager.reviewStart({ task: 'review', cwd: source });
     await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
     await backend.callbacks.get(started.run_id)?.onState('completed', { result: { summary: 'done' } });
@@ -218,7 +171,7 @@ describe('RunManager regressions', () => {
     const collector = collectUnhandledRejections();
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
-    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     const started = await manager.reviewStart({ task: 'review', cwd: source });
     await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
     await backend.callbacks.get(started.run_id)?.onState('completed', { result: { summary: 'done' } });
@@ -239,7 +192,7 @@ describe('RunManager regressions', () => {
     const { source, data } = await makeParent();
     const locked = path.join(source, 'locked');
     await mkdir(locked); await writeFile(path.join(locked, 'secret.txt'), 'secret\n'); await chmod(locked, 0o000); unreadable.push(locked);
-    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       const running = await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running' || value.state === 'failed');
@@ -260,7 +213,7 @@ describe('RunManager regressions', () => {
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
     await writeFile(path.join(source, 'file.txt'), 'content\n');
-    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     persistFault.armed = true; persistFault.fired = false;
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
@@ -283,11 +236,11 @@ describe('RunManager regressions', () => {
     await expect(hashWorkspace(source, { maxFiles: 10, maxBytes: 12 })).resolves.toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it('releases the programmatic worker when artifact finalization fails a completed run', async () => {
+  it('releases the worker when artifact finalization fails a completed run', async () => {
     const collector = collectUnhandledRejections();
     const { source, data } = await makeParent();
     const backend = new FakeBackend();
-    const config = { ...LEGACY_CONFIG, allowedWorkspaceRoots: [source], limits: { ...LEGACY_CONFIG.limits, maxArtifactBytes: 10 } };
+    const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [source], limits: { ...TEST_CONFIG.limits, maxArtifactBytes: 10 } };
     const manager = new RunManager(config, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
@@ -307,10 +260,10 @@ describe('RunManager regressions', () => {
   }, 30_000);
 
   describe('failed runs release their backend session exactly once', () => {
-    async function start(overrides: Partial<typeof LEGACY_CONFIG> = {}) {
+    async function start(overrides: Partial<typeof TEST_CONFIG> = {}) {
       const backend = new FakeBackend();
       const { source, data } = await makeParent();
-      const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source], ...overrides }, data, [backend]);
+      const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source], ...overrides }, data, [backend]);
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
       return { backend, manager, runId: started.run_id, data };
@@ -335,7 +288,7 @@ describe('RunManager regressions', () => {
     }, 30_000);
 
     it('when a completed run fails during artifact finalization', async () => {
-      const { backend, manager, runId } = await start({ limits: { ...LEGACY_CONFIG.limits, maxArtifactBytes: 10 } });
+      const { backend, manager, runId } = await start({ limits: { ...TEST_CONFIG.limits, maxArtifactBytes: 10 } });
       try {
         await backend.callbacks.get(runId)?.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: 'findings that exceed ten bytes' } });
         await backend.callbacks.get(runId)?.onState('completed', { result: { summary: 'done' } });
@@ -362,7 +315,7 @@ describe('RunManager regressions', () => {
     }, 30_000);
 
     it('when the transcript limit fails the run', async () => {
-      const { backend, manager, runId } = await start({ limits: { ...LEGACY_CONFIG.limits, maxTranscriptBytes: 8 } });
+      const { backend, manager, runId } = await start({ limits: { ...TEST_CONFIG.limits, maxTranscriptBytes: 8 } });
       try {
         await backend.callbacks.get(runId)?.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: 'this text is longer than the limit' } });
         const status = await waitFor(() => manager.status({ run_id: runId }), (value) => value.state === 'failed');
@@ -379,7 +332,7 @@ describe('RunManager regressions', () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], shouldAdvanceTime: true });
       const backend = new FakeBackend();
       const { source, data } = await makeParent();
-      const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+      const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
       try {
         const started = await manager.reviewStart({ task: 'review', cwd: source, timeout_seconds: 30 });
         await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running', 5_000);

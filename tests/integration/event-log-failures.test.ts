@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
-import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 
 const canonicalTmp = await realpath(tmpdir());
@@ -11,7 +11,7 @@ const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
 class FakeBackend implements SupervisorBackend {
-  readonly kind = 'programmatic' as const;
+  readonly kind = 'app-server' as const;
   readonly callbacks = new Map<string, BackendCallbacks>();
   async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
@@ -29,11 +29,11 @@ async function pendingWrites(manager: RunManager, runId: string): Promise<void> 
   await runtime?.persistChain;
 }
 
-async function running(maxEventBytes = LEGACY_CONFIG.limits.maxEventBytes) {
+async function running(maxEventBytes = TEST_CONFIG.limits.maxEventBytes) {
   const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-evlog-')); roots.push(parent);
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data'); await mkdir(source); await writeFile(path.join(source, 'file.txt'), 'content\n');
   const backend = new FakeBackend();
-  const manager = new RunManager({ ...LEGACY_CONFIG, limits: { ...LEGACY_CONFIG.limits, maxEventBytes }, allowedWorkspaceRoots: [source] }, data, [backend]);
+  const manager = new RunManager({ ...TEST_CONFIG, limits: { ...TEST_CONFIG.limits, maxEventBytes }, allowedWorkspaceRoots: [source] }, data, [backend]);
   const started = await manager.reviewStart({ task: 'review', cwd: source });
   for (let attempt = 0; attempt < 500 && (await manager.status({ run_id: started.run_id })).state !== 'running'; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
   await pendingWrites(manager, started.run_id);

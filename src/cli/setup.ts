@@ -2,7 +2,7 @@ import { chmod, copyFile, lstat, readFile, realpath, rename, rm } from 'node:fs/
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { parse, stringify } from 'smol-toml';
-import { resolveCommand } from '../backends/launcher.js';
+import { resolveCommand } from '../backends/app-server/executable.js';
 import { configFingerprint, loadResolvedConfig, resolveConfigSelection } from '../config/config.js';
 import { APP_VERSION } from '../version.js';
 import { validateConfig } from '../config/validation.js';
@@ -97,7 +97,6 @@ async function resolvePaths(document: Document, notes: string[]): Promise<boolea
 export const DEFAULT_PIN_MANIFEST_NAME = 'vibe-pin-manifest.json';
 
 function ensurePinManifestPath(document: Document, file: string, notes: string[]): boolean {
-  if (document.backend === 'programmatic') return false;
   const existing = document.paths ?? {};
   if (!existing || typeof existing !== 'object' || Array.isArray(existing)) return false;
   const paths = existing as Record<string, unknown>;
@@ -131,7 +130,7 @@ export async function planWorkspaceConfig(canonical: string, options: { resolveE
     const config = validateConfig(document);
     await validateWorkspaceRootsAtUse(config.allowedWorkspaceRoots);
   }
-  catch (error) { throw configInvalid(`Invalid supervisor configuration at ${file}; no changes were made: ${(error as Error).message} Supported fields are version, backend, allowed_workspace_roots, retention, limits (including max_tokens and max_cost_usd), and paths (vibe, app_server, vibe_pin_manifest). Remove unsupported fields instead of relying on them.`); }
+  catch (error) { throw configInvalid(`Invalid supervisor configuration at ${file}; no changes were made: ${(error as Error).message} Supported fields are version, allowed_workspace_roots, retention, limits (including max_tokens and max_cost_usd), and paths (vibe, app_server, vibe_pin_manifest). Remove unsupported fields instead of relying on them.`); }
   const changed = created || added || pathsChanged;
   return { file, created, added, canonical, notes, changed, ...(changed ? { text: stringify(document) } : {}) };
 }

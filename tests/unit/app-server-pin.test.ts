@@ -15,7 +15,7 @@ import {
   type PinFailureReason,
   type PinManifest,
 } from '../../src/backends/app-server/pin.js';
-import { SUPPORTED_VIBE } from '../../src/backends/pinned.js';
+import { SUPPORTED_VIBE } from '../../src/backends/app-server/supported-vibe.js';
 
 interface FakeEnvironment {
   root: string;

@@ -31,7 +31,7 @@ afterEach(async () => {
 });
 
 class FakeBackend implements SupervisorBackend {
-  readonly kind = "programmatic" as const;
+  readonly kind = "app-server" as const;
   starts = 0;
   callbacks: BackendCallbacks | undefined;
   async probe() { return { available: true, backend: this.kind }; }
@@ -45,8 +45,8 @@ class FakeBackend implements SupervisorBackend {
   async close() {}
 }
 
-function toml(roots: string[], extra = ""): string {
-  return `version = 1\nbackend = "programmatic"\nallowed_workspace_roots = ${JSON.stringify(roots)}\n${extra}`;
+function toml(roots: string[], extra = "", pathsExtra = ""): string {
+  return `version = 1\nallowed_workspace_roots = ${JSON.stringify(roots)}\npaths = { vibe_pin_manifest = "/unused/vibe-pin-manifest.json"${pathsExtra} }\n${extra}`;
 }
 
 async function replaceConfig(file: string, text: string): Promise<void> {
@@ -193,14 +193,15 @@ describe("authoritative policy source", () => {
   });
 
   it.each([
-    ["limits.max_turns_review", `[limits]\nmax_turns_review = 7\n`],
-    ["paths.vibe", `[paths]\nvibe = "/opt/other/vibe"\n`],
-    ["retention.days", `[retention]\ndays = 2\n`]
-  ])("reports restart_required for a %s change and refuses starts instead of adopting it", async (key, extra) => {
+    ["limits.max_turns_review", `[limits]\nmax_turns_review = 7\n`, ""],
+    ["paths.vibe", "", `, vibe = "/opt/other/vibe"`],
+    ["paths.app_server", "", `, app_server = "/opt/other/vibe-app-server"`],
+    ["retention.days", `[retention]\ndays = 2\n`, ""]
+  ])("reports restart_required for a %s change and refuses starts instead of adopting it", async (key, extra, pathsExtra) => {
     const box = await sandbox();
     const dataDir = path.join(box.parent, "data");
     const { manager, backend } = await connect(box.configPath, dataDir);
-    await replaceConfig(box.configPath, toml([box.alpha, box.beta], extra));
+    await replaceConfig(box.configPath, toml([box.alpha, box.beta], extra, pathsExtra));
     const report = await readiness(manager, box.beta);
     expect(report).toMatchObject({ eligible: false, restart_required: true, boot_drift: [key] });
     expect(report.blockers.map((blocker) => blocker.code)).toEqual(["VSUP_RESTART_REQUIRED"]);

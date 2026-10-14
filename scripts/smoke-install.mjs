@@ -29,10 +29,10 @@ try {
   const manifest = JSON.parse(await readFile(path.join(installedRoot, 'package.json'), 'utf8'));
   const version = run(executable, ['--version']).trim();
   if (version !== manifest.version) throw new Error('Installed CLI version check failed.');
-  await access(path.join(installedRoot, 'dist', 'backends', 'runtime', 'vibe_supervisor_launcher.py'));
+  const shimPresent = await access(path.join(installedRoot, 'dist', 'backends', 'runtime')).then(() => true, () => false);
+  if (shimPresent) throw new Error('The installed package must not contain the retired Python launcher runtime.');
   if (!run(executable, ['--help']).includes('serve --stdio')) throw new Error('Installed CLI help check failed.');
 
-  // Exercise the installed stdio process and official client without starting a backend run.
   run(executable, ['allow', packDir]);
   const expectedTools = 5;
   const expectedToolNames = ['vibe_review_start', 'vibe_edit_start', 'vibe_status', 'vibe_result', 'vibe_close'];
@@ -44,7 +44,7 @@ try {
     await client.connect(transport);
     if (client.getServerVersion()?.version !== manifest.version) throw new Error("MCP server version mismatch.");
     const listed = await client.listTools();
-    if (listed.tools.length !== expectedTools) throw new Error(`Expected exactly ${expectedTools} programmatic MCP tools; received ${listed.tools.length}.`);
+    if (listed.tools.length !== expectedTools) throw new Error(`Expected exactly ${expectedTools} MCP tools; received ${listed.tools.length}.`);
     if (JSON.stringify(listed.tools.map(tool => tool.name).sort()) !== JSON.stringify([...expectedToolNames].sort())) throw new Error(`Installed MCP tool catalog differs from the one-shot contract: ${listed.tools.map(tool => tool.name).join(', ')}.`);
     if (listed.tools.some((tool) => tool.name === 'vibe_continue' || tool.name === 'vibe_respond')) throw new Error('Interactive ACP tools must not be registered.');
     if (listed.tools.some((tool) => tool.name === 'vibe_cancel')) throw new Error('vibe_cancel must not be registered.');
@@ -77,7 +77,7 @@ try {
     const now = new Date().toISOString();
     const savedMeta = {
       schema_version: 1, supervisor_version: manifest.version, run_id: savedId,
-      backend: 'programmatic', mode: 'review', state: 'completed',
+      backend: 'app-server', mode: 'review', state: 'completed',
       source_workspace: packDir, worker_workspace: packDir,
       created_at: now, updated_at: now, task_sha256: 'a'.repeat(64),
       limits: { timeout_seconds: 120, max_turns: 6, max_event_bytes: 1048576,
@@ -105,5 +105,5 @@ try {
   } finally {
     await client.close();
   }
-  process.stdout.write(JSON.stringify({ status: 'PASS', package: manifest.name, version: manifest.version, isolatedHome: true, installedCliExecutable: 'PASS', runtimeShim: 'present', installedMcpInitializeAndListTools: 'PASS', eofShutdown: 'PASS', concurrentIsolatedMcp: 'PASS', savedRunReconnectMcp: 'PASS' }) + '\n');
+  process.stdout.write(JSON.stringify({ status: 'PASS', package: manifest.name, version: manifest.version, isolatedHome: true, installedCliExecutable: 'PASS', installedMcpInitializeAndListTools: 'PASS', eofShutdown: 'PASS', concurrentIsolatedMcp: 'PASS', savedRunReconnectMcp: 'PASS' }) + '\n');
 } finally { await rm(tmpRoot, { recursive: true, force: true }); }

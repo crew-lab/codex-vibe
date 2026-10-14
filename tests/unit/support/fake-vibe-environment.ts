@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { chmod, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { SUPPORTED_VIBE } from '../../../src/backends/pinned.js';
+import { SUPPORTED_VIBE } from '../../../src/backends/app-server/supported-vibe.js';
 
 export interface FakeVibeEnvironment {
   root: string;
@@ -20,17 +20,25 @@ async function put(file: string, content: string | Buffer, mode?: number): Promi
   if (mode !== undefined) await chmod(file, mode);
 }
 
-export async function makeFakeVibeEnvironment(scratch: string, version: string = SUPPORTED_VIBE): Promise<FakeVibeEnvironment> {
+export interface FakeVibeEnvironmentOptions {
+  scriptBody?: string;
+  interpreterTarget?: string;
+}
+
+export async function makeFakeVibeEnvironment(scratch: string, version: string = SUPPORTED_VIBE, options: FakeVibeEnvironmentOptions = {}): Promise<FakeVibeEnvironment> {
   const root = path.join(scratch, 'tools', 'mistral-vibe');
   const basePython = path.join(scratch, 'base-python', 'python3.12');
   const site = path.join(root, 'lib', 'python3.12', 'site-packages');
   const distInfo = path.join(site, `mistral_vibe-${version}.dist-info`);
-  await put(basePython, '', 0o755);
+  if (options.interpreterTarget) {
+    await mkdir(path.dirname(basePython), { recursive: true });
+    await symlink(options.interpreterTarget, basePython);
+  } else await put(basePython, '', 0o755);
   await mkdir(path.join(root, 'bin'), { recursive: true });
   await symlink(basePython, path.join(root, 'bin', 'python'));
   await put(path.join(root, 'pyvenv.cfg'), 'home = /opt/python\n');
   const script = path.join(root, 'bin', 'vibe-app-server');
-  await put(script, `#!${path.join(root, 'bin', 'python')}\nimport sys\nfrom vibe.app_server import main\nsys.exit(main())\n`, 0o755);
+  await put(script, `#!${path.join(root, 'bin', 'python')}\n${options.scriptBody ?? 'import sys\nfrom vibe.app_server import main\nsys.exit(main())\n'}`, 0o755);
   await put(path.join(site, 'vibe', '__init__.py'), `__version__ = "${version}"\n`);
   await put(path.join(site, 'vibe', 'app_server', '__init__.py'), 'def main():\n    return 0\n');
   await put(path.join(site, '_native.so'), Buffer.from([0, 1, 2, 3, 250, 251, 252]));

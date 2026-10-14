@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { chmod, mkdtemp, mkdir, readFile, readdir, stat, writeFile, rm, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, stat, writeFile, rm, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { parse } from 'smol-toml';
 import { runCli } from '../../src/cli.js';
 import { applyCodexPlan, planCodexConfig } from '../../src/cli/codex.js';
+import { generatePinManifest, serializePinManifest } from '../../src/backends/app-server/pin.js';
+import { makeFakeVibeEnvironment } from './support/fake-vibe-environment.js';
 
 const dirs: string[] = [];
 const output: string[] = [];
@@ -65,36 +67,36 @@ describe('CLI local setup', () => {
   });
 });
 
-describe('CLI diagnostics for the programmatic runtime', () => {
+describe('CLI diagnostics for the app-server runtime', () => {
   let errorSpy: ReturnType<typeof vi.spyOn> | undefined;
   const errors: string[] = [];
 
   afterEach(() => { errorSpy?.mockRestore(); errorSpy = undefined; errors.length = 0; });
 
-  async function programmaticInstall(): Promise<void> {
+  async function installation(): Promise<void> {
     const data = await tempDir();
-    const bin = path.join(data, 'bin'); await mkdir(bin);
-    const script = (name: string) => path.join(bin, name);
-    await writeFile(script('vibe'), '#!/usr/bin/env python3\nprint("vibe 2.26.1")\n');
-    await chmod(script('vibe'), 0o755);
-    await writeFile(path.join(data, 'config.toml'), `version = 1\nbackend = "programmatic"\nallowed_workspace_roots = []\n\n[paths]\nvibe = ${JSON.stringify(script('vibe'))}\n`);
+    const fake = await makeFakeVibeEnvironment(data);
+    const manifest = path.join(data, 'vibe-pin-manifest.json');
+    await writeFile(manifest, serializePinManifest(await generatePinManifest({ executable: fake.shim })), { mode: 0o600 });
+    await writeFile(path.join(data, 'config.toml'), `version = 1\nallowed_workspace_roots = []\n\n[paths]\nvibe = ${JSON.stringify(fake.vibeShim)}\nvibe_pin_manifest = ${JSON.stringify(manifest)}\n`);
     vi.stubEnv('VIBE_SUPERVISOR_HOME', data);
     captureOutput();
     errorSpy = vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: string | Uint8Array) => { errors.push(String(chunk)); return true; }) as typeof process.stderr.write);
   }
 
-  it('doctor --json verifies the pinned Vibe runtime without checking ACP', async () => {
-    await programmaticInstall();
+  it('doctor --json verifies the pinned Vibe install against the manifest without checking ACP', async () => {
+    await installation();
     await runCli(['doctor', '--json']);
-    const report = JSON.parse(output.join('')) as { checks: Array<{ name: string; ok: boolean; version?: string }> };
-    expect(report.checks.find((entry) => entry.name === 'vibe')).toMatchObject({ ok: true, version: 'vibe 2.26.1' });
+    const report = JSON.parse(output.join('')) as { checks: Array<{ name: string; ok: boolean; version?: string }>; provenance: { backend: string } };
+    expect(report.checks.find((entry) => entry.name === 'vibe')).toMatchObject({ ok: true, version: '2.26.1' });
+    expect(report.provenance.backend).toBe('app-server');
     expect(report.checks.some((entry) => entry.name.includes('acp'))).toBe(false);
   }, 30_000);
 
   it('doctor reports unknown authentication separately from local runtime checks', async () => {
-    await programmaticInstall();
+    await installation();
     await runCli(['doctor']);
-    expect(output.join('')).toMatch(/UNVERIFIED authentication: Vibe authentication was not inspected/);
+    expect(output.join('')).toMatch(/UNVERIFIED authentication: The Mistral credential is resolved/);
     expect(output.join('')).not.toMatch(/ACP/i);
   }, 30_000);
 });

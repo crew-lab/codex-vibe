@@ -6,7 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, RunState, StartRunInput, SupervisorBackend } from "../../src/contracts.js";
-import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { RunManager } from "../../src/core/run-manager.js";
 import { runToWire } from "../../src/core/serialization.js";
 import { createDetachedWorktree } from "../../src/git/worktree.js";
@@ -18,7 +18,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
 class CloseBackend implements SupervisorBackend {
-  readonly kind = "programmatic" as const;
+  readonly kind = "app-server" as const;
   callbacks = new Map<string, BackendCallbacks>();
   closeGate: Promise<void> | undefined;
   closeFailure: "none" | "throws" | "rejects" = "none";
@@ -54,7 +54,7 @@ async function setup(backend = new CloseBackend(), names = { source: "source", d
   await exec("git", ["config", "user.name", "Vibe Supervisor Test"], { cwd: source });
   await exec("git", ["add", "tracked.txt"], { cwd: source });
   await exec("git", ["commit", "-qm", "baseline"], { cwd: source });
-  const config = { ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] };
+  const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [source] };
   return { parent, source, data, backend, config, manager: new RunManager(config, data, [backend]) };
 }
 
@@ -139,7 +139,7 @@ describe("runs cleanup <id> only touches a run that is finished", () => {
 function startingEditRecord(source: string, worktree: { path: string; baseRef: string }): RunRecord {
   const now = new Date().toISOString();
   return {
-    schemaVersion: 1, runId: randomUUID(), backend: "programmatic", mode: "edit", state: "starting" as RunState, sourceWorkspace: source, workerWorkspace: worktree.path,
+    schemaVersion: 1, runId: randomUUID(), backend: "app-server", mode: "edit", state: "starting" as RunState, sourceWorkspace: source, workerWorkspace: worktree.path,
     createdAt: now, updatedAt: now, launchedAt: now, taskSha256: "a".repeat(64),
     limits: { timeoutSeconds: 600, maxTurns: 5, maxEventBytes: 1_048_576, maxTranscriptBytes: 1_048_576, maxArtifactBytes: 8_388_608 },
     worktree: { path: worktree.path, baseRef: worktree.baseRef, createdBySupervisor: true }

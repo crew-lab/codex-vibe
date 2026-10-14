@@ -29,7 +29,7 @@ export const MEANINGS = {
   VSUP_PREPARATION_TIMEOUT: 'A readiness check or start exceeded its 30 s preparation deadline (configuration reread, workspace validation or base resolution); no run was created.',
   VSUP_STORAGE_ERROR: 'A filesystem fault (disk full, permissions, read-only, I/O) hit the data directory.',
   VSUP_INTERNAL: 'An unexpected supervisor failure; the detail is only on stderr.',
-  VSUP_RESTART_REQUIRED: 'The selected configuration, reread before a readiness check or start, changes a boot-bound setting (the backend, a path, retention or a limit) that the running server cannot adopt.',
+  VSUP_RESTART_REQUIRED: 'The selected configuration, reread before a readiness check or start, changes a boot-bound setting (a path, retention or a limit) that the running server cannot adopt.',
   VSUP_READINESS_RECEIPT_INVALID: 'A start carried a readiness_receipt that is malformed, altered, expired, from another server instance, or bound to a different policy revision, operation, workspace or base_ref, or whose edit base no longer resolves or resolves to another commit; details.reason names which.',
 };
 

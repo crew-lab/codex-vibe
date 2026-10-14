@@ -1,9 +1,9 @@
 /** Shared, versioned contracts for the supervisor, MCP surface, and backends. */
-import { SUPPORTED_VIBE } from "./backends/pinned.js";
+import { SUPPORTED_VIBE } from "./backends/app-server/supported-vibe.js";
 
 export const SCHEMA_VERSION = 1 as const;
 
-export const BACKEND_KINDS = ["app-server", "programmatic"] as const;
+export const BACKEND_KINDS = ["app-server"] as const;
 export type BackendKind = typeof BACKEND_KINDS[number];
 
 export function isBackendKind(value: unknown): value is BackendKind {
@@ -129,7 +129,6 @@ export interface SupervisorEvent {
 
 export interface SupervisorConfig {
   version: 1;
-  backend: BackendKind;
   allowedWorkspaceRoots: string[];
   retention: { days: number };
   limits: {
@@ -226,7 +225,7 @@ export interface CloseToolInput { run_id: string; cleanup_worktree?: boolean }
 
 export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_CONFIG_INVALID: "Correct the reported config.toml field and try again.",
-  VSUP_VIBE_NOT_FOUND: "Install Vibe or set paths.vibe to its executable; with the app-server backend the vibe-app-server executable must sit next to it or be set as paths.app_server.",
+  VSUP_VIBE_NOT_FOUND: "Install Vibe or set paths.vibe to its executable; the vibe-app-server executable must sit next to it or be set as paths.app_server.",
   VSUP_VIBE_VERSION_UNSUPPORTED: `Install exactly the supported Vibe version (for example \`uv tool install mistral-vibe==${SUPPORTED_VIBE}\`) or set paths.vibe to its executable; for a pin-manifest failure (details.reason) check paths.vibe_pin_manifest and write the manifest on this machine with \`vibe-supervisor pin-manifest\`.`,
   VSUP_AUTH_REQUIRED: "Sign in to Vibe or configure its supported authentication.",
   VSUP_WORKSPACE_INVALID: "Provide an existing workspace directory under an allowed_workspace_roots entry (the git repository root for an edit, without project .vibe, unsafe .agents paths or glob characters), and existing context files inside it; a real .agents directory is supported without inheriting its content. Add the workspace to the selected config with `node dist/cli.js allow --config <selected-config> <workspace>` (or the equivalent installed executable path). The connected server rereads that file before every readiness check and start, so no restart is needed; confirm with vibe_status in workspace mode.",
@@ -246,7 +245,7 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_INVALID_STATE: "The request conflicts with the current state: check the run status and use an action valid for it, or wait until a shutting-down supervisor has been restarted, or inspect the isolated session path named in the message.",
   VSUP_STORAGE_ERROR: "Check the supervisor data directory permissions and disk space.",
   VSUP_INTERNAL: "Inspect supervisor diagnostics and retry; report the error if it persists.",
-  VSUP_RESTART_REQUIRED: "A boot-bound setting (backend, paths.vibe, paths.app_server, paths.vibe_pin_manifest, retention or limits) in the selected config differs from the value this server started with, so new starts are refused rather than partially adopted. Revert the setting, or close any active run and deliberately restart the Codex MCP server; allowed_workspace_roots changes never need a restart.",
+  VSUP_RESTART_REQUIRED: "A boot-bound setting (paths.vibe, paths.app_server, paths.vibe_pin_manifest, retention or limits) in the selected config differs from the value this server started with, so new starts are refused rather than partially adopted. Revert the setting, or close any active run and deliberately restart the Codex MCP server; allowed_workspace_roots changes never need a restart.",
   VSUP_OWNER_LOCKED: "Another vibe-supervisor owns this data directory, or its owner lock needs inspection. Stop the other process or give each Codex session its own VIBE_SUPERVISOR_HOME, then retry; for an unsafe or malformed lock, inspect the file named in details.lock_path.",
   VSUP_PREPARATION_TIMEOUT: "Preparation did not finish within its fixed deadline and no run was created. Check that the workspace, repository and configuration filesystems respond, then check readiness again.",
   VSUP_READINESS_RECEIPT_INVALID: "No run was created and nothing was launched. Call vibe_status with workspace and operation on this same connection, resolve any blockers, and start once with the new readiness_receipt; do not retry the start automatically.",

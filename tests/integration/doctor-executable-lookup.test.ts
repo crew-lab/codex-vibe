@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { chmod, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { runDoctor } from '../../src/diagnostics/doctor.js';
 
 const dirs: string[] = [];
@@ -28,9 +28,13 @@ async function tempDir(): Promise<string> {
 async function marker(dir: string, name: string): Promise<string> {
   const file = path.join(dir, name);
   const hit = path.join(dir, `${name}.hit`);
-  await writeFile(file, `#!/bin/sh\necho hit > ${JSON.stringify(hit)}\necho "vibe 0.0.0"\n`);
+  await writeFile(file, `#!/bin/sh\necho hit > ${JSON.stringify(hit)}\n`);
   await chmod(file, 0o755);
   return hit;
+}
+
+function vibeCheck(report: Awaited<ReturnType<typeof runDoctor>>) {
+  return report.checks.find((check) => check.name === 'vibe');
 }
 
 describe('doctor executable lookup', () => {
@@ -38,38 +42,36 @@ describe('doctor executable lookup', () => {
     const dir = await tempDir();
     const empty = path.join(dir, 'empty'); await mkdir(empty);
     const hit = await marker(dir, 'vibe');
+    const appServerHit = await marker(dir, 'vibe-app-server');
     process.chdir(dir);
     process.env.PATH = empty;
-    const report = await runDoctor({ ...LEGACY_CONFIG, paths: { vibe: 'vibe' } });
-    expect(report.checks.find((check) => check.name === 'vibe')).toMatchObject({ ok: false, message: expect.stringContaining('not found') });
+    const report = await runDoctor({ ...TEST_CONFIG, paths: { vibe: 'vibe', vibePinManifest: '/unused/manifest.json' } });
+    expect(vibeCheck(report)).toMatchObject({ ok: false });
+    expect(vibeCheck(report)?.message).not.toContain(dir);
     expect(existsSync(hit)).toBe(false);
+    expect(existsSync(appServerHit)).toBe(false);
   });
 
-  it('resolves a bare configured name through PATH', async () => {
+  it('resolves a bare configured name through PATH and verifies the sibling vibe-app-server without executing it', async () => {
     const dir = await tempDir();
     const bin = path.join(dir, 'bin'); await mkdir(bin);
-    const hit = await marker(bin, 'vibe');
+    const vibeHit = await marker(bin, 'vibe');
+    const appServerHit = await marker(bin, 'vibe-app-server');
     process.env.PATH = bin;
-    const report = await runDoctor({ ...LEGACY_CONFIG, paths: { vibe: 'vibe' } });
-    expect(report.checks.find((check) => check.name === 'vibe')?.message).not.toContain('not found');
-    await expect(readFile(hit, 'utf8')).resolves.toContain('hit');
+    const report = await runDoctor({ ...TEST_CONFIG, paths: { vibe: 'vibe', vibePinManifest: path.join(dir, 'absent-manifest.json') } });
+    expect(vibeCheck(report)).toMatchObject({ ok: false, message: expect.stringContaining(path.join(bin, 'vibe-app-server')) });
+    expect(existsSync(vibeHit)).toBe(false);
+    expect(existsSync(appServerHit)).toBe(false);
   });
 
-  it('rejects a relative configured path with a separator without executing it', async () => {
+  it('uses an absolute configured path directly and never executes it', async () => {
     const dir = await tempDir();
-    const hit = await marker(dir, 'vibe');
-    process.chdir(dir);
-    const report = await runDoctor({ ...LEGACY_CONFIG, paths: { vibe: './vibe' } });
-    expect(report.checks.find((check) => check.name === 'vibe')).toMatchObject({ ok: false, message: expect.stringContaining('relative') });
-    expect(existsSync(hit)).toBe(false);
-  });
-
-  it('uses an absolute configured path directly', async () => {
-    const dir = await tempDir();
-    const hit = await marker(dir, 'vibe');
-    const report = await runDoctor({ ...LEGACY_CONFIG, paths: { vibe: path.join(dir, 'vibe') } });
-    expect(report.checks.find((check) => check.name === 'vibe')?.version).toContain('0.0.0');
-    expect(existsSync(hit)).toBe(true);
+    const vibeHit = await marker(dir, 'vibe');
+    const appServerHit = await marker(dir, 'vibe-app-server');
+    const report = await runDoctor({ ...TEST_CONFIG, paths: { vibe: path.join(dir, 'vibe'), vibePinManifest: path.join(dir, 'absent-manifest.json') } });
+    expect(vibeCheck(report)).toMatchObject({ ok: false, message: expect.stringContaining(path.join(dir, 'vibe-app-server')) });
+    expect(existsSync(vibeHit)).toBe(false);
+    expect(existsSync(appServerHit)).toBe(false);
   });
 
   it('accepts a home-relative workspace root', async () => {
@@ -78,7 +80,7 @@ describe('doctor executable lookup', () => {
     const savedHomeVar = process.env.HOME;
     process.env.HOME = home;
     try {
-      const report = await runDoctor({ ...LEGACY_CONFIG, allowedWorkspaceRoots: ['~/project'], paths: { vibe: 'vibe' } });
+      const report = await runDoctor({ ...TEST_CONFIG, allowedWorkspaceRoots: ['~/project'], paths: { vibe: 'vibe', vibePinManifest: '/unused/manifest.json' } });
       expect(report.checks.find((check) => check.name === 'workspace-roots')).toMatchObject({ ok: true, message: expect.stringContaining('1/1') });
     } finally { if (savedHomeVar === undefined) delete process.env.HOME; else process.env.HOME = savedHomeVar; }
   });
