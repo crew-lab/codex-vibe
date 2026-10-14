@@ -1,8 +1,8 @@
 # Behavior
 
-The supervisor is a local MCP coordinator for one-shot Mistral Vibe 2.26.1 programmatic runs through the enforced `--legacy-harness` path. Its tools are `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. A run accepts one task and fixed turn, deadline, event, transcript, and artifact limits. There is no interactive permission response, continuation, queue, ACP session, idle-session retention, or automatic recovery.
+The supervisor is a local MCP coordinator for one-shot Mistral Vibe 2.26.1 runs through the `vibe-app-server` protocol: one app-server process per run, driven as a client over newline-delimited JSON-RPC on stdio. Its tools are `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. A run accepts one task and fixed turn, deadline, event, transcript, token, price and artifact limits. There is no interactive permission response, continuation, queue, ACP session, idle-session retention, or automatic recovery. Run records, events and results name the engine as `backend: app-server`.
 
-The pinned runtime checks the effective local Vibe tool inventory against the exact run profile and fails closed if a required tool is missing or an unexpected tool is present. Any tool outside the profile is also refused when it is invoked; Vibe reports the refusal to the model as a failed tool call and the run continues. Vibe skills are disabled. When `VIBE_SUPERVISOR_DIAGNOSTICS=1` is present in the supervisor process environment, private worker diagnostics also include that inventory and bounded tool invocations that reach `BaseTool.invoke`. They record approved built-in tool names and `attempt`, `completed`, `failed`, `refused` or `cancelled` only; unrecognized names collapse to `<other>`, and arguments, paths, results, provider traffic, and reasoning are excluded. They do not capture requests rejected before invocation, so missing calls do not establish that no attempt or denial occurred. The diagnostics file is returned as an optional artifact when it is a regular file and fits the run's artifact limit; an unsafe, unreadable or oversized file is omitted with a warning and never fails the run. The hooks are pinned to inspected Vibe 2.26.1 source and signatures and fail closed on drift. Their absence means diagnostics were disabled or unavailable; neither readiness nor this local trace proves hosted model usability.
+The supervisor, not Vibe's defaults, decides what the model may do. It starts the server with a supervisor-written session configuration, reads the effective configuration back before the first turn and fails the run on any mismatch, answers every approval request itself, and audits the run's history for any tool effect it did not approve. [Security](security.md#enforcement-points) lists each point. The model's tool catalogue cannot be narrowed: `write_file`, `edit`, the shell tool and `run_typescript` are listed to the model, in reviews too, and are refused when called. The model sees these tools and cannot use them; each refused call is recorded as a `tool_denied` event and the run continues.
 
 The capacity guarantee belongs to one owning server/storage instance. The server reserves its single slot before asynchronous preparation and rejects another start with a capacity error; there is no waiting record or hidden worker. Separate isolated MCP connections can each own an instance. A second process cannot manage the same storage while the owner lock is held.
 
@@ -14,9 +14,21 @@ Every delegation should begin with `vibe_status` in workspace mode on the connec
 
 A start, with or without a receipt, reserves the slot, then rereads and validates the selected configuration before it creates a record. Allowlist changes therefore apply to the next check or start without a restart; an allowed root that disappears from disk denies only workspaces under it; changes to boot-bound settings make readiness report `restart_required` and starts fail with `VSUP_RESTART_REQUIRED`; a missing or unsafe file fails closed. The admitted `policy_revision` is saved with the run. See [policy authority](reference.md#policy-authority).
 
+## Run lifecycle
+
+Admission, the slot, the integrity snapshot or detached worktree, and settlement belong to the run manager and are the same for both operations. The engine adds these steps:
+
+1. **Before spawn:** the pin check hashes the installed Vibe files against the candidate's manifest (see [compatibility](compatibility.md#the-pin-and-its-manifest)), and the credential is resolved from `MISTRAL_API_KEY` in the supervisor environment or, on macOS, the Vibe Keychain entry. Either failing refuses the start before any process exists.
+2. **Spawn:** `vibe-app-server` starts with no arguments, piped standard streams, its own process group, the filtered child environment, the supervisor's `VIBE_*` settings, and a private `HOME`, `VIBE_HOME` and `TMPDIR` inside the run directory. A small reaper process, in its own group, kills the worker's group if the supervisor disappears or the run deadline plus a margin passes.
+3. **Handshake and read-back:** `initialize` (declaring that the client answers approvals; the result's server version must equal the pin), `initialized`, `session/start` with the profile, wait until the session is ready, read the runtime and effective configuration back, turn thinking off, read back again. Any mismatch fails the run before the first turn with `VSUP_BACKEND_ERROR` and `details.reason: readback_mismatch`.
+4. **Turn:** `turn/start` carries the task as one text block over standard input, so the task is absent from OS-visible arguments. The start call returns when Vibe accepts the turn, with the run `running`.
+5. **During the turn:** notifications drive status. Each statistics update refreshes `usage` (tokens, and an estimated cost in USD that is not authoritative), at most about once a second, because the server writes no run export and the supervisor rebuilds usage and cost from the session statistics and Vibe's pricing formula. Each `callback/call` is an approval request; see [security](security.md#approval-handler).
+6. **End:** the supervisor reads the final statistics and pages the whole turn history once more, so an effect it missed live is found before the outcome is decided. The final assistant message becomes the summary. Reasoning entries are dropped on receipt and never persisted.
+7. **Stop:** the supervisor closes standard input, which lets Vibe clean up (a termination signal skips its cleanup), waits briefly, kills the process group if needed, verifies termination, then deletes the private directories. A stop on cancel or deadline first sends `turn/interrupt` for the current turn and waits a short grace period.
+
 ## Review
 
-A review requires a canonical workspace beneath an explicitly configured allowlist. The starter allowlist is empty. Before launch, the supervisor snapshots source integrity (see Review snapshot cost below). Vibe receives only read and search tools. The final result records whether source integrity remained verified, changed, or could not be established. `completed` means the worker ended; the coordinator must inspect the stop reason, warnings, integrity and final answer.
+A review requires a canonical workspace beneath an explicitly configured allowlist. The starter allowlist is empty. Before launch, the supervisor snapshots source integrity (see Review snapshot cost below). Vibe's model receives `read_file` only as a usable tool. There is no search or listing tool: the worker reads paths it is given or can guess, and the supervisor adds no file listing. Validated `context_files` are added to the prompt as approved context paths, so a review task should name the files that matter. Write tools are visible and refused as described above. The final result records whether source integrity remained verified, changed, or could not be established. `completed` means the worker ended; the coordinator must inspect the stop reason, warnings, integrity and final answer.
 
 ## Edit
 
@@ -26,9 +38,27 @@ The export and the cleanup checks read a private copy of the worktree index, so 
 
 ## Settlement and close
 
-Settlement records one final state. The active slot and owned handle are released only after backend close verifies termination. If close fails or times out, the run stays inspectable, its handle and slot remain owned, and the close response reports `worker_termination_unverified` with `VSUP_BACKEND_ERROR`; a second run cannot take that slot. Deadline, no-progress, output overflow, cancellation, provider error, shutdown and late process callbacks cannot reopen a settled run or replace its result. Deadlines and output limits are bounded. Worker watchdogs stop an orphaned child when its parent disappears or its recorded run deadline passes.
+Settlement records one final state. The active slot and owned handle are released only after backend close verifies termination. If close fails or times out, the run stays inspectable, its handle and slot remain owned, and the close response reports `worker_termination_unverified` with `VSUP_BACKEND_ERROR`; a second run cannot take that slot. Deadline, no-progress, output overflow, cancellation, provider error, shutdown and late process callbacks cannot reopen a settled run or replace its result. Deadlines and output limits are bounded. The reaper stops the worker's process group when the supervisor disappears or the run deadline plus its margin passes.
 
-A corroborated Vibe turn-limit stop is recorded as `completed` with `stop_reason: max_turn_requests` and an incomplete-result warning. This means execution ended at its configured budget, not that the task succeeded. The supervisor does not retry, continue, or increase the budget. An assistant message alone cannot establish a runtime limit: unmatched limits, conflicting errors, other stop reasons, and process crashes remain failures.
+Outcomes come from the turn status, its stop reason and error code, and the limits the supervisor itself detected, which take precedence.
+
+| Observed | State | `stop_reason` or error |
+|---|---|---|
+| Turn ended normally | `completed` | `end_turn`; a warning if no final message exists |
+| Vibe's iteration limit, or the supervisor's model-call backstop | `completed` | `turn_limit`, with an incomplete-result warning |
+| `limits.max_tokens` crossed | `completed` | `token_limit`, with the warning |
+| `limits.max_cost_usd` crossed | `completed` | `price_limit`, with the warning |
+| The model declined (error code `refusal`) | `completed` | `refusal`, with a warning that the result is not a review or an edit |
+| `vibe_close` or cancel | `cancelled` | `cancelled` |
+| Run deadline, or no progress | `failed` | `VSUP_TIMEOUT`, `VSUP_NO_PROGRESS` |
+| Provider rejected the key | `failed` | `VSUP_AUTH_REQUIRED` |
+| Rate limit | `failed` | `VSUP_RATE_LIMITED`, retryable |
+| Context or response too long, or stop reason `length` | `failed` | `VSUP_OUTPUT_LIMIT` |
+| Unapproved allowed effect, unknown history entry, event gap, unparseable message | `failed` | `VSUP_BACKEND_ERROR`, `details.reason` names the cause |
+| Server exited or its stream closed | `failed` | `VSUP_BACKEND_CRASHED` |
+| Any other error code | `failed` | `VSUP_BACKEND_ERROR` |
+
+A limit stop means execution ended at its budget, not that the task succeeded. The supervisor does not retry, continue, or raise the budget. A stop reason Vibe reports that the supervisor does not know is recorded as `completed` with that text and the incomplete-result warning; read it before trusting the answer.
 
 Closing a live run cancels its process group and accounts for worktree creation that is already in flight. Worktree deletion requires the expected canonical run-owned path, validated Git registration, a fresh export matching the saved artifact, and an inventory showing the worktree is pristine. Dirty or uncertain worktrees are retained with an explicit path and reason so the coordinator can review the exported patch. Cleanup is admitted by the root recorded when the run started, not by the current allowlist. Removing a root does not stop a run already admitted there: it runs to its normal end, stays readable and closable, and its verified pristine worktree can still be removed; a dirty or uncertain one is retained exactly as before. Saved PIDs alone never authorize termination, and saved mutable worktree metadata alone never authorizes deletion.
 
@@ -46,14 +76,27 @@ When `serve --stdio --isolated` receives `vibe_status`, `vibe_result` or `vibe_c
 
 ## Restart and saved data
 
-On startup, active records from an interrupted one-shot run are made inspectable and marked failed with an interruption diagnostic. The isolated UUID lookup applies the same recovery when it temporarily opens a unique older session. Startup and lookup do not launch Vibe, load a session, replay a task, restore a grant, or signal a PID from a saved record. Old saved records are read defensively; the reduced runtime does not provide a migration or cleanup contract for an older ACP installation. Use the corresponding older executable for that data.
+On startup, active records from an interrupted one-shot run are made inspectable and marked failed with an interruption diagnostic. Before the server accepts work, recovery also deletes each such run's private directories (`child-home`, `vibe-home` and `tmp`), because a crash can leave Vibe's throwaway session store there. If a directory cannot be deleted, the saved result carries a warning that private Vibe state remains in the run directory, and the retention sweep is not relied on to remove it. The isolated UUID lookup applies the same recovery when it temporarily opens a unique older session. Startup and lookup do not launch Vibe, load a session, replay a task, restore a grant, or signal a PID from a saved record. 2.0 makes no migration or cleanup contract for data saved by 1.x or by an older ACP installation; use the corresponding older executable for that data.
 
-Runs, events and artifacts are persisted privately and bounded by configured limits and retention. The supervisor uses atomic writes, owner locking, fresh path validation and explicit child environment filtering. Credentials remain in the private Vibe provider runtime; raw provider output, reasoning and secrets are filtered from saved artifacts.
+Runs, events and artifacts are persisted privately and bounded by configured limits and retention. The supervisor uses atomic writes, owner locking, fresh path validation and explicit child environment filtering. The credential lives only in the worker's environment, never in a task, event or artifact, and raw provider output and secrets are filtered from saved artifacts.
+
+Reasoning stays off disk by construction rather than by a switch, because Vibe has none. Session logging is off, so Vibe's session store is a throwaway directory under the run's private `TMPDIR`; thinking is turned off; reasoning entries received over the wire are dropped before anything is written; the supervisor never reads the store; and the private directories are deleted at close and by restart recovery. Whether thinking off stops the model from generating reasoning is a target observation, not a local guarantee.
+
+## Events
+
+Besides `message` (the final answer) and `diagnostic`, a run records these tool events, each with bounded, redacted fields:
+
+| Event | Fields | Meaning |
+|---|---|---|
+| `tool_call` | `name` (`read_file`, `write_file`, `edit`), `tool` (Vibe's wire name), `kind`, `outcome: executed`, `entry_id`, `path` | An approved, executed call on the profile. |
+| `tool_denied` | `tool`, `outcome`, `reason`, `entry_id`, `path` | A call that did not run. `outcome` is `permission_denied_by_handler` when the supervisor's handler answered deny (`reason` is its reason, such as `tool_not_in_profile`, `path_outside_workspace`, `path_secret` or `decision_deadline`), or `permission_denied_by_policy` when Vibe itself denied it before any approval request (for example a denylisted path), in which case `reason` repeats the outcome. |
+
+`vibe_status` shows a `tool_denied` event as `<tool>: <reason>`. The wire names are `file_system.read_file`, `file_system.write_file` and `file_system.search_replace`. A denied write in a review is expected policy, not a failure; it shows that the worker tried a refused action. Supervisor `diagnostic` events carry a `reason`, listed in [compatibility](compatibility.md#diagnostic-reasons).
 
 ## Configuration and preparation
 
-Select a config with `--config`; otherwise resolution uses `VIBE_SUPERVISOR_HOME`, then the platform default root. Explicit invalid or missing configs fail without fallback. That selection is made once, before `--isolated` switches to a private session directory, and stays the policy source for the life of the connection; the session's copy of `config.toml` is an audit record only. Once serving, a missing selected file fails closed even where startup could have used defaults. Removed keys such as `backend`, `max_concurrent_runs`, idle-session TTL and ACP executable paths are rejected. The config, doctor provenance, data directory and already-open client handshake are separate facts.
+Select a config with `--config`; otherwise resolution uses `VIBE_SUPERVISOR_HOME`, then the platform default root. Explicit invalid or missing configs fail without fallback. That selection is made once, before `--isolated` switches to a private session directory, and stays the policy source for the life of the connection; the session's copy of `config.toml` is an audit record only. Once serving, a missing selected file fails closed even where startup could have used defaults. Removed keys such as `backend`, `max_concurrent_runs`, idle-session TTL and ACP executable paths are rejected, and `paths.vibe_pin_manifest` is required. The config, doctor provenance, data directory and already-open client handshake are separate facts.
 
 Commit or stash the reviewed state before delegating and pass its ref as `base_ref`; uncommitted source bytes are not an edit base.
 
-The supervisor's path checks, filtered profiles and Vibe tool configuration are application policy. They are not a kernel or process sandbox. A worker's account permissions and any content included in its allowed workspace remain relevant.
+The supervisor's path checks, session configuration, approval handler and Vibe tool configuration are application policy. They are not a kernel or process sandbox. A worker's account permissions and any content included in its allowed workspace remain relevant.

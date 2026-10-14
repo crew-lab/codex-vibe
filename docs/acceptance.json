@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "candidate": "1.0.1-rc.2",
-  "scope": "Programmatic one-shot review and isolated edit; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work.",
+  "candidate": "2.0.0",
+  "scope": "App-server client: one-shot review and isolated edit through vibe-app-server 2.26.1, one process per run; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work. The legacy harness path, the Python launcher and the backend config key are removed.",
   "deterministic": [
     {
-      "name": "lint-typecheck-build-tests-python-acceptance-secret-scan-sbom",
+      "name": "lint-typecheck-build-tests-acceptance-secret-scan-sbom",
       "status": "RUN_BY_verify:release"
     },
     {
@@ -12,7 +12,19 @@
       "status": "RUN_BY_smoke:install"
     },
     {
-      "name": "reviewed-baseline-source-invariants-and-snapshot-verification",
+      "name": "scripted-fake-vibe-app-server-lifecycle-scenarios",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "startup-readback-approval-handler-and-event-validator-fail-closed",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "pin-manifest-generation-and-verification-against-fixture-environments",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "reaper-and-private-directory-deletion-including-restart-recovery",
       "status": "RUN_BY_focused-tests"
     },
     {
@@ -34,31 +46,19 @@
     {
       "name": "authoritative-policy-reread-readiness-receipt-and-restart-required",
       "status": "RUN_BY_focused-tests"
-    },
-    {
-      "name": "node-floor-20.19.0",
-      "status": "VERIFIED",
-      "evidence": "docs/reviews/practical-tool-fix-2026-10-13/rc1-node20-supplement.json"
     }
   ],
-  "verified": [
-    {
-      "name": "node-floor-20.19.0",
-      "status": "PASSED_LOCALLY",
-      "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the rc.2 source.",
-      "evidence": "2026-10-14, preparing machine (macOS arm64): rc.2 working tree under exactly Node v20.19.0 and npm 10.8.2; npm run verify:release passed (66 files, 652 tests passed, 2 skipped; 95 Python tests; lint, typecheck, build, acceptance, secret scan, SBOM). Also passed on Node 24. CI matrix on branch claude/ci-checks awaits the push token workflow scope."
-    }
-  ],
+  "verified": [],
   "unverified": [
+    {
+      "name": "target-no-inference-conformance-check",
+      "status": "UNVERIFIED",
+      "evidence_required": "On the target with the installed Vibe 2.26.1 and no provider: vibe-supervisor pin-manifest generated and then verified on the target (with the per-run hashing cost recorded), serverInfo.version 2.26.1, the initialize handshake, session/start with the supervisor profile, and the complete read-back (profile tools exact, no skills, MCP sources, connectors or hooks, bypass off, unified harness, each VIBE_* setting, thinking off), with no turn and no hosted inference."
+    },
     {
       "name": "native-readiness-on-candidate",
       "status": "UNVERIFIED",
-      "evidence_required": "On the intended Codex desktop connection, native readiness reports server_version 1.0.1-rc.2 against the frozen rc.2 archive; eligible, no blockers, free slot."
-    },
-    {
-      "name": "installed-vibe-profile-check",
-      "status": "UNVERIFIED",
-      "evidence_required": "On the target with the installed Vibe 2.26.1 and no provider, tests/fixtures/vibe-profile-check.py passes: the pinned sources match, a tool outside the profile is refused at invocation and by ToolManager.get, and no skill is available or invocable with the supervisor environment. No hosted inference."
+      "evidence_required": "On the intended Codex desktop connection, native readiness reports server_version 2.0.0 against the frozen 2.0 archive; eligible, no blockers, free slot."
     },
     {
       "name": "hosted-review-edit-confirmation",
@@ -66,20 +66,141 @@
       "evidence_required": "With a new owner allowance of two hosted runs: one review and one edit on the frozen fixture with readiness receipts, the edit verified independently in a disposable copy, both closed with verified cleanup. Stop on first failure; no retries."
     },
     {
+      "name": "mcp-client-disconnect-hosted",
+      "status": "UNVERIFIED",
+      "evidence_required": "One real client disconnect during a running hosted run on the 2.0 engine, through the official client: the server exits, the worker process group is gone, the owner lock is released, the run is failed and never relaunched, the private directories are deleted, and an edit worktree is kept until vibe_close cleanup."
+    },
+    {
+      "name": "permission-ask-visible-in-effective-config",
+      "status": "UNVERIFIED",
+      "evidence_required": "config/effective/read shows tools.<name>.permission = ask and the denylist for each profile tool (read from Vibe's source, not observed), and an in-workspace read_file reaches the approval handler rather than being allowed by default."
+    },
+    {
+      "name": "thinking-off-effect",
+      "status": "UNVERIFIED",
+      "evidence_required": "Observe whether config/model/write reasoningEffort off stops the model from generating reasoning. The read-back confirms the setting only."
+    },
+    {
+      "name": "experiments-fetch-off",
+      "status": "UNVERIFIED",
+      "evidence_required": "Observe whether experiments.enable = false stops Vibe's experiments request. The setting is read back; its effect is unknown."
+    },
+    {
+      "name": "nested-run-typescript-shape-and-gating",
+      "status": "UNVERIFIED",
+      "evidence_required": "One no-inference scenario shows that a write_file or edit called from inside run_typescript arrives as the same file_system.* effect and reaches deny. From Vibe's Rust tests and code reading only."
+    },
+    {
+      "name": "node-floor-20.19.0",
+      "status": "UNVERIFIED",
+      "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the 2.0 source."
+    },
+    {
       "name": "clean-account-install",
       "status": "REQUIRED_NOT_RUN",
-      "evidence_required": "Before stable 1.0.1, complete the documented fresh macOS Apple silicon account installation on a frozen, reviewable artifact, recording installation, registration, rollback, and cleanup.",
-      "decision": "Required before stable1.0.1. Owner requested packet and will test later; same-account rehearsal does not satisfy this gate.",
-      "evidence": "docs/reviews/rc1-integration-2026-10-14/FRESH-ACCOUNT.md"
+      "evidence_required": "Before stable 2.0.0, complete the documented fresh macOS Apple silicon account installation on a frozen, reviewable artifact, recording installation, registration, rollback, and cleanup.",
+      "decision": "Carried over from 1.0.1; the owner performs it with a prepared packet."
     }
   ],
-  "not_required_for_1_0": [],
-  "historical_evidence": "The evidence below is retained solely as historical 1.0.0 acceptance. Runtime equivalence to 1.0.0 is false for this candidate, so none of it transfers.",
-  "runtime_equivalence": {
-    "status": "FALSE",
-    "baseline": "1.0.1-rc.1",
-    "reason": "rc.2 refuses tools outside the profile at invocation, pins three more Vibe sources, disables Vibe skills, keeps an unsafe diagnostics file from failing a run, and records cancelled tool calls.",
-    "prior_candidate_gate_evidence_applies": false
+  "not_required_for_2_0": [],
+  "delivery_requirements": {
+    "source_ci": "Verify current-head GitHub CI for the 2.0 source.",
+    "stable_promotion": "Every gate above, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required. Main still waits on 1.0.1.",
+    "hosted_allowance_remaining": 0,
+    "published_1_0_0_unchanged": true
+  },
+  "historical_evidence": "Everything under the historical keys is version-bound and does not transfer to 2.0.0: the 2.0 runtime has a different engine.",
+  "historical_1_0_1_rc_2_acceptance": {
+    "candidate": "1.0.1-rc.2",
+    "scope": "Programmatic one-shot review and isolated edit; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work.",
+    "deterministic": [
+      {
+        "name": "lint-typecheck-build-tests-python-acceptance-secret-scan-sbom",
+        "status": "RUN_BY_verify:release"
+      },
+      {
+        "name": "offline-installed-package-smoke-exact-five-tool-catalog",
+        "status": "RUN_BY_smoke:install"
+      },
+      {
+        "name": "reviewed-baseline-source-invariants-and-snapshot-verification",
+        "status": "RUN_BY_focused-tests"
+      },
+      {
+        "name": "single-slot-settlement-close-and-worktree-ownership",
+        "status": "RUN_BY_focused-tests"
+      },
+      {
+        "name": "restart-marks-interrupted-runs-failed-without-replay",
+        "status": "RUN_BY_focused-tests"
+      },
+      {
+        "name": "installed-mcp-saved-run-reconnect-status-result-close",
+        "status": "RUN_BY_smoke:install"
+      },
+      {
+        "name": "active-disconnect-rehearsal-fake-backend-plain-and-isolated-review-and-edit",
+        "status": "RUN_BY_focused-tests"
+      },
+      {
+        "name": "authoritative-policy-reread-readiness-receipt-and-restart-required",
+        "status": "RUN_BY_focused-tests"
+      },
+      {
+        "name": "node-floor-20.19.0",
+        "status": "VERIFIED",
+        "evidence": "docs/reviews/practical-tool-fix-2026-10-13/rc1-node20-supplement.json"
+      }
+    ],
+    "verified": [
+      {
+        "name": "node-floor-20.19.0",
+        "status": "PASSED_LOCALLY",
+        "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the rc.2 source.",
+        "evidence": "2026-10-14, preparing machine (macOS arm64): rc.2 working tree under exactly Node v20.19.0 and npm 10.8.2; npm run verify:release passed (66 files, 652 tests passed, 2 skipped; 95 Python tests; lint, typecheck, build, acceptance, secret scan, SBOM). Also passed on Node 24. CI matrix on branch claude/ci-checks awaits the push token workflow scope."
+      }
+    ],
+    "unverified": [
+      {
+        "name": "native-readiness-on-candidate",
+        "status": "UNVERIFIED",
+        "evidence_required": "On the intended Codex desktop connection, native readiness reports server_version 1.0.1-rc.2 against the frozen rc.2 archive; eligible, no blockers, free slot."
+      },
+      {
+        "name": "installed-vibe-profile-check",
+        "status": "UNVERIFIED",
+        "evidence_required": "On the target with the installed Vibe 2.26.1 and no provider, tests/fixtures/vibe-profile-check.py passes: the pinned sources match, a tool outside the profile is refused at invocation and by ToolManager.get, and no skill is available or invocable with the supervisor environment. No hosted inference."
+      },
+      {
+        "name": "hosted-review-edit-confirmation",
+        "status": "UNVERIFIED",
+        "evidence_required": "With a new owner allowance of two hosted runs: one review and one edit on the frozen fixture with readiness receipts, the edit verified independently in a disposable copy, both closed with verified cleanup. Stop on first failure; no retries."
+      },
+      {
+        "name": "clean-account-install",
+        "status": "REQUIRED_NOT_RUN",
+        "evidence_required": "Before stable 1.0.1, complete the documented fresh macOS Apple silicon account installation on a frozen, reviewable artifact, recording installation, registration, rollback, and cleanup.",
+        "decision": "Required before stable1.0.1. Owner requested packet and will test later; same-account rehearsal does not satisfy this gate.",
+        "evidence": "docs/reviews/rc1-integration-2026-10-14/FRESH-ACCOUNT.md"
+      }
+    ],
+    "not_required_for_1_0": [],
+    "runtime_equivalence": {
+      "status": "FALSE",
+      "baseline": "1.0.1-rc.1",
+      "reason": "rc.2 refuses tools outside the profile at invocation, pins three more Vibe sources, disables Vibe skills, keeps an unsafe diagnostics file from failing a run, and records cancelled tool calls.",
+      "prior_candidate_gate_evidence_applies": false
+    },
+    "delivery_requirements": {
+      "source_ci": "Verify current-head GitHub CI for the rc.2 source.",
+      "stable_promotion": "Fresh-account acceptance, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required.",
+      "hosted_allowance_remaining": 0,
+      "published_1_0_0_unchanged": true
+    },
+    "frozen_archive_sha256": null,
+    "packaging_time_snapshot": null,
+    "note": "Recorded for 1.0.1-rc.2, which lives on release/1.0. 2.0.0 replaces the launcher with an app-server client, so none of this transfers; the rc.2 gates were never closed.",
+    "updated_at": "2026-10-14"
   },
   "historical_1_0_0_acceptance": {
     "candidate": "1.0.0",
@@ -149,15 +270,6 @@
     ],
     "historical_evidence": "Version-bound prior candidate reports remain in docs/history. The rc.28 target evidence applies to 1.0.0 only through identical runtime source and the release-archive confirmation."
   },
-  "updated_at": "2026-10-14",
-  "frozen_archive_sha256": null,
-  "packaging_time_snapshot": null,
-  "delivery_requirements": {
-    "source_ci": "Verify current-head GitHub CI for the rc.2 source.",
-    "stable_promotion": "Fresh-account acceptance, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required.",
-    "hosted_allowance_remaining": 0,
-    "published_1_0_0_unchanged": true
-  },
   "historical_1_0_1_rc_1_acceptance": {
     "archive_sha256": "2442e35579d30dbc9b28bab4abaddfbb0a7c1e782055ba83cc4187ca24946b98",
     "note": "Recorded for 1.0.1-rc.1. rc.2 changes the launcher and run manager, so these results do not transfer; they remain evidence for the tool inventory check and the hosted lifecycle on rc.1.",
@@ -205,5 +317,8 @@
         "result": "Full candidate verification on exact20.19.0 passed; recorded after freeze without archive rebuild."
       }
     ]
-  }
+  },
+  "updated_at": "2026-10-14",
+  "frozen_archive_sha256": null,
+  "packaging_time_snapshot": null
 }

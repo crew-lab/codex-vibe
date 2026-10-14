@@ -1,5 +1,7 @@
 # ADR 0004: client of the Vibe app-server
 
+Status: accepted; implemented in 2.0.0. Its gates are open in [the acceptance record](../acceptance.json) and the [compatibility document](../compatibility.md#unverified-gates).
+
 From 2.0.0 the supervisor drives Mistral Vibe as a client of `vibe-app-server`: newline-delimited JSON-RPC 2.0 over stdio, one process per run, the boundary Vibe's own surfaces use. This replaces patching Vibe's Python internals. It is an approved change to the earlier no-new-protocol scope; the MCP side is unchanged. The runtime supports exactly one Vibe version, with a new candidate for each Vibe release. The protocol has no version field, so the pin is the compatibility check: the exact `serverInfo.version`, plus the installed wheel's files verified by hash.
 
 Every other boundary stays: exactly five MCP tools, canonical allowlists, review read-only, edits in supervisor-created detached worktrees that are exported and never applied, shell and network disabled, private `HOME`/`VIBE_HOME` and a private `TMPDIR`, filtered child environment, untrusted project state, one active run, restart never replays, bounded deadlines and output, verified cleanup. This is application policy, not an OS sandbox.
@@ -21,4 +23,4 @@ The supervisor now owns what the shim and Vibe's CLI used to do.
 - Graceful stop by closing stdin: SIGTERM skips Vibe's cleanup.
 - Drift detection: strict on what it sends, tolerant of unknown fields on read, and failing closed on any event that could hide a tool call.
 
-Design: `docs/history/app-server-client-design.md` in the source repository.
+Design: `docs/history/app-server-client-design.md` in the source repository. Behavior and boundaries as implemented: [functionality](../functionality.md), [security](../security.md#enforcement-points) and [compatibility](../compatibility.md).

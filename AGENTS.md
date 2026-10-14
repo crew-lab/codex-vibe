@@ -4,9 +4,9 @@ These instructions apply to this repository and its descendants unless a more sp
 
 ## Project and orientation
 
-This is codex-vibe, a local MCP supervisor for one-shot Mistral Vibe reviews and isolated edits. The current release is `vibe-supervisor` `1.0.0`, ESM, npm-private and distributed through GitHub Releases. Preserve the existing MIT license and copyright notice.
+This is codex-vibe, a local MCP supervisor for one-shot Mistral Vibe reviews and isolated edits. The published release is `vibe-supervisor` `1.0.0`; this branch is the 2.0.0 candidate, ESM, npm-private and distributed through GitHub Releases. 2.0 has one engine: a client of Vibe's `vibe-app-server` JSON-RPC protocol, one process per run. The legacy `--legacy-harness` path, the Python launcher and the `backend` config key are gone; 1.0.x continues on `release/1.0` with security fixes only. Preserve the existing MIT license and copyright notice.
 
-Read [README.md](README.md) for usage, [Handoff.md](Handoff.md) for candidate scope and remaining work, [docs/reference.md](docs/reference.md) for tools/config/CLI, and [docs/functionality.md](docs/functionality.md) for behavior. Consult [docs/security.md](docs/security.md), [docs/compatibility.md](docs/compatibility.md), and the ADRs before changing those boundaries. `docs/errors.md` is generated: run `npm run docs:errors` after changing a remedy. Dated evidence lives in `docs/history/` and is not shipped.
+Read [README.md](README.md) for usage, [Handoff.md](Handoff.md) for candidate scope and remaining work, [docs/reference.md](docs/reference.md) for tools/config/CLI, and [docs/functionality.md](docs/functionality.md) for behavior. Consult [docs/security.md](docs/security.md), [docs/compatibility.md](docs/compatibility.md), and the ADRs (0004 is the app-server client) before changing those boundaries. The design note and the protocol audits behind the engine are in `docs/history/`. `docs/errors.md` is generated: run `npm run docs:errors` after changing a remedy. Dated evidence lives in `docs/history/` and is not shipped.
 
 The user's implementation preference is GPT-6 Luna agents. When delegating implementation, use that model where available, assign clear file ownership, and tell workers they share the codebase and must preserve others' changes. Do not create user-owned chats for internal implementation subtasks. If that model is unavailable, report the limitation rather than silently claiming to use it.
 
@@ -21,13 +21,14 @@ The user's implementation preference is GPT-6 Luna agents. When delegating imple
 ## Boundaries that must remain intact
 
 - Canonical workspace allowlists are required; the starter allowlist is empty. Reject invalid, unsafe, or out-of-root paths rather than broadening access.
-- Review profiles enable only read/search. Edits use supervisor-created detached Git worktrees. Do not automatically apply, commit, merge, or push worker changes.
+- Review profiles enable `read_file` only (there is no `grep`); edits add `write_file` and `edit`. The model-visible catalogue cannot be narrowed, so tools outside the profile stay listed and are refused at execution; never describe them as hidden. Edits use supervisor-created detached Git worktrees. Do not automatically apply, commit, merge, or push worker changes.
 - Shell and network tools stay disabled. `allow_shell: true` is rejected. The application policy is not a kernel sandbox; do not describe it as one.
-- Keep private per-run HOME/VIBE_HOME, explicit child environment filtering, untrusted project state, and reasoning/secret filtering. Do not inherit user/project tools, hooks, agents, skills, MCP servers, or trust records.
-- Vibe 2.26.1 and the Python persistence shim are pinned. Compatibility/version/signature drift must fail closed. Revalidate installed-source assumptions before supporting a different Vibe release; the recorded source review applies to the installed macOS/CPython 3.12 distribution and does not certify other builds.
+- Keep private per-run HOME/VIBE_HOME/TMPDIR, explicit child environment filtering, untrusted project state, and reasoning/secret filtering; reasoning stays off disk (session logging off, a throwaway private store deleted at close and by restart recovery). Do not inherit user/project tools, hooks, agents, skills, MCP servers, or trust records.
+- Keep the app-server enforcement points: the supervisor-written session configuration and `VIBE_*` environment, the `permission = "ask"` agent profile with its denylist, the startup read-back, an approval handler that denies unless the call is the profile's tool on an in-workspace path (never a session or permanent approval, 5-second deadline), and an event validator that fails closed on an unapproved allowed effect, an unknown entry kind or a watermark gap. Loosening one needs an ADR.
+- Vibe 2.26.1 is an exact pin: the server's reported version plus the installed `mistral_vibe` files hashed against a per-candidate manifest. Version, manifest or wire drift must fail closed. Revalidate the wire facts in `docs/compatibility.md` against Vibe's tagged source before supporting a different Vibe release; the recorded source review covers 2.26.1 only and does not certify other builds.
 - One run owns each server/storage instance's active slot; a competing start fails immediately. A restart marks interrupted one-shot work failed and never launches Vibe, reloads a session, replays a task, restores grants, or signals a PID from saved data.
 - Preserve bounded deadlines, output limits, owner locking, retention, and process cleanup. Remove a worktree only after checking a fresh export against the saved artifact and accounting for residual files.
-- Do not copy credentials into docs, prompts, transcripts, reports, or committed files. Authentication belongs to the private provider runtime.
+- Do not copy credentials into docs, prompts, transcripts, reports, or committed files. The credential reaches the worker only as `MISTRAL_API_KEY` in its child environment.
 
 ## Verification and reporting
 
@@ -42,4 +43,4 @@ VIBE_SUPERVISOR_TEST_NPM_CACHE=/absolute/path/to/populated/npm-cache npm run pac
 
 For documentation-only changes, verify local links and `git diff --check`; a full test rerun is unnecessary without a behavioral change. Packaging should be regenerated when delivering an updated tarball.
 
-Report checks actually performed. Fake Vibe fixtures and initialization-only probes do not prove hosted behavior. The gates in [docs/compatibility.md](docs/compatibility.md#unverified-gates) stay unverified until their evidence is recorded there.
+Report checks actually performed. Fake Vibe fixtures and initialization-only probes do not prove hosted behavior. The 2.0 gates in [docs/compatibility.md](docs/compatibility.md#unverified-gates) stay unverified until their evidence is recorded there. Handoff.md holds the working rules for where evidence may come from.
