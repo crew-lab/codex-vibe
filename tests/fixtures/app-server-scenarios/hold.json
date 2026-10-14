@@ -1,0 +1,7 @@
+{
+  "name": "hold",
+  "steps": [
+    { "op": "say", "text": "Working." },
+    { "op": "hold" }
+  ]
+}

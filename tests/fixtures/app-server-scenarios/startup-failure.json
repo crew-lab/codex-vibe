@@ -1,0 +1,4 @@
+{
+  "name": "startup-failure",
+  "startup": { "exitCode": 1, "stderr": "Error: the Unified Harness runtime could not be loaded" }
+}

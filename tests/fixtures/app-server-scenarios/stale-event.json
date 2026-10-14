@@ -1,0 +1,8 @@
+{
+  "name": "stale-event",
+  "steps": [
+    { "op": "say", "text": "First." },
+    { "op": "staleEvent" },
+    { "op": "say", "text": "Second." }
+  ]
+}

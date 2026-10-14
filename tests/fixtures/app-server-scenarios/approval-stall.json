@@ -1,0 +1,7 @@
+{
+  "name": "approval-stall",
+  "steps": [
+    { "op": "call", "tool": "read_file", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts", "offset": null, "limit": 2000 } },
+    { "op": "say", "text": "Finished after the approval." }
+  ]
+}
