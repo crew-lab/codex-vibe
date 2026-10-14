@@ -33,6 +33,31 @@ vibe-supervisor is one thing: a local MCP server that lets Codex delegate one bo
 - **Ceilings in the run record:** `limits.max_tokens` and `limits.max_cost_usd` saved per run.
 - **Fixes from target evidence:** unknown history entry kinds, the effect of thinking off, the experiments fetch, nested `run_typescript` shapes.
 
+## Lessons from building 2.0
+
+**About Vibe's protocol.** Each of these was a guess that would have broken every real run, caught only by reading the tagged source:
+- Wire fields are camelCase (`filePath`), because app-server models serialize by alias. The Python attribute name is not the wire name.
+- Callbacks and effects name tools `file_system.read_file`, `file_system.write_file` and `file_system.search_replace`; `enabledTools` takes the config names `read_file`, `write_file`, `edit`.
+- `read_file` defaults to `always`, and a path allowlist resolves to `always`: both skip the approval callback. The agent profile sets `permission = "ask"` and carries only the denylist.
+- Vibe can allow a call without asking (scratchpad paths, session grants, the bypass gate). Only an `execute` / `ask` / `user` effect linked to the handler's own approval counts as approved.
+- `vibe-app-server` writes no run export, so usage is rebuilt from events, and counters reset at a context handoff.
+- `config/effective/read` has no `max_turns`, and the server redacts MCP `args` and `env`. A read-back that expects either fails every start.
+- After a handoff, the new session id is `sessionId`; the old one is `oldSessionId`.
+
+**About verification.**
+- A fake server encodes what we believe. It proves the client against those beliefs, not against Vibe. Write the fake from source answers with file hashes, and reject anything the source contradicts (the fixture refuses snake_case keys).
+- An independent implementation is a strong check. The parallel Codex branch and this one each caught errors the other made.
+- A cold review before every merge pays for itself. The 2.0 branch review found a reaper dropped on a failed start, approvals still granted after a stop, and protocol faults hidden by a later cancel, all after a full green test suite.
+- Grep-based audits miss behaviour; read the tagged source and record its hashes.
+
+**About working with agents.**
+- An agent must never stage, move or remove files in Git. One agent's staged removals once went into an unrelated docs commit and published a half-removed engine. The coordinator commits by path.
+- Chain every check and the commit with `&&`, so a failed check stops it. A secret-scan failure was once committed because the command continued.
+- Fake credentials must not look like keys: `/\bsk-[A-Za-z0-9_-]{24,}\b/` fails the secret scan.
+- Agents write files with the Write tool, never with heredocs that wait on stdin, and avoid aliased `ls`; both left hung shells. After an agent finishes, check for its leftover processes.
+- Give each agent named files, the wire facts it must use, and what it must not touch; forward any fact one agent finds that another depends on.
+- A test that passes alone and fails under full parallel load is a timing issue to fix, not to retry until green.
+
 ## Working rules
 
 - **Verification is local.** There is no GitHub CI: the token's `workflow` scope was skipped. Every change ends with `npm run verify:release`; a release adds `npm run package:rc` with a populated cache and Node 20.19.0.
