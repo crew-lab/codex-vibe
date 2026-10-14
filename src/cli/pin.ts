@@ -2,7 +2,8 @@ import path from 'node:path';
 import { resolveAppServerExecutable } from '../backends/app-server.js';
 import { PinCheckError, generatePinManifest, serializePinManifest } from '../backends/app-server/pin.js';
 import { loadResolvedConfig } from '../config/config.js';
-import { supervisorError } from '../contracts.js';
+import { DEFAULT_CONFIG } from '../config/defaults.js';
+import { supervisorError, type SupervisorConfig } from '../contracts.js';
 import { createPrivateFile } from '../security/paths.js';
 import { fail } from './fail.js';
 
@@ -39,10 +40,23 @@ export function parsePinManifestArgs(args: string[]): PinManifestArgs {
 
 function print(line: string): void { process.stdout.write(`${line}\n`); }
 
+async function loadConfigForPin(options: PinManifestArgs): Promise<SupervisorConfig> {
+  try { return (await loadResolvedConfig({ requirePinManifest: false, ...(options.config ? { configPath: options.config } : {}) })).config; }
+  catch (error) {
+    if (options.output === undefined) throw error;
+    const reason = error instanceof Error ? error.message : String(error);
+    if (options.executable === undefined) {
+      process.stderr.write('The configuration could not be read. Pass --executable <path> together with --output <path> to write the manifest without it.\n');
+      throw error;
+    }
+    process.stderr.write(`Ignoring the unusable configuration and using --executable and --output alone: ${reason}\n`);
+    return { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits }, retention: { ...DEFAULT_CONFIG.retention } };
+  }
+}
+
 export async function pinManifestCommand(args: string[]): Promise<void> {
   const options = parsePinManifestArgs(args);
-  const resolved = await loadResolvedConfig(options.config ? { configPath: options.config } : {});
-  const { config } = resolved;
+  const config = await loadConfigForPin(options);
   const output = options.output ?? config.paths?.vibePinManifest;
   if (!output) fail('No output path: set paths.vibe_pin_manifest in the configuration or pass --output <path>.', 2);
   if (!path.isAbsolute(output)) fail('The output path must be absolute.', 2);

@@ -19,7 +19,7 @@ function reportToStderr(message: string): void {
 
 async function readTemplate(env: NodeJS.ProcessEnv, configPath?: string): Promise<{ source: string; dataDir: string }> {
   const selection = resolveConfigSelection(configPath, env);
-  await loadConfig({ env, ...(configPath ? { configPath: selection.configPath } : {}) });
+  await loadConfig({ env, requirePinManifest: false, ...(configPath ? { configPath: selection.configPath } : {}) });
   const handle = await open(selection.configPath, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   let source: string;
   try {
@@ -28,7 +28,7 @@ async function readTemplate(env: NodeJS.ProcessEnv, configPath?: string): Promis
     source = await handle.readFile('utf8');
   } finally { await handle.close(); }
   if (Buffer.byteLength(source) > 1_048_576) throw new Error('Configuration exceeds 1 MiB.');
-  validateConfig(parse(source));
+  validateConfig(parse(source), undefined, { requirePinManifest: false });
   return { source, dataDir: selection.dataDir };
 }
 

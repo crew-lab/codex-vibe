@@ -20,7 +20,7 @@ const SCENARIO_KEYS = new Set([
   'name', 'serverName', 'serverVersion', 'startup', 'watermark', 'sessionId', 'log', 'errors', 'runtime', 'harness',
   'harnessSelectionSource', 'effectiveConfig', 'effectiveFromEnv', 'thinkingLevels', 'modelWrite', 'readyInitially',
   'baselineStats', 'contextWindow', 'afterStop', 'eof', 'eofDelayMs', 'interrupt', 'extraFields', 'omit', 'effectWhileBlocked',
-  'badCursor', 'afterHandoff', 'steps'
+  'badCursor', 'afterHandoff', 'notifyBeforeTurnResponse', 'steps'
 ]);
 const STEP_OPS = new Set([
   'say', 'reasoning', 'stats', 'call', 'unknownEntry', 'unknownNotification', 'staleEvent', 'delay', 'hold', 'wedge', 'crash',
@@ -89,7 +89,7 @@ function checkHandoffStep(step) {
 
 function checkCallStep(step) {
   if (step.handoffWhileOpen !== undefined) checkHandoffStep(step.handoffWhileOpen);
-  if (typeof step.tool !== 'string' || !['approval', 'auto', 'never'].includes(step.mode ?? 'approval')) throw new Error('call step needs tool and a valid mode');
+  if (typeof step.tool !== 'string' || !['approval', 'auto', 'never', 'pending'].includes(step.mode ?? 'approval')) throw new Error('call step needs tool and a valid mode');
   if (SHORT_TOOL_NAMES.includes(step.tool)) throw new Error(`call tool must be the Unified wire name, not the short name: ${step.tool}`);
   if (step.source !== undefined && !APPROVAL_SOURCES.includes(step.source)) throw new Error('call step source invalid');
   if (step.output !== undefined) assertCamelCase(step.output, 'call output');
@@ -651,6 +651,12 @@ async function runCall(step, turn, raceInterrupt, silent) {
     await addEntry(effect, { silent });
     return undefined;
   }
+  if (mode === 'pending') {
+    effect.generationStatus = 'in_progress';
+    effect.state = { status: step.status ?? 'running', outputText: '' };
+    await addEntry(effect, { silent });
+    return undefined;
+  }
   if (mode === 'never') {
     effect.state = { ...deniedState(detail, POLICY_DENIED, 'never', step.source ?? 'never'), ...(step.approvalMeta === false ? NO_APPROVAL_META : {}) };
     await addEntry(effect, { silent });
@@ -980,12 +986,26 @@ const handlers = {
     state.session.activeTurn = turn;
     state.session.status = { type: 'running', activeTurnId: turn.id };
     state.session.turnContext = { interrupted: deferred(), interruptHonored: false };
+    const early = scenario.notifyBeforeTurnResponse;
+    const ahead = Number.isInteger(early) && early > 0;
+    const before = [];
+    if (ahead) {
+      addEntry(userEntry, { silent: true });
+      before.push(notification('history/entryAdded', state.eventId, { turnId: userEntry.turnId, entry: clone(userEntry) }));
+      before.push(notification('turn/started', nextEventId(), { turn: publicTurn(turn) }));
+      for (let index = 0; index < early; index += 1) {
+        before.push(notification('session/statsUpdated', nextEventId(), { stats: clone(state.stats), contextWindow: scenario.contextWindow ?? 128000 }));
+      }
+    }
     const lastEventId = state.eventId;
     return {
       result: { turn: publicTurn(turn), lastEventId },
+      ...(ahead ? { before } : {}),
       after: async () => {
-        await addEntry(userEntry);
-        await send(notification('turn/started', nextEventId(), { turn: publicTurn(turn) }));
+        if (!ahead) {
+          await addEntry(userEntry);
+          await send(notification('turn/started', nextEventId(), { turn: publicTurn(turn) }));
+        }
         void runTurn(turn);
       }
     };
@@ -1033,6 +1053,13 @@ const handlers = {
   }
 };
 
+function respondWithPrefix(id, method, result, frames) {
+  const body = clone(result);
+  for (const dotted of scenario.omit?.[method] ?? []) deletePath(body, dotted);
+  const lines = [...frames, { jsonrpc: '2.0', id, result: body }].map((frame) => `${JSON.stringify(frame)}\n`);
+  return writeRaw(lines.join(''));
+}
+
 function respond(id, method, result) {
   const body = clone(result);
   for (const dotted of scenario.omit?.[method] ?? []) deletePath(body, dotted);
@@ -1051,7 +1078,8 @@ async function handleRequest(message) {
     validate(schemas[method], message.params);
     const outcome = await handler(message.params);
     const result = outcome && 'result' in outcome ? outcome.result : outcome;
-    await respond(id, method, result);
+    if (outcome?.before) await respondWithPrefix(id, method, result, outcome.before);
+    else await respond(id, method, result);
     if (outcome?.after) await outcome.after();
   } catch (error) {
     if (!(error instanceof RpcError)) { fatal(`handler failed: ${error?.stack ?? error}`, 70); return; }

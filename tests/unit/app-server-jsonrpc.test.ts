@@ -370,6 +370,40 @@ describe('JSON-RPC client notifications', () => {
   });
 });
 
+describe('JSON-RPC client drain', () => {
+  it('resolves once every queued notification has been handled, including those in the response chunk', async () => {
+    const handled: number[] = [];
+    const h = harness({
+      onNotification: async (_method, params) => {
+        await sleep(15);
+        handled.push(params.index as number);
+      }
+    });
+    const pending = h.client.request('a');
+    const line = (value: Json): string => `${JSON.stringify({ jsonrpc: '2.0', ...value })}\n`;
+    h.raw(`${line({ method: 'note', params: { index: 1 } })}${line({ method: 'note', params: { index: 2 } })}${line({ id: 1, result: { ok: true } })}${line({ method: 'note', params: { index: 3 } })}`);
+    expect(await pending).toEqual({ ok: true });
+    expect(handled).toEqual([]);
+    await h.client.drained();
+    expect(handled).toEqual([1, 2, 3]);
+    await h.client.drained();
+  });
+
+  it('resolves immediately when nothing is queued and releases waiters when the client stops', async () => {
+    const h = harness({ onNotification: () => new Promise<void>(() => undefined) });
+    await h.client.drained();
+    h.frame({ method: 'note', params: {} });
+    await tick();
+    let released = false;
+    const waiting = h.client.drained().then(() => { released = true; });
+    await tick();
+    expect(released).toBe(false);
+    h.client.dispose();
+    await waiting;
+    expect(released).toBe(true);
+  });
+});
+
 describe('JSON-RPC client server requests', () => {
   it('answers a registered handler with the server integer id echoed', async () => {
     const h = harness();

@@ -90,6 +90,61 @@ describe('one-shot restart behavior', () => {
     } finally { await manager.shutdown(); }
   });
 
+  async function privateDirectories(directory: string): Promise<string[]> {
+    const names = ['child-home', 'vibe-home', 'tmp'];
+    for (const name of names) await mkdir(path.join(directory, name), { recursive: true, mode: 0o700 });
+    await writeFile(path.join(directory, 'child-home', 'state.json'), '{}');
+    return names.map((name) => path.join(directory, name));
+  }
+
+  const present = (file: string) => readdir(path.dirname(file)).then((names) => names.includes(path.basename(file)));
+
+  it('keeps the private directories until the reaper window of a worker that may still be alive has passed', async () => {
+    const { source, data } = await setup();
+    const record = baseRecord(source);
+    const directory = await writeRecord(data, record);
+    const [home] = await privateDirectories(directory);
+    const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [new FakeBackend()], undefined, { recoveryWorkerWindowMs: 700 });
+    try {
+      const begun = Date.now();
+      const initializing = manager.initialize();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(await present(home as string)).toBe(true);
+      await initializing;
+      expect(Date.now() - begun).toBeGreaterThanOrEqual(650);
+      for (const name of ['child-home', 'vibe-home', 'tmp']) expect(await present(path.join(directory, name))).toBe(false);
+      expect(await manager.status({ run_id: record.runId })).toMatchObject({ state: 'failed', error: { code: 'VSUP_BACKEND_CRASHED' } });
+    } finally { await manager.shutdown(); }
+  });
+
+  it('does not wait when the run has no private directories left', async () => {
+    const { source, data } = await setup();
+    const record = baseRecord(source);
+    await writeRecord(data, record);
+    const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [new FakeBackend()], undefined, { recoveryWorkerWindowMs: 5000 });
+    try {
+      const begun = Date.now();
+      await manager.initialize();
+      expect(Date.now() - begun).toBeLessThan(2500);
+    } finally { await manager.shutdown(); }
+  });
+
+  it('does not wait when the recorded reaper deadline has long passed', async () => {
+    const { source, data } = await setup();
+    const record = baseRecord(source);
+    const old = new Date(Date.now() - 3 * 3600_000).toISOString();
+    Object.assign(record, { createdAt: old, updatedAt: old, launchedAt: old });
+    const directory = await writeRecord(data, record);
+    await privateDirectories(directory);
+    const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [new FakeBackend()], undefined, { recoveryWorkerWindowMs: 5000 });
+    try {
+      const begun = Date.now();
+      await manager.initialize();
+      expect(Date.now() - begun).toBeLessThan(2500);
+      expect(await present(path.join(directory, 'child-home'))).toBe(false);
+    } finally { await manager.shutdown(); }
+  });
+
   it.each(['acp', 'programmatic'])('leaves historical %s metadata and artifacts byte-identical and never loads or cleans them', async (historical) => {
     const { source, data } = await setup();
     const record = baseRecord(source);

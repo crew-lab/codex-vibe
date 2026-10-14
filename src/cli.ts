@@ -23,7 +23,7 @@ import { environmentSecrets, redactSecrets } from './security/redaction.js';
 
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
 async function getManager(ownerLock?: OwnerLock, configPath?: string, isolatedHome?: string): Promise<{ manager: RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> }; config: Awaited<ReturnType<typeof loadConfig>>; dataDir: string; policy: ReturnType<typeof selectedConfigPolicy> }> {
-  const resolved = await loadResolvedConfig({ createDataDir: isolatedHome === undefined, ...(configPath ? { configPath } : {}) });
+  const resolved = await loadResolvedConfig({ createDataDir: isolatedHome === undefined, requirePinManifest: false, ...(configPath ? { configPath } : {}) });
   const config = resolved.config;
   const dataDir = isolatedHome ?? resolved.dataDir;
   const policy = selectedConfigPolicy(resolved.configPath);
@@ -72,7 +72,7 @@ async function runsCommand(args: string[]): Promise<void> {
   }
   const [subcommand, id] = positional;
   if (positional.length !== (subcommand === 'list' ? 1 : subcommand === 'cleanup' ? (id ? 2 : 1) : 2)) fail('Usage: vibe-supervisor runs [--config <path>] <list|show|tail|cleanup> [run-id]', 2);
-  const resolved = await loadResolvedConfig(configPath ? { configPath } : {}); const config = resolved.config; const dataDir = resolved.dataDir;
+  const resolved = await loadResolvedConfig({ requirePinManifest: false, ...(configPath ? { configPath } : {}) }); const config = resolved.config; const dataDir = resolved.dataDir;
   const runsDir = path.join(dataDir, 'runs');
   if (subcommand === 'list') {
     let entries: string[];

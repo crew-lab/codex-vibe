@@ -16,6 +16,7 @@ export interface LoadConfigOptions {
   env?: NodeJS.ProcessEnv;
   /** Read this exact config file. An explicit path never falls back. */
   configPath?: string;
+  requirePinManifest?: boolean;
 }
 
 export interface ConfigSelection {
@@ -121,7 +122,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Super
     if ((stat.mode & 0o022) !== 0) throw new Error("Config must not be writable by group or others; run chmod 600 on it.");
     const source = await handle.readFile("utf8");
     const raw = parse(source);
-    const config = validateConfig(raw, env.HOME ?? env.USERPROFILE);
+    const config = validateConfig(raw, env.HOME ?? env.USERPROFILE, { requirePinManifest: options.requirePinManifest ?? true });
     await inspectWorkspaceRoots(config.allowedWorkspaceRoots, env.HOME ?? env.USERPROFILE);
     return config;
   } catch (error) {
