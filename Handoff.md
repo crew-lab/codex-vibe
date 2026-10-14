@@ -4,7 +4,7 @@ Updated 2026-10-14. This document alone defines current priorities. [docs/histor
 
 - **rc.2:** the [target brief](docs/history/rc2-target-brief.md), the [rc.2 cold review](docs/history/reviews/rc2-cold-review-2026-10-14.md), and the [rc.1 cold review](docs/history/reviews/rc1-cold-review-2026-10-14.md) with its [tool-path answer](docs/history/reviews/tool-inventory-answer-2026-10-14.md).
 - **Usefulness:** the [usefulness log](docs/history/usefulness-log.md).
-- **Direction:** the [strategy](docs/history/strategy-2026-10-13.md), the [competitive landscape](docs/history/competitive-landscape-2026-10-13.md), the [ecosystem notes](docs/history/ecosystem-2026-10-13.md), and the [1.0 article draft](docs/history/article/draft-1.0.md), now filled from recorded evidence and waiting for the owner's read.
+- **Direction:** the [Unified Harness audit](docs/history/unified-harness-audit-2026-10-14.md), the [outreach drafts](docs/history/outreach-drafts.md) for the owner to post, the [strategy](docs/history/strategy-2026-10-13.md), the [competitive landscape](docs/history/competitive-landscape-2026-10-13.md), the [ecosystem notes](docs/history/ecosystem-2026-10-13.md), and the [1.0 article draft](docs/history/article/draft-1.0.md), now filled from recorded evidence and waiting for the owner's read.
 - **Earlier evidence:** the rc.28 and 1.0.0 records.
 
 Target-machine evidence for 1.0.1 lives in [docs/reviews/](docs/reviews/), with machine paths and the site project's name replaced by placeholders ([REDACTION.md](docs/reviews/REDACTION.md)). Everything older than 2026-10-12 is in Git history at `c510513`.
@@ -76,9 +76,21 @@ In order. Each runtime change is a new candidate with one hosted observation per
 - After a target check, note Codex tool search (the five tools may load on demand, and the readiness call proves they are callable) and `required = true` in the install notes.
 - From the rc.2 review, for a later candidate: the pre-existing `lstat`-then-read window in `describeArtifact`, and whether a cancelled tool's cleanup can run after `cancelled` is recorded.
 
-**1.1, Vibe's own export.** Pass `--output-dir` into the run directory and `--time-limit` from the deadline, read `export.json` for `usage`, `cost_usd`, `steps`, `warnings` and the outcome, redact it before persisting, and corroborate the stop reason from the outcome rather than from markers alone. Observe once per operation on the legacy path, which the Vibe README says still writes the export. This closes the UNKNOWN usage and gives the coordinator the cost of every run.
+**2.0, the app-server engine (owner decisions 2026-10-14).** The supervisor's next engine is a client of Vibe's `vibe-app-server` JSON-RPC protocol, which Vibe's ADRs 0009 and 0016 make the boundary every surface uses. It replaces patching Vibe's Python internals.
+- **Version policy:** an exact Vibe pin, with a new candidate and a short target check for every Vibe release.
+- **Legacy path:** removed at 2.0.0. 1.0.x continues on a `release/1.0` branch, cut from the `v1.0.1` tag, with security fixes only until Mistral removes `--legacy-harness`.
+- **Scope:** the five MCP tools and every boundary stay; an ADR records the scope change. The client owns the approval decision, denying by default, and reads usage and cost from the run export, which replaces the old 1.1 export item.
 
-**1.1 or 1.2, the Unified Harness adapter.** Vibe's source calls the legacy harness a temporary escape hatch kept until the legacy runtime is removed. Before that removal, build an adapter for the Unified Harness with the same boundaries: private homes, filtered environment, `enable_subagents` and `enable_background_processes` off, managed shell tools off, read-only review profile, patch-only edits, and a fresh compatibility audit of project discovery, persistence, the permission predicate and the tool allow/deny environment. Pin exactly one version again. Until the adapter exists, the pin stays 2.26.1 and later Vibe releases are refused, which is correct.
+Steps:
+1. A protocol audit from source.
+2. A design note and the ADR, with three owner choices the [Unified Harness audit](docs/history/unified-harness-audit-2026-10-14.md) forces:
+   - the review profile, since there is no `grep` builtin;
+   - whether a review may list write tools that are always refused, since `enabled_tools` gates execution and not the catalogue;
+   - how reasoning is kept off disk.
+3. Implementation on a branch, against a scripted fake app server only.
+4. Target acceptance, then 2.0.0.
+
+Nothing on main's shipped files changes before 1.0.1 is tagged. No Vibe is installed or run on the preparing machine.
 
 **Runtime fixes ready or small.** Session pruning for `--isolated` and a run lookup that tolerates a bad sibling or more than 128 sessions: ready on branch `claude/session-pruning` (GitHub `bdc3ca4`, based on rc.28; needs a rebase onto the rc.2 runtime), not merged because it changes runtime code after the tested build. The config fingerprint using `os.homedir()` instead of `HOME`; the `setup` restart message naming the registered path; the MCP SDK's 4-second SIGKILL after stdin closes, which can cut a slow edit shutdown short (recovered by design on the next start); owner-lock liveness from an OS-released lock instead of PID and elapsed time.
 
