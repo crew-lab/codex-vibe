@@ -6,7 +6,7 @@ Every other boundary stays: exactly five MCP tools, canonical allowlists, review
 
 The review profile gives the model `read_file` only; the supervisor puts a bounded file list in the prompt. The server cannot hide `write_file`, `edit`, the shell tool or `run_typescript` from the model, so they are listed and refused at execution: denied in configuration, every approval answered deny. The post-run source-unchanged check stays the proof that a review wrote nothing. The model sees these tools and cannot use them.
 
-Reasoning stays off disk: session logging is off, so Vibe's store is a throwaway directory inside the run's private area; thinking is off; the supervisor closes stdin for a graceful stop and deletes the private area itself, which also covers crashes.
+Reasoning stays off disk: session logging is off, so Vibe's store is a throwaway directory inside the run's private area; thinking is off; the supervisor closes stdin for a graceful stop and deletes the private area itself; after a supervisor crash, restart recovery deletes it before accepting work.
 
 This supersedes [ADR 0003](0003-vibe-launcher.md) at 2.0.0: the Python shim, its source pins and the legacy harness path are removed. Release 1.0.x continues on its own branch, security fixes only.
 
