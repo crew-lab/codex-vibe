@@ -23,9 +23,11 @@ const configSchema = z.object({
     max_transcript_bytes: z.number().int().min(1024).max(1_073_741_824).default(10_485_760),
     max_artifact_bytes: z.number().int().min(1024).max(2_147_483_648).default(104_857_600),
     worker_progress_timeout_seconds: z.number().int().refine((value) => value === 0 || (value >= 60 && value <= 7200), "must be 0 or between 60 and 7200").default(600),
-    max_mcp_result_chars: z.number().int().min(1000).max(1_000_000).default(8000)
+    max_mcp_result_chars: z.number().int().min(1000).max(1_000_000).default(8000),
+    max_session_tokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+    max_estimated_cost_usd: z.number().finite().positive().optional()
   }).strict().prefault({}),
-  paths: z.object({ vibe: executableString.optional() }).strict().optional()
+  paths: z.object({ vibe: executableString.optional(), vibe_app_server: executableString.optional() }).strict().optional()
 }).strict();
 
 export function validateConfig(input: unknown, home = process.env.HOME ?? process.env.USERPROFILE ?? homedir()): SupervisorConfig {
@@ -47,8 +49,13 @@ export function validateConfig(input: unknown, home = process.env.HOME ?? proces
       maxTranscriptBytes: parsed.limits.max_transcript_bytes,
       maxArtifactBytes: parsed.limits.max_artifact_bytes,
       workerProgressTimeoutSeconds: parsed.limits.worker_progress_timeout_seconds,
-      maxMcpResultChars: parsed.limits.max_mcp_result_chars
+      maxMcpResultChars: parsed.limits.max_mcp_result_chars,
+      ...(parsed.limits.max_session_tokens === undefined ? {} : { maxSessionTokens: parsed.limits.max_session_tokens }),
+      ...(parsed.limits.max_estimated_cost_usd === undefined ? {} : { maxEstimatedCostUsd: parsed.limits.max_estimated_cost_usd })
     },
-    paths: parsed.paths ? { ...(parsed.paths.vibe === undefined ? {} : { vibe: parsed.paths.vibe }) } : {}
+    paths: parsed.paths ? {
+      ...(parsed.paths.vibe === undefined ? {} : { vibe: parsed.paths.vibe }),
+      ...(parsed.paths.vibe_app_server === undefined ? {} : { vibeAppServer: parsed.paths.vibe_app_server })
+    } : {}
   };
 }

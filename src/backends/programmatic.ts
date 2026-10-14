@@ -91,6 +91,9 @@ export class ProgrammaticBackend implements SupervisorBackend {
   }
 
   async start(input: StartRunInput, callbacks: BackendCallbacks) {
+    if (input.limits.maxSessionTokens !== undefined || input.limits.maxEstimatedCostUsd !== undefined) {
+      throw supervisorError('VSUP_CONFIG_INVALID', 'Sampled spending ceilings require the app-server backend; the legacy backend cannot enforce them.');
+    }
     await assertNoProjectVibeExtensions(input.cwd);
     await assertNoProjectVibeExtensions(input.workerWorkspace);
     const profile = await createVibeChildProfile(input, input.mode, { forwardOriginalHome: true });

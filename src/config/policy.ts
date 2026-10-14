@@ -35,7 +35,10 @@ const BOOT_BOUND_SETTINGS: ReadonlyArray<readonly [string, (config: SupervisorCo
   ["limits.max_artifact_bytes", (config) => config.limits.maxArtifactBytes],
   ["limits.worker_progress_timeout_seconds", (config) => config.limits.workerProgressTimeoutSeconds],
   ["limits.max_mcp_result_chars", (config) => config.limits.maxMcpResultChars],
-  ["paths.vibe", (config) => config.paths?.vibe ?? null]
+  ["paths.vibe", (config) => config.paths?.vibe ?? null],
+  ["paths.vibe_app_server", (config) => config.paths?.vibeAppServer ?? null],
+  ["limits.max_session_tokens", (config) => config.limits.maxSessionTokens ?? null],
+  ["limits.max_estimated_cost_usd", (config) => config.limits.maxEstimatedCostUsd ?? null]
 ];
 
 export function bootBoundDrift(boot: SupervisorConfig, current: SupervisorConfig): string[] {

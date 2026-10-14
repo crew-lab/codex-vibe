@@ -38,7 +38,9 @@ export function runToWire(run: RunRecord): JsonObject {
       max_turns: run.limits.maxTurns,
       max_event_bytes: run.limits.maxEventBytes,
       max_transcript_bytes: run.limits.maxTranscriptBytes,
-      max_artifact_bytes: run.limits.maxArtifactBytes
+      max_artifact_bytes: run.limits.maxArtifactBytes,
+      ...(run.limits.maxSessionTokens === undefined ? {} : { max_session_tokens: run.limits.maxSessionTokens }),
+      ...(run.limits.maxEstimatedCostUsd === undefined ? {} : { max_estimated_cost_usd: run.limits.maxEstimatedCostUsd })
     },
     ...(usage ? { usage } : {}),
     ...(run.result ? { result: resultToWire(run.result) } : {}),
@@ -61,19 +63,19 @@ export function eventToWire(event: SupervisorEvent): JsonObject {
 }
 
 export function eventFromWire(value: unknown): SupervisorEvent {
-  if (!isObject(value) || value.schema_version !== 1 || !Number.isSafeInteger(value.seq) || typeof value.timestamp !== "string" || Number.isNaN(Date.parse(value.timestamp)) || typeof value.run_id !== "string" || typeof value.backend !== "string" || value.backend !== "programmatic" || typeof value.source !== "string" || !["supervisor", "vibe"].includes(value.source) || typeof value.type !== "string" || typeof value.severity !== "string" || !["debug", "info", "warning", "error"].includes(value.severity) || !isObject(value.data)) throw new TypeError("Invalid persisted supervisor event");
-  return { schemaVersion: 1, seq: value.seq as number, timestamp: value.timestamp, runId: value.run_id, backend: "programmatic", source: value.source as SupervisorEvent["source"], type: value.type, severity: value.severity as SupervisorEvent["severity"], data: value.data };
+  if (!isObject(value) || value.schema_version !== 1 || !Number.isSafeInteger(value.seq) || typeof value.timestamp !== "string" || Number.isNaN(Date.parse(value.timestamp)) || typeof value.run_id !== "string" || typeof value.backend !== "string" || (value.backend !== "programmatic" && value.backend !== "app-server") || typeof value.source !== "string" || !["supervisor", "vibe"].includes(value.source) || typeof value.type !== "string" || typeof value.severity !== "string" || !["debug", "info", "warning", "error"].includes(value.severity) || !isObject(value.data)) throw new TypeError("Invalid persisted supervisor event");
+  return { schemaVersion: 1, seq: value.seq as number, timestamp: value.timestamp, runId: value.run_id, backend: value.backend as SupervisorEvent["backend"], source: value.source as SupervisorEvent["source"], type: value.type, severity: value.severity as SupervisorEvent["severity"], data: value.data };
 }
 
 export function runFromWire(value: unknown): RunRecord {
-  if (!isObject(value) || value.schema_version !== 1 || typeof value.run_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.run_id) || typeof value.backend !== "string" || value.backend !== "programmatic" || typeof value.mode !== "string" || (value.mode !== "review" && value.mode !== "edit") || typeof value.state !== "string" || !RUN_STATES.has(value.state as RunRecord["state"])) throw new TypeError("Invalid persisted run record");
+  if (!isObject(value) || value.schema_version !== 1 || typeof value.run_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.run_id) || typeof value.backend !== "string" || (value.backend !== "programmatic" && value.backend !== "app-server") || typeof value.mode !== "string" || (value.mode !== "review" && value.mode !== "edit") || typeof value.state !== "string" || !RUN_STATES.has(value.state as RunRecord["state"])) throw new TypeError("Invalid persisted run record");
   if (value.supervisor_version !== undefined && (typeof value.supervisor_version !== "string" || value.supervisor_version.length > 128 || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(value.supervisor_version))) throw new TypeError("Invalid persisted supervisor version");
   const limits = asObject(value.limits);
   const run: RunRecord = {
     schemaVersion: 1,
     ...(typeof value.supervisor_version === "string" ? { supervisorVersion: value.supervisor_version } : {}),
     runId: value.run_id,
-    backend: "programmatic",
+    backend: value.backend as RunRecord["backend"],
     mode: value.mode,
     state: value.state as RunRecord["state"],
     sourceWorkspace: stringValue(value.source_workspace),
@@ -86,7 +88,9 @@ export function runFromWire(value: unknown): RunRecord {
       maxTurns: numberValue(limits.max_turns),
       maxEventBytes: numberValue(limits.max_event_bytes),
       maxTranscriptBytes: numberValue(limits.max_transcript_bytes),
-      maxArtifactBytes: numberValue(limits.max_artifact_bytes)
+      maxArtifactBytes: numberValue(limits.max_artifact_bytes),
+      ...(limits.max_session_tokens === undefined ? {} : { maxSessionTokens: numberValue(limits.max_session_tokens) }),
+      ...(limits.max_estimated_cost_usd === undefined ? {} : { maxEstimatedCostUsd: numberValue(limits.max_estimated_cost_usd) })
     }
   };
   if (typeof value.launched_at === "string") run.launchedAt = value.launched_at;
@@ -116,7 +120,8 @@ export function runFromWire(value: unknown): RunRecord {
   }
   if (isObject(value.result)) run.result = resultFromWire(value.result);
   if (isObject(value.error) && typeof value.error.code === "string" && ERROR_CODES.has(value.error.code as SupervisorErrorCode) && typeof value.error.message === "string" && typeof value.error.remediation === "string" && typeof value.error.retryable === "boolean") run.error = { code: value.error.code as SupervisorErrorCode, message: value.error.message, remediation: value.error.remediation, retryable: value.error.retryable, ...(isObject(value.error.details) ? { details: value.error.details } : {}) };
-  const runLimits = Object.values(run.limits);
+  const runLimits = Object.entries(run.limits).filter(([key]) => key !== 'maxEstimatedCostUsd').map(([, value]) => value);
+  if (run.limits.maxEstimatedCostUsd !== undefined && (!Number.isFinite(run.limits.maxEstimatedCostUsd) || run.limits.maxEstimatedCostUsd <= 0)) throw new TypeError('Invalid persisted estimated-cost ceiling');
   if (runLimits.some((limit) => !Number.isSafeInteger(limit) || limit <= 0) || Number.isNaN(Date.parse(run.createdAt)) || Number.isNaN(Date.parse(run.updatedAt)) || !/^[a-f0-9]{64}$/i.test(run.taskSha256)) throw new TypeError("Invalid persisted run limits, timestamps, or task digest");
   return run;
 }

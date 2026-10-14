@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPrivateDir, expandHome, isPathWithinRoot } from '../security/paths.js';
 import { configFingerprint, executableSearchPath, getDataDir } from '../config/config.js';
-import { SUPPORTED_VIBE } from '../backends/pinned.js';
+import { AppServerBackend } from '../backends/app-server.js';
 import { inspectOwnerLock } from '../core/owner-lock.js';
 import type { SupervisorConfig } from '../contracts.js';
 import { APP_VERSION } from '../version.js';
@@ -89,18 +89,18 @@ export async function runDoctor(config: SupervisorConfig, provenance?: { configP
       try { checks.push({ name: 'macos', ok: true, version: await probe('/usr/bin/sw_vers', ['-productVersion'], tmpRoot), message: 'macOS version detected.' }); }
       catch { checks.push({ name: 'macos', ok: false, message: 'macOS version could not be detected with sw_vers.' }); }
     }
-    const vibeLookup = findExecutable('vibe', config.paths?.vibe);
-    const vibe = vibeLookup.path;
-    if (vibeLookup.rejected) checks.push({ name: 'vibe', ok: false, message: rejectedMessage('Vibe', vibeLookup.rejected) });
-    else if (vibe) {
-      try {
-        const version = await probe(vibe, ['--version'], tmpRoot);
-        const match = version.match(/\b(\d+)\.(\d+)\.(\d+)/);
-        const supported = Boolean(match && `${match[1]}.${match[2]}.${match[3]}` === SUPPORTED_VIBE);
-        checks.push({ name: 'vibe', ok: supported, status: supported ? 'ok' : 'unverified', version, message: supported ? `Exact supported Vibe version ${SUPPORTED_VIBE} verified in an isolated temporary home.` : `The compatibility shim is pinned to Vibe ${SUPPORTED_VIBE}; another or unparseable version is unverified.` });
+    const configured = config.paths?.vibeAppServer;
+    const lookup = findExecutable('vibe-app-server', configured);
+    if (lookup.rejected) checks.push({ name: 'vibe', ok: false, message: rejectedMessage('Vibe app-server', lookup.rejected) });
+    else {
+      const backend = new AppServerBackend(config);
+      const identity = await backend.runtimeCheck();
+      if (!identity.executable_found) checks.push({ name: 'vibe', ok: false, message: 'Vibe app-server was not found on PATH or in configuration.' });
+      else {
+        const verified = await backend.probe();
+        checks.push({ name: 'vibe', ok: verified.available, status: verified.available ? 'ok' : 'unverified', ...(verified.version ? { version: verified.version } : {}), message: verified.available ? 'Pinned app-server wheel files and dependency versions verified without importing Vibe or accessing credentials. Session controls and inference remain unverified.' : 'Vibe app-server was resolved, but pinned installation verification failed; no candidate executable was run.' });
       }
-      catch { checks.push({ name: 'vibe', ok: false, message: 'Vibe was found but its bounded version probe failed.' }); }
-    } else checks.push({ name: 'vibe', ok: false, message: 'Vibe was not found on PATH or in configuration.' });
+    }
     const codex = findExecutable('codex').path;
     if (codex) {
       try { const version = await probe(codex, ['--version'], tmpRoot); checks.push({ name: 'codex', ok: true, version, message: 'Codex CLI is available.' }); }

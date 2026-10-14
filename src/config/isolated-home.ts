@@ -7,6 +7,7 @@ import { validateConfig } from './validation.js';
 import { acquireOwnerLock, isOwnerLockContention } from '../core/owner-lock.js';
 import type { OwnerLock } from '../core/owner-lock.js';
 import { createPrivateDir, createPrivateFile } from '../security/paths.js';
+import { assertAppServerStorage, assertAppServerTemplateStorage } from './storage-engine.js';
 
 export interface IsolatedHome { home: string; sessions: string; lock: OwnerLock; adopted: boolean }
 
@@ -72,6 +73,7 @@ async function claim(directory: string, source: string, report: (message: string
     return undefined;
   }
   try {
+    await assertAppServerStorage(directory);
     await writeSnapshot(directory, source);
     return lock;
   } catch (error) {
@@ -83,6 +85,7 @@ async function claim(directory: string, source: string, report: (message: string
 
 export async function prepareIsolatedHome(env: NodeJS.ProcessEnv = process.env, report: (message: string) => void = reportToStderr, configPath?: string): Promise<IsolatedHome> {
   const template = await readTemplate(env, configPath);
+  await assertAppServerTemplateStorage(template.dataDir);
   const source = template.source;
   const sessions = path.join(template.dataDir, 'mcp-sessions');
   await createPrivateDir(sessions);

@@ -82,7 +82,7 @@ async function resolvePaths(document: Document, notes: string[]): Promise<boolea
   if (!existing || typeof existing !== 'object' || Array.isArray(existing)) fail('paths must be a table; no changes were made.', 2);
   const paths = existing as Record<string, unknown>;
   let changed = false;
-  for (const [key, name] of [['vibe', 'vibe']] as const) {
+  for (const [key, name] of [['vibe_app_server', 'vibe-app-server']] as const) {
     if (typeof paths[key] === 'string') { notes.push(`${name}: keeping configured ${String(paths[key])}`); continue; }
     try {
       const resolved = path.resolve(await resolveCommand(name, process.env.PATH === undefined ? {} : { PATH: process.env.PATH }));
@@ -114,7 +114,7 @@ export async function planWorkspaceConfig(canonical: string, options: { resolveE
     const config = validateConfig(document);
     await validateWorkspaceRootsAtUse(config.allowedWorkspaceRoots);
   }
-  catch (error) { throw configInvalid(`Invalid supervisor configuration at ${file}; no changes were made: ${(error as Error).message} Supported fields are version, allowed_workspace_roots, retention, limits, and paths.vibe. Remove unsupported fields instead of relying on them.`); }
+  catch (error) { throw configInvalid(`Invalid supervisor configuration at ${file}; no changes were made: ${(error as Error).message} Supported fields are version, allowed_workspace_roots, retention, limits, and paths.vibe_app_server. Remove unsupported fields instead of relying on them.`); }
   const changed = created || added || pathsChanged;
   return { file, created, added, canonical, notes, changed, ...(changed ? { text: stringify(document) } : {}) };
 }

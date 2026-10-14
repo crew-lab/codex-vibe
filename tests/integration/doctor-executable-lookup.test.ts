@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { chmod, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -37,10 +37,10 @@ describe('doctor executable lookup', () => {
   it('never resolves a bare configured name against the current directory', async () => {
     const dir = await tempDir();
     const empty = path.join(dir, 'empty'); await mkdir(empty);
-    const hit = await marker(dir, 'vibe');
+    const hit = await marker(dir, 'vibe-app-server');
     process.chdir(dir);
     process.env.PATH = empty;
-    const report = await runDoctor({ ...DEFAULT_CONFIG, paths: { vibe: 'vibe' } });
+    const report = await runDoctor({ ...DEFAULT_CONFIG, paths: { vibeAppServer: 'vibe-app-server' } });
     expect(report.checks.find((check) => check.name === 'vibe')).toMatchObject({ ok: false, message: expect.stringContaining('not found') });
     expect(existsSync(hit)).toBe(false);
   });
@@ -48,28 +48,28 @@ describe('doctor executable lookup', () => {
   it('resolves a bare configured name through PATH', async () => {
     const dir = await tempDir();
     const bin = path.join(dir, 'bin'); await mkdir(bin);
-    const hit = await marker(bin, 'vibe');
+    const hit = await marker(bin, 'vibe-app-server');
     process.env.PATH = bin;
-    const report = await runDoctor({ ...DEFAULT_CONFIG, paths: { vibe: 'vibe' } });
+    const report = await runDoctor({ ...DEFAULT_CONFIG, paths: { vibeAppServer: 'vibe-app-server' } });
     expect(report.checks.find((check) => check.name === 'vibe')?.message).not.toContain('not found');
-    await expect(readFile(hit, 'utf8')).resolves.toContain('hit');
+    expect(existsSync(hit)).toBe(false);
   });
 
   it('rejects a relative configured path with a separator without executing it', async () => {
     const dir = await tempDir();
-    const hit = await marker(dir, 'vibe');
+    const hit = await marker(dir, 'vibe-app-server');
     process.chdir(dir);
-    const report = await runDoctor({ ...DEFAULT_CONFIG, paths: { vibe: './vibe' } });
+    const report = await runDoctor({ ...DEFAULT_CONFIG, paths: { vibeAppServer: './vibe-app-server' } });
     expect(report.checks.find((check) => check.name === 'vibe')).toMatchObject({ ok: false, message: expect.stringContaining('relative') });
     expect(existsSync(hit)).toBe(false);
   });
 
   it('uses an absolute configured path directly', async () => {
     const dir = await tempDir();
-    const hit = await marker(dir, 'vibe');
-    const report = await runDoctor({ ...DEFAULT_CONFIG, paths: { vibe: path.join(dir, 'vibe') } });
-    expect(report.checks.find((check) => check.name === 'vibe')?.version).toContain('0.0.0');
-    expect(existsSync(hit)).toBe(true);
+    const hit = await marker(dir, 'vibe-app-server');
+    const report = await runDoctor({ ...DEFAULT_CONFIG, paths: { vibeAppServer: path.join(dir, 'vibe-app-server') } });
+    expect(report.checks.find((check) => check.name === 'vibe')).toMatchObject({ ok: false, message: expect.stringContaining('verification failed') });
+    expect(existsSync(hit)).toBe(false);
   });
 
   it('accepts a home-relative workspace root', async () => {
@@ -78,7 +78,7 @@ describe('doctor executable lookup', () => {
     const savedHomeVar = process.env.HOME;
     process.env.HOME = home;
     try {
-      const report = await runDoctor({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: ['~/project'], paths: { vibe: 'vibe' } });
+      const report = await runDoctor({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: ['~/project'], paths: { vibeAppServer: 'vibe-app-server' } });
       expect(report.checks.find((check) => check.name === 'workspace-roots')).toMatchObject({ ok: true, message: expect.stringContaining('1/1') });
     } finally { if (savedHomeVar === undefined) delete process.env.HOME; else process.env.HOME = savedHomeVar; }
   });

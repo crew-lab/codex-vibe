@@ -169,6 +169,20 @@ export class RunManager {
     this.ownerLock ??= await acquireOwnerLock(this.dataDir);
     if (this.backends.size === 0) await this.loadDefaultBackends();
     const entries = await readdir(this.runRoot, { withFileTypes: true });
+    // Inspect engine identity before recovery can write any record. Production
+    // has only the app-server engine; an explicit test backend owns its own data.
+    const selected = this.selectedBackend();
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !UUID_V4.test(entry.name)) continue;
+      const file = path.join(this.runRoot, entry.name, 'meta.json');
+      let backend: unknown;
+      try {
+        const info = await lstat(file);
+        if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_META_BYTES) continue;
+        backend = (JSON.parse(await readFile(file, 'utf8')) as { backend?: unknown }).backend;
+      } catch { continue; }
+      if (typeof backend === 'string' && backend !== selected.kind) throw codedError('VSUP_CONFIG_INVALID', 'This storage contains another engine’s records. Select a separate Supervisor 2.0 configuration and storage directory; no records were migrated or replayed.');
+    }
     for (const entry of entries) {
       if (!entry.isDirectory() || !UUID_V4.test(entry.name)) continue;
       const directory = path.join(this.runRoot, entry.name);
@@ -277,11 +291,13 @@ export class RunManager {
         timeoutSeconds: options.timeoutSeconds, maxTurns: options.maxTurns,
         maxEventBytes: this.config.limits.maxEventBytes,
         maxTranscriptBytes: this.config.limits.maxTranscriptBytes,
-        maxArtifactBytes: this.config.limits.maxArtifactBytes
+        maxArtifactBytes: this.config.limits.maxArtifactBytes,
+        ...(this.config.limits.maxSessionTokens === undefined ? {} : { maxSessionTokens: this.config.limits.maxSessionTokens }),
+        ...(this.config.limits.maxEstimatedCostUsd === undefined ? {} : { maxEstimatedCostUsd: this.config.limits.maxEstimatedCostUsd })
       };
       const record: RunRecord = {
         schemaVersion: SCHEMA_VERSION, supervisorVersion: APP_VERSION, runId: id,
-        backend: "programmatic", mode, state: "starting", sourceWorkspace: source,
+        backend: this.selectedBackend().kind, mode, state: "starting", sourceWorkspace: source,
         workerWorkspace, createdAt: now, updatedAt: now,
         taskSha256: createHash("sha256").update(task).digest("hex"), policyRevision: policy.revision, admittedRoot: admitted.root, limits
       };
@@ -295,7 +311,7 @@ export class RunManager {
       runtime.starting.catch((error: unknown) => this.reportBackground(runtime, "launch", error));
       return {
         supervisor_version: runtime.record.supervisorVersion ?? null, run_id: id, policy_revision: policy.revision,
-        state: runtime.record.state, backend: "programmatic", mode,
+        state: runtime.record.state, backend: runtime.record.backend, mode,
         source_workspace: source, worker_workspace: workerWorkspace, created_at: now,
         next_action: this.nextAction(runtime.record, runtime.record.state),
         ...(mode === "edit" ? { base_ref: options.baseRef ?? "HEAD", ...(checkedBase ? { base_commit: checkedBase } : {}) } : {})
@@ -369,7 +385,7 @@ export class RunManager {
   }
 
   private async runtimeCheck(): Promise<RuntimeCheck | { status: "not_reported" }> {
-    const backend = this.backends.get("programmatic");
+    const backend = this.selectedBackend();
     if (!backend?.runtimeCheck) return { status: "not_reported" };
     return backend.runtimeCheck();
   }
@@ -869,8 +885,13 @@ export class RunManager {
   }
 
   private async loadDefaultBackends(): Promise<void> {
-    const { ProgrammaticBackend } = await import("../backends/programmatic.js");
-    this.backends.set("programmatic", new ProgrammaticBackend(this.config));
+    const { AppServerBackend } = await import("../backends/app-server.js");
+    this.backends.set("app-server", new AppServerBackend(this.config));
+  }
+
+  private selectedBackend(): SupervisorBackend {
+    if (this.backends.size !== 1) throw codedError('VSUP_CONFIG_INVALID', 'Exactly one supervisor engine must own a storage instance.');
+    return this.backends.values().next().value as SupervisorBackend;
   }
 
   private async launch(runtime: Runtime): Promise<void> {
@@ -888,7 +909,7 @@ export class RunManager {
         await this.persist(runtime);
       }
       if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
-      const backend = this.backends.get("programmatic");
+      const backend = this.backends.get(runtime.record.backend);
       if (!backend) throw codedError("VSUP_BACKEND_CRASHED", "The programmatic backend is unavailable.");
       runtime.backend = backend;
       await snapshotTask;

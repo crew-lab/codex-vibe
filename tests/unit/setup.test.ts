@@ -36,8 +36,8 @@ async function sandbox(options: { withVibe?: boolean } = {}): Promise<Sandbox> {
   const data = path.join(root, 'data'); const home = path.join(root, 'home'); const bin = path.join(root, 'bin'); const workspace = path.join(root, 'work');
   await Promise.all([mkdir(home), mkdir(bin), mkdir(workspace)]);
   if (options.withVibe !== false) {
-    await writeFile(path.join(bin, 'vibe'), '#!/usr/bin/env python3\nprint("vibe 2.26.1")\n');
-    await chmod(path.join(bin, 'vibe'), 0o755);
+    await writeFile(path.join(bin, 'vibe-app-server'), '#!/usr/bin/env python3\nprint("vibe 2.26.1")\n');
+    await chmod(path.join(bin, 'vibe-app-server'), 0o755);
   }
   vi.stubEnv('VIBE_SUPERVISOR_HOME', data); vi.stubEnv('HOME', home);
   vi.stubEnv('PATH', options.withVibe === false ? bin : `${bin}${path.delimiter}${process.env.PATH ?? ''}`);
@@ -48,7 +48,7 @@ async function exists(file: string): Promise<boolean> {
   try { await lstat(file); return true; } catch { return false; }
 }
 
-type ParsedConfig = { allowed_workspace_roots: string[]; paths?: { vibe?: string }; retention?: { days: number } };
+type ParsedConfig = { allowed_workspace_roots: string[]; paths?: { vibe?: string; vibe_app_server?: string }; retention?: { days: number } };
 
 describe('setup', () => {
   it('creates a private valid config with the canonical workspace and resolved paths and only previews Codex without --yes', async () => {
@@ -57,7 +57,7 @@ describe('setup', () => {
     expect((await stat(box.config)).mode & 0o777).toBe(0o600);
     const parsed = parse(await readFile(box.config, 'utf8')) as ParsedConfig;
     expect(parsed.allowed_workspace_roots).toEqual([box.workspace]);
-    expect(parsed.paths).toEqual({ vibe: path.join(box.bin, 'vibe') });
+    expect(parsed.paths).toEqual({ vibe_app_server: path.join(box.bin, 'vibe-app-server') });
     expect(output.join('')).toContain('[mcp_servers.vibe-supervisor]');
     expect(await exists(box.codex)).toBe(false);
     expect(await exists(path.join(box.home, '.codex'))).toBe(false);
@@ -142,14 +142,14 @@ describe('setup', () => {
     expect(output.join('')).toContain('config_fingerprint');
   }, 60_000);
 
-  it('leaves paths absent and says so when vibe is not on PATH', async () => {
+  it('leaves paths absent and says so when app-server is not on PATH', async () => {
     const box = await sandbox({ withVibe: false }); capture();
     await runCli(['setup', '--workspace', box.workspace]);
     const parsed = parse(await readFile(box.config, 'utf8')) as ParsedConfig;
     expect(parsed.allowed_workspace_roots).toEqual([box.workspace]);
-    expect(parsed.paths?.vibe).toBeUndefined();
-    expect(parsed.paths?.vibe).toBeUndefined();
-    expect(output.join('')).toMatch(/vibe .*not found on PATH|vibe: not found on PATH/);
+    expect(parsed.paths?.vibe_app_server).toBeUndefined();
+    expect(parsed.paths?.vibe_app_server).toBeUndefined();
+    expect(output.join('')).toMatch(/vibe-app-server: not found on PATH/);
   }, 60_000);
 
   it('refuses a symlinked workspace without creating any file', async () => {

@@ -1,5 +1,13 @@
 # Current handoff
 
+## Supervisor 2.0 draft implementation
+
+Branch `codex/unified-harness-v2` contains the unfinished `2.0.0-rc.1` app-server implementation. See [implementation checkpoint](docs/v2-implementation.md) and [ADR 0004](docs/adr/0004-app-server-client.md). The owner authorized publishing source as a draft pull request; this is not a release, installation, registration or hosted-run authorization.
+
+The new backend, owned search service, compatibility manifest/bootstrap, approval correlation, accounting, setup/Doctor and storage routing are implemented with focused coverage. The last full suite reported 717 passing, 21 failing and two skipped tests; subsequent focused fixes passed, but a full rerun remains required. Legacy package removal, release scripts/docs, lifecycle/conformance coverage, exact Node-floor verification, offline packaging, installed conformance and target acceptance remain incomplete. No 2.0 archive has been frozen.
+
+The existing `docs/acceptance.json` describes 1.0.1 and is not evidence for 2.0. Historical 1.0 acceptance below remains candidate-specific.
+
 Updated 2026-10-14. This document alone defines current priorities. [docs/history/](docs/history/) keeps what the current work uses:
 
 - **rc.2:** the [target brief](docs/history/rc2-target-brief.md), the [rc.2 cold review](docs/history/reviews/rc2-cold-review-2026-10-14.md), and the [rc.1 cold review](docs/history/reviews/rc1-cold-review-2026-10-14.md) with its [tool-path answer](docs/history/reviews/tool-inventory-answer-2026-10-14.md).

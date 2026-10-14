@@ -9,7 +9,7 @@
     "schema_version": { "const": 1 },
     "supervisor_version": { "type": "string", "maxLength": 128 },
     "run_id": { "type": "string", "format": "uuid" },
-    "backend": { "const": "programmatic" },
+    "backend": { "enum": ["programmatic", "app-server"] },
     "mode": { "enum": ["review", "edit"] },
     "state": { "enum": ["starting", "running", "completed", "failed", "cancelled", "closing", "closed"] },
     "source_workspace": { "type": "string" },
@@ -35,7 +35,7 @@
     "limits": {
       "type": "object", "additionalProperties": false,
       "required": ["timeout_seconds", "max_turns", "max_event_bytes", "max_transcript_bytes", "max_artifact_bytes"],
-      "properties": { "timeout_seconds": { "type": "integer" }, "max_turns": { "type": "integer" }, "max_event_bytes": { "type": "integer" }, "max_transcript_bytes": { "type": "integer" }, "max_artifact_bytes": { "type": "integer" } }
+      "properties": { "timeout_seconds": { "type": "integer" }, "max_turns": { "type": "integer" }, "max_event_bytes": { "type": "integer" }, "max_transcript_bytes": { "type": "integer" }, "max_artifact_bytes": { "type": "integer" }, "max_session_tokens": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }, "max_estimated_cost_usd": { "type": "number", "exclusiveMinimum": 0 } }
     },
     "usage": { "type": "object", "additionalProperties": true },
     "result": { "type": "object", "additionalProperties": true },

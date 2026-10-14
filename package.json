@@ -1,6 +1,6 @@
 {
   "name": "vibe-supervisor",
-  "version": "1.0.1-rc.2",
+  "version": "2.0.0-rc.1",
   "private": true,
   "description": "Codex MCP supervisor for delegated Mistral Vibe runs",
   "license": "MIT",
@@ -28,7 +28,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:python": "python3 -m unittest src/backends/runtime/test_prompt_file.py src/backends/runtime/test_keychain_credential.py src/backends/runtime/test_worker_watchdog.py src/backends/runtime/test_worker_diagnostics.py src/backends/runtime/test_project_discovery.py",
+    "test:python": "python3 -m unittest src/backends/runtime/test_prompt_file.py src/backends/runtime/test_keychain_credential.py src/backends/runtime/test_worker_watchdog.py src/backends/runtime/test_worker_diagnostics.py src/backends/runtime/test_project_discovery.py src/backends/runtime/test_app_server_bootstrap.py",
     "test:integration": "vitest run tests/integration",
     "test:security": "vitest run tests/security",
     "build": "node scripts/clean-dist.mjs && tsc && node scripts/copy-runtime-assets.mjs",

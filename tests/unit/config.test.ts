@@ -13,7 +13,7 @@ afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recur
 
 describe("supervisor config", () => {
   it("uses the macOS Application Support default and honors the home override", () => {
-    expect(getDataDir({ HOME: "/Users/example" })).toBe("/Users/example/Library/Application Support/VibeSupervisor-oneshot");
+    expect(getDataDir({ HOME: "/Users/example" })).toBe("/Users/example/Library/Application Support/VibeSupervisor-appserver");
     expect(getDataDir({ VIBE_SUPERVISOR_HOME: "/tmp/custom-vsup" })).toBe("/tmp/custom-vsup");
     expect(getConfigPath({ VIBE_SUPERVISOR_HOME: "/tmp/custom-vsup" })).toBe("/tmp/custom-vsup/config.toml");
   });
