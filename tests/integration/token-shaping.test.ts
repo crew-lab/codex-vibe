@@ -11,7 +11,7 @@ import { Client } from "@modelcontextprotocol/client";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import type { Transport, JSONRPCMessage } from "@modelcontextprotocol/server";
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend, SupervisorConfig } from "../../src/contracts.js";
-import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { validateConfig } from "../../src/config/validation.js";
 import { RunManager } from "../../src/core/run-manager.js";
 import { createSupervisorMcpServer } from "../../src/mcp/server.js";
@@ -55,7 +55,7 @@ async function setup(backend = new FakeBackend(), overrides: Partial<SupervisorC
   const parent = await mkdtemp(join(canonicalTmp, "vsup-shape-")); roots.push(parent);
   const source = join(parent, "source"); const data = join(parent, "data");
   await mkdir(source);
-  const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], ...overrides };
+  const config = { ...LEGACY_CONFIG, allowedWorkspaceRoots: [source], ...overrides };
   const manager = new RunManager(config, data, [backend]);
   return { parent, source, data, manager, backend };
 }
@@ -149,7 +149,7 @@ describe("vibe_status wait_seconds", () => {
   });
 
   it("leaves no timers, waiters or abort listeners behind across many waits", async () => {
-    const { source, manager, backend } = await setup(new FakeBackend(), { limits: { ...DEFAULT_CONFIG.limits, workerProgressTimeoutSeconds: 0 } });
+    const { source, manager, backend } = await setup(new FakeBackend(), { limits: { ...LEGACY_CONFIG.limits, workerProgressTimeoutSeconds: 0 } });
     try {
       const runId = await runningRun(manager, source);
       const runtime = (manager as unknown as { runs: Map<string, { waiters: Set<unknown> }> }).runs.get(runId)!;
@@ -368,7 +368,7 @@ function stubManager(overrides: Partial<RunManagerTools> = {}): RunManagerTools 
 
 async function connect(manager: RunManagerTools, limits: Partial<SupervisorConfig["limits"]> = {}) {
   const input = new PassThrough(); const output = new PassThrough();
-  const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits, ...limits } } });
+  const server = createSupervisorMcpServer(manager, { config: { ...LEGACY_CONFIG, limits: { ...LEGACY_CONFIG.limits, ...limits } } });
   await server.connect(new StdioServerTransport(input, output));
   const client = new Client({ name: "shape-test-client", version: "1.0.0" }); clients.push(client);
   await client.connect(new StdioClientHarness(input, output));
@@ -377,8 +377,8 @@ async function connect(manager: RunManagerTools, limits: Partial<SupervisorConfi
 
 describe("MCP result format", () => {
   it("sends one JSON text block under an 8000 character cap", async () => {
-    expect(DEFAULT_CONFIG.limits.maxMcpResultChars).toBe(8000);
-    expect(validateConfig({ version: 1 }).limits).toMatchObject({ maxMcpResultChars: 8000 });
+    expect(LEGACY_CONFIG.limits.maxMcpResultChars).toBe(8000);
+    expect(validateConfig({ version: 1, backend: "programmatic" }).limits).toMatchObject({ maxMcpResultChars: 8000 });
     const client = await connect(stubManager());
     const result = await client.callTool({ name: "vibe_status", arguments: { run_id: RUN_ID } });
     expect(result.structuredContent).toBeUndefined();

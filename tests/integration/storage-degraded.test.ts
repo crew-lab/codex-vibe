@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 
 const fault = vi.hoisted(() => ({ events: false }));
@@ -52,7 +52,7 @@ describe('event storage degradation', () => {
     const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-degraded-')); roots.push(parent);
     const source = path.join(parent, 'source'); const data = path.join(parent, 'data'); await mkdir(source); await writeFile(path.join(source, 'file.txt'), 'content\n');
     const backend = new FakeBackend();
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
@@ -73,7 +73,7 @@ describe('event storage degradation', () => {
     const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-degraded-')); roots.push(parent);
     const source = path.join(parent, 'source'); const data = path.join(parent, 'data'); await mkdir(source); await writeFile(path.join(source, 'file.txt'), 'content\n');
     const backend = new FakeBackend();
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');

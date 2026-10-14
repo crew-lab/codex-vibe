@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BackendCallbacks, StartRunInput, SupervisorEvent } from '../../src/contracts.js';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { PROMPT_FILE_NAME, removePromptFile } from '../../src/backends/launcher.js';
 import { ProgrammaticBackend } from '../../src/backends/programmatic.js';
 import { ORIGINAL_HOME_ENV } from '../../src/security/environment.js';
@@ -102,7 +102,7 @@ async function installFakeVibe(root: string, childBody: string) {
 }
 
 function programmaticBackend(vibe: string) {
-  return new ProgrammaticBackend({ ...DEFAULT_CONFIG, paths: { vibe } });
+  return new ProgrammaticBackend({ ...LEGACY_CONFIG, paths: { vibe } });
 }
 
 function collecting(): BackendCallbacks & { events: Array<Pick<SupervisorEvent, 'type' | 'data'>>; states: string[] } {

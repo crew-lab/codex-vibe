@@ -14,7 +14,7 @@ import type { RunRecord } from '../../src/contracts.js';
 
 const dirs: string[] = [];
 afterEach(async () => { await Promise.all(dirs.splice(0).map(dir => rm(dir, { recursive: true, force: true }))); });
-async function template(source = 'version = 1\nallowed_workspace_roots = []\n'): Promise<string> {
+async function template(source = 'version = 1\nbackend = "programmatic"\nallowed_workspace_roots = []\n'): Promise<string> {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), 'vsup-isolation-')));
   dirs.push(root);
   await writeFile(path.join(root, 'config.toml'), source, { mode: 0o600 });
@@ -23,7 +23,7 @@ async function template(source = 'version = 1\nallowed_workspace_roots = []\n'):
 
 describe('per-connection isolated storage', () => {
   it('allows simultaneous owners while preserving configuration and excluding source state', async () => {
-    const source = 'version = 1\nallowed_workspace_roots = []\n';
+    const source = 'version = 1\nbackend = "programmatic"\nallowed_workspace_roots = []\n';
     const root = await template(source);
     const env = { VIBE_SUPERVISOR_HOME: root };
     const shared = new RunManager(await loadConfig({ env }), root);
@@ -48,7 +48,7 @@ describe('per-connection isolated storage', () => {
   it('rejects symlinked configuration and template ancestors', async () => {
     const root = await template();
     await rm(path.join(root, 'config.toml'));
-    await writeFile(path.join(root, 'actual.toml'), 'version = 1\nallowed_workspace_roots = []\n');
+    await writeFile(path.join(root, 'actual.toml'), 'version = 1\nbackend = "programmatic"\nallowed_workspace_roots = []\n');
     await symlink(path.join(root, 'actual.toml'), path.join(root, 'config.toml'));
     await expect(prepareIsolatedHome({ VIBE_SUPERVISOR_HOME: root })).rejects.toThrow();
     const other = await template();
@@ -57,7 +57,7 @@ describe('per-connection isolated storage', () => {
   });
 
   it('fails closed for invalid, oversized or missing configuration', async () => {
-    const root = await template('version = 1\nallow_shell = true\n');
+    const root = await template('version = 1\nbackend = "programmatic"\nallow_shell = true\n');
     await expect(prepareIsolatedHome({ VIBE_SUPERVISOR_HOME: root })).rejects.toThrow();
     await writeFile(path.join(root, 'config.toml'), '#'.repeat(1_048_577));
     await expect(prepareIsolatedHome({ VIBE_SUPERVISOR_HOME: root })).rejects.toThrow();
@@ -68,7 +68,7 @@ describe('per-connection isolated storage', () => {
   it('places isolated storage below an explicitly selected config parent and ignores the default home', async () => {
     const root = await template('version = 1\nbackend = "acp"\n');
     const artifact = path.join(root, 'artifact'); await mkdir(artifact, { mode: 0o700 });
-    const configPath = path.join(artifact, 'config.toml'); const config = 'version = 1\nallowed_workspace_roots = []\n';
+    const configPath = path.join(artifact, 'config.toml'); const config = 'version = 1\nbackend = "programmatic"\nallowed_workspace_roots = []\n';
     await writeFile(configPath, config, { mode: 0o600 });
     const prepared = await prepareIsolatedHome({ VIBE_SUPERVISOR_HOME: root }, undefined, configPath);
     expect(prepared.home.startsWith(path.join(artifact, 'mcp-sessions'))).toBe(true);
@@ -77,8 +77,8 @@ describe('per-connection isolated storage', () => {
   });
 });
 
-const CONFIG_V1 = 'version = 1\nallowed_workspace_roots = []\n';
-const CONFIG_V2 = 'version = 1\nallowed_workspace_roots = []\n\n[retention]\ndays = 2\n';
+const CONFIG_V1 = 'version = 1\nbackend = "programmatic"\nallowed_workspace_roots = []\n';
+const CONFIG_V2 = 'version = 1\nbackend = "programmatic"\nallowed_workspace_roots = []\n\n[retention]\ndays = 2\n';
 
 async function sessionNames(root: string): Promise<string[]> {
   return (await readdir(path.join(root, 'mcp-sessions'))).sort();

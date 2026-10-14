@@ -2,14 +2,17 @@ import path from "node:path";
 import { homedir } from "node:os";
 import { z } from "zod";
 import { assertWorkspaceRootScope } from "../security/paths.js";
+import { BACKEND_KINDS } from "../contracts.js";
 import type { SupervisorConfig } from "../contracts.js";
 import { MAX_TURNS_LIMIT } from "../mcp/schemas.js";
 
 const pathString = z.string().min(1).max(4096);
 const rootString = pathString.refine((value) => path.isAbsolute(value) || value === "~" || value.startsWith("~/"), "must be an absolute path or start with ~/");
 const executableString = pathString.refine((value) => path.isAbsolute(value) || !/[\\/]/.test(value), "must be an absolute path or a bare command name");
+const absolutePathString = pathString.refine((value) => path.isAbsolute(value), "must be an absolute path");
 const configSchema = z.object({
   version: z.literal(1),
+  backend: z.enum(BACKEND_KINDS).default("app-server"),
   allowed_workspace_roots: z.array(rootString).max(100).default([]),
   retention: z.object({
     days: z.number().int().min(0).max(3650).default(7)
@@ -23,10 +26,24 @@ const configSchema = z.object({
     max_transcript_bytes: z.number().int().min(1024).max(1_073_741_824).default(10_485_760),
     max_artifact_bytes: z.number().int().min(1024).max(2_147_483_648).default(104_857_600),
     worker_progress_timeout_seconds: z.number().int().refine((value) => value === 0 || (value >= 60 && value <= 7200), "must be 0 or between 60 and 7200").default(600),
-    max_mcp_result_chars: z.number().int().min(1000).max(1_000_000).default(8000)
+    max_mcp_result_chars: z.number().int().min(1000).max(1_000_000).default(8000),
+    max_tokens: z.number().int().min(1).max(1_000_000_000).optional(),
+    max_cost_usd: z.number().positive().max(1_000_000).optional()
   }).strict().prefault({}),
-  paths: z.object({ vibe: executableString.optional() }).strict().optional()
-}).strict();
+  paths: z.object({
+    vibe: executableString.optional(),
+    app_server: executableString.optional(),
+    vibe_pin_manifest: absolutePathString.optional()
+  }).strict().optional()
+}).strict().superRefine((value, context) => {
+  if (value.backend === "app-server" && value.paths?.vibe_pin_manifest === undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["paths", "vibe_pin_manifest"],
+      message: "is required when backend is app-server: set it to the absolute path of the pin manifest written by the pin-manifest command, or set backend = \"programmatic\" to keep the legacy backend."
+    });
+  }
+});
 
 export function validateConfig(input: unknown, home = process.env.HOME ?? process.env.USERPROFILE ?? homedir()): SupervisorConfig {
   const parsed = configSchema.parse(input);
@@ -36,6 +53,7 @@ export function validateConfig(input: unknown, home = process.env.HOME ?? proces
   }
   return {
     version: parsed.version,
+    backend: parsed.backend,
     allowedWorkspaceRoots: parsed.allowed_workspace_roots,
     retention: { days: parsed.retention.days },
     limits: {
@@ -47,8 +65,14 @@ export function validateConfig(input: unknown, home = process.env.HOME ?? proces
       maxTranscriptBytes: parsed.limits.max_transcript_bytes,
       maxArtifactBytes: parsed.limits.max_artifact_bytes,
       workerProgressTimeoutSeconds: parsed.limits.worker_progress_timeout_seconds,
-      maxMcpResultChars: parsed.limits.max_mcp_result_chars
+      maxMcpResultChars: parsed.limits.max_mcp_result_chars,
+      ...(parsed.limits.max_tokens === undefined ? {} : { maxTokens: parsed.limits.max_tokens }),
+      ...(parsed.limits.max_cost_usd === undefined ? {} : { maxCostUsd: parsed.limits.max_cost_usd })
     },
-    paths: parsed.paths ? { ...(parsed.paths.vibe === undefined ? {} : { vibe: parsed.paths.vibe }) } : {}
+    paths: parsed.paths ? {
+      ...(parsed.paths.vibe === undefined ? {} : { vibe: parsed.paths.vibe }),
+      ...(parsed.paths.app_server === undefined ? {} : { appServer: parsed.paths.app_server }),
+      ...(parsed.paths.vibe_pin_manifest === undefined ? {} : { vibePinManifest: parsed.paths.vibe_pin_manifest })
+    } : {}
   };
 }

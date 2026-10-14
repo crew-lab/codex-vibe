@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BackendCallbacks, BackendStartResult, StartRunInput, SupervisorBackend } from "../../src/contracts.js";
-import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { RunManager } from "../../src/core/run-manager.js";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
@@ -74,7 +74,7 @@ async function paths() {
 async function setup() {
   const { source, data } = await paths();
   const backend = new FakeBackend();
-  const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+  const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
   return { source, data, manager, backend };
 }
 
@@ -161,7 +161,7 @@ describe("stop reason reporting", () => {
   it("surfaces the cap through the MCP compact result and a start-with-wait response", async () => {
     const { source, manager, backend } = await setup();
     const input = new PassThrough(); const output = new PassThrough();
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits } } });
+    const server = createSupervisorMcpServer(manager, { config: { ...LEGACY_CONFIG, limits: { ...LEGACY_CONFIG.limits } } });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: "stop-reason-client", version: "1.0.0" }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));

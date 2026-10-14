@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { bounded } from '../../src/mcp/tools.js';
 
@@ -28,7 +28,7 @@ async function harness() {
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data');
   await mkdir(source); await writeFile(path.join(source, 'tracked.txt'), 'original\n');
   const fake = new FakeBackend();
-  const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [fake]);
+  const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [fake]);
   const started = await manager.reviewStart({ task: 'review', cwd: source });
   for (let attempt = 0; attempt < 500 && (await manager.status({ run_id: started.run_id })).state !== 'running'; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
   return { manager, fake, runId: started.run_id };
@@ -43,7 +43,7 @@ describe('vibe_status paging through the MCP size cap', () => {
       const seen: number[] = [];
       let after = 0;
       for (let page = 0; page < 40; page += 1) {
-        const reply = bounded(await manager.status({ run_id: runId, after_seq: after, max_events: 100 }), DEFAULT_CONFIG.limits.maxMcpResultChars).structuredContent as { events: { seq: number }[]; next_after_seq: number; next_action: string };
+        const reply = bounded(await manager.status({ run_id: runId, after_seq: after, max_events: 100 }), LEGACY_CONFIG.limits.maxMcpResultChars).structuredContent as { events: { seq: number }[]; next_after_seq: number; next_action: string };
         for (const event of reply.events) seen.push(event.seq);
         expect(reply.next_after_seq).toBe(reply.events.at(-1)?.seq ?? after);
         expect(reply.next_action).toContain(`after_seq=${reply.next_after_seq}`);

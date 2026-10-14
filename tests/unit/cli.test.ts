@@ -77,7 +77,7 @@ describe('CLI diagnostics for the programmatic runtime', () => {
     const script = (name: string) => path.join(bin, name);
     await writeFile(script('vibe'), '#!/usr/bin/env python3\nprint("vibe 2.26.1")\n');
     await chmod(script('vibe'), 0o755);
-    await writeFile(path.join(data, 'config.toml'), `version = 1\nallowed_workspace_roots = []\n\n[paths]\nvibe = ${JSON.stringify(script('vibe'))}\n`);
+    await writeFile(path.join(data, 'config.toml'), `version = 1\nbackend = "programmatic"\nallowed_workspace_roots = []\n\n[paths]\nvibe = ${JSON.stringify(script('vibe'))}\n`);
     vi.stubEnv('VIBE_SUPERVISOR_HOME', data);
     captureOutput();
     errorSpy = vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: string | Uint8Array) => { errors.push(String(chunk)); return true; }) as typeof process.stderr.write);

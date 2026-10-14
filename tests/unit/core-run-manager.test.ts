@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend } from "../../src/contracts.js";
-import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
+import { LEGACY_CONFIG } from './support/legacy-config.js';
 import { supervisorError } from "../../src/contracts.js";
 import { APP_VERSION } from "../../src/version.js";
 import { RunManager } from "../../src/core/run-manager.js";
@@ -41,7 +41,7 @@ async function setup(backend = new FakeBackend()) {
   const parent = await mkdtemp(join(canonicalTmp, "vsup-core-")); roots.push(parent);
   const source = join(parent, "source"); const data = join(parent, "data");
   await mkdir(source);
-  const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] };
+  const config = { ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] };
   const manager = new RunManager(config, data, [backend]);
   return { parent, source, data, manager, backend };
 }
@@ -90,7 +90,7 @@ describe("RunManager core lifecycle", () => {
     // A later supervisor must not overwrite the recorded creator release.
     meta.supervisor_version = "0.9.0-rc.4";
     await writeFile(metaPath, JSON.stringify(meta), { mode: 0o600 });
-    const restarted = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [new FakeBackend()]);
+    const restarted = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [new FakeBackend()]);
     try {
       await restarted.initialize();
       expect((await restarted.status({ run_id: started.run_id })).supervisor_version).toBe("0.9.0-rc.4");
@@ -100,7 +100,7 @@ describe("RunManager core lifecycle", () => {
 
   it("refuses a competing live owner and releases its lock on shutdown", async () => {
     const { data, manager } = await setup();
-    const other = new RunManager({ ...DEFAULT_CONFIG }, data, [new FakeBackend()]);
+    const other = new RunManager({ ...LEGACY_CONFIG }, data, [new FakeBackend()]);
     try {
       await manager.initialize();
       await expect(other.initialize()).rejects.toMatchObject({ code: "VSUP_OWNER_LOCKED" });
@@ -166,7 +166,7 @@ describe("RunManager core lifecycle", () => {
       await manager.shutdown();
     } finally { await manager.shutdown(); }
     const restartedBackend = new FakeBackend();
-    const restarted = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [restartedBackend]);
+    const restarted = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [restartedBackend]);
     try {
       await restarted.initialize();
       expect(restartedBackend.starts).toBe(0);
@@ -185,7 +185,7 @@ describe("RunManager core lifecycle", () => {
     await exec("git", ["add", "tracked.txt"], { cwd: source });
     await exec("git", ["commit", "-qm", "baseline"], { cwd: source });
     backend.beforeReturn = async (input) => { await writeFile(join(input.workerWorkspace, "generated.txt"), "new output\n"); };
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       const started = await manager.editStart({ task: "edit", cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
@@ -212,7 +212,7 @@ describe("RunManager worker death after the supervisor deadline", () => {
     try {
       const started = await manager.reviewStart({ task: "review", cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
-      vi.setSystemTime(Date.now() + (DEFAULT_CONFIG.limits.reviewTimeoutSeconds + 1) * 1000);
+      vi.setSystemTime(Date.now() + (LEGACY_CONFIG.limits.reviewTimeoutSeconds + 1) * 1000);
       await backend.callbacks?.onState("failed", { error: supervisorError("VSUP_BACKEND_CRASHED", "Vibe ACP exited null") });
       const status = await manager.status({ run_id: started.run_id });
       expect(status.state).toBe("failed");

@@ -3,7 +3,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import type { Transport, JSONRPCMessage } from '@modelcontextprotocol/server';
 import { PassThrough } from 'node:stream';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { createSupervisorMcpServer } from '../../src/mcp/server.js';
 import type { RunManagerTools } from '../../src/mcp/tools.js';
 
@@ -50,7 +50,7 @@ describe('MCP stdio tool surface', () => {
       result: vi.fn(async () => ({ run_id: '123e4567-e89b-42d3-a456-426614174000', artifacts: [{ name: 'diff.patch', path: '/private/runs/diff.patch', sha256: 'abc' }], summary: 'complete', reasoning_content: 'should never cross the MCP boundary' })),
       close: vi.fn(async () => ({ closed: true })),
     } satisfies RunManagerTools;
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits, maxMcpResultChars: 500 } } });
+    const server = createSupervisorMcpServer(manager, { config: { ...LEGACY_CONFIG, limits: { ...LEGACY_CONFIG.limits, maxMcpResultChars: 500 } } });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
@@ -78,7 +78,7 @@ describe('MCP stdio tool surface', () => {
       reviewStart: vi.fn(async () => { throw Object.assign(new Error('run missing'), { code: 'VSUP_NOT_FOUND' }); }),
       editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})), result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
     } satisfies RunManagerTools;
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits } } });
+    const server = createSupervisorMcpServer(manager, { config: { ...LEGACY_CONFIG, limits: { ...LEGACY_CONFIG.limits } } });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
@@ -96,7 +96,7 @@ describe('MCP stdio tool surface', () => {
       reviewStart: vi.fn(async () => { throw Object.assign(new Error('root gone'), { code: 'VSUP_WORKSPACE_INVALID', retryable: true, details: { unavailable_root: '/gone', note: 'api_key=sk-abcdef1234567890xyz' } }); }),
       editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})), result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
     } satisfies RunManagerTools;
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits } } });
+    const server = createSupervisorMcpServer(manager, { config: { ...LEGACY_CONFIG, limits: { ...LEGACY_CONFIG.limits } } });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
@@ -118,7 +118,7 @@ describe('MCP stdio tool surface', () => {
       result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
     } satisfies RunManagerTools;
     const logged: string[] = [];
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits } }, onError: (message) => logged.push(message) });
+    const server = createSupervisorMcpServer(manager, { config: { ...LEGACY_CONFIG, limits: { ...LEGACY_CONFIG.limits } }, onError: (message) => logged.push(message) });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
@@ -139,7 +139,7 @@ describe('MCP stdio tool surface', () => {
       reviewStart: vi.fn(async () => { throw storage; }), editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})),
       result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
     } satisfies RunManagerTools;
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits } } });
+    const server = createSupervisorMcpServer(manager, { config: { ...LEGACY_CONFIG, limits: { ...LEGACY_CONFIG.limits } } });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
@@ -153,7 +153,7 @@ describe('MCP stdio tool surface', () => {
       reviewStart: vi.fn(async () => ({})), editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})),
       result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
     } satisfies RunManagerTools;
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG } });
+    const server = createSupervisorMcpServer(manager, { config: { ...LEGACY_CONFIG } });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));

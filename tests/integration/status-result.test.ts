@@ -5,7 +5,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { bounded } from '../../src/mcp/tools.js';
 
@@ -40,7 +40,7 @@ async function harness(git = false) {
     await exec('git', ['commit', '-qm', 'baseline'], { cwd: source });
   }
   const backend = new FakeBackend();
-  const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+  const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
   return { manager, backend, source };
 }
 

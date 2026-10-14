@@ -48,7 +48,7 @@ async function sandbox() {
   await git(workspace, ['add', 'a.js']);
   await git(workspace, ['-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'init']);
   const config = path.join(data, 'config.toml');
-  await writeFile(config, `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n`, { mode: 0o600 });
+  await writeFile(config, `version = 1\nbackend = "programmatic"\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n`, { mode: 0o600 });
   return { parent, workspace, data, config };
 }
 

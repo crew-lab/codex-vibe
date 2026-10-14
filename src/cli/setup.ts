@@ -94,6 +94,21 @@ async function resolvePaths(document: Document, notes: string[]): Promise<boolea
   return changed;
 }
 
+export const DEFAULT_PIN_MANIFEST_NAME = 'vibe-pin-manifest.json';
+
+function ensurePinManifestPath(document: Document, file: string, notes: string[]): boolean {
+  if (document.backend === 'programmatic') return false;
+  const existing = document.paths ?? {};
+  if (!existing || typeof existing !== 'object' || Array.isArray(existing)) return false;
+  const paths = existing as Record<string, unknown>;
+  if (paths.vibe_pin_manifest !== undefined) return false;
+  const manifest = path.join(path.dirname(file), DEFAULT_PIN_MANIFEST_NAME);
+  paths.vibe_pin_manifest = manifest;
+  document.paths = paths;
+  notes.push(`vibe_pin_manifest: set to ${manifest}; write it on the machine that runs Vibe with \`vibe-supervisor pin-manifest\` before the first run.`);
+  return true;
+}
+
 async function writeConfig(file: string, text: string, created: boolean): Promise<void> {
   if (created) { await createPrivateFile(file, text); return; }
   const temp = `${file}.${process.pid}.tmp`;
@@ -109,12 +124,14 @@ export async function planWorkspaceConfig(canonical: string, options: { resolveE
   const document: Document = existing?.document ?? parse(initialConfigText()) as Document;
   const notes: string[] = [];
   const added = await addRoot(document, canonical);
-  const pathsChanged = options.resolveExecutables ? await resolvePaths(document, notes) : false;
+  const resolvedChanged = options.resolveExecutables ? await resolvePaths(document, notes) : false;
+  const manifestChanged = created || options.resolveExecutables ? ensurePinManifestPath(document, file, notes) : false;
+  const pathsChanged = resolvedChanged || manifestChanged;
   try {
     const config = validateConfig(document);
     await validateWorkspaceRootsAtUse(config.allowedWorkspaceRoots);
   }
-  catch (error) { throw configInvalid(`Invalid supervisor configuration at ${file}; no changes were made: ${(error as Error).message} Supported fields are version, allowed_workspace_roots, retention, limits, and paths.vibe. Remove unsupported fields instead of relying on them.`); }
+  catch (error) { throw configInvalid(`Invalid supervisor configuration at ${file}; no changes were made: ${(error as Error).message} Supported fields are version, backend, allowed_workspace_roots, retention, limits (including max_tokens and max_cost_usd), and paths (vibe, app_server, vibe_pin_manifest). Remove unsupported fields instead of relying on them.`); }
   const changed = created || added || pathsChanged;
   return { file, created, added, canonical, notes, changed, ...(changed ? { text: stringify(document) } : {}) };
 }

@@ -39,7 +39,7 @@ const smokeHome = path.join(smokeRoot, 'home');
 const smokeData = path.join(smokeHome, 'VibeSupervisor-oneshot');
 await Promise.all([mkdir(smokeHome, { recursive: true, mode: 0o700 }), mkdir(smokeData, { recursive: true, mode: 0o700 })]);
 const smokeConfig = path.join(smokeData, 'config.toml');
-await writeFile(smokeConfig, 'version = 1\nallowed_workspace_roots = []\n', { mode: 0o600 });
+await writeFile(smokeConfig, 'version = 1\nbackend = "programmatic"\nallowed_workspace_roots = []\n', { mode: 0o600 });
 const smokeEnv = { ...process.env, HOME: smokeHome, USERPROFILE: smokeHome };
 const { Client } = await import('@modelcontextprotocol/client');
 const { StdioClientTransport } = await import('@modelcontextprotocol/client/stdio');

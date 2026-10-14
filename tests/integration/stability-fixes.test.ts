@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
 import { SCHEMA_VERSION } from '../../src/contracts.js';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { runToWire } from '../../src/core/serialization.js';
 
@@ -86,7 +86,7 @@ describe('retention of run directories that failed to load', () => {
     const fresh = randomUUID();
     await mkdir(path.join(data, 'runs', fresh), { mode: 0o700 });
     await writeFile(path.join(data, 'runs', fresh, 'meta.json'), '{not json', { mode: 0o600 });
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [new IdleBackend()]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [new IdleBackend()]);
     try {
       const result = await manager.cleanup() as { removed_run_ids: string[] };
       expect([...result.removed_run_ids].sort()).toEqual([...ids].sort());
@@ -109,7 +109,7 @@ describe('retention of run directories that failed to load', () => {
     await age(path.join(data, 'runs', runId), 30);
     const writes: string[] = [];
     vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => { writes.push(String(chunk)); return true; }) as typeof process.stderr.write);
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [new IdleBackend()]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [new IdleBackend()]);
     try {
       const result = await manager.cleanup() as { removed_run_ids: string[]; unverified_worktrees?: Array<{ run_id: string; path: string }> };
       expect(result.removed_run_ids).toEqual([]);
@@ -133,7 +133,7 @@ describe('shutdown deadline', () => {
   it('keeps the owner lock while a stuck run chain may still write, then releases it after the chain settles', async () => {
     const { source, data } = await sandbox();
     const backend = new IdleBackend();
-    const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] };
+    const config = { ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] };
     const manager = new RunManager(config, data, [backend]);
     const started = await manager.reviewStart({ task: 'review', cwd: source });
     await waitFor(() => backend.callbacks.has(started.run_id), Boolean);

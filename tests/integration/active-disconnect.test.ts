@@ -72,7 +72,7 @@ async function sandbox() {
   await writeFile(vibe, `#!${interpreter}\n`);
   await chmod(vibe, 0o755);
 
-  await writeFile(path.join(data, 'config.toml'), `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[paths]\nvibe = ${JSON.stringify(vibe)}\n`, { mode: 0o600 });
+  await writeFile(path.join(data, 'config.toml'), `version = 1\nbackend = "programmatic"\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[paths]\nvibe = ${JSON.stringify(vibe)}\n`, { mode: 0o600 });
   return { parent, workspace, data, workerRecord };
 }
 

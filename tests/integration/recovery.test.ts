@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { runToWire } from '../../src/core/serialization.js';
 
@@ -75,7 +75,7 @@ describe('one-shot restart behavior', () => {
     const directory = await writeRecord(data, record);
     const metaBefore = await readFile(path.join(directory, 'meta.json'), 'utf8');
     const backend = new FakeBackend();
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       await manager.initialize();
       const status = await manager.status({ run_id: record.runId });
@@ -101,7 +101,7 @@ describe('one-shot restart behavior', () => {
     const artifactPath = path.join(artifactDir, 'legacy.txt');
     await writeFile(artifactPath, 'historical output\n');
     const backend = new FakeBackend();
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       await manager.initialize();
       expect(await readFile(metaPath, 'utf8')).toBe(before);
@@ -115,7 +115,7 @@ describe('one-shot restart behavior', () => {
   it('releases the active worker on shutdown and stores an interrupted failure', async () => {
     const { source, data } = await setup();
     const backend = new FakeBackend();
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     const started = await manager.reviewStart({ task: 'one shot', cwd: source });
     await waitFor(() => manager.status({ run_id: started.run_id }), (status) => status.state === 'running');
     await manager.shutdown();

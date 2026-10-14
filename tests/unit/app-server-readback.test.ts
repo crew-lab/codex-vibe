@@ -185,7 +185,7 @@ class FixtureClient {
   started: unknown;
 
   constructor(scenario: string, env: Record<string, string>) {
-    this.child = spawn(process.execPath, [fixture, '--scenario', scenario], { env: { PATH: process.env.PATH ?? '', MISTRAL_API_KEY: 'sk-test-not-a-real-credential-value', ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
+    this.child = spawn(process.execPath, [fixture, '--scenario', scenario], { env: { PATH: process.env.PATH ?? '', MISTRAL_API_KEY: 'fake-credential-not-a-real-value', ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child.stdout.setEncoding('utf8');
     this.child.stdout.on('data', (chunk: string) => {
       this.buffered += chunk;

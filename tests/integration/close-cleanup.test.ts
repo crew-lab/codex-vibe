@@ -6,7 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, RunState, StartRunInput, SupervisorBackend } from "../../src/contracts.js";
-import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { RunManager } from "../../src/core/run-manager.js";
 import { runToWire } from "../../src/core/serialization.js";
 import { createDetachedWorktree } from "../../src/git/worktree.js";
@@ -54,7 +54,7 @@ async function setup(backend = new CloseBackend(), names = { source: "source", d
   await exec("git", ["config", "user.name", "Vibe Supervisor Test"], { cwd: source });
   await exec("git", ["add", "tracked.txt"], { cwd: source });
   await exec("git", ["commit", "-qm", "baseline"], { cwd: source });
-  const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] };
+  const config = { ...LEGACY_CONFIG, allowedWorkspaceRoots: [source] };
   return { parent, source, data, backend, config, manager: new RunManager(config, data, [backend]) };
 }
 

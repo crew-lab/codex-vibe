@@ -2,6 +2,7 @@ import type { SupervisorConfig } from "../contracts.js";
 
 export const DEFAULT_CONFIG: SupervisorConfig = {
   version: 1,
+  backend: "app-server",
   allowedWorkspaceRoots: [],
   retention: { days: 7 },
   limits: {

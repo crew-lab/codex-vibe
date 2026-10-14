@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { chmod } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend, SupervisorConfig } from "../../src/contracts.js";
-import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
+import { LEGACY_CONFIG } from '../unit/support/legacy-config.js';
 import { validateConfig } from "../../src/config/validation.js";
 import { RunManager } from "../../src/core/run-manager.js";
 import { ProgrammaticBackend } from "../../src/backends/programmatic.js";
@@ -71,7 +71,7 @@ async function setup(progressSeconds: number, options: { git?: boolean; backend?
     await exec("git", ["commit", "-qm", "baseline"], { cwd: source });
   }
   const backend = options.backend?.(data, source) ?? new ScriptedBackend();
-  const config: SupervisorConfig = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], limits: { ...DEFAULT_CONFIG.limits, workerProgressTimeoutSeconds: progressSeconds }, ...options.config };
+  const config: SupervisorConfig = { ...LEGACY_CONFIG, allowedWorkspaceRoots: [source], limits: { ...LEGACY_CONFIG.limits, workerProgressTimeoutSeconds: progressSeconds }, ...options.config };
   const manager = new RunManager(config, data, [backend]);
   return { parent, source, data, backend, manager };
 }
@@ -190,7 +190,7 @@ describe("worker activity and settle races", () => {
       ""
     ].join("\n"));
     childScript.path = child;
-    const context = await setup(2, { backend: () => new ProgrammaticBackend({ ...DEFAULT_CONFIG, backend: "programmatic", paths: { vibe } }), config: { backend: "programmatic" } });
+    const context = await setup(2, { backend: () => new ProgrammaticBackend({ ...LEGACY_CONFIG, backend: "programmatic", paths: { vibe } }), config: { backend: "programmatic" } });
     try {
       const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
       const status = await waitFor(() => context.manager.status({ run_id: started.run_id }), (value) => value.state === "completed" || value.state === "failed", 20_000);
@@ -279,9 +279,9 @@ describe("worker activity and settle races", () => {
 });
 
 describe("worker_progress_timeout_seconds config", () => {
-  const parse = (value: unknown) => validateConfig({ version: 1, limits: { worker_progress_timeout_seconds: value } });
+  const parse = (value: unknown) => validateConfig({ version: 1, backend: "programmatic", limits: { worker_progress_timeout_seconds: value } });
   it("defaults to 600 and accepts 0 and 60 to 7200", () => {
-    expect(validateConfig({ version: 1 }).limits.workerProgressTimeoutSeconds).toBe(600);
+    expect(validateConfig({ version: 1, backend: "programmatic" }).limits.workerProgressTimeoutSeconds).toBe(600);
     for (const value of [0, 60, 7200]) expect(parse(value).limits.workerProgressTimeoutSeconds).toBe(value);
   });
   it("rejects values between 1 and 59, above 7200, negatives and non-integers", () => {
