@@ -298,6 +298,7 @@ class MainTest(HomeCase):
                 mock.patch.object(LAUNCHER, "_patch_project_discovery"), \
                 mock.patch.object(LAUNCHER, "_patch_session_logger", side_effect=validate_error), \
                 mock.patch.object(LAUNCHER, "_patch_tool_diagnostics"), \
+                mock.patch.object(LAUNCHER, "_assert_skills_disabled"), \
                 mock.patch.object(LAUNCHER, "__import__", create=True, return_value=entry), \
                 mock.patch.object(LAUNCHER, "resolve_credential", side_effect=lambda env, home: real_resolve(env, home, "darwin", runner)), \
                 mock.patch.object(sys, "argv", ["shim.py"]):

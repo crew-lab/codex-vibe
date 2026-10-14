@@ -79,6 +79,7 @@ class StartupOrderTest(unittest.TestCase):
              patch.object(LAUNCHER, '_patch_project_discovery', side_effect=discovery), \
              patch.object(LAUNCHER, '_patch_session_logger', side_effect=lambda: events.append('logger')), \
              patch.object(LAUNCHER, '_patch_tool_diagnostics', side_effect=lambda diagnostics: events.append('tools')), \
+             patch.object(LAUNCHER, '_assert_skills_disabled', side_effect=lambda: events.append('skills')), \
              patch.object(LAUNCHER, 'resolve_credential', side_effect=lambda *args: events.append('credential') or 'environment'), \
              patch.object(LAUNCHER, '__import__', return_value=backend, create=True), \
              patch.object(sys, 'argv', ['shim.py']):
@@ -90,7 +91,7 @@ class StartupOrderTest(unittest.TestCase):
         return events
 
     def test_programmatic_entrypoint_disables_discovery_before_credentials_and_backend(self):
-        self.assertEqual(self.main_fixture(), ['discovery','logger','tools','credential','entrypoint'])
+        self.assertEqual(self.main_fixture(), ['discovery','logger','tools','skills','credential','entrypoint'])
 
     def test_drift_starts_neither_credentials_nor_backend(self):
         self.assertEqual(self.main_fixture(RuntimeError('source drift')), ['discovery'])

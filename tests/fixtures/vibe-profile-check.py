@@ -1,6 +1,8 @@
 """No-provider check of the pinned Vibe's real agent loader and path resolver."""
 import asyncio
+import hashlib
 import importlib.util
+import inspect
 import json
 import os
 from pathlib import Path
@@ -29,11 +31,24 @@ from vibe.core.config.layers.environment import EnvironmentLayer
 from vibe.core.config.layers.agent_profile import AgentProfileLayer
 from vibe.core.config.orchestrator import ConfigOrchestrator
 from vibe.core.config.vibe_schema import VibeConfigSchema
-from vibe.core.tools.base import BaseToolConfig
-from vibe.core.tools.manager import ToolManager
+from vibe.core.llm.format import APIToolFormatHandler
+from vibe.core.skills.manager import SkillManager
+from vibe.core.tools.base import BaseTool, BaseToolConfig
+from vibe.core.tools.manager import NoSuchToolError, ToolManager
 from vibe.core.tools.permissions import ToolPermission
 from vibe.core.tools.utils import resolve_file_tool_permission
 from vibe.core.workspace import Workspace
+
+def installed_source_matches(member, pinned_sha256):
+    return hashlib.sha256(inspect.getsource(member).encode('utf-8')).hexdigest() == pinned_sha256
+
+def build_skill_manager(config, harness, root):
+    parameters = inspect.signature(SkillManager).parameters
+    optional = {'cwd': root, 'harness_files': harness}
+    return SkillManager(lambda: config, **{name: value for name, value in optional.items() if name in parameters})
+
+async def drain(tool):
+    return [item async for item in tool.invoke()]
 
 async def main():
     assert vibe.__version__ == "2.26.1", "Wrong installed Vibe version"
@@ -131,9 +146,45 @@ async def main():
         {'tool': 'read_file', 'outcome': 'attempt'},
         {'tool': 'read_file', 'outcome': 'completed'},
     )], diagnostics.tool_calls
+    pinned_sources = {
+        'TOOL_INVOKE_SOURCE_SHA256': BaseTool._vibe_supervisor_original_invoke,
+        'TOOL_INVENTORY_SOURCE_SHA256': ToolManager._vibe_supervisor_original_available_tools.fget,
+        'TOOL_SCHEMA_SOURCE_SHA256': APIToolFormatHandler.get_available_tools,
+        'TOOL_CALL_RESOLUTION_SOURCE_SHA256': APIToolFormatHandler.resolve_tool_calls,
+        'TOOL_LOOKUP_SOURCE_SHA256': ToolManager.get,
+    }
+    for constant, member in pinned_sources.items():
+        assert installed_source_matches(member, getattr(launcher, constant)), f'Installed source drifted from {constant}'
+    outside_names = sorted(set(tool_manager._all_tools) - set(expected))
+    assert outside_names, 'The installed Vibe has no tool outside the supervisor profile to refuse'
+    outside_name = outside_names[0]
+    outside_class = tool_manager._all_tools[outside_name]
+    outside_tool = object.__new__(outside_class) if isinstance(outside_class, type) else outside_class
+    assert outside_tool.get_name() == outside_name, 'Outside tool does not report its registered name'
+    try:
+        await drain(outside_tool)
+        raise AssertionError('A tool outside the profile was invoked')
+    except launcher.ToolOutsideProfileError as error:
+        assert 'outside the supervisor tool profile' in str(error), str(error)
+    assert diagnostics.tool_calls[-1] == {'tool': '<other>', 'outcome': 'refused'}, diagnostics.tool_calls
+    try:
+        tool_manager.get(outside_name)
+        raise AssertionError('ToolManager.get returned a tool outside the profile')
+    except NoSuchToolError as error:
+        assert outside_name in str(error), str(error)
+    launcher._assert_skills_disabled(os.environ)
+    assert config.disabled_skills == ['*'], config.disabled_skills
+    assert not config.enabled_skills, config.enabled_skills
+    skill_manager = build_skill_manager(config, harness, root)
+    exposed_skills = sorted(skill_manager.available_skills)
+    assert exposed_skills == [], f'Skills exposed under the supervisor profile: {exposed_skills}'
+    for command in ('/vibe x', '/skill-creator x'):
+        assert skill_manager.parse_skill_command(command) is None, f'Skill command {command!r} was parsed'
     print(json.dumps({'mode':mode,'enabled_tools':config.enabled_tools,
                       'effective_tools':sorted(effective),'decisions':result,'read_results':read_results,
                       'diagnostic_tool_inventory':diagnostics.tool_inventory,
-                      'diagnostic_tool_calls':diagnostics.tool_calls}))
+                      'diagnostic_tool_calls':diagnostics.tool_calls,
+                      'refused_outside_tool':diagnostics.tool_calls[-1],'exposed_skills':exposed_skills,
+                      'pinned_sources':sorted(pinned_sources)}))
 
 asyncio.run(main())

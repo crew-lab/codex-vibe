@@ -115,6 +115,7 @@ export async function createVibeChildProfile(input: StartRunInput, mode: RunMode
     ? ['read_file', 'grep']
     : ['read_file', 'grep', 'write_file', 'edit'];
   env.VIBE_ENABLED_TOOLS = JSON.stringify(tools);
+  env.VIBE_DISABLED_SKILLS = JSON.stringify(['*']);
   env.VIBE_ENABLE_CONNECTORS = 'false';
   env.VIBE_MCP_SERVERS = '[]';
   env.VIBE_SESSION_LOGGING__SAVE_DIR = path.join(vibeHome, 'sessions');

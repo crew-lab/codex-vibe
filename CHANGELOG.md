@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.1-rc.2 — tools refused at invocation, skills off, diagnostics that cannot fail a run
+
+Fixes from the [rc.1 cold review](docs/history/reviews/rc1-cold-review-2026-10-14.md) and its [tool-path answer](docs/history/reviews/tool-inventory-answer-2026-10-14.md). Runtime differs from rc.1, so its hosted evidence does not transfer; see `docs/acceptance.json`.
+
+- Any tool outside the exact review or edit profile is refused when it is invoked, whether or not diagnostics are on. The inventory check stays; this second check does not depend on how Vibe reached the tool.
+- The launcher also pins the sources of Vibe's tool-schema builder, tool-call resolver and `ToolManager.get`; drift fails closed.
+- Vibe skills, including the built-in `vibe` and `skill-creator`, are disabled, so task text starting with `/` cannot inject a skill.
+- An unsafe, unreadable or oversized `worker-diagnostics.json` is omitted with a warning instead of failing a completed run, and its size is checked on the bytes actually recorded.
+- A cancelled tool call is recorded as `cancelled` instead of a bare attempt.
+- The package no longer ships `docs/reviews/`.
+
 ## 1.0.1-rc.1 — effective tool access checks and bounded diagnostics
 
 This private candidate adds exact effective-tool-inventory validation and optional, redacted local invocation diagnostics for the pinned Vibe runtime. The implementation differs from published 1.0.0; its historical native and hosted evidence does not transfer. No hosted inference was run for this candidate. See `docs/acceptance.json` for current candidate gates. Stable 1.0.1 still requires clean-account installation and all candidate-specific acceptance evidence.

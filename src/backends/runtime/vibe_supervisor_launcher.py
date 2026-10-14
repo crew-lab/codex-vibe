@@ -1,6 +1,7 @@
 """Pinned Vibe runtime shim. This file runs inside the isolated child only."""
 from __future__ import annotations
 
+import asyncio
 import atexit
 import hashlib
 import inspect
@@ -19,6 +20,13 @@ from typing import Any, Callable, Optional
 
 EXPECTED_VERSION = "2.26.1"
 PROJECT_DISCOVERY_SOURCE_SHA256 = "43fc21e2d1a7359ac896ab41e902d927d363ba4ef8f989909af8bcca4b82cbac"
+TOOL_INVOKE_SOURCE_SHA256 = "7e178d97a11840f13f87622b2c854c63c8204a6f8e52873d0aa3d96aa67f6312"
+TOOL_INVENTORY_SOURCE_SHA256 = "93ca0fc756a12bd1f865fa8f7b65ac21ff00b111892ec12136b3818bb9437533"
+TOOL_SCHEMA_SOURCE_SHA256 = "3fbc8ca4b9458b0e48060dd70ed69d7ffd3b094e321f9a9a56d43cba795a6c06"
+TOOL_CALL_RESOLUTION_SOURCE_SHA256 = "323d892e37da3835e4c56ea9f33c9d93c1fe5dc9bf0e2aee6e9dbb08be5b661e"
+TOOL_LOOKUP_SOURCE_SHA256 = "03e7d2a53fe180d50dc3feebebb2ad420f3841551a471735d5e889113166bf37"
+DISABLED_SKILLS_ENV = "VIBE_DISABLED_SKILLS"
+ENABLED_SKILLS_ENV = "VIBE_ENABLED_SKILLS"
 # Set restrictive permissions before importing Vibe or creating its state.
 os.umask(0o077)
 PROGRAMMATIC_ENTRYPOINT = "vibe.cli.entrypoint"
@@ -412,7 +420,9 @@ DIAGNOSTICS_FILE = "worker-diagnostics.json"
 MAX_DIAGNOSTICS_BYTES = 64 * 1024
 DIAGNOSTIC_STAGES = ("launch", "import", "prompt_consumption", "persistence_setup", "credential_resolution_complete", "entrypoint_invocation")
 TOOL_CALL_LIMIT = 256
+TOOL_CALL_OUTCOMES = ("attempt", "completed", "failed", "refused", "cancelled")
 KNOWN_SUPERVISOR_TOOL_NAMES = frozenset(("read_file", "grep", "write_file", "edit"))
+SAFE_TOOL_NAME = re.compile(r"[A-Za-z0-9_.-]{1,64}")
 
 
 class WorkerDiagnostics:
@@ -427,7 +437,6 @@ class WorkerDiagnostics:
         self.snapshots: list[dict[str, Any]] = []
         self.tool_inventory: list[str] = []
         self.tool_calls: list[dict[str, str]] = []
-        self.tool_inventory_truncated = False
         self.tool_calls_truncated = False
         self.next_snapshot = 0
         self.disabled = False
@@ -483,15 +492,12 @@ class WorkerDiagnostics:
             return
         safe_names = sorted({name if name in KNOWN_SUPERVISOR_TOOL_NAMES else "<other>"
                              for name in names if isinstance(name, str)})
-        if len(safe_names) > 128:
-            safe_names = safe_names[:128]
-            self.tool_inventory_truncated = True
         with self.lock:
             if not self.tool_inventory:
                 self.tool_inventory = safe_names
 
     def record_tool_call(self, name: Any, outcome: str) -> None:
-        if self.disabled or outcome not in ("attempt", "completed", "failed"):
+        if self.disabled or outcome not in TOOL_CALL_OUTCOMES:
             return
         safe_name = name if isinstance(name, str) and name in KNOWN_SUPERVISOR_TOOL_NAMES else "<other>"
         with self.lock:
@@ -525,7 +531,6 @@ class WorkerDiagnostics:
                 tool_calls = list(self.tool_calls)
             data = json.dumps({"schema_version": 1, "stages": stages, "snapshots": self.snapshots,
                                "tool_inventory": tool_inventory, "tool_calls": tool_calls,
-                               "tool_inventory_truncated": self.tool_inventory_truncated,
                                "tool_calls_truncated": self.tool_calls_truncated}, separators=(",", ":")).encode("utf-8")
             if len(data) > MAX_DIAGNOSTICS_BYTES:
                 raise ValueError("diagnostic size limit")
@@ -575,21 +580,47 @@ def _start_diagnostics() -> Optional[WorkerDiagnostics]:
         return None
 
 
+class ToolOutsideProfileError(PermissionError):
+    pass
+
+
+def _assert_pinned_source(member: Any, expected_sha256: str, description: str) -> None:
+    try:
+        source = inspect.getsource(member)
+    except (OSError, TypeError) as exc:
+        raise RuntimeError(f"Unsupported Vibe {description}: source unavailable; refusing tool profile") from exc
+    if hashlib.sha256(source.encode("utf-8")).hexdigest() != expected_sha256:
+        raise RuntimeError(f"Unsupported Vibe {description} implementation; refusing tool profile")
+
+
+def _assert_skills_disabled(environ: Any = os.environ) -> None:
+    try:
+        disabled = json.loads(environ.get(DISABLED_SKILLS_ENV, ""))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("Invalid Vibe supervisor skill profile; refusing to start") from exc
+    if disabled != ["*"]:
+        raise RuntimeError("Unexpected Vibe supervisor skill profile; every skill must be disabled")
+    if ENABLED_SKILLS_ENV in environ:
+        raise RuntimeError("Unexpected Vibe supervisor skill profile; enabled skills would override the disabled set")
+
+
 def _patch_tool_diagnostics(diagnostics: Optional[WorkerDiagnostics]) -> None:
-    """Enforce the effective local inventory and optionally record metadata only."""
+    """Enforce the exact local tool profile at discovery and execution; optionally record metadata only."""
+    from vibe.core.llm.format import APIToolFormatHandler
     from vibe.core.tools.base import BaseTool
     from vibe.core.tools.manager import ToolManager
 
     invoke = getattr(BaseTool, "_vibe_supervisor_original_invoke", BaseTool.invoke)
     inventory_property = getattr(ToolManager, "_vibe_supervisor_original_available_tools", ToolManager.available_tools)
     if not inspect.isasyncgenfunction(invoke) or list(inspect.signature(invoke).parameters) != ["self", "ctx", "raw"]:
-        raise RuntimeError("Unsupported Vibe tool invocation API; refusing diagnostics patch")
+        raise RuntimeError("Unsupported Vibe tool invocation API; refusing tool profile")
     if not isinstance(inventory_property, property) or inventory_property.fget is None or list(inspect.signature(inventory_property.fget).parameters) != ["self"]:
-        raise RuntimeError("Unsupported Vibe effective tool inventory API; refusing diagnostics patch")
-    if hashlib.sha256(inspect.getsource(invoke).encode("utf-8")).hexdigest() != "7e178d97a11840f13f87622b2c854c63c8204a6f8e52873d0aa3d96aa67f6312":
-        raise RuntimeError("Unsupported Vibe tool invocation implementation; refusing diagnostics patch")
-    if hashlib.sha256(inspect.getsource(inventory_property.fget).encode("utf-8")).hexdigest() != "93ca0fc756a12bd1f865fa8f7b65ac21ff00b111892ec12136b3818bb9437533":
-        raise RuntimeError("Unsupported Vibe effective tool inventory implementation; refusing diagnostics patch")
+        raise RuntimeError("Unsupported Vibe effective tool inventory API; refusing tool profile")
+    _assert_pinned_source(invoke, TOOL_INVOKE_SOURCE_SHA256, "tool invocation")
+    _assert_pinned_source(inventory_property.fget, TOOL_INVENTORY_SOURCE_SHA256, "effective tool inventory")
+    _assert_pinned_source(APIToolFormatHandler.get_available_tools, TOOL_SCHEMA_SOURCE_SHA256, "tool schema exposure")
+    _assert_pinned_source(APIToolFormatHandler.resolve_tool_calls, TOOL_CALL_RESOLUTION_SOURCE_SHA256, "tool call resolution")
+    _assert_pinned_source(ToolManager.get, TOOL_LOOKUP_SOURCE_SHA256, "tool lookup")
 
     mode_tools = {
         "plan": frozenset(("read_file", "grep")),
@@ -606,6 +637,10 @@ def _patch_tool_diagnostics(diagnostics: Optional[WorkerDiagnostics]) -> None:
     if not isinstance(configured_tools, list) or set(configured_tools) != expected_tools:
         raise RuntimeError("Unexpected Vibe supervisor tool profile; refusing effective tool inventory")
 
+    def record_call(name: Any, outcome: str) -> None:
+        if diagnostics is not None:
+            diagnostics.record_tool_call(name, outcome)
+
     def available_tools(self: Any) -> dict:
         result = inventory_property.fget(self)
         if set(result) != expected_tools:
@@ -614,21 +649,28 @@ def _patch_tool_diagnostics(diagnostics: Optional[WorkerDiagnostics]) -> None:
             diagnostics.record_tool_inventory(result.keys())
         return result
 
+    async def guarded_invoke(self: Any, ctx: Any = None, **raw: Any):
+        name = self.get_name()
+        if name not in expected_tools:
+            record_call(name, "refused")
+            printable = name if isinstance(name, str) and SAFE_TOOL_NAME.fullmatch(name) else "<other>"
+            raise ToolOutsideProfileError(f"Tool {printable} is outside the supervisor tool profile")
+        record_call(name, "attempt")
+        try:
+            async for item in invoke(self, ctx, **raw):
+                yield item
+        except (asyncio.CancelledError, GeneratorExit):
+            record_call(name, "cancelled")
+            raise
+        except Exception:
+            record_call(name, "failed")
+            raise
+        else:
+            record_call(name, "completed")
+
     ToolManager.available_tools = property(available_tools)
     ToolManager._vibe_supervisor_original_available_tools = inventory_property
-    if diagnostics is not None:
-        async def invoke_with_diagnostics(self: Any, ctx: Any = None, **raw: Any):
-            name = self.get_name()
-            diagnostics.record_tool_call(name, "attempt")
-            try:
-                async for item in invoke(self, ctx, **raw):
-                    yield item
-            except Exception:
-                diagnostics.record_tool_call(name, "failed")
-                raise
-            else:
-                diagnostics.record_tool_call(name, "completed")
-        BaseTool.invoke = invoke_with_diagnostics
+    BaseTool.invoke = guarded_invoke
     BaseTool._vibe_supervisor_original_invoke = invoke
 
 
@@ -662,6 +704,7 @@ def _run_vibe_entrypoint(diagnostics: Optional[WorkerDiagnostics], original_home
     _patch_project_discovery()
     _patch_session_logger()
     _patch_tool_diagnostics(diagnostics)
+    _assert_skills_disabled()
     if diagnostics:
         diagnostics.stage("persistence_setup")
     status = resolve_credential(os.environ, original_home)
