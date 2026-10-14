@@ -12,7 +12,7 @@ import { makeLaunchableFakeVibe } from './support/launchable-fake-vibe.js';
 const root = path.resolve(import.meta.dirname, '..', '..');
 const script = path.join(root, 'scripts', 'v2-conformance-check.mjs');
 const fixture = path.join(root, 'tests', 'fixtures', 'fake-vibe-app-server.mjs');
-const sentinelKey = 'sk-test-owner-key-0123456789abcdef';
+const sentinelKey = 'fake-owner-key-0123456789abcdef';
 
 type Json = Record<string, unknown>;
 
