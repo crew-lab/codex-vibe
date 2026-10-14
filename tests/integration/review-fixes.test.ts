@@ -375,4 +375,3 @@ describe("detail=summary", () => {
     } finally { await manager.shutdown(); }
   });
 });
-
