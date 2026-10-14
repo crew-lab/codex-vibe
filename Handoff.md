@@ -21,8 +21,8 @@ A verification pass (2026-10-14) found docs and code in agreement on every confi
 **Lessons** from building 2.0, on Vibe's protocol, verification and working with agents, are in the [development strategy](docs/development-strategy.md#lessons-from-building-20).
 
 **What remains for 2.0.0** (steps A1 to A7 of the [development strategy](docs/development-strategy.md#releases)):
-1. A1, the cold-review fixes above (running).
-2. A4, release wording and the changelog; A5, the version 2.0.0 in `package.json`, `package-lock.json` and `.codex-plugin/plugin.json`, with `verify:release` on Node 20.19.0 recorded as the `node-floor-20.19.0` gate.
+1. A1 done (`4716747`): every finding fixed with a regression test, except the pin's reach (F2), which stays documented.
+2. A4 and A5 done: release wording, the changelog's 2.0.0 entry, version 2.0.0 in `package.json`, `package-lock.json` and `.codex-plugin/plugin.json`, and `verify:release` on Node 20.19.0 recorded as the `node-floor-20.19.0` gate (PASSED_LOCALLY).
 3. A6, merge to main (conflicts in `Handoff.md` only: take the branch version), with the owner's authorization to push; A7, `npm run package:rc` with the owner's populated npm cache path, and release notes.
 4. Target gates, all unverified and listed in [compatibility](docs/compatibility.md#unverified-gates) and `docs/acceptance.json`, each with the owner's separate authorization: the pin manifest and the conformance check, native readiness, one hosted review and one edit, an observed MCP-client disconnect, `permission = "ask"` in the effective configuration, the effect of thinking off, the experiments fetch off, nested `run_typescript` calls, Node 20.19.0, and a clean-account installation.
 5. Owner decisions, delegated to Claude and settled on 2026-10-14 (each keeps what is built and tested):
@@ -55,7 +55,7 @@ Behaviour: [docs/functionality.md](docs/functionality.md); interface: [docs/refe
 
 ## Current priorities
 
-1. **2.0.0 on the branch:** the cold review and its fixes, release wording, the version bump ([2.0 status](#20-status)).
+1. **2.0.0 on the branch:** done; the branch is ready to merge ([2.0 status](#20-status).
 2. **Merge to main** with the owner's authorization, then package with the owner's npm cache path.
 3. **2.0.0 on the target**, with the brief from step 10 and the owner's authorizations; then a frozen archive, the clean-account installation and the owner's publish authorization. Do not replace or retag existing releases.
 4. **2.0.1** on a branch from main after 2.0.0 is tagged: move what the code relies on out of `docs/history/` first, then drop every other version and remove the development history, as ordered in the [development strategy](docs/development-strategy.md#releases).

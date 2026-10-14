@@ -1,6 +1,6 @@
 # Compatibility
 
-Candidate 2.0.0 supports exactly **Mistral Vibe 2.26.1** as a client of its `vibe-app-server` (newline-delimited JSON-RPC 2.0 over stdio, one process per run). It is the only engine: the `vibe -p --legacy-harness` path, the Python launcher, the `backend` configuration key and the programmatic backend are removed, and there is no ACP adapter, backend selector or fallback to another entry point. Published 1.0.0 and the unreleased 1.0.1 candidates used the legacy harness. 1.0.1 was skipped by owner decision; 1.0.0 is the last 1.x release, with no maintenance line. Their evidence is history and does not transfer to 2.0.
+Release 2.0.0 supports exactly **Mistral Vibe 2.26.1** as a client of its `vibe-app-server` (newline-delimited JSON-RPC 2.0 over stdio, one process per run). It is the only engine: the `vibe -p --legacy-harness` path, the Python launcher, the `backend` configuration key and the programmatic backend are removed, and there is no ACP adapter, backend selector or fallback to another entry point. Published 1.0.0 and the unreleased 1.0.1 candidates used the legacy harness. 1.0.1 was skipped by owner decision; 1.0.0 is the last 1.x release, with no maintenance line. Their evidence is history and does not transfer to 2.0.
 
 The protocol carries no version field, so the pin is the compatibility check: the server must report exactly `serverInfo.version` 2.26.1, and the installed package files must match a manifest generated for that candidate. Any other Vibe version fails closed, and each new Vibe release needs its own candidate, manifest and conformance check. These findings come from Vibe's tagged source (`v2.26.1`) read without running it; they do not certify other builds or operating systems, and Vibe 2.25.8 and all other versions are rejected. The supported platform is macOS Apple silicon.
 
@@ -59,7 +59,7 @@ The declared Node floor is 20.19.0. Release acceptance compares major, minor, an
 
 ## Candidate acceptance: 2.0.0
 
-The 2.0 runtime is new, so **no earlier hosted or native evidence transfers**. The candidate is implemented and has only been exercised against the scripted fake server; every gate below needs the target machine and the owner's separate authorization, and all are open. See [machine-readable gates](acceptance.json).
+The 2.0 runtime is new, so **no earlier hosted or native evidence transfers**. 2.0.0 is implemented and has only been exercised against the scripted fake server; every gate below needs the target machine and the owner's separate authorization, and all are open. See [machine-readable gates](acceptance.json).
 
 ## Unverified gates
 
