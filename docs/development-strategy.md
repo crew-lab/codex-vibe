@@ -11,6 +11,8 @@ vibe-supervisor is one thing: a local MCP server that lets Codex delegate one bo
 - **One supported line.** Only the latest 2.x release is supported. 1.0.0 was the last 1.x release; 1.0.1 was never released and there is no 1.x maintenance line.
 - **Enforcement the supervisor owns.** The client decides every approval, reads the effective configuration back before the first turn, and fails closed on anything it cannot account for. It never imports or patches Vibe.
 
+How the project is positioned and promoted, and what is said publicly, is in the unshipped [marketing strategy](../marketing/strategy.md).
+
 ## Releases
 
 | Release | Content | Gate |
