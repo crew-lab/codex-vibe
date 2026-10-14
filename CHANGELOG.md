@@ -2,7 +2,7 @@
 
 ## Unreleased 2.0.0 — one engine: a client of Vibe's app-server
 
-The supervisor now drives Mistral Vibe 2.26.1 as a client of `vibe-app-server` (JSON-RPC over stdio, one process per run) instead of patching Vibe's Python internals. The five MCP tools and every boundary stay; see [ADR 0004](docs/adr/0004-app-server-client.md). The runtime is new, so no 1.0.x hosted evidence transfers, and every 2.0 gate in `docs/acceptance.json` is open. Release 1.0.x continues on the `release/1.0` branch with security fixes only.
+The supervisor now drives Mistral Vibe 2.26.1 as a client of `vibe-app-server` (JSON-RPC over stdio, one process per run) instead of patching Vibe's Python internals. The five MCP tools and every boundary stay; see [ADR 0004](docs/adr/0004-app-server-client.md). The runtime is new, so no 1.0.x hosted evidence transfers, and every 2.0 gate in `docs/acceptance.json` is open. 1.0.1 was skipped: 1.0.0 is the last 1.x release, with no maintenance line.
 
 - Removed: the `vibe -p --legacy-harness` path, the Python launcher and its source pins, the `backend` configuration key and the programmatic backend, the worker diagnostics file and `VIBE_SUPERVISOR_DIAGNOSTICS`, and the `grep` tool. Tool names and outcomes are in the event log instead.
 - Breaking: `paths.vibe_pin_manifest` is required. A 1.0 configuration is rejected until it sets that key and drops any `backend` key. Generate the manifest with the new `vibe-supervisor pin-manifest` on the machine that runs Vibe; `setup` adds the default path.
