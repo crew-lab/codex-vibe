@@ -171,4 +171,3 @@ if (args.length !== 1) {
 const result = await verify(args[0]);
 process.stdout.write(`${JSON.stringify(result)}\n`);
 process.exit(result.passed ? 0 : 1);
-

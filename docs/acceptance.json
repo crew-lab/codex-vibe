@@ -164,8 +164,8 @@
       {
         "name": "node-floor-20.19.0-ci",
         "status": "DROPPED",
-        "evidence_required": "CI jobs on exactly Node 20.19.0 and 24 pass; the workflow change is on the local branch claude/ci-node-floor and awaits the push token's workflow scope.",
-        "decision": "DROPPED by owner decision 2026-10-12: the local exact-20.19.0 verify:release pass is recorded and CI runs 20.19.x; the exact-floor CI job remains on branch claude/ci-node-floor."
+        "evidence_required": "CI jobs on exactly Node 20.19.0 and 24 pass; the workflow change is on branch claude/ci-checks and awaits the push token's workflow scope.",
+        "decision": "DROPPED by owner decision 2026-10-12: the local exact-20.19.0 verify:release pass is recorded and CI runs 20.19.x; the exact-floor CI job is on branch claude/ci-checks."
       }
     ],
     "historical_evidence": "Version-bound prior candidate reports remain in docs/history. The rc.28 target evidence applies to 1.0.0 only through identical runtime source and the release-archive confirmation."
