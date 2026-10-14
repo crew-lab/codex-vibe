@@ -49,10 +49,11 @@ function cleanWire(expectation: ReadbackExpectation, thinking: string): { start:
   };
   for (const setting of expectation.settings) assign(config, setting.path, JSON.parse(JSON.stringify(setting.value)));
   return {
-    start: { lastEventId: 3, state: { eventId: 3, session: { id: 's-1', harness: expectation.harness, cwd: expectation.cwd, model: alias, reasoningEffort: thinking, status: { type: 'idle' } }, history: [], historyBeforeCursor: null, turns: [], isQuiescent: true } },
+    start: { lastEventId: 3, state: { eventId: 3, session: { id: 's-1', harness: expectation.harness, cwd: expectation.cwd, model: alias, reasoningEffort: thinking, status: { type: 'idle' } }, history: [], historyBeforeCursor: null, turns: [], isQuiescent: true, activeCallbacks: [], childSessions: [], backgroundProcesses: [] } },
     runtime: {
       runtime: {
         config: { activeModel: { alias, thinking } },
+        activeAgent: { name: expectation.agent, displayName: 'Supervisor', description: '', safety: 'safe', agentType: 'agent' },
         tools: expectation.tools.map((name) => ({ name, isCustom: false })),
         skills: [],
         mcp: { sources: [], discoveryErrors: {}, connectorError: null, manageConnectorsUrl: null },
@@ -99,7 +100,16 @@ describe('compareReadback on unit inputs', () => {
     ['a hook', (wire) => { ((wire.runtime as Json).runtime as Json).hooksCount = 1; }, ['runtime.hooksCount']],
     ['an issue', (wire) => { ((wire.runtime as Json).runtime as Json).issues = [{ file: 'a', message: 'b' }]; }, ['runtime.issues']],
     ['bypassed permissions', (wire) => { ((wire.runtime as Json).runtime as Json).bypassToolPermissions = true; }, ['runtime.bypassToolPermissions']],
-    ['an MCP source', (wire) => { ((wire.runtime as Json).runtime as Json).mcp = { sources: [{ name: 'x' }] }; }, ['runtime.mcp.sources']],
+    ['an MCP source', (wire) => { ((wire.runtime as Json).runtime as Json).mcp = { sources: [{ name: 'x' }], discoveryErrors: {} }; }, ['runtime.mcp.sources']],
+    ['an MCP discovery error', (wire) => { ((wire.runtime as Json).runtime as Json).mcp = { sources: [], discoveryErrors: { x: 'failed' } }; }, ['runtime.mcp.discoveryErrors']],
+    ['a different active agent', (wire) => { ((wire.runtime as Json).runtime as Json).activeAgent = { name: 'accept-edits' }; }, ['runtime.activeAgent.name']],
+    ['the other supervisor agent', (wire) => { ((wire.runtime as Json).runtime as Json).activeAgent = { name: 'supervisor-review' }; }, ['runtime.activeAgent.name']],
+    ['a different default agent', (wire) => { assign(wire.effective as Json, ['config', 'default_agent'], 'accept-edits'); }, ['config.default_agent']],
+    ['a widened agent roster', (wire) => { assign(wire.effective as Json, ['config', 'enabled_agents'], ['supervisor-edit', 'accept-edits']); }, ['config.enabled_agents']],
+    ['an active callback', (wire) => { assign(wire.start as Json, ['state', 'activeCallbacks'], [{ id: 'cb-1' }]); }, ['state.activeCallbacks']],
+    ['a child session', (wire) => { assign(wire.start as Json, ['state', 'childSessions'], [{ id: 'child-1' }]); }, ['state.childSessions']],
+    ['a background process', (wire) => { assign(wire.start as Json, ['state', 'backgroundProcesses'], [{ processId: 'p-1', command: 'sleep 1', status: 'running', createdAt: 'now' }]); }, ['state.backgroundProcesses']],
+    ['an allowlist grant on a profile tool', (wire) => { assign(wire.effective as Json, ['config', 'tools', 'read_file', 'allowlist'], ['/srv/**']); }, ['config.tools.read_file.allowlist']],
     ['a connected connector', (wire) => { ((wire.runtime as Json).runtime as Json).connectors = { connected: 1, total: 1 }; }, ['runtime.connectors.connected', 'runtime.connectors.total']],
     ['connectors that exist but are not connected', (wire) => { ((wire.runtime as Json).runtime as Json).connectors = { connected: 0, total: 2 }; }, ['runtime.connectors.total']],
     ['a changed permission', (wire) => { assign(wire.effective as Json, ['config', 'tools', 'edit', 'permission'], 'always'); }, ['config.tools.edit.permission']],
@@ -120,6 +130,13 @@ describe('compareReadback on unit inputs', () => {
     });
   }
 
+  it('accepts an empty allowlist on a profile tool and extra agent fields', () => {
+    const wire = cleanWire(plan.expectation, 'off');
+    assign(wire.effective as Json, ['config', 'tools', 'read_file', 'allowlist'], []);
+    ((wire.runtime as Json).runtime as Json).activeAgent = { name: plan.expectation.agent, futureField: 1 };
+    expect(compareReadback(plan.expectation, observe(wire), { checkThinking: true })).toEqual([]);
+  });
+
   it('accepts an unknown connector total and extra disabled tools and skills', () => {
     const wire = cleanWire(plan.expectation, 'off');
     ((wire.runtime as Json).runtime as Json).connectors = { connected: 0, total: null };
@@ -131,8 +148,11 @@ describe('compareReadback on unit inputs', () => {
   const missing: Array<[string, (wire: ReturnType<typeof cleanWire>) => void, string[]]> = [
     ['every expected setting when the effective config is empty', (wire) => { (wire.effective as Json).config = {}; }, []],
     ['connector counts', (wire) => { ((wire.runtime as Json).runtime as Json).connectors = {}; }, ['runtime.connectors.connected']],
-    ['mcp', (wire) => { ((wire.runtime as Json).runtime as Json).mcp = {}; }, ['runtime.mcp.sources']],
+    ['mcp', (wire) => { ((wire.runtime as Json).runtime as Json).mcp = {}; }, ['runtime.mcp.sources', 'runtime.mcp.discoveryErrors']],
+    ['the active agent', (wire) => { delete ((wire.runtime as Json).runtime as Json).activeAgent; }, ['runtime.activeAgent.name']],
+    ['the session callback, child and background lists', (wire) => { for (const key of ['activeCallbacks', 'childSessions', 'backgroundProcesses']) delete ((wire.start as Json).state as Json)[key]; }, ['state.activeCallbacks', 'state.childSessions', 'state.backgroundProcesses']],
     ['a tool policy entry', (wire) => { delete (((wire.effective as Json).config as Json).tools as Json).write_file; }, ['config.tools.write_file.permission', 'config.tools.write_file.denylist']],
+    ['the default agent', (wire) => { delete ((wire.effective as Json).config as Json).default_agent; }, ['config.default_agent']],
     ['a nested setting parent', (wire) => { delete ((wire.effective as Json).config as Json).session_logging; }, ['config.session_logging.enabled', 'config.session_logging.generate_titles']],
     ['the thinking field', (wire) => { ((wire.runtime as Json).runtime as Json).config = {}; }, ['runtime.config.activeModel.thinking', 'runtime.config.activeModel.alias']],
     ['the model entry', (wire) => { delete (((wire.effective as Json).config as Json).models as Json)[alias]; }, [`config.models["${alias}"].thinking`]]
@@ -173,7 +193,7 @@ describe('compareReadback on unit inputs', () => {
   it('judges review expectations against a review-only catalogue', () => {
     const review = buildSessionConfig({ mode: 'review', workspace, runDirectory: '/srv/runs/run-0002', maxTurns: 5 });
     expect(compareReadback(review.expectation, observe(cleanWire(review.expectation, 'off')), { checkThinking: true })).toEqual([]);
-    expect(paths(compareReadback(review.expectation, observe(cleanWire(plan.expectation, 'off')), { checkThinking: true }))).toEqual(['runtime.tools', 'config.enabled_tools']);
+    expect(paths(compareReadback(review.expectation, observe(cleanWire(plan.expectation, 'off')), { checkThinking: true }))).toEqual(['runtime.tools', 'runtime.activeAgent.name', 'config.enabled_tools', 'config.default_agent', 'config.enabled_agents']);
   });
 });
 
@@ -281,7 +301,7 @@ describe('compareReadback against the fake vibe-app-server', () => {
     const { first } = await readBack({}, { applyEnvironment: false });
     expect(paths(first)).toEqual(expect.arrayContaining([
       'config.enable_subagents', 'config.enable_background_processes', 'config.enable_connectors', 'config.disabled_skills',
-      'config.enable_telemetry', 'config.enable_update_checks', 'config.session_logging.enabled'
+      'config.enable_telemetry', 'config.enable_update_checks', 'config.session_logging.enabled', 'config.default_agent', 'config.enabled_agents'
     ]));
     expect(first.find((item) => item.path === 'config.enable_subagents')).toEqual({ path: 'config.enable_subagents', expected: false, actual: true });
   });
@@ -289,6 +309,24 @@ describe('compareReadback against the fake vibe-app-server', () => {
   it('fails when the agent profile layer is not reflected in the effective config', async () => {
     const { first } = await readBack({ effectiveConfig: { tools: { $delete: true } } });
     expect(paths(first)).toEqual(['config.tools.read_file.permission', 'config.tools.read_file.denylist', 'config.tools.write_file.permission', 'config.tools.write_file.denylist', 'config.tools.edit.permission', 'config.tools.edit.denylist']);
+  });
+
+  it('fails on a wrong active agent, MCP discovery errors, and start-time callbacks, children and background processes', async () => {
+    const { first } = await readBack({
+      runtime: {
+        activeAgentName: 'accept-edits',
+        discoveryErrors: { search: 'spawn failed' },
+        activeCallbacks: [{ id: 'cb-1' }],
+        childSessions: [{ id: 'child-1' }],
+        backgroundProcesses: [{ processId: 'p-1', command: 'sleep 1', status: 'running', createdAt: 'now' }]
+      }
+    });
+    expect(paths(first).sort()).toEqual(['runtime.activeAgent.name', 'runtime.mcp.discoveryErrors', 'state.activeCallbacks', 'state.backgroundProcesses', 'state.childSessions']);
+  });
+
+  it('fails when the default agent and agent roster are not applied', async () => {
+    const { first } = await readBack({ effectiveConfig: { tools: sessionPlan.profile.document.tools, default_agent: 'accept-edits', enabled_agents: [] } });
+    expect(paths(first)).toEqual(['config.default_agent', 'config.enabled_agents']);
   });
 
   it('fails on a legacy harness, a skill, an MCP source, a connected connector, bypass and an issue', async () => {
