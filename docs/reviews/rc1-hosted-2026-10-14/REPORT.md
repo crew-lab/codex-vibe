@@ -49,7 +49,7 @@ The original 16 workflow-command fixtures passed. Independent source review foun
 
 Two added tests executed the **actual unchanged worker workflow commands** in a disposable, byte-verified export. Both showed exit zero and tar invocation for forbidden trailing bytes. The already accepted Luna workflow was tested separately as a positive control: **18/18 PASS**. That control is not a repair or acceptance of Vibe's patch.
 
-Evidence: [worker patch](case2/diff.patch), [result](case2-result.json), [diagnostics](case2/worker-diagnostics.json), [16-case results](case2/fixtures-verified.log), [edge failures](case2/independent-edge.log), [18-case verifier](case2/independent-verifier.test.ts), [positive control](positive-control.log), [acceptance](case2-acceptance.json).
+Evidence: [worker patch](case2/diff.patch), [result](case2-result.json), [diagnostics](case2/worker-diagnostics.json), [16-case results](case2/fixtures-verified.log), [edge failures](case2/independent-edge.log), [18-case verifier](case2/independent-verifier.test.ts.txt), [positive control](positive-control.log), [acceptance](case2-acceptance.json).
 
 An initial coordinator verification copy was nested inside the parent Git checkout, so git apply skipped the target; those 13/16 baseline results are rejected as worker evidence and retained in fixtures-original.log / fixtures/. The corrected standalone Git copy was explicitly compared against worker bytes before testing. Correct workflow SHA256: `d93b133419943842675166e0f8d5633a8e4b22f1ff0fe8ba097b8f2d24889f3b`.
 
