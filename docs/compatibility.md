@@ -12,7 +12,7 @@ Before each spawn the supervisor locates the Python environment from the `vibe-a
 
 ## Wire facts the client relies on
 
-Read from the source at the tag ([protocol audit](history/app-server-protocol-audit-2026-10-14.md), [source answers](history/app-server-source-answers-2026-10-14.md), [design note](history/app-server-client-design.md)). None of it was observed on a running server; the [unverified gates](#unverified-gates) say which parts the target must confirm.
+Read from the source at the Vibe tag, commit `4ae5c5955da8e761318916bdb1a7f46f0b50c7d0` (the protocol audit, source answers and design note are kept in the source repository). None of it was observed on a running server; the [unverified gates](#unverified-gates) say which parts the target must confirm.
 
 - **Framing and handshake.** One compact JSON object per line. `initialize` carries `clientInfo` with entrypoint `programmatic` and `capabilities.callbackKinds = ["approval"]`; without that declaration the server crashes on its first approval. The result's `serverInfo.version` is checked against the pin, then the client sends `initialized`. The server sends error codes as strings (`unauthorized`, `invalid_params`, `not_initialized`, and others); `unauthorized` maps to `VSUP_AUTH_REQUIRED`.
 - **Strictness.** The server's models forbid unknown fields and require `params`, camelCase. The client sends exactly what it builds and tolerates unknown fields on read, but requires the fields it depends on.
@@ -36,6 +36,15 @@ Supervisor `diagnostic` events carry a `reason`, and some failures carry the sam
 | `ignored_notifications` | event, info | Counts of unknown notification methods (with `unknown_methods`), stale events and notifications for another session, ignored by design. |
 | `reaper_fired` | event, warning | The reaper ended the worker, because the supervisor disappeared or the deadline plus margin passed. |
 | `private_state_retained` | event, warning | The private Vibe directories could not be fully deleted and remain in the run directory; the result carries a warning. |
+| `file_listing_unavailable` | event, warning | The bounded workspace file listing was left out of the review prompt; `detail` names why. The run continues without it. |
+| `no_progress` | event, warning | The worker produced no output within the configured silence limit; carries `silence_seconds` and `last_activity_kind`. The run fails with `VSUP_NO_PROGRESS`. |
+| `launch_failed` | event, error | Starting the backend failed; the run settles failed with the launch error. |
+| `worker_termination_unverified` | event, error | The worker's end could not be verified at settlement; the run is failed and keeps its active slot for a safe retry. |
+| `artifact_finalization_failed` | event, warning | Finishing the artifacts failed after a run that had not completed; a completed run fails with the artifact error instead. |
+| `close_failed` | event, warning | `vibe_close` hit a failure while closing. |
+| `worktree_retained` | event, warning | Close left the edit worktree in place; `message` gives the reason, such as no verified patch export. |
+| `background_failure` | event, warning | A background task failed (`context` names it) without affecting the run's state. |
+| `ignored_backend_state_transition` | event, warning | The backend reported a run state that is invalid from the current state; the transition was ignored (`backend_state`, `run_state`). |
 | `readback_mismatch` | `VSUP_BACKEND_ERROR` `details.reason` | The startup read-back differed from the supervisor's session configuration; `details.fields` lists the paths. The run fails before the first turn. |
 
 Other `VSUP_BACKEND_ERROR` `details.reason` values name an unsafe event: `unapproved_effect`, `unknown_entry_kind`, `unknown_effect_status`, `malformed_notification`, `patch_failed`, `retention_exceeded`, `history_paging_failed`, `watermark_gap`, `session_handoff_unsafe` and `historical_effect_changed`. Usage faults are `usage_counter_regressed` (a counter went backwards outside a handoff) and `price_unavailable` (a cost ceiling is set but Vibe reports no prices).
@@ -65,13 +74,13 @@ All of these stay unverified until evidence is recorded here and in `acceptance.
 | `permission = "ask"` visible in effective configuration | That `config/effective/read` shows `tools.<name>.permission` and the denylist for each profile tool, and that an in-workspace `read_file` reaches the approval handler. Read from source only. |
 | Thinking off | That turning thinking off stops the model from generating reasoning. The read-back confirms the setting, not the effect. |
 | Experiments fetch off | That `experiments.enable = false` stops Vibe's experiments request. The setting is read back; its effect is unknown. |
-| Nested `run_typescript` shape and gating | That a `write_file` or `edit` called from inside `run_typescript` arrives as the same `file_system.*` effect and reaches deny. From Vibe's Rust tests and code reading only; one no-inference scenario must show a nested write refused. |
+| Nested `run_typescript` shape and gating | That a `write_file` or `edit` called from inside `run_typescript` arrives as the same `file_system.*` effect and reaches deny. From Vibe's Rust tests and code reading only; the hosted-review probe in the target brief (step 6) must show a nested write refused. |
 
 Also open for 2.0: a clean macOS account installation, and verification of the frozen package on exactly Node 20.19.0. macOS Apple silicon is the supported platform. Linux and Windows code paths may exist, but 2.0.0 makes no support claim for them. No Intel or plugin installation gates apply to the reduced surface. `.codex-plugin/plugin.json` remains an unverified source scaffold and is not part of the npm package; its declarations do not establish plugin installation or registration support.
 
 ## History: 1.0.x
 
-Published 1.0.0 (legacy harness) was accepted against its own archive. The 1.0.1 candidates were never released; rc.1 evidence is in the [rc.1 hosted report](reviews/rc1-hosted-2026-10-14/REPORT.md). The runtime source of 1.0.0 is identical to 0.9.0-rc.28 (`bef09855cd8104b979b962462ae9d87062ed8a9d`), whose hosted gates were observed on the target machine on 2026-10-13 (archive SHA256 `9179a091830e548d9ebd3c13bd6f12997f22a86bda6964d827c23e1a55773bbf`) and apply to 1.0.0 by owner decision together with a short confirmation on the 1.0.0 archive. The evidence is in `docs/history/` in the source repository; see [machine-readable gates](acceptance.json).
+Published 1.0.0 (legacy harness) was accepted against its own archive. The 1.0.1 candidates were never released; rc.1 evidence is the rc.1 hosted report, kept in the source repository. The runtime source of 1.0.0 is identical to 0.9.0-rc.28 (`bef09855cd8104b979b962462ae9d87062ed8a9d`), whose hosted gates were observed on the target machine on 2026-10-13 (archive SHA256 `9179a091830e548d9ebd3c13bd6f12997f22a86bda6964d827c23e1a55773bbf`) and apply to 1.0.0 by owner decision together with a short confirmation on the 1.0.0 archive. The evidence is in `docs/history/` in the source repository; see [machine-readable gates](acceptance.json).
 
 | Gate (1.0.0) | Evidence |
 |---|---|

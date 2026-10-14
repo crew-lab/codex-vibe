@@ -1,6 +1,6 @@
 # ADR 0003: pinned programmatic Vibe launcher
 
-Status: superseded by [ADR 0004](0004-app-server-client.md) at 2.0.0. It remains the record for release 1.0.x, which continues on the `release/1.0` branch with security fixes only.
+Status: superseded by [ADR 0004](0004-app-server-client.md) at 2.0.0. It remains the record for release 1.0.0, the last 1.x release; there is no maintenance line for it.
 
 The package launches the installed Vibe programmatic CLI through a packaged Python shim and enforces its legacy harness. It does not bundle Vibe or its dependencies. The runtime supports exactly Vibe 2.26.1; version or installed-source signature drift fails closed. The recorded source audit applies to macOS with CPython 3.12 and does not certify other builds.
 

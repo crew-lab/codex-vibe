@@ -50,7 +50,7 @@ export async function describeMissing(executable: string, error: unknown, env: N
 }
 
 export function interpreterMissingMessage(interpreter: unknown): string {
-  return `The interpreter for the Vibe launcher${typeof interpreter === 'string' ? ` (${interpreter})` : ''} was not found; install it or correct the launcher's shebang.`;
+  return `The interpreter for vibe-app-server${typeof interpreter === 'string' ? ` (${interpreter})` : ''} was not found; install it or correct the shebang of the vibe-app-server script.`;
 }
 
 export function spawned(process: ManagedProcess): Promise<void> {
