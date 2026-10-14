@@ -1,6 +1,13 @@
 # Current handoff
 
-Updated 2026-10-14. This document alone defines current priorities. [docs/history/](docs/history/) keeps only what the current work uses: the rc.28 brief, runbook, evidence template and target evidence, the acceptance log, the latest reviews, the 2.26.1 compatibility audit, the install notes, the [competitive landscape](docs/history/competitive-landscape-2026-10-13.md), the [ecosystem notes](docs/history/ecosystem-2026-10-13.md) on Vibe, MCP and Codex, the [strategy](docs/history/strategy-2026-10-13.md) after rc.28 (owner's wins, community, propagation, case study), the [case 7 brief](docs/history/case7-disconnect-brief.md) and the 1.0 article draft. Everything older was removed from the tree on 2026-10-12 and is in Git history at `c510513`.
+Updated 2026-10-14. This document alone defines current priorities. [docs/history/](docs/history/) keeps what the current work uses:
+
+- **rc.2:** the [target brief](docs/history/rc2-target-brief.md), the [rc.2 cold review](docs/history/reviews/rc2-cold-review-2026-10-14.md), and the [rc.1 cold review](docs/history/reviews/rc1-cold-review-2026-10-14.md) with its [tool-path answer](docs/history/reviews/tool-inventory-answer-2026-10-14.md).
+- **Usefulness:** the [usefulness log](docs/history/usefulness-log.md).
+- **Direction:** the [strategy](docs/history/strategy-2026-10-13.md), the [competitive landscape](docs/history/competitive-landscape-2026-10-13.md), the [ecosystem notes](docs/history/ecosystem-2026-10-13.md), and the [1.0 article draft](docs/history/article/draft-1.0.md), now filled from recorded evidence and waiting for the owner's read.
+- **Earlier evidence:** the rc.28 and 1.0.0 records.
+
+Target-machine evidence for 1.0.1 lives in [docs/reviews/](docs/reviews/), with machine paths and the site project's name replaced by placeholders ([REDACTION.md](docs/reviews/REDACTION.md)). Everything older than 2026-10-12 is in Git history at `c510513`.
 
 ## Release identity and acceptance
 
@@ -40,28 +47,54 @@ Behaviour: [docs/functionality.md](docs/functionality.md); interface: [docs/refe
 
 ## Current priorities
 
-1. rc.2 per its target brief: build, install, the installed-Vibe profile check, readiness, then one review and one edit with a new allowance. Then verify the consolidated branch's current-head CI and source/patch identity; preserve the frozen archive and published 1.0.0. Push authorization does not authorize merge, tag or release publication. The [rc.1 cold review](docs/history/reviews/rc1-cold-review-2026-10-14.md) found no fail-open path in the changed code but leaves one open question (whether Vibe hands the model tools only through the checked property) and two medium items: evidence in the package, fixed on `claude/v1.0.1-docs`, and private paths in public evidence.
-2. Complete the human-operated standard macOS account test using the prepared packet. No hosted allowance remains; prepare exact scopes and obtain applicable approval before any account-specific inference or agent-applied registration.
-3. Promote to stable 1.0.1 only after every required gate passes and the exact final source/archive is reviewed. A version or archive change requires its own applicable native/hosted confirmation. Do not replace or retag the existing releases.
-4. Continue the ordered roadmap below after the stable follow-up. Keep the fixed five-tool surface and existing security boundaries; use GPT-6 Luna High as the implementation backup when delegation is needed, and report worker/coordinator outcomes separately.
+1. **rc.2 on the target**, per its [brief](docs/history/rc2-target-brief.md). It needs three separate owner authorizations:
+   - build and install rc.2, and switch the registration;
+   - the installed-Vibe profile check, which uses no provider and no inference. It confirms the three new pins, refusal at invocation, and that skills are disabled.
+   - two hosted runs, one review and one edit.
+
+   A profile-check failure is a launcher fix on the preparing machine and a new candidate. No hosted allowance remains.
+2. **Fresh standard macOS account installation** of the same rc.2 archive. The owner runs it with the [prepared packet](docs/reviews/rc1-integration-2026-10-14/FRESH-ACCOUNT.md).
+3. **Stable 1.0.1:** promote and tag only after every gate in `docs/acceptance.json` passes on the exact rc.2 archive, with the owner's publish authorization. A version or archive change needs its own confirmation. Do not replace or retag existing releases.
+4. **Owner actions that unblock tooling:**
+   - Add the `workflow` scope to the push token in the Keychain (`crew-lab-codex-vibe-github-token`), then push `claude/ci-checks` and watch its first run.
+   - Delete the 17 merged or superseded remote branches with the prepared command. An agent's attempt was blocked as destructive. Keep `claude/session-pruning`; `codex/project-agents-isolation` and `codex/skill-cleanup-update` hold unmerged work and are the owner's or the target agent's call.
+5. **Article:** the owner reads [the draft](docs/history/article/draft-1.0.md) and confirms or drops two claims that have no recorded source: the allowlist incident in item 2 and the fetch-before-fix rule in item 8. Publish after 1.0.1 with the AI-assisted label.
+
+Done on 2026-10-14:
+- the rc.1 cold review, and its tool-path question answered from the v2.26.1 tag source after verifying it against the pinned hashes;
+- the 1.0.1 documentation items: what is not isolated, receipt reuse, owner-lock recovery, no-resend guidance, and connection identity without a handshake;
+- the usefulness log, and the edit template's "Must reject or preserve" line;
+- `docs/reviews/` excluded from the package;
+- public evidence redacted;
+- the rc.2 source, independently reviewed, with `verify:release` passing on Node 24 and exactly 20.19.0.
 
 ## After 1.0
 
 In order. Each runtime change is a new candidate with one hosted observation per operation; documentation-only items need none.
 
-**1.0.1, documentation and operations.** The clean macOS account install. Template changes from the [usefulness log](docs/history/usefulness-log.md). Wording from the reviews and the [competitive landscape](docs/history/competitive-landscape-2026-10-13.md): receipt reuse, failed-run retention, a "what is not isolated" section in `docs/security.md`, stale-lock recovery as crash recovery and how an operator unlocks, "do not resend the same prompt" after a deterministic failure in `docs/errors.md`, and a named way to describe reviews of untrusted input. From the [ecosystem notes](docs/history/ecosystem-2026-10-13.md): reword the "handshake version" check for stateless MCP, and after a target check note Codex tool search (the five tools may load on demand; the readiness call is the proof they are callable) and `required = true`.
+**1.0.1 leftovers.**
+- After a target check, note Codex tool search (the five tools may load on demand, and the readiness call proves they are callable) and `required = true` in the install notes.
+- From the rc.2 review, for a later candidate: the pre-existing `lstat`-then-read window in `describeArtifact`, and whether a cancelled tool's cleanup can run after `cancelled` is recorded.
 
 **1.1, Vibe's own export.** Pass `--output-dir` into the run directory and `--time-limit` from the deadline, read `export.json` for `usage`, `cost_usd`, `steps`, `warnings` and the outcome, redact it before persisting, and corroborate the stop reason from the outcome rather than from markers alone. Observe once per operation on the legacy path, which the Vibe README says still writes the export. This closes the UNKNOWN usage and gives the coordinator the cost of every run.
 
 **1.1 or 1.2, the Unified Harness adapter.** Vibe's source calls the legacy harness a temporary escape hatch kept until the legacy runtime is removed. Before that removal, build an adapter for the Unified Harness with the same boundaries: private homes, filtered environment, `enable_subagents` and `enable_background_processes` off, managed shell tools off, read-only review profile, patch-only edits, and a fresh compatibility audit of project discovery, persistence, the permission predicate and the tool allow/deny environment. Pin exactly one version again. Until the adapter exists, the pin stays 2.26.1 and later Vibe releases are refused, which is correct.
 
-**Runtime fixes ready or small.** Session pruning for `--isolated` and a run lookup that tolerates a bad sibling or more than 128 sessions: ready on branch `claude/session-pruning` (GitHub `bdc3ca4`, based on rc.28, needs a rebase), not merged because it changes runtime code after the tested build. The config fingerprint using `os.homedir()` instead of `HOME`; the `setup` restart message naming the registered path; the MCP SDK's 4-second SIGKILL after stdin closes, which can cut a slow edit shutdown short (recovered by design on the next start); owner-lock liveness from an OS-released lock instead of PID and elapsed time.
+**Runtime fixes ready or small.** Session pruning for `--isolated` and a run lookup that tolerates a bad sibling or more than 128 sessions: ready on branch `claude/session-pruning` (GitHub `bdc3ca4`, based on rc.28; needs a rebase onto the rc.2 runtime), not merged because it changes runtime code after the tested build. The config fingerprint using `os.homedir()` instead of `HOME`; the `setup` restart message naming the registered path; the MCP SDK's 4-second SIGKILL after stdin closes, which can cut a slow edit shutdown short (recovered by design on the next start); owner-lock liveness from an OS-released lock instead of PID and elapsed time.
 
-**Later.** The MCP tasks extension (`tasks/get` polling) once clients use it by default; it is the shape of our start, status and result tools. Byte-reproducible release archives across machines. Tooling waiting on the push token's `workflow` scope: `claude/release-workflow` (tag-triggered release) and `claude/ci-node-floor` (CI on exact Node 20.19.0 and 24).
+**Later.** The MCP tasks extension (`tasks/get` polling) once clients use it by default; it is the shape of our start, status and result tools. Byte-reproducible release archives across machines. Tooling waiting on the push token's `workflow` scope:
+- `claude/ci-checks`, committed locally as `8904c13` and replacing `claude/ci-node-floor`. It adds:
+  - a fast Linux job: lint, types, the generated error reference, whitespace outside evidence, and the secret scan;
+  - workflow lint;
+  - `verify:release` on macOS with Node 20.19.0 and 24;
+  - dependency review on pull requests;
+  - read-only permissions, actions pinned by commit, and Dependabot to keep them current.
+- `claude/release-workflow`: a tag-triggered release.
 
 ## Working rules
 
-- Never run a real Vibe on the preparing machine. Hosted evidence comes from the target machine only, with the owner's authorization and budget.
+- Never install, run or test Vibe on the preparing machine, including the installed-Vibe fixture. Questions about Vibe's code are answered from its tagged source, after checking it against the launcher's pinned hashes. Hosted and installed-Vibe evidence comes from the target machine only, with the owner's authorization and budget.
+- Evidence uses the placeholders in [REDACTION.md](docs/reviews/REDACTION.md) from the start; the repository is public.
 - Version numbers and runtime code change on main; the target machine records evidence and changes no code.
 - Push with `make push` (main) or `make push-branch BRANCH=<name>`. Before a release candidate, `VIBE_SUPERVISOR_TEST_NPM_CACHE=<populated cache> npm run package:rc`.
 - Keep credentials and private session histories out of every committed file.
