@@ -5,5 +5,5 @@
   "next_action": "The run is closed; start a new run for more work.",
   "worktree_removed": false,
   "worktree_retained_reason": "Uncommitted or untracked files remain after export; worktree retained",
-  "worktree_retained_path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-JNj2d8/worktrees/8f230f62-a8af-4bdc-a5de-afe12cfc68db"
+  "worktree_retained_path": "<private-supervisor-home>/rc20-config/mcp-sessions/session-JNj2d8/worktrees/8f230f62-a8af-4bdc-a5de-afe12cfc68db"
 }

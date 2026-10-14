@@ -37,6 +37,6 @@ The transfer bundle and disposable copies are local, ignored artifacts, with no 
 | Stable promotion and publication | NOT_RUN for the changed runtime; applicable approval, fresh-account acceptance, CI and immutable source/artifact identity remain required. A changed final version/archive needs its own applicable confirmation; do not silently transfer frozen-candidate evidence. |
 | Earlier no-edit root cause | UNKNOWN; successful observed tool use does not explain that earlier run retroactively. |
 
-Hosted allowance is exhausted: seven used, zero remaining, no retries. Any later paid run needs a concrete scope and separate approval. Published 1.0.0 remains unchanged. Garnebo privacy and site release remain separate responsibilities, not hidden Supervisor acceptance gates.
+Hosted allowance is exhausted: seven used, zero remaining, no retries. Any later paid run needs a concrete scope and separate approval. Published 1.0.0 remains unchanged. <site-project> privacy and site release remain separate responsibilities, not hidden Supervisor acceptance gates.
 
 Next available external actions are the owner's account test and applicable delivery authorization for the prepared integration. Keep the goal active while those requirements are incomplete.

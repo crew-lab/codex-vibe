@@ -1,6 +1,6 @@
 # Frozen rc.28 acceptance execution
 
-The user approved the exact seven-case budget on 2026-10-13. Five cases have passed; two disconnect cases remain. No retries, limit raises or hidden extra runs. All seven use the frozen fixture in assignments.json. Existing real Garnebo review is separate evidence.
+The user approved the exact seven-case budget on 2026-10-13. Five cases have passed; two disconnect cases remain. No retries, limit raises or hidden extra runs. All seven use the frozen fixture in assignments.json. Existing real <site-project> review is separate evidence.
 
 1. Verify archive SHA256 and installed-file identity. Capture current fixture HEAD, tracked-file hashes and clean status. Require frozen c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00 and original two files. Do not modify that fixture.
 2. Native readiness: require rc.28, intended policy, eligible, empty blockers, free slot and no restart required; use a fresh matching receipt on the same connection. Never preserve receipt bodies in durable reports.

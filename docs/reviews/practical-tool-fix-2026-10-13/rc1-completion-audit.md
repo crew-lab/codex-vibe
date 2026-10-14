@@ -1,6 +1,6 @@
 # Stable v1 follow-up: current-state audit — 2026-10-13
 
-Goal remains active. Published 1.0.0 is unchanged; the practical tool-access mitigation is now a distinct local **1.0.1-rc.1** candidate. Previous turn classification: progress (runtime mitigation, tests, independent review and completed Garnebo export lane). This turn: progress (frozen offline package, exact Node-floor verification and reviewable dispatch/installation contracts).
+Goal remains active. Published 1.0.0 is unchanged; the practical tool-access mitigation is now a distinct local **1.0.1-rc.1** candidate. Previous turn classification: progress (runtime mitigation, tests, independent review and completed <site-project> export lane). This turn: progress (frozen offline package, exact Node-floor verification and reviewable dispatch/installation contracts).
 
 Later same-turn update: the owner explicitly authorized installation and six bounded runs. Private installation/registration is complete, all 140 installed archive files match and doctor passes. **Zero hosted runs used.** The current native connection remains 1.0.0; restart and exact-candidate native readiness are next. [Resume checkpoint](RC1-RESUME.json), [installed bytes](rc1-installed-files.json), [doctor](rc1-installed-doctor.json), [registration and rollback receipt](rc1-registration-receipt.json). The table below retains the earlier pre-authorization audit as dated provenance.
 
@@ -41,4 +41,4 @@ The packaged acceptance report retains Node-floor UNVERIFIED at freeze. The late
 3. Complete the human-operated fresh-account lane before stable 1.0.1. Prepare any separate review/edit allowance only after installation/readiness succeeds in that account.
 4. Recheck integration against main, obtain applicable delivery authorization, then verify CI/tag/artifact/installed identity. Do not retag or replace the published 1.0.0 archive.
 
-Garnebo privacy and production release remain a separate lane. Its independent export review is now PASS; unavailable collector interception is not turned into a hidden Supervisor gate.
+<site-project> privacy and production release remain a separate lane. Its independent export review is now PASS; unavailable collector interception is not turned into a hidden Supervisor gate.

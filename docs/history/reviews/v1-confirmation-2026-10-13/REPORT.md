@@ -2,7 +2,7 @@
 
 Prepared 2026-10-13. All four authorized hosted runs passed, with no retries or repairs. Native 1.0.0 readiness passed; all runs ended end_turn with no result warnings and were closed. The edit passed nine independent cases and six worker tests in a disposable export. Its dirty worktree was safely retained rather than force-deleted. Original fixture and site inputs remain unchanged.
 
-The two scoped Garnebo reviews passed independent checks (11 parser/URL cases; 5 array-isolation cases). Selection verification covered pure store functions with hook dependencies mocked, not browser navigation. These two accepted answers do not erase the earlier failed broad review and do not establish general model accuracy.
+The two scoped <site-project> reviews passed independent checks (11 parser/URL cases; 5 array-isolation cases). Selection verification covered pure store functions with hook dependencies mocked, not browser navigation. These two accepted answers do not erase the earlier failed broad review and do not establish general model accuracy.
 
 Case 7 already passed independent active-disconnect observation on rc.28 and was closed with pristine-worktree removal. The owner adopted that single official-client observation and approved runtime-equivalent 1.0.0 confirmation. Clean-account installation remains deferred.
 

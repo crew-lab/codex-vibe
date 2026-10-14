@@ -4,7 +4,7 @@ Date: 2026-10-12. Status: IMPLEMENTED in 0.9.0-rc.24, pending native and hosted 
 
 ## Evidence and diagnosis
 
-The Garnebo execution ledger records VSUP_WORKSPACE_INVALID before run creation, with zero inference and no worker worktree. Its claim of cached roots is consistent with the source and local files, but the exact refusing connection was not identified by a live provenance receipt.
+The <site-project> execution ledger records VSUP_WORKSPACE_INVALID before run creation, with zero inference and no worker worktree. Its claim of cached roots is consistent with the source and local files, but the exact refusing connection was not identified by a live provenance receipt.
 
 In integrated rc.23:
 - src/config/isolated-home.ts reads the selected template and writes a session config snapshot at startup/adoption.
@@ -13,7 +13,7 @@ In integrated rc.23:
 - There is no native workspace-specific readiness operation; vibe_status requires an existing run UUID.
 - supervisor_version in saved-run output belongs to the recorded run, not necessarily the currently serving process.
 
-Read-only inspection on 2026-10-12 found the authoritative template hash 2163b69e8725c01367abb05a35584d4b60800bfd90618fbb5703efe8ca735e4c with Garnebo allowed. Eleven session snapshots exist: three include Garnebo; eight retain the older hash 03d919af2dc2925cb91f91817f1d35f7716c42253db75db360a5536e0123b913 without it. This inventory does not establish which sessions are live or which refused dispatch. Do not delete or signal them on that evidence.
+Read-only inspection on 2026-10-12 found the authoritative template hash 2163b69e8725c01367abb05a35584d4b60800bfd90618fbb5703efe8ca735e4c with <site-project> allowed. Eleven session snapshots exist: three include <site-project>; eight retain the older hash 03d919af2dc2925cb91f91817f1d35f7716c42253db75db360a5536e0123b913 without it. This inventory does not establish which sessions are live or which refused dispatch. Do not delete or signal them on that evidence.
 
 The mechanism is configuration divergence: editing the template cannot change an already constructed manager. Restart-dependent synchronization, weak readiness checks and immediate infrastructure fallback allow a coding task to finish while the intended Vibe test never starts. Luna does not repair this connection path; it routes around it. Earlier absent-tool, saved-run lookup and turn-limit issues are separate failures, not evidence of a single provider defect.
 
@@ -72,8 +72,8 @@ Required regression evidence:
 
 | Case | Required outcome |
 | --- | --- |
-| Connect with fixture-only roots; owner approves/adds Garnebo afterward | Same connection preflight sees Garnebo without restart; mocked start uses new policy |
-| Remove Garnebo | Next preflight/start deny it without inference; cleanup retains evidence safely if necessary |
+| Connect with fixture-only roots; owner approves/adds <site-project> afterward | Same connection preflight sees <site-project> without restart; mocked start uses new policy |
+| Remove <site-project> | Next preflight/start deny it without inference; cleanup retains evidence safely if necessary |
 | Malformed, missing, oversized, foreign-owned or symlinked config | Fail closed, actionable reason, no stale permissive fallback |
 | Two already connected servers | Both see the same approved policy revision while retaining isolated ownership |
 | Old installed runtime/boot-setting drift | Current provenance identifies mismatch; readiness false; no task launch |
@@ -81,7 +81,7 @@ Required regression evidence:
 | Change policy during a live run | Frozen run contract preserved; subsequent admission follows current policy; tested revocation behavior |
 | Existing run-status/result/close, reconnect lookup and retained dirty worktree | Existing supported behavior and safe ownership remain intact |
 | Native tools missing or selected wrong config | Setup/test fails visibly rather than defaulting to Luna |
-| Garnebo native preflight then authorized review | Concrete native receipt and actual run ID; useful accepted result; closure evidence |
+| <site-project> native preflight then authorized review | Concrete native receipt and actual run ID; useful accepted result; closure evidence |
 
 ## Operator outcome
 

@@ -4,7 +4,7 @@
 
 RC20 may support **exactly Vibe 2.26.1** through the enforced `--legacy-harness` programmatic path. The TypeScript pin and isolated Python shim now both require `2.26.1`; all other versions fail closed. This review does not establish support for other Vibe versions, operating systems, Python builds, hosted inference, desktop registration, or clean-account installation.
 
-The audit used the installed Mistral Vibe distribution at `/Users/roman/.local/share/uv/tools/mistral-vibe`, its Python 3.12 interpreter, and the cached 2.25.8 source at `/Users/roman/.cache/uv/archive-v0/xJRdBkvzHVH7UYw658Cah` as the comparison baseline. `vibe --version` reported `vibe 2.26.1`; package metadata and `vibe.__version__` both reported `2.26.1`.
+The audit used the installed Mistral Vibe distribution at `<vibe-tool-env>`, its Python 3.12 interpreter, and the cached 2.25.8 source at `<target-home>/.cache/uv/archive-v0/xJRdBkvzHVH7UYw658Cah` as the comparison baseline. `vibe --version` reported `vibe 2.26.1`; package metadata and `vibe.__version__` both reported `2.26.1`.
 
 No hosted inference was started. The profile integration fixture removes `MISTRAL_API_KEY`; its purpose is to resolve actual configuration and permissions locally, not to run a model. No credentials, session history, prompt arguments, or reasoning were read or recorded.
 
@@ -56,8 +56,8 @@ SHA-256 values below are for source files in the installed 2.26.1 distribution a
 Command run:
 
 ```sh
-PATH=/Users/roman/.nvm/versions/node/v24.21.0/bin:$PATH \
-VIBE_SUPERVISOR_TEST_VIBE_PYTHON=/Users/roman/.local/share/uv/tools/mistral-vibe/bin/python3 \
+PATH=<nvm-home>/versions/node/v24.21.0/bin:$PATH \
+VIBE_SUPERVISOR_TEST_VIBE_PYTHON=<vibe-tool-env>/bin/python3 \
 npm test -- --run tests/unit/profile.test.ts
 ```
 

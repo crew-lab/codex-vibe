@@ -2,7 +2,7 @@
 
 Operational procedure for the target machine (macOS Apple silicon, Vibe 2.26.1 installed and logged in, Codex desktop). It is history so it does not ship. Behaviour: [reference](../reference.md#workspace-readiness), [functionality](../functionality.md). Gates: `docs/acceptance.json`. Evidence: section F.
 
-Known paths (from the [Handoff](../../Handoff.md) and the [rc.18 installation](reviews/rc18-release-installation-2026-10-09.md)): rc.23 at `/Users/roman/.local/share/vibe-supervisor/rc23`; selected config `/Users/roman/.local/share/vibe-supervisor/rc20-config/config.toml`. Unknown on this side and written as placeholders: `<rc28-prefix>` (use `/Users/roman/.local/share/vibe-supervisor/rc28`, a sibling of rc23, only if the operator agrees), `<fixture>` (the test fixture repository), `<garnebo>` (the approved Garnebo root), `<artifact-dir>` (where `release/0.9.0-rc.28/` was copied), `<codex-config>` (the Codex config file printed by the setup dry run).
+Known paths (from the [Handoff](../../Handoff.md) and the [rc.18 installation](reviews/rc18-release-installation-2026-10-09.md)): rc.23 at `<private-supervisor-home>/rc23`; selected config `<private-supervisor-home>/rc20-config/config.toml`. Unknown on this side and written as placeholders: `<rc28-prefix>` (use `<private-supervisor-home>/rc28`, a sibling of rc23, only if the operator agrees), `<fixture>` (the test fixture repository), `<site-project-root>` (the approved <site-project> root), `<artifact-dir>` (where `release/0.9.0-rc.28/` was copied), `<codex-config>` (the Codex config file printed by the setup dry run).
 
 ## A. Preconditions and stop rules
 
@@ -10,7 +10,7 @@ Known paths (from the [Handoff](../../Handoff.md) and the [rc.18 installation](r
 2. Stop at the first failure. No retry, no budget or limit increase, no account rotation, no Luna substitution; a connection or readiness failure is not a Vibe result.
 3. Never record credentials, tokens or task text containing anything sensitive. Check provider login only through a run, never by reading Keychain values (`security` without `-w` at most).
 4. Keep earlier failures in the evidence next to later passes; do not overwrite them.
-5. Do not run anything on the primary dirty checkout; use only the frozen tarball. Run Garnebo only after the fixture matrix and only if separately authorized.
+5. Do not run anything on the primary dirty checkout; use only the frozen tarball. Run <site-project> only after the fixture matrix and only if separately authorized.
 
 ## B. Install rc.28 next to rc.23
 
@@ -26,7 +26,7 @@ The tarball must be `61ca4ee91067e2bbf8a7dbf2f14baf3f3667a661c8c587d4fd9b02323fe
 mkdir -m 700 -p <rc28-prefix>
 npm install --prefix <rc28-prefix> --ignore-scripts --offline <artifact-dir>/vibe-supervisor-0.9.0-rc.28.tgz
 CLI=<rc28-prefix>/node_modules/vibe-supervisor/dist/cli.js
-CONFIG=/Users/roman/.local/share/vibe-supervisor/rc20-config/config.toml
+CONFIG=<private-supervisor-home>/rc20-config/config.toml
 node "$CLI" --version
 stat -f '%Lp %Su' "$CONFIG"
 ```
@@ -53,8 +53,8 @@ Rollback to rc.23: quit Codex; if `<codex-config>` still equals the reviewed pos
 
 Reconnect: quit and reopen Codex desktop, open a testing thread, and confirm exactly the five tools `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, `vibe_close`.
 
-1. `vibe_status` with `workspace: <fixture>`, `operation: review`. Then `operation: edit` with `base_ref: <ref>`. Then the same two for `<garnebo>` (review; edit only if edits there are in scope). Expect each: `server_version` `0.9.0-rc.28`, a `server_instance_id`, `policy_path` equal to `$CONFIG`, a `policy_revision`, `restart_required: false`, `eligible: true`, empty `blockers`, `active_slot.busy: false`, `runtime` with `executable_found: true` and `version_verified: false`, a `readiness_receipt` and `receipt_expires_at`; an edit also `base_commit`. No run id appears and `node "$CLI" runs --config "$CONFIG" list` shows nothing new.
-2. Optional (covered by deterministic tests, not a 1.0 criterion). Live allowlist change, without restarting Codex: record `policy_revision`, remove one root (use `<garnebo>`) with a reviewed edit of `$CONFIG` (keep mode 0600), re-run readiness for it. Expect `eligible: false`, a blocker naming the workspace not allowlisted, a new `policy_revision`, same `server_instance_id`. Restore the root (`node "$CLI" allow --config "$CONFIG" <garnebo>`), re-run: `eligible: true`, a revision different from the removed state, a fresh receipt, same instance.
+1. `vibe_status` with `workspace: <fixture>`, `operation: review`. Then `operation: edit` with `base_ref: <ref>`. Then the same two for `<site-project-root>` (review; edit only if edits there are in scope). Expect each: `server_version` `0.9.0-rc.28`, a `server_instance_id`, `policy_path` equal to `$CONFIG`, a `policy_revision`, `restart_required: false`, `eligible: true`, empty `blockers`, `active_slot.busy: false`, `runtime` with `executable_found: true` and `version_verified: false`, a `readiness_receipt` and `receipt_expires_at`; an edit also `base_commit`. No run id appears and `node "$CLI" runs --config "$CONFIG" list` shows nothing new.
+2. Optional (covered by deterministic tests, not a 1.0 criterion). Live allowlist change, without restarting Codex: record `policy_revision`, remove one root (use `<site-project-root>`) with a reviewed edit of `$CONFIG` (keep mode 0600), re-run readiness for it. Expect `eligible: false`, a blocker naming the workspace not allowlisted, a new `policy_revision`, same `server_instance_id`. Restore the root (`node "$CLI" allow --config "$CONFIG" <site-project-root>`), re-run: `eligible: true`, a revision different from the removed state, a fresh receipt, same instance.
 3. Optional (covered by deterministic tests, not a 1.0 criterion). Boot-key change: change one boot-bound value in `$CONFIG` (for example `limits.max_mcp_result_chars`), re-run readiness. Expect `restart_required: true` with the key in `boot_drift`; a start with the old receipt would fail `VSUP_RESTART_REQUIRED` (do not start one). Restore the value, re-run: `restart_required: false`. Confirm `diff "$CONFIG" "$CONFIG.rc23-backup"` shows only the intended allowlist state.
 
 Record every reply (redacted) and the config hashes before and after. Any deviation: stop, record, roll back if needed.
@@ -72,7 +72,7 @@ Real active disconnect (one run, during run 3 or later, with a task long enough 
 
 Expected outcome ([functionality](../functionality.md)): the server exits; the worker's process group is gone (`pgrep -f` for the run shows nothing); the owner lock is released; on the next start or `runs show` the run is `failed` with an interruption diagnostic and is never relaunched or replayed; for an edit the worktree is kept and `vibe_close` with `cleanup_worktree: true` removes it only after the fresh-export check. If the run settled before the disconnect was observed, the attempt is inconclusive: record it and repeat only with new authorization.
 
-Then one narrow Garnebo review if separately authorized: one readiness call with receipt, one review with a small task and tight limits, same recording; no edit.
+Then one narrow <site-project> review if separately authorized: one readiness call with receipt, one review with a small task and tight limits, same recording; no edit.
 
 ## E. Clean macOS account install (deferred to 1.0.1 by owner decision 2026-10-12)
 

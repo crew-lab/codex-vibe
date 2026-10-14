@@ -27,33 +27,33 @@
       "remediation": "Inspect the run's diagnostic events and start a new run.",
       "retryable": false
     },
-    "worker": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-qhLOsa/worktrees/20627eaf-caeb-4612-a879-2232ddcc4ee5",
+    "worker": "<private-supervisor-home>/rc20-config/mcp-sessions/session-qhLOsa/worktrees/20627eaf-caeb-4612-a879-2232ddcc4ee5",
     "changed_files": [],
     "changed_files_total": 0,
     "artifacts": [
       {
         "name": "diff.patch",
-        "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-qhLOsa/runs/20627eaf-caeb-4612-a879-2232ddcc4ee5/artifacts/diff.patch"
+        "path": "<private-supervisor-home>/rc20-config/mcp-sessions/session-qhLOsa/runs/20627eaf-caeb-4612-a879-2232ddcc4ee5/artifacts/diff.patch"
       },
       {
         "name": "diff.stat",
-        "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-qhLOsa/runs/20627eaf-caeb-4612-a879-2232ddcc4ee5/artifacts/diff.stat"
+        "path": "<private-supervisor-home>/rc20-config/mcp-sessions/session-qhLOsa/runs/20627eaf-caeb-4612-a879-2232ddcc4ee5/artifacts/diff.stat"
       },
       {
         "name": "changed-files.json",
-        "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-qhLOsa/runs/20627eaf-caeb-4612-a879-2232ddcc4ee5/artifacts/changed-files.json"
+        "path": "<private-supervisor-home>/rc20-config/mcp-sessions/session-qhLOsa/runs/20627eaf-caeb-4612-a879-2232ddcc4ee5/artifacts/changed-files.json"
       },
       {
         "name": "transcript.md",
-        "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-qhLOsa/runs/20627eaf-caeb-4612-a879-2232ddcc4ee5/transcript.md"
+        "path": "<private-supervisor-home>/rc20-config/mcp-sessions/session-qhLOsa/runs/20627eaf-caeb-4612-a879-2232ddcc4ee5/transcript.md"
       },
       {
         "name": "events.ndjson",
-        "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-qhLOsa/runs/20627eaf-caeb-4612-a879-2232ddcc4ee5/events.ndjson"
+        "path": "<private-supervisor-home>/rc20-config/mcp-sessions/session-qhLOsa/runs/20627eaf-caeb-4612-a879-2232ddcc4ee5/events.ndjson"
       },
       {
         "name": "worker-diagnostics.json",
-        "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-qhLOsa/runs/20627eaf-caeb-4612-a879-2232ddcc4ee5/worker-diagnostics.json"
+        "path": "<private-supervisor-home>/rc20-config/mcp-sessions/session-qhLOsa/runs/20627eaf-caeb-4612-a879-2232ddcc4ee5/worker-diagnostics.json"
       }
     ]
   }

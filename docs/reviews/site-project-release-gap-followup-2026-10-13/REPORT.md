@@ -2,11 +2,11 @@
 
 **PASS in the frozen local export scope. Privacy OPEN / UNAVAILABLE. Release BLOCKED.**
 
-Signed by role: Independent final-export reviewer (`garnebo_export_review`), 2026-10-13. This review completes the previously interrupted final-export lane only.
+Signed by role: Independent final-export reviewer (`<site-project>_export_review`), 2026-10-13. This review completes the previously interrupted final-export lane only.
 
 Durable copies of the inspector and its final evidence are beside this report: [inspector](inspect.py), [evidence](evidence.json). Evidence SHA-256: `669dab9d76c39d13ee1328bbbe2a5b0825efab5847b5a6a4a9cc29e7d7473af9`. Original execution paths below are retained as provenance.
 
-Candidate: `/private/tmp/garnebo-release-gaps-2026-10-13/candidate-current`.
+Candidate: `/private/tmp/<site-project>-release-gaps-2026-10-13/candidate-current`.
 Frozen source: `28efb9d5d5ed3f811a63c365dbee469230dadf4e`.
 Export inventory SHA-256: `c5fc5234003a0b30cc36d77927e5df1e370e80ff0329ecefefdfde863ff113e6`.
 
@@ -24,7 +24,7 @@ Export inventory SHA-256: `c5fc5234003a0b30cc36d77927e5df1e370e80ff0329ecefefdfd
 
 ## Commands and evidence
 
-Executed `python3 tmp/garnebo-independent-export-review/inspect.py` from `/Users/roman/src/github.com/crew-lab/codex-vibe`; that read-only inspector executes the following against the frozen candidate and stores exact arguments, exit codes, stdout and stderr in `evidence.json`:
+Executed `python3 tmp/<site-project>-independent-export-review/inspect.py` from `<supervisor-repository>`; that read-only inspector executes the following against the frozen candidate and stores exact arguments, exit codes, stdout and stderr in `evidence.json`:
 
 - `git rev-parse HEAD`, `git status --short` before and after
 - `node scripts/verify-release.mjs`

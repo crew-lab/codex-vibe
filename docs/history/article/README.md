@@ -4,7 +4,7 @@ The launch article for 1.0. Not part of the npm package.
 
 | File | What it holds |
 |---|---|
-| [draft-1.0.md](draft-1.0.md) | The 1.0 draft for the one-shot product (rc.28), with `[EVIDENCE: …]` placeholders for the hosted sitting |
+| [draft-1.0.md](draft-1.0.md) | The 1.0 article draft for DEV.to, filled from recorded evidence (1.0.0 published; 1.0.1-rc.1 evidence included); still unpublished: the author reads it in their own voice and sets the AI-assisted label first |
 | [evidence.md](evidence.md) | Every claim and number the article may use, with its conditions and source; the claims it must never make |
 | [research.md](research.md) | DEV's publishing and AI-disclosure rules, writing practice and sources |
 

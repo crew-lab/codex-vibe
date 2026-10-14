@@ -15,7 +15,7 @@ Nothing else is a 1.0 gate. The clean-account install is 1.0.1; the live-allowli
 
 ## Before you start
 
-- Get the owner's explicit yes, in chat, for three separate things: installing rc.28 and switching the Codex registration; the hosted budget; and Garnebo, if it is used at all.
+- Get the owner's explicit yes, in chat, for three separate things: installing rc.28 and switching the Codex registration; the hosted budget; and <site-project>, if it is used at all.
 - Confirm `vibe --version` prints 2.26.1. Anything else: stop.
 - Get the artifact: the `v0.9.0-rc.28` GitHub prerelease if it exists, otherwise `release/0.9.0-rc.28/` copied from the preparing machine. Run `shasum -a 256 -c SHA256SUMS`; the tarball's sha256 is `61ca4ee91067e2bbf8a7dbf2f14baf3f3667a661c8c587d4fd9b02323fe7e6cd`.
 - Set the selected `config.toml` to mode 0600; rc.24 and later refuse a group- or world-writable config.
@@ -34,7 +34,7 @@ Nothing else is a 1.0 gate. The clean-account install is 1.0.1; the live-allowli
 
    For each: record the run ID, state, `stop_reason`, timings and warnings. For edits, apply the patch in a separate scratch clone and check it, then `vibe_close` with `cleanup_worktree: true` and record `worktree_removed`. A turn-limit run must end `completed` with `stop_reason: max_turn_requests` and the incomplete-result warning, not as a crash.
 5. **Active disconnect** (runbook D): start a sixth run, or reuse run 5 while it is still running. Quit Codex while the worker is active. Reopen it. Expect: no Vibe or supervisor process left, the lock released, and the run `failed` and never relaunched. If it was an edit, its worktree is kept until `vibe_close` cleans it.
-6. **Garnebo**, only if separately authorized: readiness, then one narrow review.
+6. **<site-project>**, only if separately authorized: readiness, then one narrow review.
 
 ## Stop rules
 

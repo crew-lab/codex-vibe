@@ -19,8 +19,8 @@
         "busy": false
       },
       "runtime": {
-        "executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
-        "resolved_executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
+        "executable": "<vibe-tool-env>/bin/vibe",
+        "resolved_executable": "<vibe-tool-env>/bin/vibe",
         "executable_found": true,
         "pinned_version": "2.26.1",
         "version_verified": false,
@@ -48,8 +48,8 @@
         "busy": false
       },
       "runtime": {
-        "executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
-        "resolved_executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
+        "executable": "<vibe-tool-env>/bin/vibe",
+        "resolved_executable": "<vibe-tool-env>/bin/vibe",
         "executable_found": true,
         "pinned_version": "2.26.1",
         "version_verified": false,
@@ -75,8 +75,8 @@
         "busy": false
       },
       "runtime": {
-        "executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
-        "resolved_executable": "/Users/roman/.local/share/uv/tools/mistral-vibe/bin/vibe",
+        "executable": "<vibe-tool-env>/bin/vibe",
+        "resolved_executable": "<vibe-tool-env>/bin/vibe",
         "executable_found": true,
         "pinned_version": "2.26.1",
         "version_verified": false,

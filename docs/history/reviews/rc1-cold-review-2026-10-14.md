@@ -21,6 +21,8 @@ The startup checks fail closed whether or not diagnostics are enabled. An unknow
 
 ## Open question that decides fail-closed
 
+Answered 2026-10-14 from the tag source: COVERED for tool exposure and dispatch; a built-in skill injection path remains, and rc.2 should enforce the profile at execution time. See [the answer](tool-inventory-answer-2026-10-14.md).
+
 Does Vibe 2.26.1 build the model's tool schemas, and dispatch calls, only through `ToolManager.available_tools`? If another path exists (`_all_tools`, `get()`, or MCP tools added later), a tool outside the profile could reach the model without the check. Answer it from the 2.26.1 source on a machine with Vibe installed, before stable 1.0.1. The rest of the profile still disables MCP and connector tools, so this is a question about the new check's coverage, not a known bypass.
 
 ## Recommendation

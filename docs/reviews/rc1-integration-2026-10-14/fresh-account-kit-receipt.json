@@ -1,6 +1,6 @@
 {
   "preparedAt": "2026-10-14T07:11:32.138063+00:00",
-  "bundle": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/vibe-supervisor-1.0.1-rc.1-fresh-account-kit.tar.gz",
+  "bundle": "<supervisor-repository>/tmp/vibe-supervisor-1.0.1-rc.1-fresh-account-kit.tar.gz",
   "bundleSha256": "93f26aa82284de8c4a159b027d8ed01a208b3444d95d2d536ba46b1d8572dfd2",
   "bundleBytes": 211965,
   "files": {

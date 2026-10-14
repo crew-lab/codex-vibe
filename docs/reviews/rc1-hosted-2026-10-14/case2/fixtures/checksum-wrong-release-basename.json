@@ -10,8 +10,8 @@
       "commandBytes": 406,
       "commandSha256": "3c83c112762c9cdfac40e228e09325ccbb37d619c98f214a163110e3470e66b3",
       "exitCode": 1,
-      "stdout": "garnebo-site-abcdef0123456789abcdef0123456789abcdef01.tar.gz: FAILED open or read\n",
-      "stderr": "shasum: garnebo-site-abcdef0123456789abcdef0123456789abcdef01.tar.gz: No such file or directory\nshasum: WARNING: 1 listed file could not be read\n"
+      "stdout": "<site-project>-site-abcdef0123456789abcdef0123456789abcdef01.tar.gz: FAILED open or read\n",
+      "stderr": "shasum: <site-project>-site-abcdef0123456789abcdef0123456789abcdef01.tar.gz: No such file or directory\nshasum: WARNING: 1 listed file could not be read\n"
     }
   ]
 }

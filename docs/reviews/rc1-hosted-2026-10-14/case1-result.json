@@ -7,27 +7,27 @@
   "stop_reason": "end_turn",
   "summary": "No defect found.",
   "workspace": {
-    "source": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/v1-native-fixture/rc28-acceptance",
-    "worker": "/Users/roman/src/github.com/crew-lab/codex-vibe/tmp/v1-native-fixture/rc28-acceptance"
+    "source": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance",
+    "worker": "<supervisor-repository>/tmp/v1-native-fixture/rc28-acceptance"
   },
   "artifacts": [
     {
       "name": "transcript.md",
-      "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-JNj2d8/runs/4145d2f6-225d-4878-a531-e64c870e058e/transcript.md",
+      "path": "<private-supervisor-home>/rc20-config/mcp-sessions/session-JNj2d8/runs/4145d2f6-225d-4878-a531-e64c870e058e/transcript.md",
       "sha256": "798694c6140ce37ef349590d7a4d990a6dfeebc7998bcf8ba09f1cc3e93825fd",
       "bytes": 17,
       "media_type": "text/markdown"
     },
     {
       "name": "events.ndjson",
-      "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-JNj2d8/runs/4145d2f6-225d-4878-a531-e64c870e058e/events.ndjson",
+      "path": "<private-supervisor-home>/rc20-config/mcp-sessions/session-JNj2d8/runs/4145d2f6-225d-4878-a531-e64c870e058e/events.ndjson",
       "sha256": "07388a7834c93318feac58404f62bf1080a42366ab4458bfc5fdc461db75862d",
       "bytes": 229,
       "media_type": "application/x-ndjson"
     },
     {
       "name": "worker-diagnostics.json",
-      "path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/mcp-sessions/session-JNj2d8/runs/4145d2f6-225d-4878-a531-e64c870e058e/worker-diagnostics.json",
+      "path": "<private-supervisor-home>/rc20-config/mcp-sessions/session-JNj2d8/runs/4145d2f6-225d-4878-a531-e64c870e058e/worker-diagnostics.json",
       "sha256": "03420582534e97ed5c0b41093bf05f0c49c591562e1f709f5915fe7712aa12be",
       "bytes": 601,
       "media_type": "application/json"

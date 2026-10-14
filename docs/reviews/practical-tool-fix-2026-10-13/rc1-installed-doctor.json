@@ -2,15 +2,15 @@
   "ok": true,
   "generatedAt": "2026-10-13T21:25:11.035Z",
   "provenance": {
-    "executable": "/Users/roman/.nvm/versions/node/v24.21.0/bin/node",
-    "application_entrypoint": "/Users/roman/.local/share/vibe-supervisor/1.0.1-rc.1/node_modules/vibe-supervisor/dist/cli.js",
-    "runtime_module": "/Users/roman/.local/share/vibe-supervisor/1.0.1-rc.1/node_modules/vibe-supervisor/dist/diagnostics/doctor.js",
+    "executable": "<nvm-home>/versions/node/v24.21.0/bin/node",
+    "application_entrypoint": "<private-supervisor-home>/1.0.1-rc.1/node_modules/vibe-supervisor/dist/cli.js",
+    "runtime_module": "<private-supervisor-home>/1.0.1-rc.1/node_modules/vibe-supervisor/dist/diagnostics/doctor.js",
     "app_version": "1.0.1-rc.1",
     "vibe_version": "vibe 2.26.1",
-    "config_path": "/Users/roman/.local/share/vibe-supervisor/rc20-config/config.toml",
+    "config_path": "<private-supervisor-home>/rc20-config/config.toml",
     "config_source": "explicit",
     "config_fingerprint": "1b44e421b46ad2443563e8b5625f1ad4859870bfe02397fcb86acbeb41db3966",
-    "data_directory": "/Users/roman/.local/share/vibe-supervisor/rc20-config",
+    "data_directory": "<private-supervisor-home>/rc20-config",
     "storage_mode": "selected-template"
   },
   "checks": [

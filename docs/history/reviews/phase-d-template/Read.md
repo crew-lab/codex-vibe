@@ -28,13 +28,13 @@ Result is PASS, FAIL, SKIP (with the reason) or PARTIAL (with what was and was n
 | Gate | Runbook | Result | Run IDs | Timing | Evidence | Notes |
 |---|---|---|---|---|---|---|
 | install-and-registration (checksum, doctor, dry run, rollback tested) | B | | | | | |
-| native-readiness-on-candidate (fixture review and edit, Garnebo) | C1 | | | | | |
+| native-readiness-on-candidate (fixture review and edit, <site-project>) | C1 | | | | | |
 | live-allowlist-change-without-restart | C2 | | | | | |
 | boot-key-change-restart-required | C3 | | | | | |
 | hosted-review-edit-matrix (5 runs, each with a receipt) | D | | | | | |
 | active-disconnect-hosted | D | | | | | |
 | provider-authentication-for-this-candidate | D | | | | | |
-| garnebo-review (optional, separately authorized) | D | | | | | |
+| <site-project>-review (optional, separately authorized) | D | | | | | |
 | clean-account-install | E | | | | | |
 | node-floor-20.19.0 (local or CI run) | F | | | | | |
 
@@ -44,7 +44,7 @@ Result is PASS, FAIL, SKIP (with the reason) or PARTIAL (with what was and was n
 |---|---|---|---|---|---|---|---|
 | Fixture review | | | | | | | |
 | Fixture edit (`base_ref`, `base_commit`) | | | | | | | |
-| Garnebo review | | | | | | | |
+| <site-project> review | | | | | | | |
 | Root removed (no Codex restart) | | | | | | | |
 | Root restored | | | | | | | |
 | Boot key changed | | | | | | | |
