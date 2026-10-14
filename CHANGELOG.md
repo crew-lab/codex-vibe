@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased 2.0.0 — one engine: a client of Vibe's app-server
+
+The supervisor now drives Mistral Vibe 2.26.1 as a client of `vibe-app-server` (JSON-RPC over stdio, one process per run) instead of patching Vibe's Python internals. The five MCP tools and every boundary stay; see [ADR 0004](docs/adr/0004-app-server-client.md). The runtime is new, so no 1.0.x hosted evidence transfers, and every 2.0 gate in `docs/acceptance.json` is open. Release 1.0.x continues on the `release/1.0` branch with security fixes only.
+
+- Removed: the `vibe -p --legacy-harness` path, the Python launcher and its source pins, the `backend` configuration key and the programmatic backend, the worker diagnostics file and `VIBE_SUPERVISOR_DIAGNOSTICS`, and the `grep` tool. Tool names and outcomes are in the event log instead.
+- Breaking: `paths.vibe_pin_manifest` is required. A 1.0 configuration is rejected until it sets that key and drops any `backend` key. Generate the manifest with the new `vibe-supervisor pin-manifest` on the machine that runs Vibe; `setup` adds the default path.
+- Pin: before each spawn the installed `mistral_vibe` files are hashed against the manifest, and the server must report exactly 2.26.1. Drift fails closed. The check covers that distribution's `RECORD` only, not dependencies, `.pth` files, the interpreter or `__pycache__`.
+- Enforcement: the session configuration and `VIBE_*` environment disable subagents, shell, connectors, skills, MCP, telemetry and session logging; a supervisor-written agent profile asks for every profile tool and denies reserved and secret paths; the startup read-back fails the run on any difference before the first turn; the supervisor answers every approval, approving only the profile's tool on an in-workspace path and denying anything else after 5 seconds; and the event validator fails a run on any allowed effect it did not approve, any unknown history entry kind, or a gap in event ids.
+- Reviews have `read_file` only and no search or listing tool. The model's catalogue still lists `write_file`, `edit`, the shell tool and `run_typescript`, which the protocol cannot hide; they are refused when called and recorded as `tool_denied` events (fields `tool`, `outcome`, `reason`, `entry_id`, `path`).
+- Stop reasons `turn_limit`, `token_limit`, `price_limit`, `refusal` and `cancelled`. New optional `limits.max_tokens` and `limits.max_cost_usd`, enforced by the supervisor because the Vibe server does not enforce them. Usage and cost are rebuilt from the session statistics.
+- Run records, events and results name the engine as `backend: app-server`. `doctor` runs the pin check instead of a version probe, and its provenance records the backend.
+- Reasoning stays off disk: session logging is off, thinking is off, Vibe's throwaway store lives in a private `TMPDIR` that is deleted at close, and restart recovery deletes the private directories of interrupted runs and warns when it cannot. A reaper process replaces the Python watchdog and kills the worker group if the supervisor disappears or the deadline passes. The credential reaches the worker only in its environment, resolved from `MISTRAL_API_KEY` or the macOS Keychain by Node.
+
 ## 1.0.1-rc.2 — tools refused at invocation, skills off, diagnostics that cannot fail a run
 
 Fixes from the [rc.1 cold review](docs/history/reviews/rc1-cold-review-2026-10-14.md) and its [tool-path answer](docs/history/reviews/tool-inventory-answer-2026-10-14.md). Runtime differs from rc.1, so its hosted evidence does not transfer; see `docs/acceptance.json`.
