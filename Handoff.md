@@ -79,7 +79,7 @@ In order. Each runtime change is a new candidate with one hosted observation per
 **2.0, the app-server engine (owner decisions 2026-10-14).** The supervisor's next engine is a client of Vibe's `vibe-app-server` JSON-RPC protocol, which Vibe's ADRs 0009 and 0016 make the boundary every surface uses. It replaces patching Vibe's Python internals.
 - **Version policy:** an exact Vibe pin, with a new candidate and a short target check for every Vibe release.
 - **Legacy path:** removed at 2.0.0. 1.0.x continues on a `release/1.0` branch, cut from the `v1.0.1` tag, with security fixes only until Mistral removes `--legacy-harness`.
-- **Scope:** the five MCP tools and every boundary stay; an ADR records the scope change. The client owns the approval decision, denying by default, and reads usage and cost from the run export, which replaces the old 1.1 export item.
+- **Scope:** the five MCP tools and every boundary stay; an ADR records the scope change. The client owns the approval decision, denying by default, and rebuilds usage and cost from `session/statsUpdated` and `runtime/read`, because `vibe-app-server` writes no run export; this replaces the old 1.1 export item. Subagents, background processes, managed shell, skills, MCP, session logging and telemetry are set through `VIBE_*` process environment, not the session request; thinking is set through `config/model/write`.
 
 Steps:
 1. A protocol audit from source.
