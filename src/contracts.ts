@@ -3,7 +3,7 @@ import { SUPPORTED_VIBE } from "./backends/pinned.js";
 
 export const SCHEMA_VERSION = 1 as const;
 
-export type BackendKind = "programmatic";
+export type BackendKind = "programmatic" | "app-server";
 export type RunMode = "review" | "edit";
 export type RunState =
   | "starting" | "running" | "completed" | "failed"
@@ -17,6 +17,8 @@ export interface RunLimits {
   maxEventBytes: number;
   maxTranscriptBytes: number;
   maxArtifactBytes: number;
+  maxSessionTokens?: number;
+  maxEstimatedCostUsd?: number;
 }
 
 export interface WorktreeRecord {
@@ -136,8 +138,10 @@ export interface SupervisorConfig {
     maxArtifactBytes: number;
     workerProgressTimeoutSeconds: number;
     maxMcpResultChars: number;
+    maxSessionTokens?: number;
+    maxEstimatedCostUsd?: number;
   };
-  paths?: { vibe?: string };
+  paths?: { vibe?: string; vibeAppServer?: string };
 }
 
 export interface StartRunInput {
@@ -197,6 +201,10 @@ export interface RuntimeCheck {
   pinned_version: string;
   version_verified: false;
   note: string;
+  backend?: BackendKind;
+  expected_model_alias?: string;
+  expected_reasoning_effort?: string;
+  accounting_limits?: { max_session_tokens: number | null; max_estimated_cost_usd: number | null };
 }
 
 export interface StartToolInput {

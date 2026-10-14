@@ -21,7 +21,7 @@ class FakeBackend implements SupervisorBackend {
   closes: string[] = [];
   callbacks = new Map<string, BackendCallbacks>();
   async probe() { return { available: true, backend: this.kind, version: '2.26.1' }; }
-  readonly kind = 'programmatic' as const;
+  readonly kind = 'app-server' as const;
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     this.starts += 1;
     this.callbacks.set(input.runId, callbacks);
@@ -40,10 +40,10 @@ async function setup() {
   return { parent, source, data };
 }
 
-function baseRecord(source: string, backend: 'programmatic' | 'acp' = 'programmatic'): RunRecord {
+function baseRecord(source: string, backend: 'app-server' = 'app-server'): RunRecord {
   const now = new Date().toISOString();
   return {
-    schemaVersion: 1, runId: randomUUID(), backend: backend as 'programmatic', mode: 'review', state: 'running',
+    schemaVersion: 1, runId: randomUUID(), backend, mode: 'review', state: 'running',
     sourceWorkspace: source, workerWorkspace: source, createdAt: now, updatedAt: now, launchedAt: now,
     taskSha256: 'a'.repeat(64), limits: { timeoutSeconds: 600, maxTurns: 5, maxEventBytes: 1_048_576, maxTranscriptBytes: 1_048_576, maxArtifactBytes: 8_388_608 }
   };
@@ -68,7 +68,7 @@ async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean): 
 const activeSlots = (manager: RunManager) => (manager as unknown as { activeSlots: number }).activeSlots;
 
 describe('one-shot restart behavior', () => {
-  it('marks an interrupted programmatic run failed without starting, replaying, or signaling a saved PID', async () => {
+  it('marks an interrupted app-server run failed without starting, replaying, or signaling a saved PID', async () => {
     const { source, data } = await setup();
     const record = baseRecord(source);
     record.process = { pid: 99999999, executable: '/not-used/vibe', version: '2.26.1' };
@@ -90,7 +90,7 @@ describe('one-shot restart behavior', () => {
     } finally { await manager.shutdown(); }
   });
 
-  it('leaves historical ACP metadata and artifacts byte-identical and never loads or cleans them', async () => {
+  it('refuses historical ACP storage and leaves metadata and artifacts byte-identical', async () => {
     const { source, data } = await setup();
     const record = baseRecord(source);
     const directory = await writeRecord(data, record, 'acp');
@@ -103,11 +103,10 @@ describe('one-shot restart behavior', () => {
     const backend = new FakeBackend();
     const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
-      await manager.initialize();
+      await expect(manager.initialize()).rejects.toMatchObject({ code: 'VSUP_CONFIG_INVALID' });
       expect(await readFile(metaPath, 'utf8')).toBe(before);
       expect(await readFile(artifactPath, 'utf8')).toBe('historical output\n');
       expect(backend.starts).toBe(0);
-      await expect(manager.status({ run_id: record.runId })).rejects.toMatchObject({ code: 'VSUP_NOT_FOUND' });
       expect(await readdir(path.join(data, 'runs'))).toContain(record.runId);
     } finally { await manager.shutdown(); }
   });

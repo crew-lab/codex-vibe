@@ -33,9 +33,9 @@ export function getDataDir(env: NodeJS.ProcessEnv = process.env): string {
   const override = env.VIBE_SUPERVISOR_HOME;
   if (override) return resolve(override);
   const userHome = env.HOME ?? env.USERPROFILE ?? homedir();
-  if (process.platform === "win32") return join(env.APPDATA ?? join(userHome, "AppData", "Roaming"), "VibeSupervisor-oneshot");
-  if (process.platform === "darwin") return join(userHome, "Library", "Application Support", "VibeSupervisor-oneshot");
-  return join(env.XDG_DATA_HOME ?? join(userHome, ".local", "share"), "vibe-supervisor-oneshot");
+  if (process.platform === "win32") return join(env.APPDATA ?? join(userHome, "AppData", "Roaming"), "VibeSupervisor-appserver");
+  if (process.platform === "darwin") return join(userHome, "Library", "Application Support", "VibeSupervisor-appserver");
+  return join(env.XDG_DATA_HOME ?? join(userHome, ".local", "share"), "vibe-supervisor-appserver");
 }
 
 export function getConfigPath(env: NodeJS.ProcessEnv = process.env): string {
@@ -72,9 +72,12 @@ export function configFingerprint(config: SupervisorConfig): string {
       maxTranscriptBytes: config.limits.maxTranscriptBytes,
       maxArtifactBytes: config.limits.maxArtifactBytes,
       workerProgressTimeoutSeconds: config.limits.workerProgressTimeoutSeconds,
-      maxMcpResultChars: config.limits.maxMcpResultChars
+      maxMcpResultChars: config.limits.maxMcpResultChars,
+      ...(config.limits.maxSessionTokens === undefined ? {} : { maxSessionTokens: config.limits.maxSessionTokens }),
+      ...(config.limits.maxEstimatedCostUsd === undefined ? {} : { maxEstimatedCostUsd: config.limits.maxEstimatedCostUsd })
     },
-    ...(config.paths?.vibe ? { vibePath: config.paths.vibe } : {})
+    ...(config.paths?.vibe ? { vibePath: config.paths.vibe } : {}),
+    ...(config.paths?.vibeAppServer ? { vibeAppServerPath: config.paths.vibeAppServer } : {})
   };
   return createHash("sha256").update(JSON.stringify(semantic)).digest("hex");
 }
@@ -123,7 +126,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Super
   } catch (error) {
     if (error instanceof Error) {
       throw Object.assign(new Error(`Invalid supervisor configuration: ${error.message}`, { cause: error }), {
-        supervisor: supervisorError("VSUP_CONFIG_INVALID", `Invalid configuration file ${selection.configPath}: ${error.message} Supported fields are version, allowed_workspace_roots, retention, limits, and paths.vibe; remove unsupported fields.`, { configPath: selection.configPath })
+        supervisor: supervisorError("VSUP_CONFIG_INVALID", `Invalid configuration file ${selection.configPath}: ${error.message} Supported fields are version, allowed_workspace_roots, retention, limits, and paths.vibe_app_server; remove unsupported fields.`, { configPath: selection.configPath })
       });
     }
     throw error;

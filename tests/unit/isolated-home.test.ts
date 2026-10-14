@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { prepareIsolatedHome } from '../../src/config/isolated-home.js';
 import { RunManager } from '../../src/core/run-manager.js';
-import { ProgrammaticBackend } from '../../src/backends/programmatic.js';
+import { AppServerBackend } from '../../src/backends/app-server.js';
 import { createIsolatedRunRouter } from '../../src/core/isolated-run-router.js';
 import { loadConfig } from '../../src/config/config.js';
 import { runToWire } from '../../src/core/serialization.js';
@@ -98,7 +98,7 @@ function unusedPid(): number {
 function record(): RunRecord {
   const runId = randomUUID(); const now = new Date().toISOString();
   return {
-    schemaVersion: 1, runId, backend: 'programmatic', mode: 'review', state: 'completed', sourceWorkspace: '/tmp', workerWorkspace: '/tmp',
+    schemaVersion: 1, runId, backend: 'app-server', mode: 'review', state: 'completed', sourceWorkspace: '/tmp', workerWorkspace: '/tmp',
     createdAt: now, updatedAt: now, launchedAt: now, taskSha256: 'a'.repeat(64),
     limits: { timeoutSeconds: 600, maxTurns: 5, maxEventBytes: 1_048_576, maxTranscriptBytes: 1_048_576, maxArtifactBytes: 8_388_608 }
   };
@@ -111,6 +111,21 @@ async function writeRun(home: string, run: RunRecord): Promise<void> {
 }
 
 describe('session directory reuse', () => {
+  it.each(['programmatic', 'acp'])('refuses %s storage before rewriting an isolated configuration', async backend => {
+    const root = await template(CONFIG_V1); const env = { VIBE_SUPERVISOR_HOME: root };
+    const first = await prepareIsolatedHome(env);
+    await first.lock.release();
+    const saved = record(); await writeRun(first.home, saved);
+    const meta = path.join(first.home, 'runs', saved.runId, 'meta.json');
+    const original = JSON.parse(await readFile(meta, 'utf8')); original.backend = backend;
+    await writeFile(meta, JSON.stringify(original), { mode: 0o600 });
+    const bytes = await readFile(meta, 'utf8');
+    await writeFile(path.join(root, 'config.toml'), CONFIG_V2, { mode: 0o600 });
+    await expect(prepareIsolatedHome(env)).rejects.toMatchObject({ code: 'VSUP_CONFIG_INVALID' });
+    expect(await readFile(path.join(first.home, 'config.toml'), 'utf8')).toBe(CONFIG_V1);
+    expect(await readFile(meta, 'utf8')).toBe(bytes);
+    expect(await sessionNames(root)).toHaveLength(1);
+  });
   it('gives simultaneous starts different directories and both initialize', async () => {
     const root = await template(); const env = { VIBE_SUPERVISOR_HOME: root };
     const first = await prepareIsolatedHome(env); const second = await prepareIsolatedHome(env);
@@ -177,7 +192,7 @@ describe('session directory reuse', () => {
     } finally { await owner.shutdown(); }
   });
 
-  it('skips and leaves untouched a symlinked or group-readable candidate', async () => {
+  it('refuses a symlinked session before modifying any candidate', async () => {
     const root = await template(); const env = { VIBE_SUPERVISOR_HOME: root };
     const sessions = path.join(root, 'mcp-sessions');
     await mkdir(sessions, { mode: 0o700 });
@@ -185,15 +200,11 @@ describe('session directory reuse', () => {
     await symlink(target, path.join(sessions, 'session-aaaaaa'));
     const open = path.join(sessions, 'session-bbbbbb');
     await mkdir(open, { mode: 0o755 }); await chmod(open, 0o755);
-    const messages: string[] = [];
-    const prepared = await prepareIsolatedHome(env, line => messages.push(line));
-    expect(prepared.adopted).toBe(false);
-    expect([path.join(sessions, 'session-aaaaaa'), open]).not.toContain(prepared.home);
+    await expect(prepareIsolatedHome(env)).rejects.toMatchObject({ code: 'VSUP_CONFIG_INVALID' });
     expect(await readdir(target)).toEqual([]);
     expect(await readdir(open)).toEqual([]);
     expect((await stat(open)).mode & 0o777).toBe(0o755);
-    expect(messages).toHaveLength(2);
-    await prepared.lock.release();
+    expect(await sessionNames(root)).toHaveLength(2);
   });
 
   it('ignores names outside the session pattern', async () => {
@@ -256,7 +267,7 @@ describe('isolated run UUID routing', () => {
     await writeRun(older.home, saved);
     const current = await prepareIsolatedHome(env);
     const { manager, router } = await routerFor(current);
-    const start = vi.spyOn(ProgrammaticBackend.prototype, 'start');
+    const start = vi.spyOn(AppServerBackend.prototype, 'start');
     try {
       const status = await router.status({ run_id: saved.runId });
       expect(status.state).toBe('failed');
@@ -335,19 +346,14 @@ describe('isolated run UUID routing', () => {
     } finally { await manager.shutdown(); }
   });
 
-  it('rejects symlinked UUID paths and invalid IDs without following them', async () => {
+  it('rejects symlinked UUID paths at startup without following them', async () => {
     const root = await template(); const env = { VIBE_SUPERVISOR_HOME: root };
     const older = await prepareIsolatedHome(env); const saved = record();
     await mkdir(path.join(older.home, 'runs'), { mode: 0o700 });
     const target = await mkdtemp(path.join(tmpdir(), 'vsup-run-target-')); dirs.push(target);
     await symlink(target, path.join(older.home, 'runs', saved.runId));
     await older.lock.release();
-    const current = await prepareIsolatedHome(env);
-    const { manager, router } = await routerFor(current);
-    try {
-      await expect(router.status({ run_id: saved.runId })).rejects.toMatchObject({ code: 'VSUP_INVALID_STATE' });
-      await expect(router.result({ run_id: 'not-a-uuid' })).rejects.toMatchObject({ code: 'VSUP_NOT_FOUND' });
-      expect(await readdir(target)).toEqual([]);
-    } finally { await manager.shutdown(); }
+    await expect(prepareIsolatedHome(env)).rejects.toMatchObject({ code: 'VSUP_CONFIG_INVALID' });
+    expect(await readdir(target)).toEqual([]);
   });
 });
