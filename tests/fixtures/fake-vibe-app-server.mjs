@@ -180,7 +180,7 @@ function decorate(value) {
   if (Array.isArray(value)) return value.map(decorate);
   if (!isObject(value)) return value;
   const out = {};
-  for (const [key, item] of Object.entries(value)) out[key] = decorate(item);
+  for (const [key, item] of Object.entries(value)) out[key] = key === 'discoveryErrors' ? item : decorate(item);
   out[FUTURE_FIELD] = 'ignored';
   return out;
 }
@@ -786,7 +786,7 @@ function runtimeSnapshot() {
       activeModelPinned: false,
       defaultModelAlias: session.modelAlias
     },
-    activeAgent: { name: session.agentConfig.agent ?? 'default', displayName: session.agentConfig.agent ?? 'default', description: '', safety: 'neutral', agentType: 'agent' },
+    activeAgent: { name: runtime.activeAgentName ?? session.agentConfig.agent ?? 'default', displayName: session.agentConfig.agent ?? 'default', description: '', safety: 'neutral', agentType: 'agent' },
     agents: [],
     skills: runtime.skills ?? [],
     tools: toolNames().map((name) => ({ name, isCustom: false })),
@@ -795,7 +795,7 @@ function runtimeSnapshot() {
     issues: runtime.issues ?? [],
     hooksCount: runtime.hooksCount ?? 0,
     connectors: runtime.connectors ?? { connected: 0, total: null },
-    mcp: { sources: runtime.mcpSources ?? [], discoveryErrors: {}, connectorError: null, manageConnectorsUrl: null },
+    mcp: { sources: runtime.mcpSources ?? [], discoveryErrors: runtime.discoveryErrors ?? {}, connectorError: null, manageConnectorsUrl: null },
     bypassToolPermissions: runtime.bypassToolPermissions ?? (session.agentConfig.autoApprove ?? false),
     experimentalHarness: runtime.experimentalHarness ?? true
   };
@@ -825,9 +825,9 @@ function sessionState({ historyLimit = 200 } = {}) {
     history: clone(state.history.slice(-historyLimit)),
     historyBeforeCursor: null,
     turns: state.session.turns.map(publicTurn),
-    activeCallbacks: [],
-    childSessions: [],
-    backgroundProcesses: [],
+    activeCallbacks: scenario.runtime?.activeCallbacks ?? [],
+    childSessions: scenario.runtime?.childSessions ?? [],
+    backgroundProcesses: scenario.runtime?.backgroundProcesses ?? [],
     turnQueue: { items: [], paused: false, maxItems: 32 },
     retrying: null
   };

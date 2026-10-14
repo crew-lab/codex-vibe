@@ -234,6 +234,14 @@ describe('response parsers', () => {
     expectParseError(() => parseSessionStartResult({ lastEventId: 1, state: withoutKey(sessionState, 'turns') }), 'turns');
   });
 
+  it('surfaces the session callback, child and background lists, and null when absent', () => {
+    const withLists = { ...sessionState, activeCallbacks: [{ id: 'cb' }], childSessions: [], backgroundProcesses: [{ processId: 'p' }] };
+    expect(parseSessionStartResult({ lastEventId: 1, state: withLists }).state).toMatchObject({ activeCallbacks: [{ id: 'cb' }], childSessions: [], backgroundProcesses: [{ processId: 'p' }] });
+    expect(parseSessionReadResult({ lastEventId: 1, state: withLists }).state.activeCallbacks).toEqual([{ id: 'cb' }]);
+    expect(parseSessionStartResult({ lastEventId: 1, state: sessionState }).state).toMatchObject({ activeCallbacks: null, childSessions: null, backgroundProcesses: null });
+    expectParseError(() => parseSessionStartResult({ lastEventId: 1, state: { ...sessionState, activeCallbacks: 'none' } }), 'activeCallbacks');
+  });
+
   it('surfaces unknown history entry kinds distinctly inside session state', () => {
     const parsed = parseSessionStartResult({ lastEventId: 1, state: { ...sessionState, history: [assistantMessage, { type: 'hologram', id: 'h1', payload: {} }] } });
     expect(parsed.state.history.map((entry) => entry.kind)).toEqual(['message', 'unknown']);
@@ -263,6 +271,13 @@ describe('response parsers', () => {
       expectParseError(() => parseRuntimeReadResult({ runtime: withoutKey(runtime, key) }), key);
     }
     expect(parseRuntimeReadResult({ runtime: withoutKey(runtime, 'config') }).runtime.activeModel).toBeNull();
+  });
+
+  it('surfaces the active agent name and tolerates its absence', () => {
+    expect(parseRuntimeReadResult({ runtime: { ...runtime, activeAgent: { name: 'supervisor-review', displayName: 'x', future: 1 } } }).runtime.activeAgent).toEqual({ name: 'supervisor-review' });
+    expect(parseRuntimeReadResult({ runtime }).runtime.activeAgent).toBeNull();
+    expect(parseRuntimeReadResult({ runtime: { ...runtime, activeAgent: {} } }).runtime.activeAgent).toEqual({ name: null });
+    expect(parseRuntimeReadResult({ runtime: { ...runtime, mcp: { sources: [], discoveryErrors: { s: 'bad' } } } }).runtime.mcp).toEqual({ sources: [], discoveryErrors: { s: 'bad' } });
   });
 
   it('requires token totals in stats and tolerates missing optional counters', () => {

@@ -21,7 +21,7 @@ const SECRET_FILE_PATTERNS = ['.env', '.env.*', '.envrc', '.envrc.*', '*.pem', '
 const RESERVED_DIRECTORIES = ['.git', '.vibe', '.agents'];
 const RESERVED_FILES = ['.vibeignore'];
 
-type SettingValue = boolean | readonly string[];
+type SettingValue = boolean | string | readonly string[];
 
 interface RuntimeSetting {
   key: string;
@@ -47,6 +47,10 @@ const RUNTIME_SETTINGS: readonly RuntimeSetting[] = [
   { key: 'session_logging.generate_titles', value: false },
   { key: 'bypass_tool_permissions', value: false }
 ];
+
+function runtimeSettings(agent: string): readonly RuntimeSetting[] {
+  return [...RUNTIME_SETTINGS, { key: 'default_agent', value: agent }, { key: 'enabled_agents', value: [agent] }];
+}
 
 export interface SessionDirectories {
   home: string;
@@ -108,10 +112,11 @@ function settingEnvironmentName(key: string): string {
 }
 
 function encodeSettingValue(value: SettingValue): string {
+  if (typeof value === 'string') return value;
   return typeof value === 'boolean' ? String(value) : JSON.stringify(value);
 }
 
-function buildEnvironment(directories: SessionDirectories): Record<string, string> {
+function buildEnvironment(directories: SessionDirectories, agent: string): Record<string, string> {
   const environment: Record<string, string> = {
     HOME: directories.home,
     VIBE_HOME: directories.vibeHome,
@@ -119,14 +124,14 @@ function buildEnvironment(directories: SessionDirectories): Record<string, strin
     LOG_LEVEL,
     VIBE_SESSION_LOGGING__SAVE_DIR: path.join(directories.vibeHome, 'sessions')
   };
-  for (const setting of RUNTIME_SETTINGS) environment[settingEnvironmentName(setting.key)] = encodeSettingValue(setting.value);
+  for (const setting of runtimeSettings(agent)) environment[settingEnvironmentName(setting.key)] = encodeSettingValue(setting.value);
   return environment;
 }
 
-function buildExpectation(workspace: string, tools: readonly string[], denylist: readonly string[]): ReadbackExpectation {
+function buildExpectation(workspace: string, agent: string, tools: readonly string[], denylist: readonly string[]): ReadbackExpectation {
   const toolPolicies: Record<string, ToolPolicyExpectation> = Object.fromEntries(tools.map((tool) => [tool, { permission: TOOL_PERMISSION, denylist }]));
-  const settings: SettingExpectation[] = RUNTIME_SETTINGS.map((setting) => ({ path: setting.key.split('.'), value: setting.value, match: setting.match ?? 'equal' }));
-  return { harness: 'unified', cwd: workspace, tools, disabledTools: DISABLED_TOOLS, toolPolicies, settings };
+  const settings: SettingExpectation[] = runtimeSettings(agent).map((setting) => ({ path: setting.key.split('.'), value: setting.value, match: setting.match ?? 'equal' }));
+  return { harness: 'unified', agent, cwd: workspace, tools, disabledTools: DISABLED_TOOLS, toolPolicies, settings };
 }
 
 export function buildSessionConfig(input: SessionConfigInput): SessionConfigPlan {
@@ -150,8 +155,8 @@ export function buildSessionConfig(input: SessionConfigInput): SessionConfigPlan
     directories,
     agentConfig: { cwd: workspace, agent, enabledTools: [...tools], disabledTools: [...DISABLED_TOOLS], maxTurns: input.maxTurns },
     profile: { directory: profileDirectory, file: path.join(profileDirectory, `${agent}.toml`), document, content: stringify(document) },
-    environment: buildEnvironment(directories),
-    expectation: buildExpectation(workspace, tools, denylist)
+    environment: buildEnvironment(directories, agent),
+    expectation: buildExpectation(workspace, agent, tools, denylist)
   };
 }
 

@@ -15,6 +15,7 @@ export interface ToolPolicyExpectation {
 
 export interface ReadbackExpectation {
   harness: string;
+  agent: string;
   cwd: string;
   tools: readonly string[];
   disabledTools: readonly string[];
@@ -77,9 +78,13 @@ export function compareReadback(expected: ReadbackExpectation, observed: Readbac
   };
   const equal = (field: string, want: unknown, actual: unknown): void => expect(field, want, actual, isDeepStrictEqual(actual, want));
 
-  const { session } = observed.sessionStart.state;
+  const { state } = observed.sessionStart;
+  const { session } = state;
   equal('session.harness', expected.harness, session.harness);
   expect('session.cwd', expected.cwd, session.cwd, session.cwd !== null && path.resolve(session.cwd) === path.resolve(expected.cwd));
+  equal('state.activeCallbacks', [], state.activeCallbacks ?? undefined);
+  equal('state.childSessions', [], state.childSessions ?? undefined);
+  equal('state.backgroundProcesses', [], state.backgroundProcesses ?? undefined);
 
   const { runtime } = observed.runtime;
   const toolNames = runtime.tools.map((tool) => tool.name);
@@ -88,9 +93,11 @@ export function compareReadback(expected: ReadbackExpectation, observed: Readbac
   equal('runtime.hooksCount', 0, runtime.hooksCount);
   equal('runtime.issues', [], runtime.issues);
   equal('runtime.bypassToolPermissions', false, runtime.bypassToolPermissions);
+  equal('runtime.activeAgent.name', expected.agent, runtime.activeAgent?.name ?? undefined);
 
   const mcpSources = isRecord(runtime.mcp) ? runtime.mcp.sources : undefined;
   equal('runtime.mcp.sources', [], mcpSources);
+  equal('runtime.mcp.discoveryErrors', {}, isRecord(runtime.mcp) ? runtime.mcp.discoveryErrors : undefined);
 
   const connectors = isRecord(runtime.connectors) ? runtime.connectors : undefined;
   equal('runtime.connectors.connected', 0, connectors?.connected);
@@ -112,6 +119,8 @@ export function compareReadback(expected: ReadbackExpectation, observed: Readbac
     const entry = valueAt(config, ['tools', tool]);
     const prefix = `config.${describePath(['tools', tool])}`;
     equal(`${prefix}.permission`, policy.permission, isRecord(entry) ? entry.permission : undefined);
+    const allowlist = isRecord(entry) ? entry.allowlist : undefined;
+    expect(`${prefix}.allowlist`, [], allowlist, allowlist === undefined || isDeepStrictEqual(allowlist, []));
     equal(`${prefix}.denylist`, [...policy.denylist], isRecord(entry) ? entry.denylist : undefined);
   }
 

@@ -172,7 +172,9 @@ describe('child process environment additions', () => {
       VIBE_EXPERIMENTS__ENABLE: 'false',
       VIBE_SESSION_LOGGING__ENABLED: 'false',
       VIBE_SESSION_LOGGING__GENERATE_TITLES: 'false',
-      VIBE_BYPASS_TOOL_PERMISSIONS: 'false'
+      VIBE_BYPASS_TOOL_PERMISSIONS: 'false',
+      VIBE_DEFAULT_AGENT: 'supervisor-review',
+      VIBE_ENABLED_AGENTS: '["supervisor-review"]'
     });
   });
 
@@ -186,10 +188,14 @@ describe('child process environment additions', () => {
     expect(Object.values(plan.environment).every((value) => typeof value === 'string')).toBe(true);
   });
 
-  it('does not depend on the mode', () => {
+  it('differs between the modes only in the agent selection', () => {
     const review = buildSessionConfig({ mode: 'review', workspace, runDirectory, maxTurns: 5 });
     const edit = buildSessionConfig({ mode: 'edit', workspace, runDirectory, maxTurns: 5 });
-    expect(edit.environment).toEqual(review.environment);
+    const { VIBE_DEFAULT_AGENT: reviewDefault, VIBE_ENABLED_AGENTS: reviewEnabled, ...reviewRest } = review.environment;
+    const { VIBE_DEFAULT_AGENT: editDefault, VIBE_ENABLED_AGENTS: editEnabled, ...editRest } = edit.environment;
+    expect(editRest).toEqual(reviewRest);
+    expect([reviewDefault, reviewEnabled]).toEqual(['supervisor-review', '["supervisor-review"]']);
+    expect([editDefault, editEnabled]).toEqual(['supervisor-edit', '["supervisor-edit"]']);
   });
 });
 
@@ -204,6 +210,7 @@ describe('read-back expectation', () => {
   it('is derived from the same values the session is started with', () => {
     const plan = buildSessionConfig({ mode: 'edit', workspace, runDirectory, maxTurns: 5 });
     expect(plan.expectation.harness).toBe('unified');
+    expect(plan.expectation.agent).toBe(plan.agentConfig.agent);
     expect(plan.expectation.cwd).toBe(workspace);
     expect(plan.expectation.tools).toEqual(plan.agentConfig.enabledTools);
     expect(plan.expectation.disabledTools).toEqual(plan.agentConfig.disabledTools);
@@ -213,5 +220,7 @@ describe('read-back expectation', () => {
     expect(paths).toContain('enable_subagents');
     expect(paths).toContain('session_logging.enabled');
     expect(plan.expectation.settings.find((setting) => setting.path.join('.') === 'disabled_skills')).toEqual({ path: ['disabled_skills'], value: ['*'], match: 'includes' });
+    expect(plan.expectation.settings.find((setting) => setting.path.join('.') === 'default_agent')).toEqual({ path: ['default_agent'], value: 'supervisor-edit', match: 'equal' });
+    expect(plan.expectation.settings.find((setting) => setting.path.join('.') === 'enabled_agents')).toEqual({ path: ['enabled_agents'], value: ['supervisor-edit'], match: 'equal' });
   });
 });

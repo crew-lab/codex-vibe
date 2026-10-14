@@ -482,6 +482,9 @@ export interface SessionState {
   historyBeforeCursor: string | null;
   turns: Turn[];
   isQuiescent: boolean | null;
+  activeCallbacks: unknown[] | null;
+  childSessions: unknown[] | null;
+  backgroundProcesses: unknown[] | null;
 }
 
 const sessionStateSchema = z.object({
@@ -497,7 +500,10 @@ const sessionStateSchema = z.object({
   history: z.array(z.unknown()),
   historyBeforeCursor: nullableString,
   turns: z.array(turnSchema),
-  isQuiescent: z.boolean().nullish()
+  isQuiescent: z.boolean().nullish(),
+  activeCallbacks: z.array(z.unknown()).nullish(),
+  childSessions: z.array(z.unknown()).nullish(),
+  backgroundProcesses: z.array(z.unknown()).nullish()
 });
 
 function toSessionState(raw: z.output<typeof sessionStateSchema>, context: string): SessionState {
@@ -507,7 +513,10 @@ function toSessionState(raw: z.output<typeof sessionStateSchema>, context: strin
     history: raw.history.map((entry, index) => parseHistoryEntry(entry, `${context}.history[${index}]`)),
     historyBeforeCursor: raw.historyBeforeCursor,
     turns: raw.turns,
-    isQuiescent: raw.isQuiescent ?? null
+    isQuiescent: raw.isQuiescent ?? null,
+    activeCallbacks: raw.activeCallbacks ?? null,
+    childSessions: raw.childSessions ?? null,
+    backgroundProcesses: raw.backgroundProcesses ?? null
   };
 }
 
@@ -555,6 +564,7 @@ export interface RuntimeSnapshot {
   bypassToolPermissions: boolean;
   stats: AgentStats;
   activeModel: { alias: string | null; thinking: string | null } | null;
+  activeAgent: { name: string | null } | null;
 }
 
 export interface RuntimeReadResult {
@@ -571,6 +581,7 @@ const runtimeSchema = z.object({
   issues: z.array(z.unknown()),
   stats: statsSchema,
   bypassToolPermissions: z.boolean(),
+  activeAgent: z.object({ name: nullableString }).nullish(),
   config: z.object({
     activeModel: z.object({ alias: nullableString, thinking: nullableString }).nullish()
   }).nullish()
@@ -586,7 +597,8 @@ function toRuntimeSnapshot(raw: z.output<typeof runtimeSchema>): RuntimeSnapshot
     issues: raw.issues,
     bypassToolPermissions: raw.bypassToolPermissions,
     stats: raw.stats,
-    activeModel: raw.config?.activeModel ? { alias: raw.config.activeModel.alias, thinking: raw.config.activeModel.thinking } : null
+    activeModel: raw.config?.activeModel ? { alias: raw.config.activeModel.alias, thinking: raw.config.activeModel.thinking } : null,
+    activeAgent: raw.activeAgent ? { name: raw.activeAgent.name } : null
   };
 }
 
