@@ -3,7 +3,7 @@
   "files": [
     {
       "path": "RUNBOOK.md",
-      "sha256": "0bc1b23db6786ea49996b1adec5430ced5b2e339e51a084c0180f34a1f83af8a"
+      "sha256": "a45b36c9e810684493c5262bb34ba47a13ee75544d85419b7dbcb8f1d766e348"
     },
     {
       "path": "STATUS.md",
@@ -55,7 +55,7 @@
     },
     {
       "path": "native-readiness.json",
-      "sha256": "81eec17fb8203e068c4b03e9a9dcf474b0410c845813c65a341f0d428bdeb24b"
+      "sha256": "758636b66da14bf981e472b44c052b841cc89992fceb38e03aec129967b2c9fd"
     },
     {
       "path": "release-verification.json",

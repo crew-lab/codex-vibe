@@ -24,7 +24,7 @@ Export inventory SHA-256: `c5fc5234003a0b30cc36d77927e5df1e370e80ff0329ecefefdfd
 
 ## Commands and evidence
 
-Executed `python3 tmp/<site-project>-independent-export-review/inspect.py` from `<target-home>/src/github.com/crew-lab/codex-vibe`; that read-only inspector executes the following against the frozen candidate and stores exact arguments, exit codes, stdout and stderr in `evidence.json`:
+Executed `python3 tmp/<site-project>-independent-export-review/inspect.py` from `<supervisor-repository>`; that read-only inspector executes the following against the frozen candidate and stores exact arguments, exit codes, stdout and stderr in `evidence.json`:
 
 - `git rev-parse HEAD`, `git status --short` before and after
 - `node scripts/verify-release.mjs`

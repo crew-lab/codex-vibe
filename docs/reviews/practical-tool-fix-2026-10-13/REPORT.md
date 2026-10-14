@@ -18,11 +18,11 @@ Offline tests against pinned Vibe 2.26.1 proved actual local reads of ordinary a
 - Coordinator: [patch](candidate.patch) independently applied against the exact base, all ten changed files matched candidate bytes, and reversal restored a clean checkout. See [reversal evidence](reversal.json). Patch SHA256 `f638bea48dc93b90337f762924cddc166ecb757e2aa5240135e64fac0fe7cd76`.
 - Dependencies and lockfile are unchanged. No global configuration, allowlist, installed package, commit, push or deployment was changed.
 
-Candidate source: `<target-home>/src/github.com/crew-lab/codex-vibe/tmp/practical-tool-diagnosis`. Read the [worker report](practical-tool-access-2026-10-13.md) for limits and provenance. Apply the patch only to its reviewed base or reconcile it explicitly against a refreshed clean source; do not apply it wholesale to the older dirty primary checkout.
+Candidate source: `<supervisor-repository>/tmp/practical-tool-diagnosis`. Read the [worker report](practical-tool-access-2026-10-13.md) for limits and provenance. Apply the patch only to its reviewed base or reconcile it explicitly against a refreshed clean source; do not apply it wholesale to the older dirty primary checkout.
 
 ## <site-project> follow-up
 
-The previously interrupted independent final-export lane now PASSES for frozen candidate `28efb9d5d5ed3f811a63c365dbee469230dadf4e`. The reviewer verified source/preservation identities, all 320 export files, 36 localized routes, 30 sitemap URLs, ten city pages and stable quote-link compatibility. [Independent report and evidence](../<site-project>-release-gap-followup-2026-10-13/REPORT.md). Browser/build results remain attributed to the original coordinator; they were not independently replayed.
+The previously interrupted independent final-export lane now PASSES for frozen candidate `28efb9d5d5ed3f811a63c365dbee469230dadf4e`. The reviewer verified source/preservation identities, all 320 export files, 36 localized routes, 30 sitemap URLs, ten city pages and stable quote-link compatibility. [Independent report and evidence](../site-project-release-gap-followup-2026-10-13/REPORT.md). Browser/build results remain attributed to the original coordinator; they were not independently replayed.
 
 Privacy remains OPEN/UNAVAILABLE and release remains BLOCKED. Collector/submission interception, consent transitions with the loaded Google runtime, the fragment timing risk and modifier-click reproduction still need measurement-owner evidence. No observed leakage is claimed and no policy-dependent privacy change was made. The original closure is retained as a dated record; this report supplements its interrupted-export verdict.
 
