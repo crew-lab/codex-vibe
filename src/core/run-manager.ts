@@ -1203,6 +1203,7 @@ export class RunManager {
       if (!info.isFile()) throw asStorageError(Object.assign(new Error("Unsafe event log"), { code: info.isSymbolicLink() ? "ELOOP" : info.isDirectory() ? "EISDIR" : "ENOTSUP", path: eventsPath }), runtime.directory, { eventLog: true });
     } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") await this.atomicWriteText(eventsPath, ""); else throw error; }
     const artifacts: NonNullable<RunRecord["result"]>["artifacts"] = [];
+    let workerDiagnosticsOmitted = false;
     if (patchInfo) {
       artifacts.push(await describeArtifact("diff.patch", patchInfo.patchPath, "text/x-diff"));
       artifacts.push(await describeArtifact("diff.stat", patchInfo.statPath, "text/plain"));
@@ -1211,6 +1212,17 @@ export class RunManager {
     }
     artifacts.push(await describeArtifact("transcript.md", path.join(runtime.directory, "transcript.md"), "text/markdown"));
     if (!runtime.logUnavailable) artifacts.push(await describeArtifact("events.ndjson", path.join(runtime.directory, "events.ndjson"), "application/x-ndjson"));
+    const workerDiagnosticsPath = path.join(runtime.directory, "worker-diagnostics.json");
+    try {
+      const info = await lstat(workerDiagnosticsPath);
+      if (info.isSymbolicLink() || !info.isFile()) throw new Error("Unsafe worker diagnostics output");
+      const currentBytes = artifacts.reduce((sum, artifact) => sum + artifact.bytes, 0);
+      if (info.size <= 64 * 1024 && currentBytes + info.size <= runtime.record.limits.maxArtifactBytes) {
+        artifacts.push(await describeArtifact("worker-diagnostics.json", workerDiagnosticsPath, "application/json"));
+      } else workerDiagnosticsOmitted = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
     const artifactBytes = artifacts.reduce((sum, artifact) => sum + artifact.bytes, 0);
     if (artifactBytes > runtime.record.limits.maxArtifactBytes) throw codedError("VSUP_OUTPUT_LIMIT", "Run artifacts exceeded the configured byte limit.");
     const stopReason = runtime.record.result?.stopReason;
@@ -1219,6 +1231,7 @@ export class RunManager {
     const stopWarning = resultState === "completed" ? stopReasonWarning(stopReason) : undefined;
     const carriedWarnings = withoutStopReasonWarnings(runtime.record.result?.warnings ?? []);
     if (runtime.logUnavailable) carriedWarnings.push(`${UNREADABLE_LOG_WARNING} (${runtime.logUnavailable.reason})`);
+    if (workerDiagnosticsOmitted) carriedWarnings.push("Optional worker diagnostics exceeded the artifact size limit and were not included.");
     runtime.record.result = {
       ...(stopReason ? { stopReason } : {}),
       summary,

@@ -1,0 +1,8 @@
+{
+  "verdict": "PASS",
+  "freshExportMatches": true,
+  "workerPristine": true,
+  "patchBytes": 0,
+  "patchSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "sourceBase": "9e04d00353b368d84bfbd529d51333ef40ae2b83"
+}

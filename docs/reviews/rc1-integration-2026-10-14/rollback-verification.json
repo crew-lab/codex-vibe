@@ -1,0 +1,10 @@
+{
+  "verdict": "PASS",
+  "completeChangedFiles": 22,
+  "sourcePatchSha256": "26205df7419f5a3a426968204bb38cf1074546468503f87119807819ae7960d9",
+  "rollbackPatchSha256": "444a22f91c953e8f37aec6752b34bf53c628a219fa3cb80ad5d889e2a139a608",
+  "exactBeforeAfterVerified": true,
+  "restoredCleanBaseline": "7b30feaf60e7b6038e2bd80c14974d7ff270330e",
+  "proofCopy": "/private/tmp/codex-vibe-rc1-rollback-bal5wnqb",
+  "noCommitPushPublish": true
+}

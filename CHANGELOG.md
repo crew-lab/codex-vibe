@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1-rc.1 — effective tool access checks and bounded diagnostics
+
+This private candidate adds exact effective-tool-inventory validation and optional, redacted local invocation diagnostics for the pinned Vibe runtime. The implementation differs from published 1.0.0; its historical native and hosted evidence does not transfer. No hosted inference was run for this candidate. See `docs/acceptance.json` for current candidate gates. Stable 1.0.1 still requires clean-account installation and all candidate-specific acceptance evidence.
+
+- Missing required tools or unexpected effective tools fail closed before they are exposed to the model.
+- Optional diagnostics record the sanitized tool inventory and bounded invocation outcomes, with a serialized final flush. They cannot observe permission requests rejected before tool invocation.
+- Offline tests exercise the installed Vibe tools against ordinary and hidden YAML paths; this does not certify hosted inference or authenticated hosted tool access.
+
 ## 1.0.0 — first stable release
 
 Codex delegates one bounded review or one isolated edit at a time to Mistral Vibe 2.26.1 through five MCP tools. The runtime source is identical to 0.9.0-rc.28 (`bef0985`), which was accepted on the target machine on 2026-10-13 with native readiness, five hosted runs with readiness receipts and provider authentication, and an official-client active disconnect on 2026-10-13. The exact 1.0.0 archive was confirmed on 2026-10-13 with native readiness, one review and one independently verified edit; both runs were closed. The dirty edit export was retained as required by policy.
