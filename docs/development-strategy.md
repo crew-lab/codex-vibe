@@ -10,6 +10,7 @@ vibe-supervisor is one thing: a local MCP server that lets Codex delegate one bo
 - **One Vibe version.** Each release pins exactly one Vibe release. A new Vibe release is a new supervisor candidate.
 - **One supported line.** Only the latest 2.x release is supported. 1.0.0 was the last 1.x release; 1.0.1 was never released and there is no 1.x maintenance line.
 - **Enforcement the supervisor owns.** The client decides every approval, reads the effective configuration back before the first turn, and fails closed on anything it cannot account for. It never imports or patches Vibe.
+- **Client-agnostic by protocol, verified per client.** Nothing on the MCP side is written for Codex; Codex is simply the only client with recorded evidence. Another client earns a support claim through its own gates on the target (readiness, one hosted review and one edit, a disconnect), never through runtime code written for it before that evidence exists. Google Antigravity is the candidate (the unshipped [Antigravity research](../research/antigravity-2026-10-14.md)); it is a client only, never a worker, because no surface of it offers supervisor-owned approvals, a configuration read-back or an engine that can be pinned.
 
 How the project is positioned and promoted, and what is said publicly, is in the unshipped [marketing strategy](../marketing/strategy.md).
 
@@ -34,6 +35,8 @@ How the project is positioned and promoted, and what is said publicly, is in the
 - **Search for reviews:** a supervisor-owned, read-only search tool exposed to Vibe over MCP. Only after real runs confirm how MCP tools appear on the server.
 - **Ceilings in the run record:** `limits.max_tokens` and `limits.max_cost_usd` saved per run.
 - **Fixes from target evidence:** unknown history entry kinds, the effect of thinking off, the experiments fetch, nested `run_typescript` shapes.
+- **Antigravity as a verified MCP client (the 2.1 candidate):** an `mcp_config.json` install note, client-neutral skill wording, and four client gates recorded on the target with the Antigravity version (readiness and how the five tools appear, since its CLI lazy-loads MCP tools behind a `call_mcp_tool` wrapper; one hosted review and edit; a client disconnect; approval latency against the 10-minute receipt). No runtime change unless the readiness evidence shows the wrapper blocks the skill flow. Needs the owner's reading that a second verified client is documentation plus evidence rather than the platform scope AGENTS.md forbids, and an Antigravity account on the target.
+- **Antigravity as a worker: no, until its triggers.** Re-evaluated only when Google documents ACP permission semantics for every tool kind and per-process configuration isolation, publishes checksums or source for its ACP server, and names API-key authentication as the programmatic route; then it is an owner decision against the "no ACP" line and a new ADR, with its own pin model. Until then the supervisor drives Vibe only.
 
 ## Lessons from building 2.0
 
