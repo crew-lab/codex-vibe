@@ -12,4 +12,4 @@ No exact Node 20.19.0 binary was available when this archive was frozen. Its gat
 
 The original ten-file runtime patch was re-diffed after preparing the release metadata and is byte-for-byte identical to the frozen review patch (SHA-256 `f638bea48dc93b90337f762924cddc166ecb757e2aa5240135e64fac0fe7cd76`). The package archive remains the checksum-frozen artifact listed below; this accompanying report and manifest are local review records created after packaging.
 
-See [machine-readable candidate acceptance](../../acceptance.json) and the [artifact manifest](practical-tool-access-1.0.1-rc.1-manifest.json). The full package log is `/private/tmp/practical-tool-1.0.1-rc1-package-frozen.log`.
+See [machine-readable candidate acceptance](../acceptance.json) and the [artifact manifest](practical-tool-access-1.0.1-rc.1-manifest.json). The full package log is `/private/tmp/practical-tool-1.0.1-rc1-package-frozen.log`.
