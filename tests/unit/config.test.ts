@@ -58,7 +58,7 @@ describe("supervisor config", () => {
   });
 
   it("rejects removed backend and scheduling keys", () => {
-    for (const value of ["acp", "app-server", "programmatic"]) expect(() => validateConfig({ ...base, backend: value }), value).toThrow(/backend/);
+    for (const value of ["acp", "app-server"]) expect(() => validateConfig({ ...base, backend: value }), value).toThrow(/backend/);
     expect(() => validateConfig({ ...base, max_concurrent_runs: 1 })).toThrow(/max_concurrent_runs/);
     expect(() => validateConfig({ ...base, worker_idle_ttl_seconds: 1 })).toThrow(/worker_idle_ttl_seconds/);
     expect(() => validateConfig({ ...base, paths: { ...manifestPaths, vibe_acp: "vibe-acp" } })).toThrow(/vibe_acp/);
@@ -136,7 +136,7 @@ describe("path contracts", () => {
 describe("configuration selection and provenance", () => {
   it("uses explicit config before the selected home and never falls back when it is missing", async () => {
     const root = await mkdtemp(join(canonicalTmp, "vsup-config-select-")); roots.push(root);
-    const home = join(root, "legacy"); const selected = join(root, "artifact", "config.toml");
+    const home = join(root, "obsolete"); const selected = join(root, "artifact", "config.toml");
     await import("node:fs/promises").then(({ mkdir }) => mkdir(home, { recursive: true }));
     await writeFile(join(home, "config.toml"), 'version = 1\nbackend = "acp"\n');
     expect(resolveConfigSelection(selected, { VIBE_SUPERVISOR_HOME: home }).configPath).toBe(selected);
@@ -169,7 +169,7 @@ describe("app-server keys", () => {
   });
 
   it("no longer accepts a backend key in any form", () => {
-    for (const value of ["acp", "app-server", "programmatic", "", 1, null]) expect(() => validateConfig({ version: 1, backend: value, paths: appServer.paths }), String(value)).toThrow(/backend/);
+    for (const value of ["acp", "app-server", "", 1, null]) expect(() => validateConfig({ version: 1, backend: value, paths: appServer.paths }), String(value)).toThrow(/backend/);
   });
 
   it("maps paths.app_server and validates it like the other executable paths", () => {

@@ -31,7 +31,6 @@ const DECISION_TYPES = ['approve', 'approve_for_session', 'approve_permanently',
 const APPROVING = new Set(['approve', 'approve_for_session', 'approve_permanently']);
 const CALLBACK_KINDS = ['approval', 'user_input', 'connector_auth'];
 const CLIENT_TOOLS = ['filesystem/read', 'filesystem/write', 'terminal'];
-const ENTRYPOINTS = ['cli', 'acp', 'desktop', 'programmatic', 'unknown'];
 const TURN_STATUSES = ['in_progress', 'completed', 'failed', 'interrupted'];
 const STOP_REASONS = ['limit', 'length'];
 const APPROVAL_SOURCES = ['config', 'smart', 'user', 'bypass', 'never'];
@@ -329,7 +328,7 @@ const sessionIdOnly = V.obj({ sessionId: V.str() }, ['sessionId']);
 const schemas = {
   initialize: V.obj({
     clientInfo: V.obj({
-      name: V.str(), version: V.str(), title: V.nullable(V.str()), entrypoint: V.oneOf(ENTRYPOINTS), terminalEmulator: V.str()
+      name: V.str(), version: V.str(), title: V.nullable(V.str()), entrypoint: V.str(), terminalEmulator: V.str()
     }, ['name', 'version']),
     capabilities: V.obj({
       callbackKinds: V.arr(V.oneOf(CALLBACK_KINDS)), clientTools: V.arr(V.oneOf(CLIENT_TOOLS)), disabledNotifications: V.arr(V.str())

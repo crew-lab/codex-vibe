@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { AppServerBackend, type AppServerBackendOptions, type AppServerTiming } from '../../src/backends/app-server.js';
 import { ResolvedCredential, type CredentialResolution } from '../../src/backends/app-server/credentials.js';
 import { PinCheckError } from '../../src/backends/app-server/pin.js';
+import { CLIENT_ENTRYPOINT } from '../../src/backends/app-server/protocol.js';
 import { PROFILE_TOOLS, TOOL_PERMISSION, workspaceDenylist } from '../../src/backends/app-server/session-config.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunLimits, RunMode, RunState, StartRunInput, SupervisorError } from '../../src/contracts.js';
@@ -239,7 +240,7 @@ describe('app-server backend: clean runs', () => {
       'initialize', 'initialized', 'session/start', 'session/ready/wait', 'runtime/read', 'config/effective/read', 'config/read',
       'config/model/write', 'runtime/read', 'config/effective/read', 'turn/start', 'runtime/read', 'session/history/list'
     ]);
-    expect(harness.frames('initialize')[0]?.params).toMatchObject({ clientInfo: { name: 'vibe-supervisor', entrypoint: 'programmatic' }, capabilities: { callbackKinds: ['approval'] } });
+    expect(harness.frames('initialize')[0]?.params).toMatchObject({ clientInfo: { name: 'vibe-supervisor', entrypoint: CLIENT_ENTRYPOINT }, capabilities: { callbackKinds: ['approval'] } });
     expect(harness.frames('config/model/write')[0]?.params).toEqual({ sessionId: 'fake-session-0001', reasoningEffort: 'off' });
     const turn = harness.frames('turn/start')[0]?.params as Json;
     expect(turn.message).toEqual([{ type: 'text', text: 'Review the repository.' }]);

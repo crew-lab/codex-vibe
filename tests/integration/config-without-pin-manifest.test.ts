@@ -118,7 +118,7 @@ describe('a configuration without paths.vibe_pin_manifest does not block its own
       stderr: 'pipe',
       env: box.env as Record<string, string>
     });
-    const client = new Client({ name: 'no-manifest-test', version: '1.0.0' });
+    const client = new Client({ name: 'no-manifest-test', version: '0.0.1' });
     clients.push(client);
     await client.connect(transport);
 

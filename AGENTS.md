@@ -4,9 +4,9 @@ These instructions apply to this repository and its descendants unless a more sp
 
 ## Project and orientation
 
-This is codex-vibe, a local MCP supervisor for one-shot Mistral Vibe reviews and isolated edits. The current release is `vibe-supervisor` `2.0.0` (the previously published release is `1.0.0`), ESM, npm-private and distributed through GitHub Releases. 2.0 has one engine: a client of Vibe's `vibe-app-server` JSON-RPC protocol, one process per run. The legacy `--legacy-harness` path, the Python launcher and the `backend` config key are gone; 1.0.0 is the last 1.x release and has no maintenance line. Preserve the existing MIT license and copyright notice.
+This is codex-vibe, a local MCP supervisor for one-shot Mistral Vibe reviews and isolated edits. The current release is `vibe-supervisor` `2.0.1`, ESM, npm-private and distributed through GitHub Releases. There is one engine: a client of Vibe's `vibe-app-server` JSON-RPC protocol, one process per run. There is no second backend, backend selector or `backend` config key, and only the latest release is supported. Preserve the existing MIT license and copyright notice.
 
-Read [README.md](README.md) for usage, [Handoff.md](Handoff.md) for scope and remaining work, [docs/reference.md](docs/reference.md) for tools/config/CLI, and [docs/functionality.md](docs/functionality.md) for behavior. Consult [docs/security.md](docs/security.md), [docs/compatibility.md](docs/compatibility.md), and the ADRs (0004 is the app-server client) before changing those boundaries. The design note and the protocol audits behind the engine are in `docs/history/`. `docs/errors.md` is generated: run `npm run docs:errors` after changing a remedy. Dated evidence lives in `docs/history/` and is not shipped.
+Read [README.md](README.md) for usage, [Handoff.md](Handoff.md) for scope and remaining work, [docs/reference.md](docs/reference.md) for tools/config/CLI, and [docs/functionality.md](docs/functionality.md) for behavior. Consult [docs/security.md](docs/security.md), [docs/compatibility.md](docs/compatibility.md) (its source basis records the Vibe tag and file hashes the wire facts were read from), [docs/target-acceptance.md](docs/target-acceptance.md) (the procedure that proves a build on the machine that runs Vibe), and the ADRs (0004 is the app-server client) before changing those boundaries. `docs/errors.md` is generated: run `npm run docs:errors` after changing a remedy.
 
 The user's implementation preference is GPT-6 Luna agents. When delegating implementation, use that model where available, assign clear file ownership, and tell workers they share the codebase and must preserve others' changes. Do not create user-owned chats for internal implementation subtasks. If that model is unavailable, report the limitation rather than silently claiming to use it.
 
@@ -44,3 +44,21 @@ VIBE_SUPERVISOR_TEST_NPM_CACHE=/absolute/path/to/populated/npm-cache npm run pac
 For documentation-only changes, verify local links and `git diff --check`; a full test rerun is unnecessary without a behavioral change. Packaging should be regenerated when delivering an updated tarball.
 
 Report checks actually performed. Fake Vibe fixtures and initialization-only probes do not prove hosted behavior. The 2.0 gates in [docs/compatibility.md](docs/compatibility.md#unverified-gates) stay unverified until their evidence is recorded there. Handoff.md holds the working rules for where evidence may come from.
+
+### Recording target evidence
+
+The repository is public. Evidence recorded on the target machine (outputs of the [target acceptance procedure](docs/target-acceptance.md), reports, manifests) never contains a machine path, a credential, a readiness receipt, reasoning or private session history. Replace these before anything is committed, longest prefix first, and keep the exact bytes of any file whose hash is recorded elsewhere:
+
+| Original | Placeholder |
+| --- | --- |
+| Supervisor private home directory | `<private-supervisor-home>` |
+| Vibe uv tool environment | `<vibe-tool-env>` |
+| Node version manager home | `<nvm-home>` |
+| Supervisor repository checkout | `<supervisor-repository>` |
+| Site project repository checkout | `<site-project-repository>` |
+| Any other path under the original home directory | `<target-home>/...` |
+| Private project name, any letter case | `<site-project>` |
+| Private project domain | `<site-project-domain>` |
+| Private project root placeholder used in a runbook | `<site-project-root>` |
+
+Run `grep -rn '/Users/\|/home/' <evidence folder>` before committing; raw-byte files that still contain a path or a name are listed with the reason beside the evidence.

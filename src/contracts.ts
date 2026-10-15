@@ -89,7 +89,7 @@ export type SupervisorErrorCode =
   | "VSUP_OWNER_LOCKED" | "VSUP_PREPARATION_TIMEOUT";
 
 export interface RunRecord {
-  /** Release that created the run; absent on legacy records. */
+  /** Release that created the run; absent on records written without it. */
   supervisorVersion?: string;
   schemaVersion: typeof SCHEMA_VERSION;
   runId: string;
