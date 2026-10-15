@@ -1,99 +1,66 @@
-# Reliable workflow candidate — 15 October 2026
-
-Implementation is isolated on `codex/workflow-acceptance-reporting`, based on the frozen rc.2 bundled-skills candidate. rc.3 implements deterministic acceptance and standardized export; rc.4 adds runtime observations, preparation kits and conformance-aware readiness; rc.5 adds owned offline validation copies and explicit coordinator/fallback guidance. The five-tool, detached-worktree, no automatic integration, no shell/network worker boundaries remain.
-
-Use [acceptance/reporting](docs/workflow-acceptance.md), [preparation](docs/preparation.md) and [validation workspace](docs/validation-workspace.md) procedures. Milestone packages and source snapshots are retained separately under local `output/workflow-2026-10-15/`. Consult the delivery report for checks actually run; earlier checkpoints below are historical. No new hosted inference, commits, pushes, publication or deployment are authorized by these notes. Hosted acceptance, exact Node floor, fresh-account/Intel checks and native reconnection remain separate evidence gates.
-
-# Bundled-skills candidate — 15 October 2026
-
-The owner explicitly permits Vibe's own bundled skills. Local 2.0.0-rc.2 accepts only the pinned 2.26.1 builtin plugin catalogue (ADR 0006), while keeping user/project/registry skills disabled and the tool/path/approval rules unchanged. rc.1 fixed nullable provenance and remote startup fetches but failed its target check solely on runtime.skills. Preserve that evidence. rc.2 has no target acceptance yet; no hosted task is authorized by documentation alone. The owner's implementation request includes routine task-scoped preparation, without repeated approvals for each local prerequisite.
-
-# Target conformance repair candidate — 15 October 2026
-
-Local `2.0.0-rc.1` repairs the observed nullable config/read contract, owns a loopback managed-config endpoint (ADR 0005), and corrects the network-control/verdict semantics. The installed 2.0.0 archive remains frozen. This candidate has no installed-Vibe, native, hosted, disconnect, fresh-account or exact Node-floor evidence. Keep PR implementation blocked until applicable target checks pass. Earlier checkpoints below are history for this repair.
-
 # Current handoff
 
-Updated 2026-10-14. Status only: what the release is, what is done, what remains and who does it, what is open, and where the records are. The picture, the plan, the lessons and the rules are in the [development strategy](docs/development-strategy.md); the boundaries are in [AGENTS.md](AGENTS.md).
+Updated 15 October 2026. This is the current status; the [development plan](planning/development-plan.md) owns remaining work and the [strategy](docs/development-strategy.md) owns enduring rules. Earlier stacked checkpoints are preserved in Git history, including commit `91afad4`.
 
-## Release identity
+## Repository and release state
 
-- **Candidate:** `vibe-supervisor` 2.0.0 on branch `claude/app-server-design` at `e88c2f0`; version 2.0.0 in `package.json`, `package-lock.json` and `.codex-plugin/plugin.json`; Vibe pinned to 2.26.1 (`src/backends/app-server/supported-vibe.ts`). One engine, a client of `vibe-app-server`; the legacy harness path, the Python launcher, the `backend` key and the programmatic backend are removed. Exercised against the scripted fake only; nothing has run against a real Vibe, and every target gate in `docs/acceptance.json` is open.
-- **Main** is at `d9d9dae`, which the branch does not contain. A merge conflicts in `Handoff.md` only; the branch version wins.
-- **Owner decisions on record (2026-10-14):** 1.0.1 is skipped; 2.0.0 is the next release and the stable major version; 2.0.1 drops every other version and removes the development history; the push token's `workflow` scope is skipped, so verification is local; the open 2.0.0 decisions are settled as listed below; Antigravity is a client candidate only, never a worker; the bounded workspace file listing in the prompt is in.
-- **Published:** 1.0.0, the last 1.x release with no maintenance line ([GitHub release](https://github.com/crew-lab/codex-vibe/releases/tag/v1.0.0), archive SHA256 `4e91e90bb7cb48c4411e1dc02820e91abddd690fc430f15a65ad6a9f3bd1c610`, source `f0f317e10d5d021f171ed38f5a85bb8e2354f12d`). The 1.0.1 candidates (rc.1, rc.2) were never released; their records stay in `docs/acceptance.json` and `docs/reviews/` until 2.0.1 removes them.
-
-## Done
-
-| What | Commits |
+| Item | Verified state |
 |---|---|
-| Design note and ADR 0004; design cold review applied; wire facts closed from the v2.26.1 source | `fa74147`, `c3da259`, `1eea01b` |
-| Scripted fake `vibe-app-server` with scenarios and tests | `bb2ba78` |
-| Transport, protocol, pin, credentials, reaper; session configuration, read-back, approvals, event validation, usage and outcome; the backend against the fake; wiring, config keys, restart cleanup, `doctor`, `pin-manifest` | `d4ae9c4`, `9a2dee3`, `dddf42e`, `437fa3b` |
-| Documentation for the engine (reference, functionality, security, compatibility, acceptance gates, ADR statuses); legacy engine removed | `170a8b8`, `6430537` |
-| Read-back of the active agent, default and enabled agents, MCP discovery errors and an idle session at start | `3b93d4d` |
-| Target kit: the brief and the no-inference conformance check (`scripts/v2-conformance-check.mjs`), with a non-key-shaped fake credential in its test | `0573178`, `24ed294` |
-| Ports from `codex/unified-harness-v2`: handoff re-validation with usage continuity, effect-to-callback fingerprints; the review file listing | `2006e98` |
-| Doc gaps from the verification pass: no 1.x maintenance line, read-only reviews, local verification, every diagnostic reason, no shipped doc linking into history | `3655cff` |
-| Decisions recorded: the 2.0 path, 1.0.1 skipped, the settled 2.0.0 decisions, the skipped `workflow` scope | `f836351`, `eafb32d`, `fc05bbf`, `0b4a994` |
-| Cold-review fixes: ten of eleven findings fixed with regression tests; the pin's reach stays the documented limit (the list is in the [strategy](docs/development-strategy.md#where-200-stands)) | `4716747` |
-| Release wording, the changelog's 2.0.0 entry, version 2.0.0; `verify:release` on exactly Node 20.19.0 (83 files, 1244 tests) recorded as gate `node-floor-20.19.0`, `PASSED_LOCALLY` | `e486030` |
-| Development strategy, marketing strategy, the 2.0 article draft with editor notes, the Antigravity research (all unshipped except the strategy under `docs/`) | `21c3e41`, `c57bf46`, `2a3198a`, `b3a8278`, `e88c2f0` |
+| Workflow implementation | `91afad4a9b6c598d2486c5d22e902f32972e4cac`, pushed on `codex/workflow-acceptance-reporting`; package identity `2.0.0-rc.5`, Vibe pin `2.26.1` |
+| Main | Fetched at `881464cf4a86a030775a47104171853f9aecd3df`; package version `2.0.1`. It is 32 commits beyond the workflow base `2ae8e86`. Workflow changes have not been integrated into main. |
+| Published release | GitHub metadata checked today: `v1.0.0` is published; `v2.0.0` is a draft. Main's source version does not establish a published release. |
+| Selected desktop installation | rc.2 was retained during this session. rc.5 was installed only in a disposable prefix; the intended desktop connection was not switched or verified on rc.5. Recheck live state before another task. |
+| Primary checkout | Contains unrelated staged and unstaged work. It was preserved; implementation and documentation work use the isolated checkout. |
 
-**Settled 2.0.0 decisions** (delegated to Claude by the owner, 2026-10-14; each keeps what is built and tested):
-- Error codes: `invalid_api_key` → `VSUP_AUTH_REQUIRED`; `invalid_model` → `VSUP_BACKEND_ERROR` classified as configuration; `context_too_long`, `response_too_long` and a `length` stop → `VSUP_OUTPUT_LIMIT`; `rate_limit` → `VSUP_RATE_LIMITED`.
-- Pin reach for 2.0.0: the installed Vibe package's `RECORD` files only, against the manifest generated on the target; dependencies, `.pth`, the interpreter and `__pycache__` are documented as not covered. 2.0.1 adds a shipped manifest derived from the published wheel.
-- Off-profile calls: a call Vibe or the handler denies is recorded and the run continues; a call that runs without the handler's approval ends the run.
-- Refusal: `completed`, with a refusal warning.
-- Design choices: the Node reaper, the Keychain lookup in Node and the per-candidate manifest stay.
-- Readiness checks that `vibe-app-server` exists, not the full pin; the full pin runs at each run start and in `doctor`.
-- Budgets: `limits.max_tokens` and `limits.max_cost_usd` stay optional and unset by default.
+Do not delete the workflow branch under the old main handoff's statement that every branch is merged. Recheck branch ancestry before any cleanup. Do not retag or replace a frozen artifact.
 
-## Remaining
+## Completed workflow work
 
-| # | Step | Who | Needs |
-|---|---|---|---|
-| 1 | Merge `claude/app-server-design` to main (take the branch `Handoff.md`), `make push` | Agent merges; owner authorizes the push | Nothing else |
-| 2 | `VIBE_SUPERVISOR_TEST_NPM_CACHE=<populated cache> npm run package:rc`; release notes from the changelog | Agent; owner gives the cache path | Step 1 |
-| 3 | Target sitting per the [brief](docs/history/v2-target-brief.md), stopping at the first failure: build and install next to the current prefix; `pin-manifest` and `doctor`; the conformance check (`--observe-network`); native readiness; one hosted review (with the nested-write probe and the reasoning watcher) and one hosted edit, verified independently; one MCP-client disconnect (a third hosted run) | Target agent runs; owner gives five separate authorizations and the allowance of three hosted runs | Step 2 |
-| 4 | Clean-account installation on the frozen archive (gate `clean-account-install`) | Owner | Step 2 |
-| 5 | Record the evidence: gates to `VERIFIED` in `docs/acceptance.json` with their rows in `docs/compatibility.md`, `npm run acceptance`, placeholders from [REDACTION.md](docs/reviews/REDACTION.md); frozen archive SHA-256 | Agent | Steps 3, 4 |
-| 6 | Tag and publish 2.0.0 with checksums and the acceptance record | Owner | Step 5; nothing else is retagged or replaced |
-| 7 | 2.0.1 on a branch from main, in the strategy's [order](docs/development-strategy.md#releases): move the dependencies out of `docs/history/`, remove the history and every other version, rename the `v1-*` scripts and tests | Agent | Step 6 |
-| 8 | Delete the stale remote branches (list below); confirm `claude/v1.0.0` first, since its tip (`90ded78`) is two commits ahead of the `v1.0.0` tag; keep `codex/unified-harness-v2` until its remaining ideas are ported | Owner | Any time; `codex/unified-harness-v2` after 2.0.1 |
-| 9 | Decide the repository rename (`codex-vibe` → `vibe-supervisor`) and read the Mistral and OpenAI brand pages | Owner | Before the article goes out |
-| 10 | Read the 2.0 article draft (`marketing/article/devto-2.0.md`) with its [editor notes](marketing/article/editor-notes.md); publish after 2.0.0 with the AI-Assisted label and the `[UPDATE AT PUBLISH]` markers filled, in the marketing strategy's [order](marketing/strategy.md#6-next-actions-in-order). The 1.0 draft in `docs/history/article/` leaves with 2.0.1 | Owner reads and publishes; agent fills the markers from the evidence | Step 6 |
-| 11 | 2.1: Antigravity as a verified MCP client (docs and four target gates) | Agent docs; owner decides the scope reading, provides the account and runs the sitting | 2.0.1 tagged |
+| Enhancement | Delivered behavior |
+|---|---|
+| Deterministic acceptance | Frozen path/text/hash contract; check committed base plus exact exported patch; bounded saved inputs; execution, verification and append-only coordinator assessment are distinct. |
+| Standard reporting | `runs verify` / `runs export`; sanitized diagnostics and hashes; optional exact patch and projected events; no raw transcript or private receipt export. |
+| Model/usage observations | Runtime-reported model name/alias/thinking and prices at startup/handoffs; prompt/completion/cache/model-call metrics, estimated cost provenance and known phase durations. Unavailable identities and timings remain unknown. |
+| Matched preparation | Separate candidate kit, one-shot fake-key/no-inference check, private evidence; new checks invalidate older PASS before launch. |
+| Readiness | Workspace eligibility, candidate identity, conformance state and expected-candidate drift are separate; matching preparation PASS gates ordinary dispatch. |
+| Validation copies | Independent baseline/candidate Git copies, immutable input hashes, pinned offline dependency preparation without lifecycle scripts, owned manifest and conservative cleanup. |
+| Coordinator/fallback | Main chat coordinates; Vibe implements; Luna/high is fallback only after verified artifact rejection. Preserve the original Vibe output, corrections, budgets and attribution. |
 
-**Stale remote branches.** Merged into main: `claude/v1.0.0-bump`, `claude/v1.0.1-docs`, `claude/v1.0.1-rc.2`, `claude/v1.0.1-unblock` and eleven `codex/*` branches (`connection-readiness-handoff`, `devto-development-article`, `lifecycle-triage`, `preparation-diagnostics`, `rc21-multichat-hotfix`, `rc23-reconnect-hotfix`, `rc7-testing-fixes`, `rc8-stall-diagnostics`, `turn-limit-diagnostics`, `v1-release-confirmation`, `v1-stable-strategy`). Superseded and unmerged: `codex/project-agents-isolation`, `codex/rc1-runtime-consolidation`, `codex/rc28-target-evidence`, `codex/skill-cleanup-update`, `claude/session-pruning`, `claude/v1.0.0`.
+Task-scoped preparation is already covered by the owner's Vibe implementation request: required candidate installation/switching, no-inference checks and only the named repository root, preserving settings and rollback. Do not repeat separate-approval gates for those steps. Additional hosted starts, broader roots, publication, deployment and unrelated global changes need their own authorization. Vibe's exact pinned bundled catalogue is permitted; user/project/registry skills remain disabled.
 
-**The skipped `workflow` scope.** Until it is added, no workflow file can be pushed, so `claude/ci-checks` (`8904c13`) and `claude/release-workflow` stay local and the 2.0 line has no CI. To unblock: at https://github.com/settings/tokens give the push token the `workflow` scope (fine-grained: "Workflows: Read and write" on `crew-lab/codex-vibe`), update the Keychain entry `crew-lab-codex-vibe-github-token` if the value changed, then push `claude/ci-checks` rebased onto the 2.0 line and watch its first run.
+## Evidence and limits
+
+The [version-bound evidence packet](docs/reviews/workflow-2026-10-15/README.md) records:
+
+- rc.3: 1,256 tests; rc.4: 1,258; rc.5: 1,260 across 87 files. Release verification and offline installed-package smoke passed for each.
+- rc.5 actual installed Vibe 2.26.1 conformance passed once with a fixed fake key, no inference and no real credentials. Subject proxy requests were absent and the control was observed; experiments-specific attribution remains unverified.
+- rc.5 official-SDK stdio readiness passed and rejected the wrong expected-candidate hash. This is distinct from native desktop readiness.
+- The real npm dependency-free offline fixture passed with a deliberately failing lifecycle script suppressed. A populated pnpm dependency installation has not been demonstrated.
+- The exported source patch reconstructed 542 source files byte-for-byte.
+
+Frozen rc.5 archive SHA-256: `d1fd22ec04e50048c052cdf013b4d235b525dffc2efb11596dd29f8253003f6a`.
+Installed distribution identity: `a3600f7632ea42a221d342734dd1b6cb17deaaf072211693a728e31c0437b053`.
+These identify different things. Local packages/logs/snapshots are under `output/workflow-2026-10-15/`; the source-only evidence packet is committed, sanitized and excluded from the npm package.
+
+Exact Node floor, native rc.5 desktop readiness, new hosted fixture/permission/thinking/nested-tool tests, hosted disconnect/soak, fresh-account installation and additional platforms remain open for rc.5. Earlier rc.2 Crew Bravo work and main's earlier floor test do not close those gates.
+
+## Next steps
+
+1. Reconcile the workflow implementation with current main in an isolated integration checkout. Preserve main's neutral script names, history cleanup, packaging and test fixes; resolve candidate naming and guard tests. Review the complete diff, then verify and freeze the integrated source as a new artifact. rc.5's receipt cannot certify it.
+2. Validate the populated pnpm profile and representative project dependencies, then exercise the exact Node floor on the selected final candidate.
+3. Select/install that exact candidate with rollback, run its matched preparation kit and verify the intended desktop connection. A hosted sitting follows only with explicit task limits and allowance; use deterministic acceptance and standardized reporting.
+4. Complete fresh-account and applicable client/platform gates before stable promotion. Record evidence against the exact frozen archive; publish only under the owner's release authorization.
+
+The [plan](planning/development-plan.md) carries dependencies, acceptance criteria, future product work, outreach and the separate Crew Bravo consent UX follow-up. No new hosted run, merge into main, release publication, deployment or branch deletion is implied by this status update.
 
 ## Open questions
 
-**Only the target can answer** (each fails closed; the consequences are in the [strategy](docs/development-strategy.md#verification-model), and the brief records which way each goes): whether a callback's `relatedEntryId` is filled at the entry or only in `detail`; whether handler-approved effects carry `approvalType` `ask` and `approvalSource` `user`; whether `agentConfig.maxTurns` is enforced; how long Vibe keeps a callback open; whether a large legitimate `write_file` fits the 8 MiB line cap; whether thinking off stops reasoning generation; whether `experiments.enable = false` stops the experiments request; what the real server leaves in `tmp` after stdin EOF; which history entry kinds and notification methods a real run produces.
-
-**For the owner:** whether a second verified MCP client (Antigravity) is documentation plus evidence or the platform scope AGENTS.md forbids (the strategy recommends the former; 2.1 does not start without it); the repository rename; whether to post the Mistral Discussion with the protocol questions (catalogue narrowing, a search builtin, omitting reasoning, honouring budgets, a protocol version, the stable callback name), whose answers would remove 2.0.1 work.
-
-**Known to be untouched by this candidate:** `.codex-plugin/plugin.json` is an unverified scaffold outside the npm package; Linux and Windows code paths exist without a support claim; `docs/development-strategy.md` ships inside `docs/` while pointing at unshipped files (`Handoff.md`, `marketing/`, `research/`), which 2.0.1 should settle by excluding it from `files` or moving it.
-
-## Pointers
-
-Shipped: [functionality](docs/functionality.md), [reference](docs/reference.md), [security](docs/security.md), [compatibility](docs/compatibility.md) (gates and diagnostic reasons), [errors](docs/errors.md) (generated), `docs/acceptance.json` (machine-readable gates), [ADR 0004](docs/adr/0004-app-server-client.md), the coordinator skill `skills/vibe-supervisor`.
-
-Source repository only, in [docs/history/](docs/history/): the [2.0 path](docs/history/v2-path-2026-10-14.md), the [design note](docs/history/app-server-client-design.md), the [protocol audit](docs/history/app-server-protocol-audit-2026-10-14.md) and the [source answers](docs/history/app-server-source-answers-2026-10-14.md) with their file hashes, the [target brief](docs/history/v2-target-brief.md), the [disconnect brief](docs/history/case7-disconnect-brief.md), the [usefulness log](docs/history/usefulness-log.md), the [outreach drafts](docs/history/outreach-drafts.md) and the [1.0 article](docs/history/article/draft-1.0.md). Target-machine evidence is in [docs/reviews/](docs/reviews/). Unshipped strategy material: [marketing/strategy.md](marketing/strategy.md), [marketing/article/](marketing/article/editor-notes.md), [research/antigravity-2026-10-14.md](research/antigravity-2026-10-14.md). Everything older than 2026-10-12 is in Git history at `c510513`.
-
-| Area | Code |
-|---|---|
-| MCP server and tool schemas | `src/mcp/` |
-| Run lifecycle, one active slot, deadline, watchdog, retention, owner lock, policy reread and readiness receipts, saved-run routing after `--isolated` reconnect | `src/core/`, `src/config/policy.ts` |
-| App-server client: backend, JSON-RPC transport, protocol subset, session configuration and read-back, approval handler, event validator, usage and outcome mapping, pin check, credentials, workspace listing; the reaper | `src/backends/app-server.ts`, `src/backends/app-server/`, `src/process/reaper.ts` |
-| Worktrees, private-index export, verified cleanup | `src/git/worktree.ts` |
-| Paths, child environment, redaction | `src/security/` |
-| Configuration and `--isolated` session homes | `src/config/` |
-| CLI: `setup`, `allow`, `doctor`, `pin-manifest`, `serve`, `runs` | `src/cli.ts`, `src/cli/`, `src/diagnostics/doctor.ts` |
-| Release, conformance and coordinator scripts (not shipped) | `scripts/` |
+The integration needs a coherent release identity alongside main's 2.0.1 source. The owner still decides publication/promotion, repository rename and vendor wording, plugin scaffold disposition, additional client/platform scope, vendor-wheel downloads and the next hosted allowance. Protocol questions about thinking generation, attributable experiments requests, nested-tool behavior and hosted disconnect remain evidence tasks, not assumptions resolved by initialization.
 
 ## Fixed scope and safeguards
 
-Exactly five one-shot MCP tools; no ACP, continuation, recovery replay, queue, automatic patch application, worker shell or network, or new platform scope. Reviews are read-only; edits use isolated detached worktrees. The enforcement points and the pin are listed in the [strategy](docs/development-strategy.md#architecture-and-enforcement-points) and fixed by [AGENTS.md](AGENTS.md). Missing evidence remains unknown: 2.0 has no acceptance evidence yet, and no other platform or universal answer-quality guarantee is made.
+Exactly five one-shot MCP tools; one owned active slot; canonical allowlists; detached worker edit worktrees; pinned Vibe 2.26.1. No automatic patch integration, worker shell/network, recovery replay, continuation or extra hosted starts. Bundled skills stay inside the same tool/path policy. Keep private runtime state and sanitized evidence; uncertain cleanup retains files. These are application-policy controls, not an OS sandbox.
+
+## Operating references
+
+[Acceptance/reporting](docs/workflow-acceptance.md) · [Preparation](docs/preparation.md) · [Validation workspaces](docs/validation-workspace.md) · [Tool/CLI reference](docs/reference.md) · [Behavior](docs/functionality.md) · [Security](docs/security.md) · [Compatibility and gates](docs/compatibility.md) · [Machine-readable acceptance](docs/acceptance.json)

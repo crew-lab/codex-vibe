@@ -133,10 +133,12 @@ The repository is a portfolio piece about judgment rather than volume: 174 commi
 - **2.0.1 removes the development history, which is the marketing material.** `docs/history/` and `docs/reviews/` leave the tree; Git keeps them. Recommendation: the story lives outside the repository, in the blog series, the portfolio page and the talks, each citing the commit (`c510513` for the earliest cut, the 2.0.0 tag for the rest) so readers can still reach the evidence. Before 2.0.1, copy what the story needs (cold reviews, the usefulness log, the article evidence file, the landscape notes) into this directory or a private writing repo, with the redaction placeholders kept. The shipped repo then describes only the current state, which is what a user needs; narrative goes where narrative belongs.
 - **AI-assistance disclosure.** One factual sentence everywhere; the platform's label where one exists; the owner's own reading and voice in the article, as the article README already requires. The risk is overclaiming the human share; the guardrail is describing the owner's actual role: scope, authorization, review, decisions.
 - **macOS only.** In the first paragraph of everything. Linux and Windows are unclaimed contribution areas, not roadmap.
-- **Answer quality and cost.** Six runs, three accepted; cost not recorded. Say both until 2.0 target evidence changes them. The usable advice is the template lesson: narrow scope, enumerated inputs and rejections.
+- **Answer quality and cost.** The historical six-run sample had three accepted and no recorded cost. Keep that sample dated and version-bound. The later owner-reported rc.2 Crew Bravo patch was independently accepted; rc.5 added no hosted sample. Do not combine these into an invented current acceptance rate or cost claim. The usable advice is the template lesson: narrow scope, enumerated inputs and rejections.
 - **Comparisons with attack research.** The "Friendly Fire" result is cited only as "a class of failure our worker cannot reproduce because it has no shell and no network", never as "immune".
 
 ## 6. Next actions, in order
+
+Status updated 15 October 2026: the [consolidated plan](../planning/development-plan.md#outreach-and-adjacent-work) is the current dependency list. Main has already performed its source-history cleanup, while the workflow branch still needs integration. Per-run acceptance, reporting, usage observations and a matched preparation kit are implemented on the workflow branch; they should not be marketed as shipped before release/client evidence is complete. The action table below retains the original channel sequence; it does not authorize posting or publication.
 
 | # | Action | Who | Needs 2.0.0 stable |
 |---|---|---|---|

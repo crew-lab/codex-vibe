@@ -93,7 +93,7 @@ The MCP interface is stdio with strict schemas and exactly five tools. It has no
 
 ## Verification limits
 
-No local test, scripted fake app-server, doctor result or pin check proves hosted inference, the authenticated effective configuration, that `permission = "ask"` is visible in Vibe's effective configuration, nested `run_typescript` gating, the effect of turning thinking off, native Codex behavior, or clean-account installation. The gates are listed in [compatibility](compatibility.md#unverified-gates) and stay unverified until their evidence is recorded there. Historical evidence is version-bound and kept in the source repository, not in the package.
+Local fixtures, doctor and pin checks do not prove hosted inference or authenticated behavior. Actual rc.5 no-inference conformance observed the effective `ask` permission/denylist configuration, as recorded in compatibility; it did not prove hosted handler enforcement, nested `run_typescript` gating, thinking generation effects, native Codex behavior or clean-account installation. The gates are listed in [compatibility](compatibility.md#unverified-gates) and stay unverified until their evidence is recorded there. Historical evidence is version-bound and kept in the source repository, not in the package.
 
 ## Development dependency advisories
 
