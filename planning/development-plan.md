@@ -38,7 +38,7 @@ Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily co
 | # | Step | Who | Your touchpoint |
 |---|---|---|---|
 | 1 | Done: integration on main (`6c645e3`), pushed; GitHub reduced to `main` | — | — |
-| 2 | Decide the v2.0.0 draft (section 4.9) | You | **Delete it or leave it unpublished** |
+| 2 | Done: the owner deleted the v2.0.0 draft (2026-10-15) | — | — |
 | 3 | Done: packaged from `3de455e`; archive `c8d79b8d…`, kit `2d53d615…`; identity recorded in `docs/acceptance.json` | — | — |
 | 4 | Populated pnpm validation on a representative project | Coordinator | Name the project, if not a public fixture |
 | 5 | Carry the archive and the kit to the target | You | **Copy three files** |
@@ -314,7 +314,9 @@ REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner) && CHECK=$(mktemp -d
 
 Then on main (coordinator, by path, `make push` with your yes): the Handoff's release identity says "published", the 2.0.1 changelog line "Unreleased" becomes the date and the link, and the 2.0.0 entry's release sentence says it was not released. Existing releases are never replaced or retagged; a wrong asset means a new patch release, not an edit of the old one.
 
-### 4.9 The v2.0.0 draft (you)
+### 4.9 The v2.0.0 draft (you) — done
+
+Deleted by the owner on 2026-10-15. The options below are kept as the record of the decision.
 
 It is a private draft, so it has no tag yet and nobody outside sees it. Two ways, your choice:
 
@@ -466,7 +468,6 @@ The coordinator adds one line per subcommand to `src/cli/runs.ts`'s table when m
 - **A wire fact we guessed wrong:** every one fails closed, so the cost is a fix, a new archive and kit, and a new sitting (section 4.5). Two have already been found this way.
 - **The frozen archive or its kit is lost or rebuilt:** their bytes cannot be reproduced and a rebuilt archive refuses the old kit; keep `release/2.0.1/` until v2.0.1 is published and verified, and never rebuild to "refresh" it.
 - **Evidence on the wrong bytes:** the workflow candidate's results and the 2.0.0 source's floor run sit beside this candidate's gates in `docs/acceptance.json`; the `build` field, the archive hash in every result line and the coordinator's identity check keep them apart.
-- **The v2.0.0 draft published by mistake:** it would ship a runtime that cannot start on the supported Vibe; delete it (section 4.9).
 - **Mistral changes or removes `vibe-app-server`:** each release pins one Vibe version, and a later Vibe release is a new candidate.
 - **The hosted allowance runs out:** stop at the first failure and never retry.
 - **The guard test rejects an evidence line:** it fails `verify:release` before the merge, never after; the forbidden words are listed in section 4.4.
