@@ -41,8 +41,8 @@ Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily co
 | 2 | Done: the owner deleted the v2.0.0 draft (2026-10-15) | — | — |
 | 3 | Done: packaged from `9d2bbde` (after the pnpm fix); archive `73c28081…`, kit `4c0fdc17…`; identity recorded in `docs/acceptance.json` | — | — |
 | 4 | Done: populated pnpm validation passed on a public fixture after fixing the lockfile check | — | — |
-| 5 | Carry the archive and the kit to the target | You | **Copy three files** |
-| 6 | Run `docs/target-acceptance.md` on that archive; record the results on an evidence branch | Target agent | **Authorizations (1 to 3 covered when the sitting serves an implementation request), three hosted runs, name the evidence folder** |
+| 5 | On the target: fetch main via git, fill an offline npm cache with the locked versions, `npm run package:rc` under Node 20.19.0, record the target-built archive and kit SHA-256 (archives are not byte-reproducible across machines; the target tests and the release publishes those bytes) | Target agent | **Fetch main on the target** |
+| 6 | Run `docs/target-acceptance.md` on the target-built archive; record the results on an evidence branch | Target agent | **Authorizations (1 to 3 covered when the sitting serves an implementation request), three hosted runs, name the evidence folder** |
 | 7 | Clean-account installation of the same archive | You | **Do it, with the packet in 4.6** |
 | 8 | Review and merge the evidence branch into main | Coordinator | Yes to the merge and `make push` |
 | 9 | Repo readiness: rename, description, topics | Coordinator prepares | **Decide the rename; run two `gh` commands** |
