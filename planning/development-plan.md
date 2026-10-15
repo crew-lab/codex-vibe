@@ -1,6 +1,6 @@
 # vibe-supervisor development plan
 
-One plan for everything from here: landing the integrated 2.0.1 on main, packaging and proving it on the target, publishing it as the first 2.x release, the 2.1 and 2.2 lines, the outreach that rides on them, and what never gets built. Written 2026-10-15 and revised the same day twice: after the owner merged the 2.0.1 cleanup ahead of the 2.0.0 release, and after the parallel workflow line (`codex/workflow-acceptance-reporting` at `2e920d3`) was integrated. This plan supersedes both lines' earlier plans; they stay reachable at `881464c` and `2e920d3`. Not shipped.
+One plan for everything from here: landing the integrated 2.0.1 on main, packaging and proving it on the target, publishing it as the first 2.x release, the 2.1 and 2.2 lines, the outreach that rides on them, and what never gets built. Written 2026-10-15 and revised the same day three times: after the owner merged the 2.0.1 cleanup ahead of the 2.0.0 release, after the parallel workflow line (`codex/workflow-acceptance-reporting` at `2e920d3`) was integrated, and after the integration reached main (`6c645e3`) and GitHub was reduced to `main`. This plan supersedes both lines' earlier plans; they stay reachable at `881464c` and `2e920d3`. Not shipped.
 
 The reasons behind it are in the [development strategy](../docs/development-strategy.md); the live status is in the [Handoff](../Handoff.md); the evidence behind each choice is in [marketing/strategy.md](../marketing/strategy.md), [marketing/interest.md](../marketing/interest.md), [research/features-2026-10-14.md](../research/features-2026-10-14.md) and [research/antigravity-2026-10-14.md](../research/antigravity-2026-10-14.md). Two companions hold the long parts: the [release notes template](release-notes-2.0.0.md) (written for 2.0.0, reused for 2.0.1) and the [2.1 design sketches](2.1-designs.md).
 
@@ -8,14 +8,15 @@ The reasons behind it are in the [development strategy](../docs/development-stra
 
 | Item | State |
 |---|---|
-| Main | `881464c`: version 2.0.1, the one-version cleanup. No `docs/history/`, `docs/reviews/`, ADR 0003 or `v1-*` files; `tests/unit/no-legacy-references.test.ts` guards it |
-| Integration | Branch `claude/integrate-workflow` merges `2e920d3` into main, uncommitted at the time of writing. Version stays 2.0.1. Lint, typecheck, build, the suite (88 files, 1,286 tests), acceptance and the secret scan pass on the merged tree under Node 20.19.0. The workflow's evidence packet is out of the tree and summarized in `docs/acceptance.json`; the target brief's amendments are folded into `docs/target-acceptance.md` |
-| Workflow line | `91afad4` (implementation) and `2e920d3` (status and evidence). Its candidate, archive `d1fd22ec04e50048c052cdf013b4d235b525dffc2efb11596dd29f8253003f6a`, passed release verification (1,260 tests in 87 files), the offline smoke, the no-inference conformance check on the installed Vibe 2.26.1 and installed SDK readiness; zero hosted starts |
+| Main | `6c645e3`, pushed 2026-10-15: version 2.0.1 with the one-version cleanup and the integrated workflow line. No `docs/history/`, `docs/reviews/`, ADR 0003 or `v1-*` files; `tests/unit/no-legacy-references.test.ts` guards it. `npm run verify:release` passes on the exact pushed tree under Node 20.19.0: 88 files, 1,286 tests, acceptance, secret scan, SBOM |
+| Integration | Done (`6c645e3`). The workflow's evidence packet is out of the tree and summarized in `docs/acceptance.json`; the target brief's amendments are in `docs/target-acceptance.md`. Two things were fixed during it: a private project name in `marketing/strategy.md` became `<site-project>`, and a readiness race in the fake server's wedge step (it reported `wedged` before installing its SIGTERM handlers) |
+| Workflow line | `91afad4` (implementation) and `2e920d3` (status and evidence), both in main's history; the remote branch is deleted. Its candidate, archive `d1fd22ec04e50048c052cdf013b4d235b525dffc2efb11596dd29f8253003f6a`, passed release verification (1,260 tests in 87 files), the offline smoke, the no-inference conformance check on the installed Vibe 2.26.1 and installed SDK readiness; zero hosted starts |
 | v2.0.0 draft | Created by the owner with target `f2c2119` (`0101f28` plus two non-runtime fixes), archive `485ecce329560507e54f1450790629f877e3623754e56ea11343a81dc753576f`. Its runtime is the one the target rejected (ADR 0005, ADR 0006); no target evidence. Recommendation: do not publish |
 | Gates | Every gate of the integrated build is open in `docs/acceptance.json`; the workflow candidate's results and the 2.0.0 source's node-floor run are recorded as evidence for those builds only |
 | Target kit | `docs/target-acceptance.md` is the procedure; `package:rc` writes `preparation-kit-<version>/` beside the archive, and `prepare check` with that kit replaces the direct conformance-script run |
 | Installations | The desktop connection is still on an earlier workflow candidate; the workflow candidate was installed only in a disposable prefix |
 | Packaging cache | `/Users/r.senchuk/.npm`, the default npm cache on the preparing machine; its `_cacache` is populated (about 1.3 GB). Not an owner input |
+| Repository | GitHub holds `main` only; every other branch was deleted after an ancestry check against `origin/main`. Locally: `main` in the primary checkout and this session's worktree; the old worktrees and merged local branches are removed |
 | Outreach | Drafts only: the dev.to article, the interest note's asks, the marketing calendar. Nothing posted |
 
 ## 2. Delivered
@@ -28,7 +29,7 @@ The reasons behind it are in the [development strategy](../docs/development-stra
 | Workflow 1: acceptance and export | Frozen contracts on the exported patch; append-only assessments; `runs verify` and `runs export` | 1,256 tests, release checks, offline smoke |
 | Workflow 2: observable preparation | Token, model-call, model and price observations; the version-matched kit and private receipt; readiness with workspace eligibility, candidate, preparation and expected-candidate drift; dispatch gated on the pass | 1,258 tests, release checks, offline smoke |
 | Workflow 3: validation and coordination | Owned validation copies with offline dependency preparation; the main-chat coordinator and the evidence-backed fallback in the skill | 1,260 tests in 87 files; no-inference conformance and installed SDK readiness on the target |
-| Integration | One line on main with both sets of work | 88 files, 1,286 tests; section 4.1 |
+| Integration | One line on main with both sets of work (`6c645e3`) | 88 files, 1,286 tests in `verify:release` on the pushed tree |
 
 Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily cost ledger and the other items in section 6 remain separate from the per-run primitives above.
 
@@ -36,7 +37,7 @@ Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily co
 
 | # | Step | Who | Your touchpoint |
 |---|---|---|---|
-| 1 | Commit the integration, cold review, merge to main | Coordinator | **Yes to the merge and `make push`** |
+| 1 | Done: integration on main (`6c645e3`), pushed; GitHub reduced to `main` | — | — |
 | 2 | Decide the v2.0.0 draft (section 4.9) | You | **Delete it or leave it unpublished** |
 | 3 | Package 2.0.1 from main under Node 20.19.0; record the archive identity on main | Coordinator | Yes to the record commit and `make push` |
 | 4 | Populated pnpm validation on a representative project | Coordinator | Name the project, if not a public fixture |
@@ -46,16 +47,16 @@ Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily co
 | 8 | Review and merge the evidence branch into main | Coordinator | Yes to the merge and `make push` |
 | 9 | Repo readiness: rename, description, topics | Coordinator prepares | **Decide the rename; run two `gh` commands** |
 | 10 | Publish v2.0.1 as a draft, verify, then publish | Coordinator prepares | **Run `gh release create`, then `gh release edit`** |
-| 11 | Delete merged branches and worktrees; decide the plugin scaffold | You | **Run the deletions; pick a path** |
+| 11 | Decide the plugin scaffold (branches and worktrees are done) | You | **Pick a path in 4.11** |
 | 12 | 2.1 merges to main | Agents, Coordinator | Scope reading for Antigravity; the wheel download |
 
-Nothing else blocks 2.0.1 stable. Steps 4 to 7 can overlap once step 3 is done; step 9 can happen any time before the first outreach post.
+Open decisions that do not block packaging are in section 4.12. Nothing else blocks 2.0.1 stable. Steps 4 to 7 can overlap once step 3 is done; step 9 can happen any time before the first outreach post.
 
 ## 4. 2.0.1 to published
 
-### 4.1 Integrate (coordinator)
+### 4.1 Integrate (coordinator) — done
 
-`git merge --no-ff 2e920d3` on `claude/integrate-workflow` (from `881464c`). The workflow line's product work is kept whole: `src/acceptance/`, `src/reporting/`, `src/preparation/`, `src/validation/`, `src/cli/prepare.ts`, `src/cli/validation.ts`, the managed-config endpoint and bundled-skill read-back, the run-manager, contract, serialization, CLI and MCP schema changes, the tests and the schemas; ADR 0005 and ADR 0006; `docs/preparation.md`, `docs/validation-workspace.md`, `docs/workflow-acceptance.md`. Main's rules are kept: version 2.0.1 everywhere, no `docs/history/` or `docs/reviews/`, neutral script names (the workflow's edit to `tests/v1-disconnect-client.test.mjs` landed on `tests/disconnect-client.test.mjs`), candidate names out of every scanned file. The evidence packet `docs/reviews/workflow-2026-10-15/` left the tree and is summarized in `docs/acceptance.json` (`evidence_builds`, the `workflow-candidate-*` entries); `docs/history/v2-target-brief.md` stays deleted, and its two amendments are in `docs/target-acceptance.md` (step 4 runs `prepare check`, the skills and managed-config criteria, the network rule, the owner's authorization clarification). Before the merge commit: lint, typecheck, build, the full suite, acceptance, secret scan, `git diff --check`, no unmerged path; then a cold review of the merge diff.
+Landed as `6c645e3` and pushed. `git merge --no-ff 2e920d3` on `claude/integrate-workflow` (from `881464c`). The workflow line's product work is kept whole: `src/acceptance/`, `src/reporting/`, `src/preparation/`, `src/validation/`, `src/cli/prepare.ts`, `src/cli/validation.ts`, the managed-config endpoint and bundled-skill read-back, the run-manager, contract, serialization, CLI and MCP schema changes, the tests and the schemas; ADR 0005 and ADR 0006; `docs/preparation.md`, `docs/validation-workspace.md`, `docs/workflow-acceptance.md`. Main's rules are kept: version 2.0.1 everywhere, no `docs/history/` or `docs/reviews/`, neutral script names (the workflow's edit to `tests/v1-disconnect-client.test.mjs` landed on `tests/disconnect-client.test.mjs`), candidate names out of every scanned file. The evidence packet `docs/reviews/workflow-2026-10-15/` left the tree and is summarized in `docs/acceptance.json` (`evidence_builds`, the `workflow-candidate-*` entries); `docs/history/v2-target-brief.md` stays deleted, and its two amendments are in `docs/target-acceptance.md` (step 4 runs `prepare check`, the skills and managed-config criteria, the network rule, the owner's authorization clarification). Before the merge commit: lint, typecheck, build, the full suite, acceptance, secret scan, `git diff --check`, no unmerged path. The first full run failed one test under load (the fake server's wedge step signalled readiness before installing its signal handlers); the fixture now installs them first, and the rerun passed. No separate cold review of the merge diff was run; the merged code is the workflow line's own, verified on its candidate, and the resolution touched documents, versions and one fixture.
 
 ### 4.2 Package (coordinator, preparing machine)
 
@@ -327,25 +328,9 @@ REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner) && gh release view v
 
 Publishing it as a pre-release is not recommended: its notes would have to say that every start fails before the first turn.
 
-### 4.10 Branches and worktrees (you, after step 1 is on main)
+### 4.10 Branches and worktrees — done
 
-Remote branches main already contains go in one pass; each is checked as an ancestor of main first, so the workflow branch is deleted only after the integration reached main:
-
-```bash
-cd /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe && git fetch --prune origin && for b in $(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin | grep -v -x -e HEAD -e main); do git merge-base --is-ancestor "origin/$b" origin/main && git push origin --delete "$b" && echo "deleted $b"; done
-```
-
-Worktrees and local branches. Each removal stands alone, so one refusal does not stop the rest; a dirty worktree refuses removal, and you read it before forcing anything. `git branch -d` deletes only branches merged into the current one:
-
-```bash
-cd /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe && git worktree list && for w in package-2.0.0 package-2.0.1 project-review-a90ec4; do git worktree remove ".claude/worktrees/$w" && echo "removed $w"; done; git worktree prune && git worktree list
-```
-
-```bash
-cd /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe && git switch main && for b in $(git branch --format='%(refname:short)' --merged main | grep -v -x main); do git branch -d "$b"; done
-```
-
-**Kept:** `main`; the local `claude/ci-checks`, `claude/ci-node-floor` and `claude/release-workflow`, which wait for the push token's `workflow` scope. The parallel engine's remaining ideas (the shipped manifest, the search sidecar) are in [2.1-designs.md](2.1-designs.md), so its branch need not be kept for them.
+GitHub holds `main` only. Every remote branch was checked as an ancestor of `origin/main` and then deleted, the workflow branch last, after `6c645e3` reached main. Locally, the leftover worktrees and every branch merged into main are removed; the CI branches went with them, and their commits stay reachable in main's history (`59eb988`). To recreate CI once the push token has the `workflow` scope, branch from main and restore `.github/` from `8904c13`.
 
 ### 4.11 The plugin scaffold: your call
 
@@ -353,6 +338,17 @@ cd /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe && git switch main && for
 
 - **Delete now, rebuild in 2.2 (recommended).** One commit on main before 2.0.1 is packaged: delete both files; in `tests/unit/version.test.ts` drop the case "keeps the plugin manifest literal equal to package.json"; in `tests/integration/lazy-startup-retention.test.ts` drop the two `.mcp.json` lines and " and matches .mcp.json" from the test name (the timeouts stay asserted against the written Codex entry); the scaffold sentence in `docs/compatibility.md` and the Handoff's known limits go; the 2.0.1 changelog entry gains "The unverified Codex plugin scaffold is removed; Codex plugin packaging returns in 2.2 in the current layout." 2.2 builds the root `plugin.json` with `extensions.com.openai` and the `.agents/plugins/marketplace.json` the interest note describes, with an install gate on the target.
 - **Keep.** Nothing changes now; `version.test.ts` keeps the version in step at every bump; the documents keep calling it an unverified scaffold; 2.2 migrates it instead of creating it. Cost: a file in a fallback layout that no one has installed, shown in the repository root during the outreach weeks.
+
+### 4.12 Open decisions and small leftovers
+
+| Item | Recommendation | Who |
+|---|---|---|
+| The private project name in history: `marketing/strategy.md` named it in commit `2e920d3`, now in main's history; the current tree uses `<site-project>` | Leave history as it is unless the name is sensitive; a rewrite of public `main` breaks every clone | You |
+| Authorizations when a sitting serves an implementation request (`docs/target-acceptance.md`): authorizations 1 to 3 treated as given; a standalone release sitting asks for each; hosted runs always need an allowance | Confirm | You |
+| The preparation kit as a release asset beside the archive, so release installs can dispatch | Yes; section 4.8 lists it | You confirm |
+| Code comments in the workflow line's source (`bundled-skills.ts`, `managed-config.ts`, `cli/prepare.ts`, `validation/workspace.ts`, `scripts/package-rc.mjs` and others) against the no-comments rule | Remove them in one commit before packaging; names carry the meaning | Coordinator, after your yes |
+| A site-specific example value in `docs/workflow-acceptance.md` | Replace with a neutral example before packaging (the file ships) | Coordinator |
+| Release-candidate story lines in `marketing/strategy.md` (for example "rc.15 and rc.16") | Keep as dated story material or reword; unshipped, not guarded | You |
 
 ## 5. One coordinator workflow
 
