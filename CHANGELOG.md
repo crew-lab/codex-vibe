@@ -2,7 +2,7 @@
 
 ## 2.0.1 — one version
 
-Unreleased. The version is set on branch `claude/v2.0.1-cleanup`. Documentation, names and one recovery special case change; run behavior does not.
+Unreleased; on main since 2026-10-15. Documentation, names and one recovery special case change; run behavior does not.
 
 - One supported version: only the latest release is supported, and Vibe 2.26.1 is the only Vibe release described or accepted.
 - The development history, the recorded evidence of earlier candidates and the superseded launcher decision record are removed from the tree. The wire facts keep their basis in [compatibility](docs/compatibility.md#source-basis): the Vibe tag commit and the SHA-256 of every file read.

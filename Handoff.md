@@ -21,8 +21,8 @@ Updated 2026-10-15. Status only: what the release is, what remains and who does 
 
 | # | Step | Who | Needs |
 |---|---|---|---|
-| 1 | Cold review of this branch, merge to main, `make push` | Agent reviews and merges; owner authorizes the push | Nothing else |
-| 2 | `VIBE_SUPERVISOR_TEST_NPM_CACHE=<populated cache> npm run package:rc`; release notes from the changelog | Agent; owner gives the cache path | Step 1 |
+| 1 | Done: 2.0.1 merged to main (`b7ac223`), ahead of the 2.0.0 release by the owner's decision | — | — |
+| 2 | Package 2.0.0 from `0101f28` (and 2.0.1 from main) with `VIBE_SUPERVISOR_TEST_NPM_CACHE=$(npm config get cache) npm run package:rc`; the default npm cache is populated; release notes from [planning/release-notes-2.0.0.md](planning/release-notes-2.0.0.md) | Agent | Nothing |
 | 3 | Target sitting per the [target acceptance procedure](docs/target-acceptance.md), stopping at the first failure: build and install next to the current prefix; `pin-manifest` and `doctor`; the conformance check (`--observe-network`); native readiness; one hosted review (with the nested-write probe and the reasoning watcher) and one hosted edit, verified independently; one MCP-client disconnect (a third hosted run) | Target agent runs; owner gives five separate authorizations and the allowance of three hosted runs | Step 2 |
 | 4 | Clean-account installation on the frozen archive (gate `clean-account-install`) | Owner | Step 2 |
 | 5 | Record the evidence: gates to `VERIFIED` in `docs/acceptance.json` with their rows in `docs/compatibility.md`, `npm run acceptance`, placeholders from [AGENTS.md](AGENTS.md#recording-target-evidence); frozen archive SHA-256 | Agent | Steps 3, 4 |
