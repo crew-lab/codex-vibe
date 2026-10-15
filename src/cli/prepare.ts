@@ -32,7 +32,6 @@ export async function prepareCommand(args: string[]): Promise<unknown> {
     await createPrivateDir(reports);
     const started = Buffer.from(JSON.stringify({ result: 'incomplete', stage: 'no-inference-check-started', checked_at: new Date().toISOString() })+'\n');
     await createPrivateFile(path.join(reports, `${digest(started)}.json`), started, 'wx');
-    // Invalidate an older PASS before launch; a crash cannot leave it current.
     await atomicWriteJson(receiptPath(resolved.config), {schema_version:1,result:'failed',identity,checked_at:new Date().toISOString(),report_sha256:digest(started)});
     const status=await new Promise<number>((resolve,reject)=>{const child=spawn(process.execPath,argv,{stdio:['ignore','ignore','inherit'],env:{PATH:process.env.PATH,HOME:temporary,TMPDIR:temporary},timeout:180_000});child.once('error',reject);child.once('close',code=>resolve(code??1));});
     const bytes=await readOwnedFile(output,4*1024*1024);

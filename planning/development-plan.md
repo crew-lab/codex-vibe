@@ -47,7 +47,7 @@ Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily co
 | 8 | Review and merge the evidence branch into main | Coordinator | Yes to the merge and `make push` |
 | 9 | Repo readiness: rename, description, topics | Coordinator prepares | **Decide the rename; run two `gh` commands** |
 | 10 | Publish v2.0.1 as a draft, verify, then publish | Coordinator prepares | **Run `gh release create`, then `gh release edit`** |
-| 11 | Decide the plugin scaffold (branches and worktrees are done) | You | **Pick a path in 4.11** |
+| 11 | Decide the plugin scaffold (branches and worktrees are done) | You | Decided 2026-10-15: deleted; rebuilt in 2.2 (4.11) |
 | 12 | 2.1 merges to main | Agents, Coordinator | Scope reading for Antigravity; the wheel download |
 
 Open decisions that do not block packaging are in section 4.12. Nothing else blocks 2.0.1 stable. Steps 4 to 7 can overlap once step 3 is done; step 9 can happen any time before the first outreach post.
@@ -334,6 +334,8 @@ GitHub holds `main` only. Every remote branch was checked as an ancestor of `ori
 
 ### 4.11 The plugin scaffold: your call
 
+Decided 2026-10-15: deleted; rebuilt in 2.2.
+
 `.codex-plugin/plugin.json` (legacy layout, version in lockstep with `package.json`) and `.mcp.json` (a disabled `node ./dist/cli.js serve --stdio --isolated` entry) are outside the npm package, so neither path changes an archive.
 
 - **Delete now, rebuild in 2.2 (recommended).** One commit on main before 2.0.1 is packaged: delete both files; in `tests/unit/version.test.ts` drop the case "keeps the plugin manifest literal equal to package.json"; in `tests/integration/lazy-startup-retention.test.ts` drop the two `.mcp.json` lines and " and matches .mcp.json" from the test name (the timeouts stay asserted against the written Codex entry); the scaffold sentence in `docs/compatibility.md` and the Handoff's known limits go; the 2.0.1 changelog entry gains "The unverified Codex plugin scaffold is removed; Codex plugin packaging returns in 2.2 in the current layout." 2.2 builds the root `plugin.json` with `extensions.com.openai` and the `.agents/plugins/marketplace.json` the interest note describes, with an install gate on the target.
@@ -346,8 +348,8 @@ GitHub holds `main` only. Every remote branch was checked as an ancestor of `ori
 | The private project name in history: `marketing/strategy.md` named it in commit `2e920d3`, now in main's history; the current tree uses `<site-project>` | Leave history as it is unless the name is sensitive; a rewrite of public `main` breaks every clone | You |
 | Authorizations when a sitting serves an implementation request (`docs/target-acceptance.md`): authorizations 1 to 3 treated as given; a standalone release sitting asks for each; hosted runs always need an allowance | Confirm | You |
 | The preparation kit as a release asset beside the archive, so release installs can dispatch | Yes; section 4.8 lists it | You confirm |
-| Code comments in the workflow line's source (`bundled-skills.ts`, `managed-config.ts`, `cli/prepare.ts`, `validation/workspace.ts`, `scripts/package-rc.mjs` and others) against the no-comments rule | Remove them in one commit before packaging; names carry the meaning | Coordinator, after your yes |
-| A site-specific example value in `docs/workflow-acceptance.md` | Replace with a neutral example before packaging (the file ships) | Coordinator |
+| Code comments in the workflow line's source (`bundled-skills.ts`, `managed-config.ts`, `cli/prepare.ts`, `validation/workspace.ts`, `scripts/package-rc.mjs` and others) against the no-comments rule | Done 2026-10-15: removed; the two facts without a home are in `docs/preparation.md` and `docs/workflow-acceptance.md` | Coordinator |
+| A site-specific example value in `docs/workflow-acceptance.md` | Done 2026-10-15: replaced with a neutral example | Coordinator |
 | Release-candidate story lines in `marketing/strategy.md` (for example "rc.15 and rc.16") | Keep as dated story material or reword; unshipped, not guarded | You |
 
 ## 5. One coordinator workflow

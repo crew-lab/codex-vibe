@@ -10,6 +10,7 @@ One version:
 - The development history, the recorded evidence of earlier candidates and the superseded launcher decision record are removed from the tree. The wire facts keep their basis in [compatibility](docs/compatibility.md#source-basis): the Vibe tag commit and the SHA-256 of every file read.
 - New [target acceptance procedure](docs/target-acceptance.md): the reusable steps, authorizations and stop rules that prove a build against one Vibe release on the machine that runs Vibe, including the disconnect procedure. The evidence placeholders are in AGENTS.md.
 - The disconnect and fixture-verification scripts and their tests carry neutral names: `scripts/disconnect-client.mjs`, `scripts/disconnect-observer.mjs`, `scripts/fixture-verify.mjs`.
+- The unverified Codex plugin scaffold is removed; Codex plugin packaging returns in 2.2 in the current layout.
 - Saved run records with an unknown engine are skipped by the same rule as any other unreadable record, without a special case.
 - `docs/acceptance.json` keeps the 2.0 gates, verified and unverified, and drops every record of other candidates. A test fails the build when a document, script or source file refers to another supervisor version, another Vibe version or the removed history.
 

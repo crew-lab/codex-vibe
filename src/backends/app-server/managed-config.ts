@@ -6,10 +6,6 @@ export interface ManagedConfigEndpoint {
   close(): Promise<void>;
 }
 
-/** Local, non-forwarding replacement for Vibe's remote managed-config service.
- * Never reads, records or echoes the Authorization header. No request bodies
- * are accepted and no vendor/provider connection is made by this service.
- */
 export async function startManagedConfigEndpoint(): Promise<ManagedConfigEndpoint> {
   const server = createServer({ maxHeaderSize: 8192, requestTimeout: 1000, headersTimeout: 1000 }, (request, response) => {
     const allowed = request.method === 'GET' && request.url === '/api/v1/code/managed-config' &&

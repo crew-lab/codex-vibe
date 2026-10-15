@@ -16,7 +16,7 @@ async function run(command:string,args:string[],cwd:string,root:string,input?:Bu
   return new Promise((resolve,reject)=>{
     const child=spawn(command,args,{cwd,env:env(root),stdio:['pipe','pipe','pipe'],detached:process.platform!=='win32'});
     let size=0;let stdout='';let stopped=false;let killTimer:NodeJS.Timeout|undefined;
-    const signal=(value:NodeJS.Signals):void=>{if(!child.pid)return;try{process.kill(process.platform==='win32'?child.pid:-child.pid,value);}catch{/* owned group already exited */}};
+    const signal=(value:NodeJS.Signals):void=>{if(!child.pid)return;try{process.kill(process.platform==='win32'?child.pid:-child.pid,value);}catch{}};
     const stop=():void=>{if(stopped)return;stopped=true;signal('SIGTERM');killTimer=setTimeout(()=>signal('SIGKILL'),1000);killTimer.unref();};
     const timer=setTimeout(stop,120_000);timer.unref();
     const collect=(bytes:Buffer,output:boolean):void=>{size+=bytes.length;if(size>1024*1024)stop();else if(output)stdout+=bytes.toString('utf8');};
@@ -87,7 +87,6 @@ export async function prepareValidation(options:{source:string;base:string;patch
     if(options.install){
       if(!options.cache)throw new Error('Populated offline cache required');
       const cache=await realpath(options.cache);const sourceCache=kind==='npm'?path.join(cache,'_cacache'):cache;
-      // Copy only cache data into owned state; never let installation mutate a user cache.
       let copiedBytes=0,copiedFiles=0;
       await cp(sourceCache,path.join(output,'cache',kind==='npm'?'_cacache':'store'),{recursive:true,dereference:false,force:false,errorOnExist:true,filter:async file=>{const info=await lstat(file);if(info.isFile()){copiedBytes+=info.size;if(copiedBytes>MAX_BYTES)throw new Error("Cache exceeds copy budget");}if(++copiedFiles>MAX_FILES)throw new Error("Cache exceeds file budget");return true;}});
       await fingerprint(output);
@@ -101,7 +100,6 @@ export async function prepareValidation(options:{source:string;base:string;patch
     await writeFile(path.join(output,'manifest.json'),JSON.stringify(manifest,null,2)+'\n',{mode:0o600,flag:'wx'});
     return {status:'prepared',root:output,base_commit:base,patch_sha256:digest(patch),dependencies:manifest.dependencies,project_checks:'not-run'};
   }catch(error){
-    // Failed preparation is retained: unknown state is never deleted automatically.
     throw new Error(`Validation preparation blocked; retained ${output}. ${error instanceof Error?error.message:'Unknown error'}`);
   }
 }

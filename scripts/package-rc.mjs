@@ -49,7 +49,6 @@ await writeFile(sumsPath, `${sums.join('\n')}\n`, { mode: 0o644 });
 process.stdout.write(`\nRC package and reports written to ${releaseDir}\n`);
 for (const line of sums) process.stdout.write(`${line}\n`);
 
-// A separate, version-matched kit; it cannot be substituted for another candidate.
 const { candidateIdentity } = await import('../dist/preparation/evidence.js');
 const kit = path.join(releaseDir, `preparation-kit-${pkg.version}`);
 await rm(kit, { recursive: true, force: true });

@@ -1,7 +1,3 @@
-// Exact packaged plugin skill catalogue audited in the pinned Vibe 2.26.1.
-// Names alone are insufficient: a project/global/registry entry must not be
-// accepted merely because it uses a bundled name. Installed bytes remain
-// subject to the existing per-start distribution pin check.
 export const BUNDLED_SKILL_NAMES: readonly string[] = [
   'vibe:create-plugin', 'vibe:skill-creator', 'vibe:vibe', 'vibe:worktree'
 ];

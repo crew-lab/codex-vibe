@@ -23,7 +23,6 @@ export function publicValue(value: unknown): unknown {
   return walk(sanitizeForPersistence(value));
 }
 
-/** Read only; never borrows the live owner's lock or changes run records. */
 export async function locateSavedRun(dataDir: string, runId: string): Promise<string> {
   uuid.parse(runId); await assertOwnedDirectory(dataDir);
   const candidates: string[] = [];
@@ -113,7 +112,6 @@ export async function exportReport(options: { directory: string; output: string;
   const staging = path.join(path.dirname(destination), `.report-${randomUUID()}`); await mkdir(staging, { mode: 0o700 });
   try {
     for (const [name, bytes] of Object.entries(files)) await writeFile(path.join(staging, name), bytes, { mode: 0o600, flag: 'wx' });
-    // mkdir is exclusive: never replace an intervening destination.
     await mkdir(destination, { mode: 0o700 });
     for (const [name, bytes] of Object.entries(files)) await writeFile(path.join(destination, name), bytes, { mode: 0o600, flag: 'wx' });
   } finally { await rm(staging, { recursive: true, force: true }); }

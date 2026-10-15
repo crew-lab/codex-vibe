@@ -312,8 +312,6 @@ export async function removeVerifiedWorktree(source: string, record: { path: str
 
 export { git as preparationGit };
 
-/** Reconstruct immutable exported bytes in a private index; never read the
- * worker's current content, check out files, or change the user's index. */
 export async function inspectExport(source: string, base: string, patch: Buffer, paths: readonly string[], maxBytes: number): Promise<{ changedFiles: string[]; files: Record<string, { mode: string; bytes: Buffer } | null> }> {
   const root = await resolveGitRoot(source);
   if (await resolveBaseCommit(root, base) !== base) throw new Error('Export base is not an immutable commit');

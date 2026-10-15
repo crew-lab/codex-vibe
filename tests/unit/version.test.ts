@@ -60,10 +60,6 @@ describe('single version source', () => {
     finally { await client.close(); }
   });
 
-  it('keeps the plugin manifest literal equal to package.json', async () => {
-    expect(await manifestVersion('../../.codex-plugin/plugin.json')).toBe(await manifestVersion('../../package.json'));
-  });
-
   it('keeps package-lock root identity equal to package.json', async () => {
     const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
     const lock = JSON.parse(await readFile(new URL('../../package-lock.json', import.meta.url), 'utf8')) as { version: string; packages: Record<string, { version?: string }> };
