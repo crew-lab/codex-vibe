@@ -215,8 +215,13 @@ describe('real runner against a fake security executable', () => {
     const result = await resolveCredential({ environment: { HOME: home }, platform: 'darwin', executable, timeoutMs: 300 });
     expect(result.status).toBe('timeout');
     expect(Date.now() - started).toBeLessThan(5000);
-    const pid = Number((await readFile(pidFile, 'utf8')).trim());
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    const recorded = await readFile(pidFile, 'utf8').catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    if (recorded === undefined) {
+      await expect(readFile(pidFile, 'utf8')).rejects.toThrow();
+      return;
+    }
+    const pid = Number(recorded.trim());
     expect(() => process.kill(pid, 0)).toThrow();
   });
 
