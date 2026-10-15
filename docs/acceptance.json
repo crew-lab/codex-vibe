@@ -65,7 +65,7 @@
     {
       "name": "native-readiness-on-candidate",
       "status": "UNVERIFIED",
-      "evidence_required": "On the intended Codex desktop connection, native readiness reports server_version 2.0.0 against the frozen 2.0 archive; eligible, no blockers, free slot."
+      "evidence_required": "On the intended Codex desktop connection, native readiness reports the server_version of the frozen archive under test; eligible, no blockers, free slot."
     },
     {
       "name": "hosted-review-edit-confirmation",
