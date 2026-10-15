@@ -26,13 +26,35 @@ Updated 2026-10-15. Status only: what the release is, what remains and who does 
 | 3 | Target sitting per the [target acceptance procedure](docs/target-acceptance.md), stopping at the first failure: build and install next to the current prefix; `pin-manifest` and `doctor`; the conformance check (`--observe-network`); native readiness; one hosted review (with the nested-write probe and the reasoning watcher) and one hosted edit, verified independently; one MCP-client disconnect (a third hosted run) | Target agent runs; owner gives five separate authorizations and the allowance of three hosted runs | Step 2 |
 | 4 | Clean-account installation on the frozen archive (gate `clean-account-install`) | Owner | Step 2 |
 | 5 | Record the evidence: gates to `VERIFIED` in `docs/acceptance.json` with their rows in `docs/compatibility.md`, `npm run acceptance`, placeholders from [AGENTS.md](AGENTS.md#recording-target-evidence); frozen archive SHA-256 | Agent | Steps 3, 4 |
-| 6 | Tag and publish with checksums and the acceptance record | Owner | Step 5; nothing already published is retagged or replaced |
-| 7 | Delete the stale remote branches (every remote branch except main, the current one and `codex/unified-harness-v2`, after a last look); keep `codex/unified-harness-v2` until its remaining ideas are ported | Owner | Any time |
+| 6 | Publish: a private draft release exists (created by the owner 2026-10-15) with target `f2c2119`, title "Vibe Supervisor 2.0.0", the four assets from `release/2.0.0/` and the notes from [planning/release-notes-2.0.0.md](planning/release-notes-2.0.0.md). Fill its `[FILL]` markers from steps 3 to 5, then publish; publishing creates the `v2.0.0` tag. Published before steps 3 to 5, it must say the target gates are open and be marked a pre-release | Owner | Step 5; nothing already published is retagged or replaced |
+| 7 | Delete the remote branches: every one is already merged into main (the stale ones as an `ours` merge in `59eb988`, so their commits stay reachable), so deleting them loses nothing. Command in [Testing on another machine](#testing-on-another-machine) | Owner | Any time |
 | 8 | Decide the repository rename (`codex-vibe` → `vibe-supervisor`) and read the Mistral and OpenAI brand pages | Owner | Before the article goes out |
 | 9 | Read the 2.0 article draft (`marketing/article/devto-2.0.md`) with its [editor notes](marketing/article/editor-notes.md) and [story sources](marketing/sources.md); publish after the release with the AI-Assisted label and the `[UPDATE AT PUBLISH]` markers filled, in the marketing strategy's [order](marketing/strategy.md#6-next-actions-in-order) | Owner reads and publishes; agent fills the markers from the evidence | Step 6 |
 | 10 | 2.1: Antigravity as a verified MCP client (docs and four target gates) | Agent docs; owner decides the scope reading, provides the account and runs the sitting | Release tagged |
 
 **The skipped `workflow` scope.** Until it is added, no workflow file can be pushed, so the CI branches (`claude/ci-checks`, `claude/release-workflow`) stay local and the repository has no CI. To unblock: at https://github.com/settings/tokens give the push token the `workflow` scope (fine-grained: "Workflows: Read and write" on `crew-lab/codex-vibe`), update the Keychain entry `crew-lab-codex-vibe-github-token` if the value changed, then push `claude/ci-checks` rebased onto the current line and watch its first run.
+
+## Testing on another machine
+
+Main is one thread: every branch, the 2.0.0 release commit `f2c2119` and the 2.0.1 cleanup are in its history. On another Mac (Apple silicon, Node 20.19 or later, Git):
+
+```bash
+git clone https://github.com/crew-lab/codex-vibe.git vibe-supervisor && cd vibe-supervisor && npm ci && npm run verify:release
+```
+
+`verify:release` needs no Vibe and no network beyond `npm ci`. To package offline, fill a dedicated npm cache with the locked versions first, then package:
+
+```bash
+CACHE="$PWD/.npm-offline-cache" && node -e 'const l=require("./package-lock.json");const s=new Set();for(const[k,v]of Object.entries(l.packages)){if(!k||v.link||!v.version)continue;s.add((v.name||k.slice(k.lastIndexOf("node_modules/")+13))+"@"+v.version)}console.log([...s].join("\n"))' | xargs -P 8 -n 1 npm cache add --cache "$CACHE" && VIBE_SUPERVISOR_TEST_NPM_CACHE="$CACHE" npm run package:rc
+```
+
+To test the exact 2.0.0 archive instead, check out `f2c2119` before packaging, or take the archive from the draft release and compare its SHA-256 with `485ecce329560507e54f1450790629f877e3623754e56ea11343a81dc753576f`. Hosted behaviour needs Vibe 2.26.1 and follows [docs/target-acceptance.md](docs/target-acceptance.md).
+
+Deleting the remote branches (owner; all are already in main). `git branch -r` also lists one branch from the previous major version; delete it the same way:
+
+```bash
+git push origin --delete claude/app-server-design claude/development-plan claude/development-plan-detail claude/release-2.0.0 claude/v2.0.1-cleanup claude/one-thread claude/session-pruning codex/project-agents-isolation codex/rc1-runtime-consolidation codex/rc28-target-evidence codex/skill-cleanup-update codex/unified-harness-v2
+```
 
 ## Open questions
 
