@@ -39,8 +39,8 @@ Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily co
 |---|---|---|---|
 | 1 | Done: integration on main (`6c645e3`), pushed; GitHub reduced to `main` | — | — |
 | 2 | Done: the owner deleted the v2.0.0 draft (2026-10-15) | — | — |
-| 3 | Done: packaged from `3de455e`; archive `c8d79b8d…`, kit `2d53d615…`; identity recorded in `docs/acceptance.json` | — | — |
-| 4 | Populated pnpm validation on a representative project | Coordinator | Name the project, if not a public fixture |
+| 3 | Done: packaged from `9d2bbde` (after the pnpm fix); archive `73c28081…`, kit `4c0fdc17…`; identity recorded in `docs/acceptance.json` | — | — |
+| 4 | Done: populated pnpm validation passed on a public fixture after fixing the lockfile check | — | — |
 | 5 | Carry the archive and the kit to the target | You | **Copy three files** |
 | 6 | Run `docs/target-acceptance.md` on that archive; record the results on an evidence branch | Target agent | **Authorizations (1 to 3 covered when the sitting serves an implementation request), three hosted runs, name the evidence folder** |
 | 7 | Clean-account installation of the same archive | You | **Do it, with the packet in 4.6** |
