@@ -292,6 +292,8 @@ describe('response parsers', () => {
     expectParseError(() => parseConfigEffectiveReadResult({}), 'config');
     expect(parseConfigReadResult({ config: {}, harnessSelectionSource: 'default', hooksCount: 0, skillsCount: 0 })).toEqual({ harnessSelectionSource: 'default', hooksCount: 0, skillsCount: 0 });
     expect(parseConfigReadResult({ harnessSelectionSource: 'env' })).toEqual({ harnessSelectionSource: 'env', hooksCount: null, skillsCount: null });
+    expect(parseConfigReadResult({ harnessSelectionSource: null, hooksCount: 0, skillsCount: 0 })).toEqual({ harnessSelectionSource: null, hooksCount: 0, skillsCount: 0 });
+    expectParseError(() => parseConfigReadResult({ harnessSelectionSource: 1 }), 'harnessSelectionSource');
     expectParseError(() => parseConfigReadResult({}), 'harnessSelectionSource');
     expect(parseConfigModelWriteResult({ runtime: {}, status: 'applied' })).toEqual({ status: 'applied' });
     expect(parseConfigModelWriteResult({})).toEqual({ status: null });

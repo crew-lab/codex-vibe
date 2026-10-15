@@ -1,5 +1,7 @@
 # vibe-supervisor
 
+Local workflow candidate `2.0.0-rc.5` adds [deterministic acceptance and reporting](docs/workflow-acceptance.md), [version-matched preparation](docs/preparation.md), and [owned validation workspaces](docs/validation-workspace.md). Workspace eligibility and conformance are separate; ordinary dispatch requires matching conformance evidence. This candidate is uncommitted and unpublished.
+
 A local MCP server for one bounded Mistral Vibe review or isolated edit. It exposes exactly five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. Edits run in a supervisor-created detached Git worktree and return a patch for review; the supervisor never applies, commits, merges, or pushes it automatically.
 
 This is an application policy boundary, **not an operating-system sandbox**. A delegated run uses your account's permissions, and permitted workspace content is sent to Mistral. Review [SECURITY.md](SECURITY.md) before use.

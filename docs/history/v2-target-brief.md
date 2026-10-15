@@ -75,3 +75,11 @@ The owner's own steps stay the owner's: the fresh standard macOS account install
 | `hosted-review-edit-confirmation` | both runs completed, edit verified independently, both closed with verified cleanup |
 | `mcp-client-disconnect-hosted` | step 7 PASS |
 | `node-floor-20.19.0` | step 1 on exactly Node 20.19.0 |
+
+## Repair-candidate amendment — 2.0.0-rc.1
+
+Use the new frozen archive and its identity; earlier target observations do not transfer. Subjects use the owned loopback managed-config service and require its URL in read-back. The observer control explicitly enables telemetry and experiments with the original vendor service URL; its refusing proxy forwards nothing. Any subject request fails, regardless of control-host equality. `none-observed-control-validated` describes only proxy-observed startup traffic, not experiments attribution. The `experiments-fetch-off` gate remains unverified from host-only evidence. Do not mark that gate verified using the earlier host-matching rule above. Null `harnessSelectionSource` is expected for unified Vibe; hooks/skills and actual harness checks remain strict. No real-Vibe check is authorized by this amendment.
+
+## Bundled-skills amendment — 2.0.0-rc.2
+
+The owner permits Vibe's own skills. Replace the earlier zero-runtime-skills criterion with ADR 0006: only the four pinned packaged plugin names, source plugin, scope builtin and registry null; no duplicates or foreign entries. Root config/read skillsCount must still be zero. The conformance report now records only skill names and source/scope, not prompt bodies. Keep every other guard and no-model-turn requirement. The owner has also clarified that a Vibe implementation request authorizes necessary task-scoped preparation, including installation/switch and no-inference checks; do not repeat approvals for those already-authorized steps. Extra hosted starts and scope expansion still need explicit authorization.

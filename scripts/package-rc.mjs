@@ -47,3 +47,15 @@ const sumsPath = path.join(releaseDir, 'SHA256SUMS');
 await writeFile(sumsPath, `${sums.join('\n')}\n`, { mode: 0o644 });
 process.stdout.write(`\nRC package and reports written to ${releaseDir}\n`);
 for (const line of sums) process.stdout.write(`${line}\n`);
+
+// A separate, version-matched kit; it cannot be substituted for another candidate.
+const { candidateIdentity } = await import('../dist/preparation/evidence.js');
+const kit = path.join(releaseDir, `preparation-kit-${pkg.version}`);
+await rm(kit, { recursive: true, force: true });
+await mkdir(kit, { mode: 0o700 });
+const scriptBytes = await readFile(path.join(root, 'scripts/v2-conformance-check.mjs'));
+await writeFile(path.join(kit, 'v2-conformance-check.mjs'), scriptBytes, { mode: 0o600 });
+await writeFile(path.join(kit, 'manifest.json'), JSON.stringify({ schema_version: 1, version: pkg.version, candidate_sha256: await candidateIdentity(), script_sha256: createHash('sha256').update(scriptBytes).digest('hex') }, null, 2)+'\n', { mode: 0o600 });
+await copyFile(path.join(root, 'docs/preparation.md'), path.join(kit, 'PROCEDURE.md'));
+const kitFiles = ['v2-conformance-check.mjs','manifest.json','PROCEDURE.md'];
+await writeFile(path.join(kit,'SHA256SUMS'), (await Promise.all(kitFiles.map(async name => `${createHash('sha256').update(await readFile(path.join(kit,name))).digest('hex')}  ${name}`))).join('\n')+'\n', {mode:0o600});

@@ -1,3 +1,6 @@
+import { captureVerification, verifySaved } from "../acceptance/verify.js";
+import { contractDigest, verificationSummary, type AcceptanceContract, type AssessmentInput } from "../acceptance/schema.js";
+import { readOwnedFile } from "../reporting/private-files.js";
 import { createHash, randomUUID } from "node:crypto";
 import { open, readFile, readdir, realpath, rename, rm, lstat } from "node:fs/promises";
 import path from "node:path";
@@ -25,7 +28,7 @@ import { ReadinessReceipts, receiptMismatch, receiptRejected } from "./readiness
 import type { OpenedReceipt } from "./readiness-receipt.js";
 import { assertNoProjectVibeExtensions, assertSimpleGlobRoot } from "../security/workspace-guard.js";
 import { PRIVATE_DIRECTORY_NAMES } from "../backends/app-server/session-config.js";
-import { eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire } from "./serialization.js";
+import { usageDetailsToWire, eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
 import { changedSinceSnapshot, parseManifest, serializeManifest, snapshotWorkspace } from "./workspace-snapshot.js";
 import type { ManifestEntry } from "./workspace-snapshot.js";
@@ -127,7 +130,7 @@ export interface RunManagerOptions {
   recoveryWorkerWindowMs?: number;
 }
 
-type StartOptions = { maxTurns: number; timeoutSeconds: number; contextFiles?: string[]; baseRef?: string; readinessReceipt?: string };
+type StartOptions = { maxTurns: number; timeoutSeconds: number; contextFiles?: string[]; baseRef?: string; readinessReceipt?: string; acceptanceContract?: AcceptanceContract };
 
 export class RunManager {
   private readonly runRoot: string;
@@ -221,6 +224,7 @@ export class RunManager {
     const input = parseInput(editStartSchema, value);
     const started = await this.start("edit", input.task, input.cwd, {
       maxTurns: input.max_turns ?? this.config.limits.maxTurnsEdit, timeoutSeconds: input.timeout_seconds ?? this.config.limits.editTimeoutSeconds,
+      ...(input.acceptance_contract ? { acceptanceContract: input.acceptance_contract } : {}),
       baseRef: input.base_ref, ...(input.readiness_receipt === undefined ? {} : { readinessReceipt: input.readiness_receipt })
     });
     return this.awaitStartOutcome(started, input.wait_seconds, wait?.signal);
@@ -293,6 +297,7 @@ export class RunManager {
         workerWorkspace, createdAt: now, updatedAt: now,
         taskSha256: createHash("sha256").update(task).digest("hex"), policyRevision: policy.revision, admittedRoot: admitted.root, limits
       };
+      if (options.acceptanceContract) { record.acceptanceContract = options.acceptanceContract; record.verification = { status: "pending", contract_sha256: contractDigest(options.acceptanceContract), checks: [] }; }
       runtime = this.makeRuntime(record, path.join(this.runRoot, id), task, options.contextFiles ?? []);
       runtime.slot = true;
       if (mode === "edit") runtime.baseRef = checkedBase ?? options.baseRef ?? "HEAD";
@@ -382,7 +387,7 @@ export class RunManager {
     return backend.runtimeCheck();
   }
 
-  private async readiness(input: { workspace: string; operation: RunMode; base_ref?: string | undefined }): Promise<Record<string, unknown>> {
+  private async readiness(input: { workspace: string; operation: RunMode; base_ref?: string | undefined; expected_candidate?: string | undefined }): Promise<Record<string, unknown>> {
     await this.ready();
     const deadline = Date.now() + START_PREPARATION_DEADLINE_MS;
     const blockers: SupervisorError[] = [];
@@ -407,6 +412,10 @@ export class RunManager {
     if (busy) blockers.push(supervisorError("VSUP_LIMIT_EXCEEDED", "One run is already active for this supervisor."));
     const runtime = await this.runtimeCheck().catch((error: unknown) => { block(error); return { status: "not_reported" as const }; });
     if ("executable_found" in runtime && !runtime.executable_found) blockers.push(supervisorError("VSUP_VIBE_NOT_FOUND", `The configured Vibe executable ${runtime.executable} was not found.`));
+    const workspaceEligible = blockers.length === 0 && policy !== undefined && workspace !== null;
+    const preparation = await this.backends.get(BACKEND_KIND)?.preparationCheck?.();
+    if (input.expected_candidate && preparation?.candidate_sha256 !== input.expected_candidate) blockers.push(supervisorError("VSUP_INVALID_STATE", "Connected candidate differs from expected_candidate."));
+    if (preparation && preparation.status !== "passed") blockers.push(supervisorError("VSUP_INVALID_STATE", "Matching candidate conformance is required before dispatch.", { preparation }));
     const eligible = blockers.length === 0 && policy !== undefined && workspace !== null;
     const issued = eligible ? this.receipts.issue({ revision: policy!.revision, operation: input.operation, workspace: workspace!, baseRef: baseRef ?? null, baseCommit }) : undefined;
     return {
@@ -422,6 +431,9 @@ export class RunManager {
       workspace,
       ...(baseRef === undefined ? {} : { base_ref: baseRef, base_commit: baseCommit }),
       eligible,
+      workspace_eligible: workspaceEligible,
+      candidate: { version: APP_VERSION, sha256: preparation?.candidate_sha256 ?? null },
+      preparation: preparation ?? { status: "not_reported" },
       blockers: blockers.map((error) => ({ code: error.code, message: error.message, remediation: error.remediation, retryable: error.retryable, ...(error.details ? { details: error.details } : {}) })),
       active_slot: { busy },
       runtime,
@@ -434,7 +446,7 @@ export class RunManager {
 
   async status(value: StatusToolInput, wait?: WaitOptions): Promise<Record<string, unknown>> {
     const input = parseInput(statusSchema, value);
-    if (input.workspace !== undefined) return this.readiness({ workspace: input.workspace, operation: input.operation ?? "review", base_ref: input.base_ref });
+    if (input.workspace !== undefined) return this.readiness({ workspace: input.workspace, operation: input.operation ?? "review", base_ref: input.base_ref, expected_candidate: input.expected_candidate });
     const runtime = this.requireRun(input.run_id ?? "");
     await this.ensureLoaded(runtime);
     this.assertLogReadable(runtime);
@@ -473,6 +485,8 @@ export class RunManager {
       schema_version: 1, supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: record.state, backend: record.backend,
       ...(result.stopReason ? { stop_reason: result.stopReason } : {}),
       summary: result.summary ?? "",
+      verification: record.verification ?? { status: "not_requested", checks: [] },
+      assessments: record.assessments ?? [],
       workspace: { source: record.sourceWorkspace, worker: record.workerWorkspace },
       artifacts: (result.artifacts ?? []).map(artifactToWire),
       changed_files: result.changedFiles ?? [], ...(record.usage ? { usage: usageToWire(record.usage) } : {}), warnings: result.warnings ?? [], ...(result.integrity ? { integrity: integrityToWire(result.integrity) } : {}), ...(record.error ? { error: record.error } : {}),
@@ -503,7 +517,7 @@ export class RunManager {
 
   private async compactResult(runtime: Runtime, includeTranscript: boolean, reserveChars = 0): Promise<Record<string, unknown>> {
     const record = runtime.record; const result = record.result;
-    const output: Record<string, unknown> = { supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: record.state, backend: record.backend };
+    const output: Record<string, unknown> = { supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: record.state, backend: record.backend, verification: verificationSummary(record.verification), assessment: record.assessments?.at(-1)?.decision ?? "unassessed" };
     if (!result) {
       output.summary = "Run has not produced a result yet.";
       output.warnings = [];
@@ -556,9 +570,29 @@ export class RunManager {
 
   async close(value: CloseToolInput): Promise<Record<string, unknown>> {
     const input = parseInput(closeSchema, value); const runtime = this.requireRun(input.run_id);
-    const next = runtime.closeChain.then(() => this.closeRun(runtime, input.cleanup_worktree === true));
+    const next = runtime.closeChain.then(async () => {
+      if (input.assessment) await this.recordAssessment(runtime, input.assessment);
+      return this.closeRun(runtime, input.cleanup_worktree === true);
+    });
     runtime.closeChain = next.then(() => undefined, () => undefined);
     return next;
+  }
+
+  private async recordAssessment(runtime: Runtime, input: AssessmentInput): Promise<void> {
+    if (runtime.record.mode !== "edit" || !COORDINATOR_ACTION_STATES.has(runtime.record.state)) throw codedError("VSUP_INVALID_STATE", "Assess only a settled edit.");
+    const record = runtime.record;
+    const contract = record.acceptanceContract;
+    const artifact = record.result?.artifacts?.find((item) => item.name === "diff.patch");
+    if (!contract || input.contract_sha256 !== contractDigest(contract) || input.patch_sha256 !== artifact?.sha256) throw codedError("VSUP_INVALID_ARGUMENT", "Assessment does not match the frozen contract and patch.");
+    const verification = await verifySaved(runtime.directory, contract, record.limits.maxArtifactBytes);
+    if (input.decision === "accepted" && (verification.status !== "passed" || verification.patch_sha256 !== input.patch_sha256 || contract.required_validations.some((id) => !input.validations.some((item) => item.id === id && item.status === "passed")))) throw codedError("VSUP_INVALID_STATE", "Acceptance requires automated PASS and all required coordinator validations.");
+    if ((record.assessments?.length ?? 0) >= 100) throw codedError("VSUP_OUTPUT_LIMIT", "Assessment history is full.");
+    await this.serial(runtime, async () => {
+      record.verification = verification;
+      record.assessments = [...(record.assessments ?? []), { ...input, assessed_at: new Date().toISOString() }];
+      await this.persist(runtime);
+      await atomicWriteJson(path.join(runtime.directory, "result.json"), this.resultWire(runtime, record.state));
+    });
   }
 
   private async closeRun(runtime: Runtime, cleanupWanted: boolean): Promise<Record<string, unknown>> {
@@ -586,6 +620,7 @@ export class RunManager {
     catch (error) { failure ??= error; }
     if (cleanup.reason) await this.serial(runtime, () => this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "warning", data: { reason: "worktree_retained", message: cleanup.reason } }, true)).catch(() => undefined);
     if (failure !== undefined) await this.serial(runtime, () => this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "warning", data: { reason: "close_failed", message: describeFailure(failure) } }, true)).catch(() => undefined);
+    record.cleanup = { worktree: cleanup.removed ? "removed" : !record.worktree ? "none" : cleanupWanted ? "retained" : "not_requested", checked_at: new Date().toISOString(), ...(cleanup.reason ? { reason: cleanup.reason } : {}) };
     try { await this.setState(runtime, "closed", { finishedAt: record.finishedAt ?? new Date().toISOString() }); }
     catch (error) {
       failure ??= error;
@@ -1038,10 +1073,12 @@ export class RunManager {
     return true;
   }
 
-  private async applyBackendState(runtime: Runtime, state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process">>): Promise<void> {
+  private async applyBackendState(runtime: Runtime, state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "modelObservations" | "preparation">>): Promise<void> {
     if (isTerminal(runtime.record.state) || runtime.record.state === "closing") return;
     const outcome = this.reportedOutcome(runtime, state, update?.error);
     if (outcome && runtime.record.state === "completed") { await this.settle(runtime, outcome); return; }
+    if (update?.preparation) runtime.record.preparation = update.preparation;
+    if (update?.modelObservations) runtime.record.modelObservations = update.modelObservations;
     if (update?.usage) runtime.record.usage = update.usage;
     if (update?.result) runtime.record.result = update.result;
     if (update?.process) runtime.record.process = update.process;
@@ -1208,6 +1245,8 @@ export class RunManager {
       schema_version: 1, supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: resultState, backend: record.backend,
       ...(result?.stopReason ? { stop_reason: result.stopReason } : {}),
       summary: result?.summary ?? "",
+      verification: record.verification ?? { status: "not_requested", checks: [] },
+      assessments: record.assessments ?? [],
       workspace: { source: record.sourceWorkspace, worker: record.workerWorkspace },
       artifacts: (result?.artifacts ?? []).map(artifactToWire), changed_files: result?.changedFiles ?? [],
       ...(record.error ? { error: record.error } : {}),
@@ -1258,6 +1297,15 @@ export class RunManager {
       warnings: stopWarning ? [...carriedWarnings, stopWarning] : carriedWarnings,
       ...(runtime.record.result?.integrity ? { integrity: runtime.record.result.integrity } : {})
     };
+    if (runtime.record.acceptanceContract && !patchInfo) runtime.record.verification = { status: "incomplete", checks: [{ id: "$artifacts", status: "incomplete", reason: "patch-unavailable" }] };
+    if (runtime.record.acceptanceContract && patchInfo && runtime.record.worktree) {
+      try {
+        const patch = await readOwnedFile(patchInfo.patchPath, runtime.record.limits.maxArtifactBytes);
+        runtime.record.verification = await captureVerification({ directory: runtime.directory, source: runtime.record.sourceWorkspace, base: runtime.record.worktree.baseRef, patch, contract: runtime.record.acceptanceContract, executionState: resultState === "completed" ? "completed" : resultState === "cancelled" ? "cancelled" : "failed", ...(stopReason ? { stopReason } : {}), maxBytes: runtime.record.limits.maxArtifactBytes - artifactBytes });
+      } catch {
+        runtime.record.verification = { status: "incomplete", contract_sha256: contractDigest(runtime.record.acceptanceContract), checks: [{ id: "$artifacts", status: "incomplete", reason: "verification-inputs-unavailable" }] };
+      }
+    }
     await atomicWriteJson(path.join(runtime.directory, "result.json"), this.resultWire(runtime, resultState));
     await this.persist(runtime);
   }
@@ -1310,6 +1358,7 @@ export class RunManager {
     try { await removeVerifiedWorktree(runtime.record.sourceWorkspace, worktree, verified, expectedPath, runtime.record.limits.maxArtifactBytes); }
     catch (error) { return { removed: false, reason: redactSecrets(error instanceof Error ? error.message : "Worktree cleanup was refused.").slice(0, MAX_RETAINED_REASON_CHARS) }; }
     delete runtime.record.worktree;
+    runtime.record.cleanup = { worktree: "removed", checked_at: new Date().toISOString() };
     try { await this.persist(runtime); }
     catch (error) { if (!this.degrade(runtime, error)) throw error; }
     return { removed: true };
@@ -1376,11 +1425,13 @@ export class RunManager {
     });
   }
 
-  private async setState(runtime: Runtime, state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process"> & { startedAt?: string; finishedAt?: string }>): Promise<void> {
+  private async setState(runtime: Runtime, state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "modelObservations" | "preparation"> & { startedAt?: string; finishedAt?: string }>): Promise<void> {
     if (isTerminal(runtime.record.state) && state !== "closing" && state !== "closed") return;
     assertTransition(runtime.record.state, state);
     runtime.record.state = state;
     runtime.record.updatedAt = new Date().toISOString();
+    if (update?.preparation) runtime.record.preparation = update.preparation;
+    if (update?.modelObservations) runtime.record.modelObservations = update.modelObservations;
     if (update?.usage) runtime.record.usage = update.usage;
     if (update?.result) runtime.record.result = update.result;
     if (update?.error) runtime.record.error = update.error;
@@ -1618,7 +1669,7 @@ function artifactToWire(artifact: NonNullable<RunRecord["result"]>["artifacts"] 
 }
 
 function usageToWire(usage: NonNullable<RunRecord["usage"]>): Record<string, unknown> {
-  return { ...(usage.tokensUsed === undefined ? {} : { tokens_used: usage.tokensUsed }), ...(usage.contextSize === undefined ? {} : { context_size: usage.contextSize }), ...(usage.cost ? { cost: { amount: usage.cost.amount, currency: usage.cost.currency, authoritative: false } } : {}) };
+  return { ...usageDetailsToWire(usage), ...(usage.tokensUsed === undefined ? {} : { tokens_used: usage.tokensUsed }), ...(usage.contextSize === undefined ? {} : { context_size: usage.contextSize }), ...(usage.cost ? { cost: { amount: usage.cost.amount, currency: usage.cost.currency, authoritative: false } } : {}) };
 }
 
 async function describeArtifact(name: string, file: string, mediaType: string): Promise<NonNullable<RunRecord["result"]>["artifacts"] extends (infer A)[] | undefined ? A : never> {

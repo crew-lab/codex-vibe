@@ -1,3 +1,17 @@
+# Reliable workflow candidate — 15 October 2026
+
+Implementation is isolated on `codex/workflow-acceptance-reporting`, based on the frozen rc.2 bundled-skills candidate. rc.3 implements deterministic acceptance and standardized export; rc.4 adds runtime observations, preparation kits and conformance-aware readiness; rc.5 adds owned offline validation copies and explicit coordinator/fallback guidance. The five-tool, detached-worktree, no automatic integration, no shell/network worker boundaries remain.
+
+Use [acceptance/reporting](docs/workflow-acceptance.md), [preparation](docs/preparation.md) and [validation workspace](docs/validation-workspace.md) procedures. Milestone packages and source snapshots are retained separately under local `output/workflow-2026-10-15/`. Consult the delivery report for checks actually run; earlier checkpoints below are historical. No new hosted inference, commits, pushes, publication or deployment are authorized by these notes. Hosted acceptance, exact Node floor, fresh-account/Intel checks and native reconnection remain separate evidence gates.
+
+# Bundled-skills candidate — 15 October 2026
+
+The owner explicitly permits Vibe's own bundled skills. Local 2.0.0-rc.2 accepts only the pinned 2.26.1 builtin plugin catalogue (ADR 0006), while keeping user/project/registry skills disabled and the tool/path/approval rules unchanged. rc.1 fixed nullable provenance and remote startup fetches but failed its target check solely on runtime.skills. Preserve that evidence. rc.2 has no target acceptance yet; no hosted task is authorized by documentation alone. The owner's implementation request includes routine task-scoped preparation, without repeated approvals for each local prerequisite.
+
+# Target conformance repair candidate — 15 October 2026
+
+Local `2.0.0-rc.1` repairs the observed nullable config/read contract, owns a loopback managed-config endpoint (ADR 0005), and corrects the network-control/verdict semantics. The installed 2.0.0 archive remains frozen. This candidate has no installed-Vibe, native, hosted, disconnect, fresh-account or exact Node-floor evidence. Keep PR implementation blocked until applicable target checks pass. Earlier checkpoints below are history for this repair.
+
 # Current handoff
 
 Updated 2026-10-14. Status only: what the release is, what is done, what remains and who does it, what is open, and where the records are. The picture, the plan, the lessons and the rules are in the [development strategy](docs/development-strategy.md); the boundaries are in [AGENTS.md](AGENTS.md).

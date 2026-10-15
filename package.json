@@ -1,6 +1,6 @@
 {
   "name": "vibe-supervisor",
-  "version": "2.0.0",
+  "version": "2.0.0-rc.5",
   "private": true,
   "description": "Codex MCP supervisor for delegated Mistral Vibe runs",
   "license": "MIT",
@@ -22,7 +22,8 @@
     "README.md",
     "SECURITY.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "scripts/v2-conformance-check.mjs"
   ],
   "scripts": {
     "lint": "eslint .",

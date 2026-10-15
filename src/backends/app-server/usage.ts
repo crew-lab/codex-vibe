@@ -72,6 +72,7 @@ export function usageFromStats(baseline: AgentStats | null, current: AgentStats,
 
 export function toUsageState(summary: UsageSummary): UsageState {
   return {
+    promptTokens: summary.promptTokens, completionTokens: summary.completionTokens, cachedTokens: summary.cachedTokens, modelCalls: summary.modelCalls, costSource: "runtime-stats-prices",
     tokensUsed: summary.tokensUsed,
     ...(summary.contextSize === null ? {} : { contextSize: summary.contextSize }),
     ...(summary.costAmount === null ? {} : { cost: { amount: summary.costAmount, currency: USAGE_CURRENCY, authoritative: false as const } })

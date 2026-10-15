@@ -91,3 +91,13 @@ Published 1.0.0 (legacy harness) was accepted against its own archive. The 1.0.1
 | 1.0.0 archive confirmation: readiness, one review, one edit with verified cleanup | PASS 2026-10-13, archive 4e91e90b…; review f8f9c56f…, edit 377bc531…; independent verification and safe close, dirty export retained. See dated release-evidence supplement. |
 
 A separate real-project review ran safely but its answer was not accepted. Usage and cost were not reported (UNKNOWN). Completed execution and correct task output remain separate claims.
+
+## Target conformance corrections (2.0.0-rc.1)
+
+`config/read.harnessSelectionSource` is nullable on the unified implementation. Null is accepted as diagnostic provenance, while the actual session/runtime unified-harness checks and hooks/skills checks remain mandatory. See ADR 0005 for the owned loopback managed-config service, which must be read back exactly. Its lifecycle is covered by fake-worker tests; installed-Vibe evidence is pending.
+
+The no-inference observer records CONNECT authorities, not encrypted paths. Its control enables both telemetry and experiments, but host equality cannot attribute requests to experiments. Every observed subject request fails the no-request check even without a matching control host. An otherwise passing subject/control matrix validates only absence of proxy-observed requests; the experiments-specific gate stays `unverified-host-only-observation` until separate attributable evidence exists. No network gate is promoted merely because configuration read-back passes.
+
+## Bundled Vibe skills (2.0.0-rc.2, owner decision)
+
+Pinned Vibe 2.26.1 bundled plugin skills are permitted: `vibe:create-plugin`, `vibe:skill-creator`, `vibe:vibe`, `vibe:worktree`. Read-back requires plugin source, builtin scope and no registry reference, and rejects unknown or duplicate names. User/project/registry skills remain disabled. Skills are guidance; their instructions do not authorize tools, paths, shell or network access. The exact review/edit file-tool profiles and approval handler remain unchanged. Earlier statements of an empty skill catalogue are superseded by ADR 0006.

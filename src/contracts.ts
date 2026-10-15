@@ -1,6 +1,8 @@
 /** Shared, versioned contracts for the supervisor, MCP surface, and backends. */
 import { SUPPORTED_VIBE } from "./backends/app-server/supported-vibe.js";
 
+import type { AcceptanceContract, Assessment, AssessmentInput, Verification } from './acceptance/schema.js';
+
 export const SCHEMA_VERSION = 1 as const;
 
 export const BACKEND_KINDS = ["app-server"] as const;
@@ -37,6 +39,11 @@ export interface ProcessRecord {
 }
 
 export interface UsageState {
+  promptTokens?: number;
+  completionTokens?: number;
+  cachedTokens?: number | null;
+  modelCalls?: number | null;
+  costSource?: "runtime-stats-prices";
   tokensUsed?: number;
   contextSize?: number;
   cost?: { amount: number; currency: string; authoritative: false };
@@ -105,12 +112,18 @@ export interface RunRecord {
   startedAt?: string;
   finishedAt?: string;
   taskSha256: string;
+  acceptanceContract?: AcceptanceContract;
+  verification?: Verification;
+  assessments?: Assessment[];
   policyRevision?: string;
   admittedRoot?: string;
   workspaceSnapshotSha256?: string;
   process?: ProcessRecord;
   limits: RunLimits;
   usage?: UsageState;
+  preparation?: import("./preparation/evidence.js").PreparationStatus;
+  cleanup?: { worktree: "removed" | "retained" | "not_requested" | "none"; checked_at: string; reason?: string | undefined };
+  modelObservations?: import("./reporting/telemetry.js").ModelObservation[];
   result?: ResultSummary;
   error?: SupervisorError;
 }
@@ -178,7 +191,7 @@ export interface BackendCallbacks {
   onEvent(event: Omit<SupervisorEvent, "schemaVersion" | "seq" | "timestamp" | "runId" | "backend">): void | Promise<void>;
   onActivity?(kind: string): void;
   onSpawn?(handle: BackendRunHandle): void;
-  onState(state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process">>): void | Promise<void>;
+  onState(state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "modelObservations" | "preparation">>): void | Promise<void>;
 }
 
 export interface BackendStartResult {
@@ -188,6 +201,7 @@ export interface BackendStartResult {
 }
 
 export interface SupervisorBackend {
+  preparationCheck?(): Promise<import("./preparation/evidence.js").PreparationStatus>;
   readonly kind: BackendKind;
   probe(): Promise<BackendCapabilities>;
   start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult>;
@@ -216,12 +230,13 @@ export interface StartToolInput {
 }
 export interface ReviewStartToolInput extends StartToolInput { context_files?: string[] }
 export interface EditStartToolInput extends StartToolInput {
+  acceptance_contract?: AcceptanceContract;
   base_ref?: string;
 }
-export interface StatusToolInput { run_id?: string; after_seq?: number; max_events?: number; wait_seconds?: number; workspace?: string; operation?: RunMode; base_ref?: string }
+export interface StatusToolInput { expected_candidate?: string; run_id?: string; after_seq?: number; max_events?: number; wait_seconds?: number; workspace?: string; operation?: RunMode; base_ref?: string }
 export interface WaitOptions { signal?: AbortSignal }
 export interface ResultToolInput { run_id: string; detail?: "compact" | "full"; include_transcript?: boolean }
-export interface CloseToolInput { run_id: string; cleanup_worktree?: boolean }
+export interface CloseToolInput { run_id: string; cleanup_worktree?: boolean; assessment?: AssessmentInput }
 
 export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_CONFIG_INVALID: "Correct the reported config.toml field and try again.",

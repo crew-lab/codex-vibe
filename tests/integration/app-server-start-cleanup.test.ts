@@ -84,6 +84,7 @@ async function setup(scenario: Record<string, unknown>) {
   const states: RunState[] = [];
   const backend = new AppServerBackend(DEFAULT_CONFIG, {
     executable: fake.appServer,
+    preparation: { check: async () => ({ status: "passed" as const, candidate_sha256: null, version: "fixture", reason: "Fake evidence" }) },
     pin: { manifestPath: fake.manifest },
     resolveCredential: async () => ({ status: 'environment', detail: '', credential: new ResolvedCredential('start-cleanup-credential-for-tests') }),
     reaper: { pollMs: 50, graceMs: 200 },

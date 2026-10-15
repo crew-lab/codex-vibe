@@ -106,3 +106,17 @@ Select a config with `--config`; otherwise resolution uses `VIBE_SUPERVISOR_HOME
 Commit or stash the reviewed state before delegating and pass its ref as `base_ref`; uncommitted source bytes are not an edit base.
 
 The supervisor's path checks, session configuration, approval handler and Vibe tool configuration are application policy. They are not a kernel or process sandbox. A worker's account permissions and any content included in its allowed workspace remain relevant.
+
+## Managed configuration isolation
+
+Each worker receives an owned loopback `vibe_base_url` serving only a disabled managed policy; remote admin configuration is excluded (ADR 0005). The endpoint is validated through effective read-back before a turn and closed during cleanup. The inference provider endpoint and five MCP operations are unchanged. Nullable harness-selection provenance is accepted; actual unified-harness identity remains required.
+
+## Bundled Vibe skills (2.0.0-rc.2, owner decision)
+
+Pinned Vibe 2.26.1 bundled plugin skills are permitted: `vibe:create-plugin`, `vibe:skill-creator`, `vibe:vibe`, `vibe:worktree`. Read-back requires plugin source, builtin scope and no registry reference, and rejects unknown or duplicate names. User/project/registry skills remain disabled. Skills are guidance; their instructions do not authorize tools, paths, shell or network access. The exact review/edit file-tool profiles and approval handler remain unchanged. Earlier statements of an empty skill catalogue are superseded by ADR 0006.
+
+## Artifact acceptance and reproducible validation (rc.3–rc.5)
+
+The five tools remain unchanged in number. Edit start may freeze an [acceptance contract](workflow-acceptance.md); automated checks evaluate exact exported bytes separately from execution and coordinator assessment. Close accepts append-only assessment corrections. Read-only `runs verify` and `runs export` produce sanitized reports and optional patch/projected-event artifacts.
+
+[Version-matched preparation](preparation.md) is now a dispatch gate: workspace eligibility alone is insufficient. Native readiness reports candidate identity, preparation state and optional expected-candidate mismatch. Runtime pin verification remains independent at launch. Model observations and detailed usage are reported where exposed; unknown identities, costs and phase boundaries stay unknown. [Validation preparation](validation-workspace.md) creates independent owned copies and pinned offline dependencies without running project checks or integrating output.

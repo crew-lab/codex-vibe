@@ -1,3 +1,4 @@
+import { writeFakePreparation } from "./unit/support/fake-preparation.js";
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
@@ -42,6 +43,7 @@ async function sandbox() {
   const workerRecord = launchable.workerRecord;
   const config = path.join(data, 'config.toml');
   await writeFile(config, `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[paths]\nvibe = ${JSON.stringify(launchable.vibe)}\nvibe_pin_manifest = ${JSON.stringify(launchable.manifest)}\n`, { mode: 0o600 });
+  await writeFakePreparation(config);
   const taskFile = path.join(parent, 'task.txt');
   await writeFile(taskFile, 'hold until the client goes away\n');
   return { parent, workspace, config, taskFile, workerRecord };

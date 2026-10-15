@@ -1,3 +1,4 @@
+import { BUNDLED_SKILL_NAMES, onlyBundledSkills } from './bundled-skills.js';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { RuntimeReadResult, SessionStartResult } from './protocol.js';
@@ -89,7 +90,7 @@ export function compareReadback(expected: ReadbackExpectation, observed: Readbac
   const { runtime } = observed.runtime;
   const toolNames = runtime.tools.map((tool) => tool.name);
   expect('runtime.tools', [...expected.tools], toolNames, sameStringSet(toolNames, expected.tools));
-  equal('runtime.skills', [], runtime.skills);
+  expect('runtime.skills', { source: 'plugin', scope: 'builtin', registry: null, allowedNames: BUNDLED_SKILL_NAMES }, runtime.skills, onlyBundledSkills(runtime.skills));
   equal('runtime.hooksCount', 0, runtime.hooksCount);
   equal('runtime.issues', [], runtime.issues);
   equal('runtime.bypassToolPermissions', false, runtime.bypassToolPermissions);

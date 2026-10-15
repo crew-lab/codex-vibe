@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "candidate": "2.0.0",
+  "candidate": "2.0.0-rc.5",
   "scope": "App-server client: one-shot review and isolated edit through vibe-app-server 2.26.1, one process per run; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work. The legacy harness path, the Python launcher and the backend config key are removed.",
   "deterministic": [
     {
@@ -48,24 +48,22 @@
       "status": "RUN_BY_focused-tests"
     }
   ],
-  "verified": [
+  "verified": [],
+  "unverified": [
     {
       "name": "node-floor-20.19.0",
-      "status": "PASSED_LOCALLY",
-      "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the 2.0 source.",
-      "evidence": "2026-10-14, preparing machine (macOS arm64): the 2.0.0 working tree at the version bump (parent commit 4716747) under exactly Node v20.19.0 and npm 10.8.2; npm run verify:release passed (lint, typecheck, build, 83 test files / 1244 tests, acceptance, secret scan, SBOM with 193 entries). No GitHub CI: the workflow token scope is skipped."
-    }
-  ],
-  "unverified": [
+      "status": "UNVERIFIED",
+      "evidence_required": "Run full release verification on exactly Node 20.19.0 for this repaired candidate; previous source evidence does not transfer."
+    },
     {
       "name": "target-no-inference-conformance-check",
       "status": "UNVERIFIED",
-      "evidence_required": "On the target with the installed Vibe 2.26.1 and no provider: vibe-supervisor pin-manifest generated and then verified on the target (with the per-run hashing cost recorded), serverInfo.version 2.26.1, the initialize handshake, session/start with the supervisor profile, and the complete read-back (profile tools exact, no skills, MCP sources, connectors or hooks, bypass off, unified harness, each VIBE_* setting, thinking off), with no turn and no hosted inference."
+      "evidence_required": "On the target with the installed Vibe 2.26.1 and no provider: vibe-supervisor pin-manifest generated and then verified on the target (with the per-run hashing cost recorded), serverInfo.version 2.26.1, the initialize handshake, session/start with the supervisor profile, and the complete read-back (profile tools exact, only the permitted bundled skill catalogue from ADR 0006, no MCP sources, connectors or hooks, bypass off, unified harness, each VIBE_* setting, thinking off), with no turn and no hosted inference."
     },
     {
       "name": "native-readiness-on-candidate",
       "status": "UNVERIFIED",
-      "evidence_required": "On the intended Codex desktop connection, native readiness reports server_version 2.0.0 against the frozen 2.0 archive; eligible, no blockers, free slot."
+      "evidence_required": "On the intended Codex desktop connection, native readiness reports server_version 2.0.0-rc.2 against the frozen 2.0 archive; eligible, no blockers, free slot."
     },
     {
       "name": "hosted-review-edit-confirmation",
