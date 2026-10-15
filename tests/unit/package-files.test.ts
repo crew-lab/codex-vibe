@@ -12,4 +12,5 @@ it('ships documentation but no dated evidence', async () => {
   const files = report[0]!.files.map((file) => file.path);
   expect(files).toContain('docs/security.md');
   expect(files.filter((file) => file.startsWith('docs/history/') || file.startsWith('docs/reviews/'))).toEqual([]);
+  expect(files.filter((file) => /^(marketing|research|planning)\//.test(file))).toEqual([]);
 }, 60_000);

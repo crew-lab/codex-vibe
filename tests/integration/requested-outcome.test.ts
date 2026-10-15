@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 
 const canonicalTmp = await realpath(tmpdir());
@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 
 class CompletingCancelBackend implements SupervisorBackend {
-  readonly kind = 'programmatic' as const;
+  readonly kind = 'app-server' as const;
   readonly callbacks = new Map<string, BackendCallbacks>();
   async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
@@ -42,7 +42,7 @@ async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean, t
 async function startRunning(timeoutSeconds?: number, backend: CompletingCancelBackend = new CompletingCancelBackend()) {
   const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-requested-')); roots.push(parent);
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data'); await mkdir(source);
-  const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+  const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
   const started = await manager.reviewStart({ task: 'review', cwd: source, ...(timeoutSeconds ? { timeout_seconds: timeoutSeconds } : {}) });
   await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
   return { manager, runId: started.run_id, data };

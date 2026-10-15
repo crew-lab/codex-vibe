@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BackendCallbacks, BackendStartResult, StartRunInput, SupervisorBackend } from "../../src/contracts.js";
-import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { RunManager } from "../../src/core/run-manager.js";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
@@ -51,7 +51,7 @@ class StdioClientHarness implements Transport {
 const clients: Client[] = [];
 
 class FakeBackend implements SupervisorBackend {
-  readonly kind = "programmatic" as const;
+  readonly kind = "app-server" as const;
   callbacks: BackendCallbacks | undefined;
   completeOnStart: { stopReason: string } | undefined;
   async probe() { return { available: true, backend: this.kind }; }
@@ -74,7 +74,7 @@ async function paths() {
 async function setup() {
   const { source, data } = await paths();
   const backend = new FakeBackend();
-  const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+  const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
   return { source, data, manager, backend };
 }
 
@@ -96,12 +96,12 @@ describe("stop reason reporting", () => {
     const { source, manager, backend } = await setup();
     try {
       const runId = await runningReview(manager, source);
-      await backend.callbacks?.onState("completed", { result: { stopReason: "max_turn_requests" } });
+      await backend.callbacks?.onState("completed", { result: { stopReason: "turn_limit" } });
       const compact = await manager.result({ run_id: runId });
       expect(compact.state).toBe("completed");
-      expect(compact.stop_reason).toBe("max_turn_requests");
+      expect(compact.stop_reason).toBe("turn_limit");
       expect(compact.summary).toBe(TURN_LIMIT);
-      expect(compact.warnings).toEqual([expect.stringContaining("max_turn_requests")]);
+      expect(compact.warnings).toEqual([expect.stringContaining("turn_limit")]);
       const full = await manager.result({ run_id: runId, detail: "full" });
       expect(full.summary).toBe(TURN_LIMIT);
       expect(full.warnings).toEqual(compact.warnings);
@@ -109,7 +109,7 @@ describe("stop reason reporting", () => {
   });
 
   it.each([
-    ["max_tokens", /token limit/],
+    ["token_limit", /token limit/],
     ["refusal", /declined/],
     ["cancelled", /cancelled/]
   ])("derives a distinct summary and warning for %s", async (reason, pattern) => {
@@ -140,10 +140,10 @@ describe("stop reason reporting", () => {
     const { source, manager, backend } = await setup();
     try {
       const runId = await runningReview(manager, source);
-      await backend.callbacks?.onState("completed", { result: { stopReason: "max_turn_requests", summary: "Partial findings so far" } });
+      await backend.callbacks?.onState("completed", { result: { stopReason: "turn_limit", summary: "Partial findings so far" } });
       const compact = await manager.result({ run_id: runId });
       expect(compact.summary).toBe("Partial findings so far");
-      expect(compact.warnings).toEqual([expect.stringContaining("max_turn_requests")]);
+      expect(compact.warnings).toEqual([expect.stringContaining("turn_limit")]);
     } finally { await manager.shutdown(); }
   });
 
@@ -161,23 +161,23 @@ describe("stop reason reporting", () => {
   it("surfaces the cap through the MCP compact result and a start-with-wait response", async () => {
     const { source, manager, backend } = await setup();
     const input = new PassThrough(); const output = new PassThrough();
-    const server = createSupervisorMcpServer(manager, { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits } } });
+    const server = createSupervisorMcpServer(manager, { config: { ...TEST_CONFIG, limits: { ...TEST_CONFIG.limits } } });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: "stop-reason-client", version: "1.0.0" }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
     try {
-      backend.completeOnStart = { stopReason: "max_turn_requests" };
+      backend.completeOnStart = { stopReason: "turn_limit" };
       const waited = await client.callTool({ name: "vibe_review_start", arguments: { task: "review", cwd: source, wait_seconds: 5 } });
       const envelope = structured(waited) as { state: string; result: Record<string, unknown> };
       expect(envelope.state).toBe("completed");
-      expect(envelope.result.stop_reason).toBe("max_turn_requests");
+      expect(envelope.result.stop_reason).toBe("turn_limit");
       expect(envelope.result.summary).toBe(TURN_LIMIT);
-      expect(envelope.result.warnings).toEqual([expect.stringContaining("max_turn_requests")]);
+      expect(envelope.result.warnings).toEqual([expect.stringContaining("turn_limit")]);
       const runId = (structured(waited) as { run_id: string }).run_id;
       const compact = structured(await client.callTool({ name: "vibe_result", arguments: { run_id: runId } })) as Record<string, unknown>;
-      expect(compact.stop_reason).toBe("max_turn_requests");
+      expect(compact.stop_reason).toBe("turn_limit");
       expect(compact.summary).toBe(TURN_LIMIT);
-      expect(compact.warnings).toEqual([expect.stringContaining("max_turn_requests")]);
+      expect(compact.warnings).toEqual([expect.stringContaining("turn_limit")]);
     } finally { await manager.shutdown(); }
   });
 
@@ -187,10 +187,10 @@ describe("stop reason reporting", () => {
     try {
       const runId = await runningReview(manager, source);
       await writeFile(path.join(source, "a.txt"), "changed\n");
-      await backend.callbacks?.onState("completed", { result: { stopReason: "max_turn_requests" } });
+      await backend.callbacks?.onState("completed", { result: { stopReason: "turn_limit" } });
       const result = await manager.result({ run_id: runId });
       expect(result.summary).toBe(TURN_LIMIT);
-      expect(result.warnings).toEqual([CHANGED_PLAIN, expect.stringContaining("max_turn_requests")]);
+      expect(result.warnings).toEqual([CHANGED_PLAIN, expect.stringContaining("turn_limit")]);
     } finally { await manager.shutdown(); }
   });
 });

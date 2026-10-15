@@ -1,0 +1,9 @@
+{
+  "name": "stats-usage",
+  "baselineStats": { "inputPricePerMillion": 0.4, "outputPricePerMillion": 2, "cachedInputPricePerMillion": 0.04 },
+  "steps": [
+    { "op": "stats", "stats": { "modelCalls": 1, "sessionPromptTokens": 1000, "sessionCompletionTokens": 200, "sessionCachedTokens": 400, "contextTokens": 1200 } },
+    { "op": "stats", "stats": { "modelCalls": 3, "sessionPromptTokens": 5000, "sessionCompletionTokens": 900, "sessionCachedTokens": 2000, "contextTokens": 5900 } },
+    { "op": "say", "text": "Usage recorded." }
+  ]
+}

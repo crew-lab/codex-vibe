@@ -9,11 +9,11 @@ const distRoot = process.env.VIBE_SUPERVISOR_DIST_DIR ? path.resolve(process.env
 const load = (relative) => import(pathToFileURL(path.join(distRoot, relative)).href);
 const { createPrivateFile, isPathWithinRoot, resolveCanonicalRoot } = await load('security/paths.js');
 const { environmentSecrets, patchContainsCredential } = await load('security/redaction.js');
-const { assertNoProjectVibeExtensions, assertSimpleGlobRoot } = await load('backends/profile.js');
+const { assertNoProjectVibeExtensions, assertSimpleGlobRoot } = await load('security/workspace-guard.js');
 const { preparationGit: boundedGit, resolveBaseCommit, resolveGitRoot } = await load('git/worktree.js');
 const { loadResolvedConfig, resolveConfigSelection } = await load('config/config.js');
 const { APP_VERSION } = await load('version.js');
-const { SUPPORTED_VIBE } = await load('backends/pinned.js');
+const { SUPPORTED_VIBE } = await load('backends/app-server/supported-vibe.js');
 
 const git = (cwd, args, codes = [0]) =>
   boundedGit(cwd, args, { PATH: process.env.PATH, HOME: process.env.HOME, LANG: process.env.LANG }, codes);

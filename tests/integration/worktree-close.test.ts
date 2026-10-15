@@ -6,7 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, RunState, StartRunInput, SupervisorBackend } from "../../src/contracts.js";
-import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { RunManager } from "../../src/core/run-manager.js";
 import { runToWire } from "../../src/core/serialization.js";
 import { captureDirtySnapshot, createDetachedWorktree } from "../../src/git/worktree.js";
@@ -22,7 +22,7 @@ afterEach(async () => {
 });
 
 class FakeBackend implements SupervisorBackend {
-  readonly kind = "programmatic" as const;
+  readonly kind = "app-server" as const;
   callbacks = new Map<string, BackendCallbacks>();
   cancelled: string[] = [];
   closed: string[] = [];
@@ -60,7 +60,7 @@ async function setup(options: { backend?: FakeBackend; git?: boolean } = {}) {
     await exec("git", ["add", "tracked.txt", ".gitignore"], { cwd: source });
     await exec("git", ["commit", "-qm", "baseline"], { cwd: source });
   }
-  const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] };
+  const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [source] };
   const manager = new RunManager(config, data, [backend]);
   return { parent, source, data, backend, config, manager };
 }
@@ -379,7 +379,7 @@ describe("close", () => {
 function baseRecord(source: string, state: RunState, extra: Partial<RunRecord> = {}): RunRecord {
   const now = new Date().toISOString();
   return {
-    schemaVersion: 1, runId: randomUUID(), backend: "programmatic", mode: "review", state, sourceWorkspace: source, workerWorkspace: source,
+    schemaVersion: 1, runId: randomUUID(), backend: "app-server", mode: "review", state, sourceWorkspace: source, workerWorkspace: source,
     createdAt: now, updatedAt: now, launchedAt: now, taskSha256: "a".repeat(64),
     limits: { timeoutSeconds: 600, maxTurns: 5, maxEventBytes: 1_048_576, maxTranscriptBytes: 1_048_576, maxArtifactBytes: 8_388_608 },
     ...extra

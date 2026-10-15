@@ -30,10 +30,13 @@ describe('workspace readiness over a real --isolated stdio connection', () => {
     await mkdir(data, { mode: 0o700 }); await mkdir(first); await mkdir(second);
     const marker = path.join(parent, 'vibe-was-launched');
     const vibe = path.join(parent, 'vibe');
-    await writeFile(vibe, `#!/bin/sh\ntouch ${JSON.stringify(marker)}\n`);
-    await chmod(vibe, 0o755);
+    const appServer = path.join(parent, 'vibe-app-server');
+    for (const executable of [vibe, appServer]) {
+      await writeFile(executable, `#!/bin/sh\ntouch ${JSON.stringify(marker)}\n`);
+      await chmod(executable, 0o755);
+    }
     const configPath = path.join(data, 'config.toml');
-    await writeFile(configPath, `version = 1\nallowed_workspace_roots = [${JSON.stringify(first)}]\n[paths]\nvibe = ${JSON.stringify(vibe)}\n`, { mode: 0o600 });
+    await writeFile(configPath, `version = 1\nallowed_workspace_roots = [${JSON.stringify(first)}]\n[paths]\nvibe = ${JSON.stringify(vibe)}\nvibe_pin_manifest = ${JSON.stringify(path.join(parent, 'vibe-pin-manifest.json'))}\n`, { mode: 0o600 });
     const env = { ...(process.env as Record<string, string>), VIBE_SUPERVISOR_HOME: data };
 
     const transport = new StdioClientTransport({ command: process.execPath, args: [cli, 'serve', '--stdio', '--isolated'], env, stderr: 'pipe' });

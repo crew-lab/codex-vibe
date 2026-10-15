@@ -3,25 +3,33 @@ import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { chmod } from "node:fs/promises";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { chmodSync, writeFileSync } from "node:fs";
+import { afterEach, describe, expect, it } from "vitest";
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend, SupervisorConfig } from "../../src/contracts.js";
-import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { validateConfig } from "../../src/config/validation.js";
 import { RunManager } from "../../src/core/run-manager.js";
-import { ProgrammaticBackend } from "../../src/backends/programmatic.js";
+import { AppServerBackend } from "../../src/backends/app-server.js";
+import { ResolvedCredential } from "../../src/backends/app-server/credentials.js";
+import { PROFILE_TOOLS, TOOL_PERMISSION, workspaceDenylist } from "../../src/backends/app-server/session-config.js";
 
-const childScript = vi.hoisted(() => ({ path: "" }));
-vi.mock("../../src/backends/launcher.js", async (importOriginal) => {
-  const original = await importOriginal<typeof import("../../src/backends/launcher.js")>();
-  return {
-    ...original,
-    buildVibeLaunch: async (...args: Parameters<typeof original.buildVibeLaunch>) => {
-      const launch = await original.buildVibeLaunch(...args);
-      return childScript.path ? { ...launch, command: process.execPath, args: [childScript.path] } : launch;
-    }
-  };
-});
+const fixture = path.resolve(import.meta.dirname, "..", "fixtures", "fake-vibe-app-server.mjs");
+
+function fakeAppServerBackend(parent: string, source: string, scenario: Record<string, unknown>): AppServerBackend {
+  const tools = Object.fromEntries(PROFILE_TOOLS.review.map((tool) => [tool, { permission: TOOL_PERMISSION, denylist: workspaceDenylist(source) }]));
+  const scenarioFile = path.join(parent, "scenario.json");
+  writeFileSync(scenarioFile, JSON.stringify({ ...scenario, effectiveConfig: { tools } }));
+  const wrapper = path.join(parent, "vibe-app-server");
+  writeFileSync(wrapper, `#!/bin/sh\nexec '${process.execPath}' '${fixture}' --scenario '${scenarioFile}'\n`);
+  chmodSync(wrapper, 0o755);
+  return new AppServerBackend(TEST_CONFIG, {
+    executable: wrapper,
+    pin: { verify: async () => undefined },
+    resolveCredential: async () => ({ status: "environment", detail: "", credential: new ResolvedCredential("watchdog-credential-abcdefghijklmnop") }),
+    reaper: { pollMs: 50, graceMs: 200 },
+    timing: { interruptGraceMs: 300, stdinGraceMs: 300, terminateGraceMs: 300, interruptTimeoutMs: 500, statsThrottleMs: 0 }
+  });
+}
 
 const exec = promisify(execFile);
 const canonicalTmp = await realpath(tmpdir());
@@ -31,7 +39,7 @@ afterEach(async () => {
 });
 
 class ScriptedBackend implements SupervisorBackend {
-  readonly kind = "programmatic" as const;
+  readonly kind = "app-server" as const;
   callbacks = new Map<string, BackendCallbacks>();
   cancelled: string[] = [];
   closed: string[] = [];
@@ -71,7 +79,7 @@ async function setup(progressSeconds: number, options: { git?: boolean; backend?
     await exec("git", ["commit", "-qm", "baseline"], { cwd: source });
   }
   const backend = options.backend?.(data, source) ?? new ScriptedBackend();
-  const config: SupervisorConfig = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], limits: { ...DEFAULT_CONFIG.limits, workerProgressTimeoutSeconds: progressSeconds }, ...options.config };
+  const config: SupervisorConfig = { ...TEST_CONFIG, allowedWorkspaceRoots: [source], limits: { ...TEST_CONFIG.limits, workerProgressTimeoutSeconds: progressSeconds }, ...options.config };
   const manager = new RunManager(config, data, [backend]);
   return { parent, source, data, backend, manager };
 }
@@ -173,29 +181,22 @@ describe("worker progress watchdog", () => {
 });
 
 describe("worker activity and settle races", () => {
-  it("counts programmatic stdout lines that carry no assistant text and stderr output as activity", async () => {
-    const parent = await mkdtemp(path.join(canonicalTmp, "vsup-progress-")); roots.push(parent);
-    const dir = path.join(parent, "fake-vibe"); await mkdir(dir);
-    const vibe = path.join(dir, "vibe");
-    await writeFile(vibe, ["#!/usr/bin/env python3", "print(\"vibe 2.26.1\")", ""].join("\n")); await chmod(vibe, 0o755);
-    const child = path.join(dir, "child.mjs");
-    await writeFile(child, [
-      "const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));",
-      "for (let index = 0; index < 4; index += 1) {",
-      "  await wait(1000);",
-      "  if (index % 2) process.stderr.write('working\\n');",
-      "  else process.stdout.write(JSON.stringify({ role: 'tool', content: [{ type: 'tool_result', text: 'ok' }] }) + '\\n');",
-      "}",
-      "process.stdout.write(JSON.stringify({ role: 'assistant', text: 'done' }) + '\\n');",
-      ""
-    ].join("\n"));
-    childScript.path = child;
-    const context = await setup(2, { backend: () => new ProgrammaticBackend({ ...DEFAULT_CONFIG, backend: "programmatic", paths: { vibe } }), config: { backend: "programmatic" } });
+  it("counts app-server frames that carry no assistant text as activity so a slow but busy run completes", async () => {
+    const scenario = {
+      name: "slow-busy",
+      steps: [
+        { op: "delay", ms: 900 }, { op: "stats", stats: { modelCalls: 1, sessionPromptTokens: 10, sessionCompletionTokens: 1 } },
+        { op: "delay", ms: 900 }, { op: "stats", stats: { modelCalls: 2, sessionPromptTokens: 20, sessionCompletionTokens: 2 } },
+        { op: "delay", ms: 900 }, { op: "stats", stats: { modelCalls: 3, sessionPromptTokens: 30, sessionCompletionTokens: 3 } },
+        { op: "say", text: "done", stream: true }
+      ]
+    };
+    const context = await setup(2, { backend: (_data, source) => fakeAppServerBackend(path.dirname(source), source, scenario) });
     try {
       const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
       const status = await waitFor(() => context.manager.status({ run_id: started.run_id }), (value) => value.state === "completed" || value.state === "failed", 20_000);
       expect(status.state).toBe("completed");
-    } finally { childScript.path = ""; await context.manager.shutdown(); }
+    } finally { await context.manager.shutdown(); }
   });
 
   it("records the last activity kind and the silence in the no_progress diagnostic", async () => {
@@ -279,9 +280,9 @@ describe("worker activity and settle races", () => {
 });
 
 describe("worker_progress_timeout_seconds config", () => {
-  const parse = (value: unknown) => validateConfig({ version: 1, limits: { worker_progress_timeout_seconds: value } });
+  const parse = (value: unknown) => validateConfig({ version: 1, paths: { vibe_pin_manifest: "/unused/manifest.json" }, limits: { worker_progress_timeout_seconds: value } });
   it("defaults to 600 and accepts 0 and 60 to 7200", () => {
-    expect(validateConfig({ version: 1 }).limits.workerProgressTimeoutSeconds).toBe(600);
+    expect(validateConfig({ version: 1, paths: { vibe_pin_manifest: "/unused/manifest.json" } }).limits.workerProgressTimeoutSeconds).toBe(600);
     for (const value of [0, 60, 7200]) expect(parse(value).limits.workerProgressTimeoutSeconds).toBe(value);
   });
   it("rejects values between 1 and 59, above 7200, negatives and non-integers", () => {

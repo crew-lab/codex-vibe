@@ -1,17 +1,19 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, test } from 'vitest';
 import { classify, parseArgs, redactReadiness } from '../scripts/v1-disconnect-client.mjs';
+import { makeLaunchableFakeVibe } from './unit/support/launchable-fake-vibe.js';
 
 const exec = promisify(execFile);
 const repo = path.resolve(import.meta.dirname, '..');
 const script = path.join(repo, 'scripts', 'v1-disconnect-client.mjs');
 const cli = path.join(process.env.VIBE_SUPERVISOR_TEST_DIST ?? path.join(repo, 'dist'), 'cli.js');
 const scratch = [];
+process.env.MISTRAL_API_KEY = 'disconnect-client-credential-abcdefghijklmnop';
 const strays = new Set();
 
 afterEach(async () => {
@@ -36,22 +38,10 @@ async function sandbox() {
   await git(workspace, ['init', '-q']);
   await git(workspace, ['add', 'a.js']);
   await git(workspace, ['-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'init']);
-  const workerRecord = path.join(fake, 'worker.json');
-  const interpreter = path.join(fake, 'fake-python');
-  await writeFile(interpreter, [
-    `#!${process.execPath}`,
-    "const fs = require('node:fs');",
-    "if (!String(process.argv[2]).endsWith('vibe_supervisor_launcher.py')) { process.stdout.write('vibe 2.26.1\\n'); process.exit(0); }",
-    `fs.writeFileSync(${JSON.stringify(workerRecord)}, JSON.stringify({ pid: process.pid }));`,
-    'setInterval(() => {}, 1000);',
-    '',
-  ].join('\n'));
-  await chmod(interpreter, 0o755);
-  const vibe = path.join(fake, 'vibe');
-  await writeFile(vibe, `#!${interpreter}\n`);
-  await chmod(vibe, 0o755);
+  const launchable = await makeLaunchableFakeVibe(fake, { scenario: { name: 'hold', steps: [{ op: 'say', text: 'Working.' }, { op: 'hold' }] } });
+  const workerRecord = launchable.workerRecord;
   const config = path.join(data, 'config.toml');
-  await writeFile(config, `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[paths]\nvibe = ${JSON.stringify(vibe)}\n`, { mode: 0o600 });
+  await writeFile(config, `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[paths]\nvibe = ${JSON.stringify(launchable.vibe)}\nvibe_pin_manifest = ${JSON.stringify(launchable.manifest)}\n`, { mode: 0o600 });
   const taskFile = path.join(parent, 'task.txt');
   await writeFile(taskFile, 'hold until the client goes away\n');
   return { parent, workspace, config, taskFile, workerRecord };

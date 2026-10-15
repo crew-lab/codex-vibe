@@ -1,0 +1,4 @@
+{
+  "name": "session-start-unauthorized",
+  "errors": { "session/start": { "code": "unauthorized", "message": "Missing API key", "data": { "provider": "mistral", "env_key": "MISTRAL_API_KEY" } } }
+}

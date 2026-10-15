@@ -1,0 +1,7 @@
+{
+  "name": "limit",
+  "steps": [
+    { "op": "say", "text": "Partial answer." },
+    { "op": "end", "status": "completed", "stopReason": "limit" }
+  ]
+}

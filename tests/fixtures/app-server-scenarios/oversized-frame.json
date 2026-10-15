@@ -1,0 +1,4 @@
+{
+  "name": "oversized-frame",
+  "steps": [ { "op": "oversizedFrame", "bytes": 2097152 } ]
+}

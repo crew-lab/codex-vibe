@@ -1,0 +1,8 @@
+{
+  "name": "handoff-unfinished-effect",
+  "effectWhileBlocked": "blocked",
+  "steps": [
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts" }, "handoffWhileOpen": { "kind": "contextCleared", "newSessionId": "fake-session-0002" } },
+    { "op": "say", "text": "Unreachable after the handoff." }
+  ]
+}

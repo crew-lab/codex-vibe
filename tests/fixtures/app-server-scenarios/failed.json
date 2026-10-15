@@ -1,0 +1,6 @@
+{
+  "name": "failed",
+  "steps": [
+    { "op": "end", "status": "failed", "error": { "message": "The backend failed.", "code": "backend_error", "details": null } }
+  ]
+}

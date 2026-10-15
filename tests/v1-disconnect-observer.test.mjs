@@ -91,7 +91,7 @@ test('extracts only safe run state fields from the rc28 meta.json format', async
   const runDir = path.join(dir, 'runs', runId);
   await mkdir(runDir, { recursive: true });
   await writeFile(path.join(runDir, 'meta.json'), JSON.stringify({
-    run_id: runId, state: 'running', backend: 'programmatic', mode: 'edit',
+    run_id: runId, state: 'running', backend: 'app-server', mode: 'edit',
     updated_at: '2026-10-13T10:00:00.000Z', started_at: '2026-10-13T09:59:00.000Z',
     task: 'private task text', task_sha256: 'a'.repeat(64),
     error: { message: 'private diagnostic' }, acp: { session_id: 'private-session' },
@@ -99,7 +99,7 @@ test('extracts only safe run state fields from the rc28 meta.json format', async
 
   const runs = await readRunStates(dir);
   assert.deepEqual(runs, [{
-    run_id: runId, state: 'running', backend: 'programmatic', mode: 'edit',
+    run_id: runId, state: 'running', backend: 'app-server', mode: 'edit',
     updated_at: '2026-10-13T10:00:00.000Z', started_at: '2026-10-13T09:59:00.000Z',
   }]);
   assert.equal(JSON.stringify(runs).includes('private task text'), false);

@@ -1,0 +1,7 @@
+{
+  "name": "interrupted",
+  "steps": [
+    { "op": "say", "text": "Interrupted by something else." },
+    { "op": "end", "status": "interrupted", "stopReason": "limit" }
+  ]
+}

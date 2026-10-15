@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
 import { supervisorError } from '../../src/contracts.js';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 
 const canonicalTmp = await realpath(tmpdir());
@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 
 class SettleBackend implements SupervisorBackend {
-  readonly kind = 'programmatic' as const;
+  readonly kind = 'app-server' as const;
   readonly callbacks = new Map<string, BackendCallbacks>();
   readonly cancelled: string[] = [];
   readonly closed: string[] = [];
@@ -38,11 +38,11 @@ class SettleBackend implements SupervisorBackend {
   async close(handle: BackendRunHandle) { this.closed.push(handle.runId); if (this.closeFailure) throw new Error('process group still alive'); }
 }
 
-async function setup(limits = DEFAULT_CONFIG.limits) {
+async function setup(limits = TEST_CONFIG.limits) {
   const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-settle-')); roots.push(parent);
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data'); await mkdir(source);
   const backend = new SettleBackend();
-  const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], limits }, data, [backend]);
+  const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source], limits }, data, [backend]);
   return { manager, backend, data, source };
 }
 
@@ -202,7 +202,7 @@ describe('one-shot settlement', () => {
   });
 
   it('fails on transcript overflow while preserving the output-limit error', async () => {
-    const limits = { ...DEFAULT_CONFIG.limits, maxTranscriptBytes: 8 };
+    const limits = { ...TEST_CONFIG.limits, maxTranscriptBytes: 8 };
     const context = await setup(limits);
     try {
       const started = await context.manager.reviewStart({ task: 'overflow', cwd: context.source });
