@@ -49,12 +49,12 @@ describe('usageFromStats', () => {
   it('leaves unknowns null and omits them from the usage state', () => {
     const summary = usageFromStats(null, stats({ promptTokens: 10, completionTokens: 5, cachedTokens: null, inputPricePerMillion: null }));
     expect(summary).toMatchObject({ tokensUsed: 15, cachedTokens: null, modelCalls: null, costAmount: null, contextSize: null });
-    expect(toUsageState(summary)).toEqual({ tokensUsed: 15 });
+    expect(toUsageState(summary)).toEqual({ tokensUsed: 15, promptTokens: 10, completionTokens: 5, cachedTokens: null, modelCalls: null, costSource: "runtime-stats-prices" });
   });
 
   it('builds the usage state with a non-authoritative cost and the context window', () => {
     const state = toUsageState(usageFromStats(stats(), stats({ promptTokens: 1000, completionTokens: 1000 }), 4096));
-    expect(state).toEqual({ tokensUsed: 2000, contextSize: 4096, cost: { amount: expect.closeTo(0.0024, 10), currency: 'USD', authoritative: false } });
+    expect(state).toMatchObject({ tokensUsed: 2000, contextSize: 4096, cost: { amount: expect.closeTo(0.0024, 10), currency: 'USD', authoritative: false } });
     expect(toUsageState(usageFromStats(stats(), stats(), 0)).contextSize).toBeUndefined();
   });
 });
@@ -85,7 +85,7 @@ describe('budget checks', () => {
 describe('UsageTracker', () => {
   it('starts at zero from the baseline, tracks changes and carries the context window forward', () => {
     const tracker = new UsageTracker(stats({ promptTokens: 100 }), { maxTokens: 50 });
-    expect(tracker.state).toEqual({ tokensUsed: 0, cost: { amount: 0, currency: 'USD', authoritative: false } });
+    expect(tracker.state).toMatchObject({ tokensUsed: 0, cost: { amount: 0, currency: 'USD', authoritative: false } });
     const first = tracker.update(stats({ promptTokens: 130, completionTokens: 10 }), 8000);
     expect(first).toMatchObject({ changed: true, breach: null, summary: { tokensUsed: 40, contextSize: 8000 } });
     expect(tracker.update(stats({ promptTokens: 130, completionTokens: 10 })).changed).toBe(false);
@@ -96,7 +96,7 @@ describe('UsageTracker', () => {
 
   it('works without a baseline', () => {
     const tracker = new UsageTracker(null);
-    expect(tracker.state).toEqual({ tokensUsed: 0 });
+    expect(tracker.state).toMatchObject({ tokensUsed: 0 });
     expect(tracker.update(stats({ promptTokens: 7 })).summary.tokensUsed).toBe(7);
   });
 });
@@ -232,7 +232,7 @@ describe('against the scripted fake vibe-app-server', () => {
     expect(run.baseline).toMatchObject({ promptTokens: 0, completionTokens: 0, inputPricePerMillion: 0.4, outputPricePerMillion: 2, cachedInputPricePerMillion: 0.04 });
     expect(run.usageUpdates.map((update) => [update.tokensUsed, update.modelCalls])).toEqual([[1200, 1], [5900, 3]]);
     expect(run.usageUpdates[0]?.costAmount).toBeCloseTo((600 * 0.4 + 400 * 0.04 + 200 * 2) / 1e6, 12);
-    expect(run.usage.state).toEqual({ tokensUsed: 5900, contextSize: 128000, cost: { amount: expect.closeTo(0.00308, 10), currency: 'USD', authoritative: false } });
+    expect(run.usage.state).toMatchObject({ tokensUsed: 5900, contextSize: 128000, cost: { amount: expect.closeTo(0.00308, 10), currency: 'USD', authoritative: false } });
     expect(run.finalStats).toMatchObject({ promptTokens: 5000, completionTokens: 900, cachedTokens: 2000, modelCalls: 3 });
     expect(run.outcome.state).toBe('completed');
   });
@@ -244,7 +244,7 @@ describe('against the scripted fake vibe-app-server', () => {
         steps: [{ op: 'stats', stats: { modelCalls: 1, sessionPromptTokens: 10, sessionCompletionTokens: 5, inputPricePerMillion: null, outputPricePerMillion: null } }, { op: 'say', text: 'ok' }]
       }
     });
-    expect(run.usage.state).toEqual({ tokensUsed: 15, contextSize: 128000 });
+    expect(run.usage.state).toMatchObject({ tokensUsed: 15, contextSize: 128000 });
   });
 
   it('latches a counter that moved backwards in a scripted run', async () => {

@@ -41,7 +41,7 @@ async function failedRun(manager: RunManager, source: string) {
 
 describe('app-server start errors identify missing runtime components', () => {
   const injected = {
-    pin: { verify: async () => undefined },
+    preparation: { check: async () => ({ status: "passed" as const, candidate_sha256: null, version: "fixture", reason: "Fake ACP fixture evidence only" }) }, pin: { verify: async () => undefined },
     resolveCredential: async (): Promise<CredentialResolution> => ({ status: 'environment', detail: '', credential: new ResolvedCredential('labels-credential-abcdefghijklmnop') })
   };
 

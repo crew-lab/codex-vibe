@@ -1,3 +1,7 @@
+import { preparationStatusSchema } from "../preparation/evidence.js";
+import { z } from "zod";
+import { modelObservationsSchema } from "../reporting/telemetry.js";
+import { acceptanceContractSchema, verificationSchema, parseAssessments } from "../acceptance/schema.js";
 import { REMEDIATION, isBackendKind } from "../contracts.js";
 import type { RunRecord, SupervisorErrorCode, SupervisorEvent } from "../contracts.js";
 
@@ -5,11 +9,15 @@ type JsonObject = Record<string, unknown>;
 
 export function runToWire(run: RunRecord): JsonObject {
   const usage = run.usage ? {
+    ...usageDetailsToWire(run.usage),
     ...(run.usage.tokensUsed === undefined ? {} : { tokens_used: run.usage.tokensUsed }),
     ...(run.usage.contextSize === undefined ? {} : { context_size: run.usage.contextSize }),
     ...(run.usage.cost === undefined ? {} : { cost: { amount: run.usage.cost.amount, currency: run.usage.cost.currency, authoritative: false } })
   } : undefined;
   return {
+    ...(run.modelObservations ? { model_observations: run.modelObservations } : {}),
+    ...(run.preparation ? { preparation: run.preparation } : {}),
+    ...(run.cleanup ? { cleanup: run.cleanup } : {}),
     schema_version: run.schemaVersion,
     ...(run.supervisorVersion === undefined ? {} : { supervisor_version: run.supervisorVersion }),
     run_id: run.runId,
@@ -29,6 +37,9 @@ export function runToWire(run: RunRecord): JsonObject {
     ...(run.startedAt ? { started_at: run.startedAt } : {}),
     ...(run.finishedAt ? { finished_at: run.finishedAt } : {}),
     task_sha256: run.taskSha256,
+    ...(run.acceptanceContract ? { acceptance_contract: run.acceptanceContract } : {}),
+    ...(run.verification ? { verification: run.verification } : {}),
+    ...(run.assessments ? { assessments: run.assessments } : {}),
     ...(run.policyRevision ? { policy_revision: run.policyRevision } : {}),
     ...(run.admittedRoot ? { admitted_root: run.admittedRoot } : {}),
     ...(run.workspaceSnapshotSha256 ? { workspace_snapshot_sha256: run.workspaceSnapshotSha256 } : {}),
@@ -89,6 +100,9 @@ export function runFromWire(value: unknown): RunRecord {
       maxArtifactBytes: numberValue(limits.max_artifact_bytes)
     }
   };
+  if (value.acceptance_contract !== undefined) run.acceptanceContract = acceptanceContractSchema.parse(value.acceptance_contract);
+  if (value.verification !== undefined) run.verification = verificationSchema.parse(value.verification);
+  if (value.assessments !== undefined) run.assessments = parseAssessments(value.assessments);
   if (typeof value.launched_at === "string") run.launchedAt = value.launched_at;
   if (typeof value.started_at === "string") run.startedAt = value.started_at;
   if (typeof value.finished_at === "string") run.finishedAt = value.finished_at;
@@ -106,12 +120,16 @@ export function runFromWire(value: unknown): RunRecord {
   }
   if (isObject(value.worktree) && typeof value.worktree.path === "string" && typeof value.worktree.base_ref === "string" && typeof value.worktree.created_by_supervisor === "boolean") run.worktree = { path: value.worktree.path, baseRef: value.worktree.base_ref, createdBySupervisor: value.worktree.created_by_supervisor };
   if (isObject(value.process) && typeof value.process.executable === "string") run.process = { executable: value.process.executable, ...(typeof value.process.pid === "number" ? { pid: value.process.pid } : {}), ...(typeof value.process.version === "string" ? { version: value.process.version } : {}) };
+  if (value.preparation !== undefined) run.preparation = preparationStatusSchema.parse(value.preparation);
+  if (value.cleanup !== undefined) run.cleanup = z.object({ worktree: z.enum(["removed", "retained", "not_requested", "none"]), checked_at: z.string().datetime(), reason: z.string().max(2000).optional() }).strict().parse(value.cleanup);
+  if (value.model_observations !== undefined) run.modelObservations = modelObservationsSchema.parse(value.model_observations);
   if (isObject(value.usage)) {
     const usage: NonNullable<RunRecord["usage"]> = {
       ...(typeof value.usage.tokens_used === "number" ? { tokensUsed: value.usage.tokens_used } : {}),
       ...(typeof value.usage.context_size === "number" ? { contextSize: value.usage.context_size } : {})
     };
     if (isObject(value.usage.cost) && typeof value.usage.cost.amount === "number" && typeof value.usage.cost.currency === "string") usage.cost = { amount: value.usage.cost.amount, currency: value.usage.cost.currency, authoritative: false };
+    Object.assign(usage, usageDetailsFromWire(value.usage));
     run.usage = usage;
   }
   if (isObject(value.result)) run.result = resultFromWire(value.result);
@@ -172,3 +190,17 @@ function isObject(value: unknown): value is JsonObject { return typeof value ===
 function asObject(value: unknown): JsonObject { return isObject(value) ? value : {}; }
 function stringValue(value: unknown): string { if (typeof value !== "string") throw new TypeError("Invalid persisted string field"); return value; }
 function numberValue(value: unknown): number { if (typeof value !== "number" || !Number.isFinite(value)) throw new TypeError("Invalid persisted number field"); return value; }
+
+export function usageDetailsToWire(usage: NonNullable<RunRecord["usage"]>): JsonObject {
+  return Object.fromEntries(([['prompt_tokens',usage.promptTokens],['completion_tokens',usage.completionTokens],['cached_tokens',usage.cachedTokens],['model_calls',usage.modelCalls],['cost_source',usage.costSource]] as const).filter(([,value]) => value !== undefined));
+}
+function usageDetailsFromWire(raw: JsonObject): Partial<NonNullable<RunRecord["usage"]>> {
+  const out: Partial<NonNullable<RunRecord["usage"]>> = {};
+  for (const [wire,field] of [['prompt_tokens','promptTokens'],['completion_tokens','completionTokens'],['cached_tokens','cachedTokens'],['model_calls','modelCalls']] as const) {
+    const value = raw[wire];
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) out[field] = value;
+    else if (value === null && (field === 'cachedTokens' || field === 'modelCalls')) out[field] = null;
+  }
+  if (raw.cost_source === 'runtime-stats-prices') out.costSource = raw.cost_source;
+  return out;
+}

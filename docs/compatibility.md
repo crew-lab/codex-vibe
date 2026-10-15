@@ -2,7 +2,7 @@
 
 vibe-supervisor 2.0 supports exactly **Mistral Vibe 2.26.1** as a client of its `vibe-app-server` (newline-delimited JSON-RPC 2.0 over stdio, one process per run). It is the only engine: there is no ACP adapter, backend selector, `backend` configuration key or fallback to another entry point.
 
-The protocol carries no version field, so the pin is the compatibility check: the server must report exactly `serverInfo.version` 2.26.1, and the installed package files must match a manifest generated for that candidate. Any other Vibe version fails closed, and each new Vibe release needs its own candidate, manifest and conformance check. These findings come from Vibe's tagged source (`v2.26.1`) read without running it; they do not certify other builds or operating systems, and every other Vibe version is rejected. The supported platform is macOS Apple silicon.
+The protocol carries no version field, so the pin is the compatibility check: the server must report exactly `serverInfo.version` 2.26.1, and the installed package files must match a manifest generated for that candidate. Any other Vibe version fails closed, and each new Vibe release needs its own candidate, manifest and conformance check. These findings come from Vibe's tagged source (`v2.26.1`) read without running it, supplemented by one no-inference observation of the installed Vibe 2.26.1 with an earlier build of this workflow ([candidate acceptance](#candidate-acceptance)). They do not certify other builds or operating systems, and every other Vibe version is rejected. The supported platform is macOS Apple silicon.
 
 ## The pin and its manifest
 
@@ -12,7 +12,7 @@ Before each spawn the supervisor locates the Python environment from the `vibe-a
 
 ## Wire facts the client relies on
 
-Read from the source at the Vibe tag, commit `4ae5c5955da8e761318916bdb1a7f46f0b50c7d0`; the files and their hashes are in [Source basis](#source-basis). None of it was observed on a running server; the [unverified gates](#unverified-gates) say which parts the target must confirm.
+Read from the source at the Vibe tag, commit `4ae5c5955da8e761318916bdb1a7f46f0b50c7d0`; the files and their hashes are in [Source basis](#source-basis). The no-inference check of the workflow candidate on a running server confirmed the handshake and configuration read-back subset below; hosted permission and event behavior were not observed, and the [unverified gates](#unverified-gates) say which parts the target must still confirm. A source-read fact is not an observed gate.
 
 - **Framing and handshake.** One compact JSON object per line. `initialize` carries `clientInfo` with the entrypoint value set by `CLIENT_ENTRYPOINT` in `src/backends/app-server/protocol.ts` and `capabilities.callbackKinds = ["approval"]`; without that declaration the server crashes on its first approval. The result's `serverInfo.version` is checked against the pin, then the client sends `initialized`. The server sends error codes as strings (`unauthorized`, `invalid_params`, `not_initialized`, and others); `unauthorized` maps to `VSUP_AUTH_REQUIRED`.
 - **Strictness.** The server's models forbid unknown fields and require `params`, camelCase. The client sends exactly what it builds and tolerates unknown fields on read, but requires the fields it depends on.
@@ -123,23 +123,48 @@ Use `npm run verify:release` for local code and security verification and `npm r
 
 The declared Node floor is 20.19.0. Release acceptance compares major, minor, and patch components; a passing run on another Node version does not establish that the minimum runtime itself was exercised. Verify the frozen package on Node 20.19.0 before making a stable compatibility claim.
 
+`vibe-supervisor prepare check --kit <preparation-kit-VERSION> --config <path>` is the one local check that launches the installed `vibe-app-server`: it runs the no-inference conformance check from the version-matched kit with a fixed fake key and the refusing network observer, never sends `turn/start`, and saves the private receipt that ordinary dispatch requires ([preparation](preparation.md)). Its pass is initialization evidence for that candidate, pin, runtime and policy, not hosted acceptance.
+
 ## Candidate acceptance
 
-2.0 has been exercised against the scripted fake server only. Every gate below needs the target machine and the owner's separate authorization, and all are open. See [machine-readable gates](acceptance.json) and the [target acceptance procedure](target-acceptance.md).
+This build, 2.0.1, integrates the one-version cleanup with the coordinator workflow. It has been exercised against the scripted fake server only, and every gate below is open for it until its own target sitting. See [machine-readable gates](acceptance.json) and the [target acceptance procedure](target-acceptance.md).
+
+An earlier build of the same workflow, the **workflow candidate**, was observed on the target on 2026-10-15: source `91afad4a9b6c598d2486c5d22e902f32972e4cac`, frozen archive SHA-256 `d1fd22ec04e50048c052cdf013b4d235b525dffc2efb11596dd29f8253003f6a`, installed distribution identity `a3600f7632ea42a221d342734dd1b6cb17deaaf072211693a728e31c0437b053`. The sanitized records are the evidence packet at commit 2e920d3 (source only, never shipped), summarized in `acceptance.json` under `evidence_builds` and the `workflow-candidate-*` entries. That evidence belongs to that archive; the integrated build's bytes differ, so none of it closes a gate here. It does show what to expect when the same checks are rerun.
+
+| Check on the workflow candidate | Observed result and boundary |
+|---|---|
+| Release verification | PASS: 1,260 tests across 87 files, lint, strict types, build, acceptance, secret scan and SBOM on Node 24.21.0. |
+| Offline installed package | PASS: installed CLI, five-tool catalogue, isolated reconnect smoke; no hosted inference. |
+| No-inference conformance | PASS once on the installed Vibe 2.26.1 with a fixed fake key and no `turn/start`: pin and tamper control, handshake, review and edit initialization, the full read-back before and after thinking (including the owned managed-config URL and the four bundled skills with source `plugin`, scope `builtin`), and cleanup with nothing left in `tmp` after stdin EOF. One unknown notification method, `runtime/updated`, was ignored as designed. |
+| Network observation | `none-observed-control-validated`: no subject request and an observed control. Experiments-specific attribution stays `unverified-host-only-observation`; that gate is not promoted from a host name. |
+| Installed readiness and drift | PASS through the official SDK over stdio: the matching candidate eligible with preparation passed, a deliberately wrong `expected_candidate` rejected. The intended desktop connection was not tested. |
+| Validation helper | PASS for independent copies, source preservation, cleanup refusal after a change, and a real npm dependency-free offline fixture with lifecycle scripts off. Populated pnpm dependency graphs are not demonstrated. |
 
 ## Unverified gates
 
-All of these stay unverified until evidence is recorded here and in `acceptance.json`.
+All of these stay unverified for this build until evidence is recorded here and in `acceptance.json`.
 
 | Gate | What it settles |
 |---|---|
-| Target no-inference conformance check | With the installed Vibe 2.26.1 and no provider: the manifest generated and verified on the target (and the per-run hashing cost), `serverInfo.version`, the handshake, `session/start`, and the complete read-back, with no turn. |
-| Native readiness | On the intended Codex desktop connection, native readiness on the frozen 2.0 archive: `server_version`, eligible, no blockers, free slot. |
-| One hosted review and one hosted edit | Each with a readiness receipt, the edit verified independently in a disposable copy, both closed with verified cleanup. Needs a new owner allowance; stop on first failure. |
+| Target no-inference conformance check | With the installed Vibe 2.26.1, this build's preparation kit and no provider: the manifest generated and verified on the target (and the per-run hashing cost), `serverInfo.version`, the handshake, `session/start`, and the complete read-back, with no turn. The workflow candidate passed it; this build has not run it. |
+| Native readiness | On the intended Codex desktop connection: `server_version` and candidate identity of the frozen archive under test, preparation passed, eligible, no blockers, free slot. Installed SDK readiness does not close it. |
+| One hosted review and one hosted edit | Each with a readiness receipt, the edit with an acceptance contract and verified independently in a disposable copy, both closed with verified cleanup and exported. Needs a new owner allowance; stop on first failure. |
 | MCP client disconnect | One observed disconnect during a running hosted run: worker group gone, owner lock released, run failed and never replayed, private directories deleted, edit worktree kept until close. |
-| `permission = "ask"` visible in effective configuration | That `config/effective/read` shows `tools.<name>.permission` and the denylist for each profile tool, and that an in-workspace `read_file` reaches the approval handler. Read from source only. |
+| `permission = "ask"` visible in effective configuration | That `config/effective/read` shows `tools.<name>.permission` and the denylist for each profile tool, and that an in-workspace `read_file` reaches the approval handler. The workflow candidate's read-back showed the configuration half; the handler half needs a hosted run. |
 | Thinking off | That turning thinking off stops the model from generating reasoning. The read-back confirms the setting, not the effect. |
-| Experiments fetch off | That `experiments.enable = false` stops Vibe's experiments request. The setting is read back; its effect is unknown. |
+| Experiments fetch off | Attributable evidence that `experiments.enable = false` stops Vibe's experiments request. The proxy matrix alone cannot attribute a request to experiments. |
 | Nested `run_typescript` shape and gating | That a `write_file` or `edit` called from inside `run_typescript` arrives as the same `file_system.*` effect and reaches deny. From Vibe's Rust tests and code reading only; the hosted-review probe in the [target acceptance procedure](target-acceptance.md) (step 6) must show a nested write refused. |
+| Exact Node 20.19.0 floor | Full release verification of this build's frozen source on exactly the declared minimum. The pass on the 2.0.0 source does not transfer. |
+| Populated pnpm validation | `validation prepare` on a representative project with a populated pnpm store, with explicit blockers for unsupported profiles. |
 
-Also open: a clean macOS account installation, and verification of the frozen package on exactly Node 20.19.0. macOS Apple silicon is the supported platform. Linux and Windows code paths may exist, but 2.0 makes no support claim for them. No Intel or plugin installation gates apply to the reduced surface. `.codex-plugin/plugin.json` remains an unverified source scaffold and is not part of the npm package; its declarations do not establish plugin installation or registration support.
+Also open: a clean macOS account installation of the frozen archive. macOS Apple silicon is the supported platform. Linux and Windows code paths may exist, but 2.0 makes no support claim for them, and Intel and other MCP clients have no acceptance. `.codex-plugin/plugin.json` remains an unverified source scaffold and is not part of the npm package; its declarations do not establish plugin installation or registration support.
+
+## Target conformance corrections
+
+`config/read.harnessSelectionSource` is nullable on the unified implementation. Null is accepted as diagnostic provenance, while the actual session and runtime unified-harness checks and the hooks and skills checks remain mandatory. See [ADR 0005](adr/0005-target-conformance-repairs.md) for the owned loopback managed-config service, which must be read back exactly; its lifecycle is covered by fake-worker tests, and the workflow candidate's no-inference check read its URL back on the installed Vibe.
+
+The no-inference observer records CONNECT authorities, not encrypted paths. Its control enables both telemetry and experiments, but host equality cannot attribute requests to experiments. Every observed subject request fails the no-request check even without a matching control host. An otherwise passing subject and control matrix validates only the absence of proxy-observed requests; the experiments-specific gate stays `unverified-host-only-observation` until separate attributable evidence exists. No network gate is promoted merely because configuration read-back passes.
+
+## Bundled Vibe skills
+
+Pinned Vibe 2.26.1 bundled plugin skills are permitted by owner decision ([ADR 0006](adr/0006-bundled-vibe-skills.md)): `vibe:create-plugin`, `vibe:skill-creator`, `vibe:vibe`, `vibe:worktree`. Read-back requires plugin source, builtin scope and no registry reference, and rejects unknown or duplicate names. User, project and registry skills remain disabled. Skills are guidance; their instructions do not authorize tools, paths, shell or network access. The exact review and edit file-tool profiles and the approval handler remain unchanged.

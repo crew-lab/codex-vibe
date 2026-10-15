@@ -27,10 +27,12 @@ All schemas are strict. `run_id` is a UUID v4. Unless noted, required fields hav
 | | `timeout_seconds` | integer 30–7200 | `limits.review_timeout_seconds` |
 | | `wait_seconds` | integer 0–300 | `0` |
 | | `readiness_receipt` | string, 1–2048 characters, from a workspace check on this connection | none |
-| `vibe_edit_start` | `task`, `cwd` | as above; `cwd` must be the Git repository root | required |
+| `vibe_edit_start` | `acceptance_contract` | optional strict versioned path/text/hash contract and required validation IDs; see [acceptance](workflow-acceptance.md) | none |
+| | `task`, `cwd` | as above; `cwd` must be the Git repository root | required |
 | | `base_ref` | existing Git ref, 1–512 characters | `HEAD` |
 | | `max_turns`, `timeout_seconds`, `wait_seconds`, `readiness_receipt` | same bounds as review | configured defaults, then `0` for wait, no receipt |
-| `vibe_status` | `run_id` | UUID v4; pass exactly one of `run_id` or `workspace` | none |
+| `vibe_status` | `expected_candidate` | optional SHA-256 distribution identity, workspace mode only | none |
+| | `run_id` | UUID v4; pass exactly one of `run_id` or `workspace` | none |
 | | `after_seq` | integer ≥0 (run mode) | `0` |
 | | `max_events` | integer 0–100 (run mode) | `10` |
 | | `wait_seconds` | integer 0–300 (run mode) | `0` |
@@ -40,7 +42,8 @@ All schemas are strict. `run_id` is a UUID v4. Unless noted, required fields hav
 | `vibe_result` | `run_id` | UUID v4 | required |
 | | `detail` | `compact` or `full` | `compact` |
 | | `include_transcript` | boolean | `false` |
-| `vibe_close` | `run_id` | UUID v4 | required |
+| `vibe_close` | `assessment` | optional strict append-only coordinator decision bound to contract/patch hashes and validations | none |
+| | `run_id` | UUID v4 | required |
 | | `cleanup_worktree` | boolean | `false` |
 
 A failed tool call sets `isError` and returns one JSON text block, `{"error": {code, message, remediation, retryable, details?}}`, redacted and bounded like a result; branch on `code`, `retryable` and `details`. See [errors](errors.md).
@@ -54,6 +57,8 @@ Start calls can wait until the run needs coordinator attention. For longer work,
 | Field | Meaning |
 |---|---|
 | `server_version`, `server_instance_id` | The serving process's release and a random per-process identity. Unlike `supervisor_version` in run output, which names the release that created a saved run, these describe this connection. |
+| `workspace_eligible`, `eligible` | Workspace admission is separate from complete start eligibility; preparation or expected-candidate drift can block an eligible workspace. |
+| `candidate`, `preparation` | Connected distribution identity and matching conformance evidence (`passed`, `failed`, `missing`, `stale`); runtime pin is checked again at dispatch. |
 | `policy_path`, `policy_revision` | The selected configuration file and the semantic SHA-256 of what it holds now; `null` revision when it cannot be read. |
 | `restart_required`, `boot_drift` | Whether boot-bound settings in the file differ from the ones this server started with, and which keys. |
 | `session_id` | The private `--isolated` session directory name, or `null`. |
@@ -64,7 +69,7 @@ Start calls can wait until the run needs coordinator attention. For longer work,
 | `runtime` | Resolution of the `vibe-app-server` executable (`paths.app_server`, else the directory of `paths.vibe`): `executable_found`, `resolved_executable`, `pinned_version`. Vibe is not launched and the installed files are not hashed, so `version_verified` is always `false`; the exact pinned version and the pin manifest are enforced when a run starts, and `doctor` runs the pin check on demand. |
 | `readiness_receipt`, `receipt_expires_at` | Present only when eligible. An opaque token, valid for 10 minutes on this server instance. |
 
-Passing `readiness_receipt` to the matching start binds it to the check: the start is rejected before any run is created with `VSUP_READINESS_RECEIPT_INVALID` when the receipt is malformed, altered, expired, issued by another instance, or bound to a different policy revision, operation, canonical workspace or `base_ref`, or when, for an edit, the ref no longer resolves (`base_ref_unresolved`) or resolves to another commit (`base_commit`). An admitted edit's worktree is created at exactly the commit that was checked, so a ref that moves afterwards cannot change what the worker sees; without a receipt the ref is resolved once, when the worktree is created, and that commit is used throughout. `details.reason` names which. A receipt is not authorization for the task and does not prove provider availability or authentication. Without a receipt a start behaves as before, but always against the freshly reread configuration. Either way a start still claims the slot, rereads and validates, so a slot taken after the check is rejected with `VSUP_LIMIT_EXCEEDED`.
+Passing `readiness_receipt` to the matching start binds it to the check: the start is rejected before any run is created with `VSUP_READINESS_RECEIPT_INVALID` when the receipt is malformed, altered, expired, issued by another instance, or bound to a different policy revision, operation, canonical workspace or `base_ref`, or when, for an edit, the ref no longer resolves (`base_ref_unresolved`) or resolves to another commit (`base_commit`). An admitted edit's worktree is created at exactly the commit that was checked, so a ref that moves afterwards cannot change what the worker sees; without a receipt the ref is resolved once, when the worktree is created, and that commit is used throughout. `details.reason` names which. A receipt is not authorization for the task and does not prove provider availability or authentication. Without a readiness receipt, start still rereads configuration and requires matching preparation PASS; a readiness receipt and private preparation evidence are separate mechanisms. Either way a start still claims the slot, rereads and validates, so a slot taken after the check is rejected with `VSUP_LIMIT_EXCEEDED`.
 
 ## Results and artifacts
 
@@ -113,6 +118,9 @@ A start records the `policy_revision` it was admitted under in its run record an
 - `doctor [--json] [--config <path>]` reports local Node, Git, config, the `vibe-app-server` pin check, and the exact `application_entrypoint` and `runtime_module` that produced the report; its `provenance` also records the `backend` in use (`app-server`). With no `paths.vibe_pin_manifest`, the `vibe` check fails with the remedy (set the path, run `pin-manifest`, restart the server) instead of the command refusing to run. The pin check resolves `vibe-app-server`, reads the installed package files and compares them with the manifest. It does not launch Vibe, make a model request, or prove provider authentication; the credential is looked up only when a run starts.
 - `pin-manifest [--config <path>] [--executable <path>] [--output <path>] [--force]` writes the pin manifest for the Vibe installed on this machine. Run it on the machine that runs Vibe, once per Vibe candidate, and review that the installed build is the one you intend to supervise, because the manifest records whatever is installed now. It locates the Python environment from the `vibe-app-server` script, requires Vibe 2.26.1, and hashes the files its `RECORD` lists; it fails if a listed file is missing or a file in the covered directories is unlisted. `--executable` overrides the `vibe-app-server` path (default: `paths.app_server`, else next to `paths.vibe`). `--output` overrides `paths.vibe_pin_manifest` and must be absolute. The file is private (owner-only), and an existing file is not replaced without `--force`. A configuration without `paths.vibe_pin_manifest` is accepted, so the command can write the file the path will name. If the configuration cannot be read at all, pass both `--executable` and `--output` and it is ignored with a notice on stderr; with only `--output` the command stops rather than guess which Vibe to pin.
 - `serve --stdio [--config <path>] [--isolated]` runs the MCP server. It starts without `paths.vibe_pin_manifest`; every readiness check and start then fails closed with `VSUP_CONFIG_INVALID` and the remedy, because the policy is reread strictly each time.
+- `prepare check --kit <directory> --config <file>` runs the [matched no-inference check](preparation.md) once and saves private evidence; it does not start inference.
+- `validation prepare|clean` manages [owned offline validation copies](validation-workspace.md), without running general project checks.
+- `runs verify|export <run-id> --out <directory>` writes [sanitized verification/report bundles](workflow-acceptance.md); optional patch/events and coordinator validation manifests retain exact bindings.
 - `runs list|show|tail|cleanup` inspects or cleans saved runs according to ownership and fresh-export checks.
 
 Use `vibe-supervisor <command> --help` for current options. The explicit selected config and the connection already open in a desktop client are separate facts; identify the owning connection by a `vibe_status` readiness call and its `server_version`, which works whether or not the client protocol has an initialization handshake, and confirm the five tools are callable there.

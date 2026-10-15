@@ -46,13 +46,13 @@ describe('workspace readiness over a real --isolated stdio connection', () => {
 
     const before = await check(second);
     expect(before).toMatchObject({ eligible: false, policy_path: configPath, server_version: expect.any(String), session_id: expect.stringMatching(/^session-/) });
-    expect(before.blockers.map((blocker) => blocker.code)).toEqual(['VSUP_WORKSPACE_INVALID']);
+    expect(before.blockers.map((blocker) => blocker.code)).toEqual(['VSUP_WORKSPACE_INVALID', 'VSUP_INVALID_STATE']);
     const session = path.join(data, 'mcp-sessions', String(before.session_id));
     const snapshot = await readFile(path.join(session, 'config.toml'), 'utf8');
 
     await exec(process.execPath, [cli, 'allow', '--config', configPath, second], { env });
     const after = await check(second);
-    expect(after).toMatchObject({ eligible: true, workspace: second, policy_path: configPath, session_id: before.session_id, server_instance_id: before.server_instance_id, runtime: { executable_found: true, version_verified: false } });
+    expect(after).toMatchObject({ workspace_eligible: true, eligible: false, workspace: second, policy_path: configPath, session_id: before.session_id, server_instance_id: before.server_instance_id, runtime: { executable_found: true, version_verified: false } });
     expect(after.policy_revision).not.toBe(before.policy_revision);
     expect(await readFile(path.join(session, 'config.toml'), 'utf8')).toBe(snapshot);
 

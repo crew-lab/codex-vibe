@@ -24,7 +24,7 @@ function fakeAppServerBackend(parent: string, source: string, scenario: Record<s
   chmodSync(wrapper, 0o755);
   return new AppServerBackend(TEST_CONFIG, {
     executable: wrapper,
-    pin: { verify: async () => undefined },
+    preparation: { check: async () => ({ status: "passed" as const, candidate_sha256: null, version: "fixture", reason: "Fake ACP fixture evidence only" }) }, pin: { verify: async () => undefined },
     resolveCredential: async () => ({ status: "environment", detail: "", credential: new ResolvedCredential("watchdog-credential-abcdefghijklmnop") }),
     reaper: { pollMs: 50, graceMs: 200 },
     timing: { interruptGraceMs: 300, stdinGraceMs: 300, terminateGraceMs: 300, interruptTimeoutMs: 500, statsThrottleMs: 0 }

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { acceptanceContractSchema, assessmentSchema } from "../acceptance/schema.js";
 import { z } from "zod";
 
 const runId = z.string().uuid({ version: "v4" });
@@ -25,6 +26,7 @@ export const editStartSchema = z.object({
   task,
   cwd: workspace,
   base_ref: baseRef.default("HEAD"),
+  acceptance_contract: acceptanceContractSchema.optional(),
   max_turns: maxTurns,
   timeout_seconds: timeoutSeconds,
   wait_seconds: waitSeconds,
@@ -32,6 +34,7 @@ export const editStartSchema = z.object({
 }).strict();
 
 export const statusSchema = z.object({
+  expected_candidate: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   run_id: runId.optional(),
   after_seq: z.number().int().min(0).default(0),
   max_events: z.number().int().min(0).max(100).default(10),
@@ -43,7 +46,7 @@ export const statusSchema = z.object({
   const issue = (message: string): void => { context.addIssue({ code: "custom", message }); };
   if ((input.run_id === undefined) === (input.workspace === undefined)) { issue("Pass exactly one of run_id (run status) or workspace (readiness check)."); return; }
   if (input.run_id !== undefined) {
-    if (input.operation !== undefined || input.base_ref !== undefined) issue("operation and base_ref apply only to a workspace readiness check.");
+    if (input.operation !== undefined || input.base_ref !== undefined || input.expected_candidate !== undefined) issue("operation and base_ref apply only to a workspace readiness check.");
     return;
   }
   if (!path.isAbsolute(input.workspace ?? "")) issue("workspace must be an absolute path.");
@@ -57,7 +60,7 @@ export const resultSchema = z.object({
   include_transcript: z.boolean().default(false)
 }).strict();
 
-export const closeSchema = z.object({ run_id: runId, cleanup_worktree: z.boolean().default(false) }).strict();
+export const closeSchema = z.object({ run_id: runId, cleanup_worktree: z.boolean().default(false), assessment: assessmentSchema.optional() }).strict();
 
 export const toolSchemas = {
   vibe_review_start: reviewStartSchema,
