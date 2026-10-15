@@ -1,6 +1,6 @@
 {
   "name": "vibe-supervisor",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "description": "Codex MCP supervisor for delegated Mistral Vibe runs",
   "license": "MIT",
@@ -17,8 +17,6 @@
     "examples",
     "skills",
     "docs",
-    "!docs/history",
-    "!docs/reviews",
     "README.md",
     "SECURITY.md",
     "CHANGELOG.md",

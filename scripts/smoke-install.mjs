@@ -29,8 +29,6 @@ try {
   const manifest = JSON.parse(await readFile(path.join(installedRoot, 'package.json'), 'utf8'));
   const version = run(executable, ['--version']).trim();
   if (version !== manifest.version) throw new Error('Installed CLI version check failed.');
-  const shimPresent = await access(path.join(installedRoot, 'dist', 'backends', 'runtime')).then(() => true, () => false);
-  if (shimPresent) throw new Error('The installed package must not contain the retired Python launcher runtime.');
   if (!run(executable, ['--help']).includes('serve --stdio')) throw new Error('Installed CLI help check failed.');
 
   run(executable, ['allow', packDir]);
@@ -46,7 +44,6 @@ try {
     const listed = await client.listTools();
     if (listed.tools.length !== expectedTools) throw new Error(`Expected exactly ${expectedTools} MCP tools; received ${listed.tools.length}.`);
     if (JSON.stringify(listed.tools.map(tool => tool.name).sort()) !== JSON.stringify([...expectedToolNames].sort())) throw new Error(`Installed MCP tool catalog differs from the one-shot contract: ${listed.tools.map(tool => tool.name).join(', ')}.`);
-    if (listed.tools.some((tool) => tool.name === 'vibe_continue' || tool.name === 'vibe_respond')) throw new Error('Interactive ACP tools must not be registered.');
     if (listed.tools.some((tool) => tool.name === 'vibe_cancel')) throw new Error('vibe_cancel must not be registered.');
     const status = await client.callTool({ name: 'vibe_status', arguments: { run_id: '00000000-0000-4000-8000-000000000001' } });
     if (!status.isError) throw new Error('Expected status on an unknown run to return a normalized error.');

@@ -1,6 +1,6 @@
 # Reference
 
-The supervisor uses MCP over stdio. Standard output carries protocol frames; diagnostics go to standard error. Tool schemas reject unknown fields, including removed `backend`, `allow_shell`, `vibe_continue`, and `vibe_respond` fields. See [behavior](functionality.md), [security](security.md), and [errors](errors.md).
+The supervisor uses MCP over stdio. Standard output carries protocol frames; diagnostics go to standard error. Tool schemas reject unknown fields, including `backend`, `allow_shell`, `vibe_continue`, and `vibe_respond` fields. See [behavior](functionality.md), [security](security.md), and [errors](errors.md).
 
 ## Tools
 
@@ -76,7 +76,7 @@ Review integrity is `verified`, `changed`, or `unverified`. Inspect `changed_pat
 
 ## Configuration
 
-The configuration is strict TOML. The starter allowlist is empty. Removed keys, including `backend`, concurrency, idle-session TTL and ACP paths, are errors; do not reuse the old configuration unchanged.
+The configuration is strict TOML. The starter allowlist is empty. Keys the supervisor does not define, including `backend`, concurrency, idle-session TTL and ACP paths, are errors, and a file without `paths.vibe_pin_manifest` is refused for runs with `VSUP_CONFIG_INVALID`. `setup` adds the default path (`vibe-pin-manifest.json` next to the config) when it creates a config or resolves executables and says to write the manifest with `pin-manifest` before the first run.
 
 | Key | Meaning |
 |---|---|
@@ -105,10 +105,6 @@ The selected configuration file is the only policy source. A running server rere
 `allowed_workspace_roots` is live: an added root is admitted and a removed root is refused on the next check or start, without restarting Codex. Every other key is boot-bound, because the server binds it at startup: `paths.vibe`, `paths.app_server` and `paths.vibe_pin_manifest` (backend executable and pin), `retention.days` (retention schedule), `limits.max_mcp_result_chars` (tool registration), `limits.worker_progress_timeout_seconds` (watchdog of running work), `limits.max_tokens` and `limits.max_cost_usd` (budgets), and the default turn, deadline and output limits (kept together so one server never mixes two limit sets). When the file changes a boot-bound key, readiness reports `restart_required: true` with the keys in `boot_drift`, and starts fail with `VSUP_RESTART_REQUIRED` instead of adopting part of the change.
 
 A start records the `policy_revision` it was admitted under in its run record and start reply. A running run is never changed by a later edit. When its root is removed it keeps running to its normal end, and status, result and close keep working. A start also records the canonical root that admitted it (`admitted_root`). Worktree cleanup is admitted by that frozen admission, not by the current file, so narrowing the allowlist never strands a worktree: the saved source must still be its own canonical path inside the admitted root, and every existing removal check still applies (supervisor-owned run path, Git registration, a fresh export matching the saved artifact, a pristine worktree). Dirty or uncertain worktrees are retained with their reason as before. Records written before this field existed are checked against the boot configuration's allowlist.
-
-### Upgrading a 1.0 configuration
-
-2.0 has one engine, and its configuration has no `backend` key. A 1.0 file is rejected with `VSUP_CONFIG_INVALID` until it sets `paths.vibe_pin_manifest`, and a file that still carries `backend` is rejected as well. To upgrade: remove `backend` if present, add `paths.vibe_pin_manifest` with an absolute path, and write that file with `pin-manifest` on the machine that runs Vibe. `setup` adds the default path (`vibe-pin-manifest.json` next to the config) when it creates a config or resolves executables, and tells you to write the manifest before the first run. Nothing else in a 1.0 file changes meaning.
 
 ## CLI
 

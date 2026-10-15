@@ -11,6 +11,6 @@ it('ships documentation but no dated evidence', async () => {
   const report = JSON.parse(stdout.slice(stdout.indexOf('['))) as { files: { path: string }[] }[];
   const files = report[0]!.files.map((file) => file.path);
   expect(files).toContain('docs/security.md');
-  expect(files.filter((file) => file.startsWith('docs/history/') || file.startsWith('docs/reviews/'))).toEqual([]);
+  expect(files.filter((file) => /^docs\/(history|reviews)\//.test(file))).toEqual([]);
   expect(files.filter((file) => /^(marketing|research|planning)\//.test(file))).toEqual([]);
 }, 60_000);

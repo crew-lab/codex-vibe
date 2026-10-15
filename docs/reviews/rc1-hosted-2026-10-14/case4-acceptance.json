@@ -1,8 +1,0 @@
-{
-  "verdict": "PASS expected-incomplete",
-  "completedImplementation": false,
-  "emptyExportVerified": true,
-  "baselineUnchanged": true,
-  "pristineWorktreeRemoved": true,
-  "usageCost": "UNKNOWN"
-}

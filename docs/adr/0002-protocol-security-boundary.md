@@ -2,7 +2,7 @@
 
 The supervisor exposes exactly five MCP tools over stdio: review start, edit start, status, result, and close. Input schemas reject unknown fields. Shell, network, user-selected backend, interactive permission/input response, continuation, and task replay are outside the supported protocol.
 
-Review uses a canonical allowlisted source workspace and read-only access (`read_file`); in 2.0 the supervisor puts a bounded workspace file listing in the prompt and there is no search tool. Edit uses a named Git base and a supervisor-created detached worktree with read, write and edit tools. The server exports a patch for coordinator review; it does not apply or publish worker changes.
+Review uses a canonical allowlisted source workspace and read-only access (`read_file`); the supervisor puts a bounded workspace file listing in the prompt and there is no search tool. Edit uses a named Git base and a supervisor-created detached worktree with read, write and edit tools. The server exports a patch for coordinator review; it does not apply or publish worker changes.
 
 Each owning server/storage instance accepts one active run. The slot is reserved before asynchronous launch. A competing start fails without creating a queue record. An interrupted run is stored as failed on restart; startup does not launch a worker or use saved PID data to signal a process. Separate explicitly isolated connections can own separate instances.
 

@@ -1,9 +1,0 @@
-{
-  "verdict": "PASS",
-  "sourceHashesUnchanged": true,
-  "actualReadInvocationsCompleted": 2,
-  "endTurn": true,
-  "warnings": [],
-  "authentication": "observed through hosted task",
-  "usageCost": "UNKNOWN"
-}
