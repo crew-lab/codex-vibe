@@ -4,11 +4,17 @@ These instructions apply to this repository and its descendants unless a more sp
 
 ## Project and orientation
 
-This is codex-vibe, a local MCP supervisor for one-shot Mistral Vibe reviews and isolated edits. The current release is `vibe-supervisor` `2.0.0` (the previously published release is `1.0.0`), ESM, npm-private and distributed through GitHub Releases. 2.0 has one engine: a client of Vibe's `vibe-app-server` JSON-RPC protocol, one process per run. The legacy `--legacy-harness` path, the Python launcher and the `backend` config key are gone; 1.0.0 is the last 1.x release and has no maintenance line. Preserve the existing MIT license and copyright notice.
+This is codex-vibe, a local MCP supervisor for bounded Mistral Vibe reviews and isolated edits. This branch's package is `vibe-supervisor` `2.0.0-rc.5`, ESM, npm-private and unpublished. Main's source version is separately 2.0.1; do not conflate the branch, published release, installed candidate or native connection. [Handoff.md](Handoff.md) records current status. There is one app-server engine and no automatic patch integration. Preserve the MIT license and copyright notice.
 
 Read [README.md](README.md) for usage, [Handoff.md](Handoff.md) for scope and remaining work, [docs/reference.md](docs/reference.md) for tools/config/CLI, and [docs/functionality.md](docs/functionality.md) for behavior. Consult [docs/security.md](docs/security.md), [docs/compatibility.md](docs/compatibility.md), and the ADRs (0004 is the app-server client) before changing those boundaries. The design note and the protocol audits behind the engine are in `docs/history/`. `docs/errors.md` is generated: run `npm run docs:errors` after changing a remedy. Dated evidence lives in `docs/history/` and is not shipped.
 
 The user's implementation preference is GPT-6 Luna agents. When delegating implementation, use that model where available, assign clear file ownership, and tell workers they share the codebase and must preserve others' changes. Do not create user-owned chats for internal implementation subtasks. If that model is unavailable, report the limitation rather than silently claiming to use it.
+
+## Task authorization and coordination
+
+The owner clarified on 2026-10-15 that a Vibe implementation request already authorizes necessary task-scoped candidate installation/switching, no-inference checks and adding only the explicitly named task repository to the selected allowlist. Preserve other settings and roots, retain rollback, and record changes. Do not reintroduce separate preparation approvals from older runbooks. Hosted limits, deterministic-failure stop rules and no replay remain. Extra hosted starts, broader roots, publication/deployment and unrelated global changes require their own authorization.
+
+The main chat coordinates and independently verifies. GPT-6 Luna/high is fallback only after verified implementation rejection within the user's scope; never reject solely from an abbreviated final summary. Preserve original Vibe output and separately attribute corrections/fallback changes. Exact pinned bundled Vibe skills are permitted; user/project/registry skills remain disabled and no skill expands tools or paths.
 
 ## Development
 

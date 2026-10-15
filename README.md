@@ -1,12 +1,14 @@
 # vibe-supervisor
 
-Local workflow candidate `2.0.0-rc.5` adds [deterministic acceptance and reporting](docs/workflow-acceptance.md), [version-matched preparation](docs/preparation.md), and [owned validation workspaces](docs/validation-workspace.md). Workspace eligibility and conformance are separate; ordinary dispatch requires matching conformance evidence. This candidate is uncommitted and unpublished.
+Local workflow candidate `2.0.0-rc.5` adds [deterministic acceptance and reporting](docs/workflow-acceptance.md), [version-matched preparation](docs/preparation.md), and [owned validation workspaces](docs/validation-workspace.md). Workspace eligibility and conformance are separate; ordinary dispatch requires matching conformance evidence. Implementation is committed and pushed as `91afad4` on `codex/workflow-acceptance-reporting`; the candidate is unpublished and not integrated with main. See the [current handoff](Handoff.md) and [consolidated plan](planning/development-plan.md).
 
 A local MCP server for one bounded Mistral Vibe review or isolated edit. It exposes exactly five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. Edits run in a supervisor-created detached Git worktree and return a patch for review; the supervisor never applies, commits, merges, or pushes it automatically.
 
 This is an application policy boundary, **not an operating-system sandbox**. A delegated run uses your account's permissions, and permitted workspace content is sent to Mistral. Review [SECURITY.md](SECURITY.md) before use.
 
-This is `vibe-supervisor` `2.0.0`; the previously published release is `1.0.0`. 2.0 has one engine: the supervisor is a client of Vibe's `vibe-app-server` protocol, one server process per run. It verifies the installed Vibe against a pin manifest before each run, reads the effective configuration back before the model sees a prompt, answers every approval itself, and refuses any tool outside the profile. The model's tool catalogue still lists write tools that are refused when called, not hidden. Release 1.0.0, which used Vibe's legacy harness, is the last 1.x release; there is no 1.x maintenance line. 2.0 acceptance gates are open in the [acceptance record](docs/acceptance.json), and no 1.0.x evidence transfers. Supported platform claims remain limited to macOS Apple silicon with Mistral Vibe 2.26.1. See [compatibility](docs/compatibility.md).
+This branch's package is `vibe-supervisor` `2.0.0-rc.5`, pinned to Vibe 2.26.1. Main separately identifies itself as 2.0.1; the published release is 1.0.0 and the GitHub 2.0.0 release is still a draft (checked 15 October 2026). The workflow branch has not been merged into main. Source version, archive, installed prefix and native connection are separate identities.
+
+The engine is a client of Vibe's `vibe-app-server` protocol, one process per run. It verifies installed files, reads configuration back and answers approvals within policy. The model-visible catalogue may still list tools that execution policy refuses. Actual rc.5 no-inference conformance and installed SDK readiness passed; native desktop, hosted, floor and clean-account gates remain open in the [acceptance record](docs/acceptance.json). See [compatibility](docs/compatibility.md) for the exact evidence boundary.
 
 ## Requirements
 

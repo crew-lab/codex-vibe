@@ -1,8 +1,8 @@
 # Compatibility
 
-Release 2.0.0 supports exactly **Mistral Vibe 2.26.1** as a client of its `vibe-app-server` (newline-delimited JSON-RPC 2.0 over stdio, one process per run). It is the only engine: the `vibe -p --legacy-harness` path, the Python launcher, the `backend` configuration key and the programmatic backend are removed, and there is no ACP adapter, backend selector or fallback to another entry point. Published 1.0.0 and the unreleased 1.0.1 candidates used the legacy harness. 1.0.1 was skipped by owner decision; 1.0.0 is the last 1.x release, with no maintenance line. Their evidence is history and does not transfer to 2.0.
+The workflow candidate is `vibe-supervisor` **2.0.0-rc.5**, pinned to **Mistral Vibe 2.26.1** through `vibe-app-server` (newline-delimited JSON-RPC over stdio, one process per run). Main's source version 2.0.1, older releases, the selected installation and this candidate are distinct. The candidate is committed/pushed at `91afad4`; it is not published or integrated with main.
 
-The protocol carries no version field, so the pin is the compatibility check: the server must report exactly `serverInfo.version` 2.26.1, and the installed package files must match a manifest generated for that candidate. Any other Vibe version fails closed, and each new Vibe release needs its own candidate, manifest and conformance check. These findings come from Vibe's tagged source (`v2.26.1`) read without running it; they do not certify other builds or operating systems, and Vibe 2.25.8 and all other versions are rejected. The supported platform is macOS Apple silicon.
+The protocol carries no version field. Pin and handshake checks require exactly Vibe 2.26.1 and the candidate's installed-file manifest. Another Vibe release needs its own audited wire facts and evidence. Source audit is supplemented by the actual rc.5 no-inference observations below. Observations on macOS Apple silicon / Node 24.21.0 do not verify another platform, fresh-account install, exact declared Node floor or hosted behavior.
 
 ## The pin and its manifest
 
@@ -12,7 +12,7 @@ Before each spawn the supervisor locates the Python environment from the `vibe-a
 
 ## Wire facts the client relies on
 
-Read from the source at the Vibe tag, commit `4ae5c5955da8e761318916bdb1a7f46f0b50c7d0` (the protocol audit, source answers and design note are kept in the source repository). None of it was observed on a running server; the [unverified gates](#unverified-gates) say which parts the target must confirm.
+Read from the source at the Vibe tag, commit `4ae5c5955da8e761318916bdb1a7f46f0b50c7d0` (the protocol audit, source answers and design note are kept in the source repository). The actual no-inference rc.5 check confirmed the handshake/configuration subset below. Hosted permission/event behavior remains in the [unverified gates](#unverified-gates); a source-read fact is not automatically an observed gate.
 
 - **Framing and handshake.** One compact JSON object per line. `initialize` carries `clientInfo` with entrypoint `programmatic` and `capabilities.callbackKinds = ["approval"]`; without that declaration the server crashes on its first approval. The result's `serverInfo.version` is checked against the pin, then the client sends `initialized`. The server sends error codes as strings (`unauthorized`, `invalid_params`, `not_initialized`, and others); `unauthorized` maps to `VSUP_AUTH_REQUIRED`.
 - **Strictness.** The server's models forbid unknown fields and require `params`, camelCase. The client sends exactly what it builds and tolerates unknown fields on read, but requires the fields it depends on.
@@ -57,26 +57,36 @@ Use `npm run verify:release` for local code and security verification and `npm r
 
 The declared Node floor is 20.19.0. Release acceptance compares major, minor, and patch components; a passing run on another Node version does not establish that the minimum runtime itself was exercised. Verify the frozen package on Node 20.19.0 before making a stable compatibility claim.
 
-## Candidate acceptance: 2.0.0
+## Candidate acceptance: 2.0.0-rc.5
 
-The 2.0 runtime is new, so **no earlier hosted or native evidence transfers**. 2.0.0 is implemented and has only been exercised against the scripted fake server; every gate below needs the target machine and the owner's separate authorization, and all are open. See [machine-readable gates](acceptance.json).
+Evidence belongs to source `91afad4a9b6c598d2486c5d22e902f32972e4cac`, frozen archive SHA-256 `d1fd22ec04e50048c052cdf013b4d235b525dffc2efb11596dd29f8253003f6a` and installed distribution identity `a3600f7632ea42a221d342734dd1b6cb17deaaf072211693a728e31c0437b053`. The [source-only evidence packet](https://github.com/crew-lab/codex-vibe/tree/codex/workflow-acceptance-reporting/docs/reviews/workflow-2026-10-15) and [machine-readable gates](acceptance.json) contain the observations. Updating this documentation does not replace the frozen archive or its original packaging report.
+
+| Check | Observed result and boundary |
+|---|---|
+| Release verification | PASS: 1,260 tests across 87 files, lint, strict types, build, acceptance, secret scan and SBOM on Node 24.21.0. |
+| Offline installed package | PASS: installed CLI, five-tool catalog, isolated/reconnect smoke; no hosted inference. |
+| Actual no-inference conformance | VERIFIED once on installed Vibe 2.26.1 with a fixed fake key. Pin/handshake, review/edit initialization, full read-back and cleanup passed. No turn/start or real credentials. |
+| Network observation | `none-observed-control-validated`: no subject attempts and an observed control. Experiments-specific attribution remains `unverified-host-only-observation`; do not promote that gate from a host name. |
+| Installed readiness and drift | PASS through official SDK stdio; matching candidate eligible and an intentionally incorrect expected candidate rejected. Intended desktop/native connection not tested on rc.5. |
+| Validation helper | PASS for independent copies, source preservation, modified-state cleanup refusal and real npm dependency-free offline fixture with lifecycle scripts disabled. Populated pnpm dependency graphs remain unverified. |
 
 ## Unverified gates
 
-All of these stay unverified until evidence is recorded here and in `acceptance.json`.
-
-| Gate | What it settles |
+| Gate | Remaining observation |
 |---|---|
-| Target no-inference conformance check | With the installed Vibe 2.26.1 and no provider: the manifest generated and verified on the target (and the per-run hashing cost), `serverInfo.version`, the handshake, `session/start`, and the complete read-back, with no turn. |
-| Native readiness | On the intended Codex desktop connection, native readiness on the frozen 2.0 archive: `server_version`, eligible, no blockers, free slot. |
-| One hosted review and one hosted edit | Each with a readiness receipt, the edit verified independently in a disposable copy, both closed with verified cleanup. Needs a new owner allowance; stop on first failure. |
-| MCP client disconnect | One observed disconnect during a running hosted run: worker group gone, owner lock released, run failed and never replayed, private directories deleted, edit worktree kept until close. |
-| `permission = "ask"` visible in effective configuration | That `config/effective/read` shows `tools.<name>.permission` and the denylist for each profile tool, and that an in-workspace `read_file` reaches the approval handler. Read from source only. |
-| Thinking off | That turning thinking off stops the model from generating reasoning. The read-back confirms the setting, not the effect. |
-| Experiments fetch off | That `experiments.enable = false` stops Vibe's experiments request. The setting is read back; its effect is unknown. |
-| Nested `run_typescript` shape and gating | That a `write_file` or `edit` called from inside `run_typescript` arrives as the same `file_system.*` effect and reaches deny. From Vibe's Rust tests and code reading only; the hosted-review probe in the target brief (step 6) must show a nested write refused. |
+| Exact Node 20.19.0 floor | Full verification of the selected candidate on exactly the declared minimum. Another source's floor test does not transfer. |
+| Native desktop readiness | Intended connection reports the frozen candidate/distribution, preparation PASS, eligibility, no blockers and free slot. |
+| Hosted fixture review/edit | Explicit bounded allowance, contracts/hashes and independent validation with standardized reports. No new hosted start ran in this session. |
+| Hosted disconnect/soak | Observed owned-group termination, lock release, failed interruption without replay, private cleanup and retained uncertain worktree. |
+| Permission handler | `ask` and denylist were read back; actual hosted in-workspace calls still need to demonstrate handler enforcement. |
+| Thinking generation effect | Thinking-off setting was read back; absence of generated reasoning remains unverified. |
+| Experiments-specific fetch | Attribute the request purpose/effect separately; the proxy matrix alone does not. |
+| Nested tool gating | Hosted nested-write probe with deny/effect evidence under the existing bounded policy. |
+| Clean-account installation | Frozen archive installation, registration, rollback and cleanup under a fresh standard account. |
+| Other platforms/clients | Intel, Linux, Windows and additional MCP clients have no new acceptance here. Plugin declarations remain unverified scaffolds. |
+| Integration with main | Reconcile current 2.0.1 source/guards/neutral scripts, review and freeze a new integrated candidate; do not carry rc.5 receipts implicitly. |
 
-Also open for 2.0: a clean macOS account installation, and verification of the frozen package on exactly Node 20.19.0. macOS Apple silicon is the supported platform. Linux and Windows code paths may exist, but 2.0.0 makes no support claim for them. No Intel or plugin installation gates apply to the reduced surface. `.codex-plugin/plugin.json` remains an unverified source scaffold and is not part of the npm package; its declarations do not establish plugin installation or registration support.
+Earlier rc.2 Crew Bravo acceptance and historical release results remain attached to their own artifacts. No general reliability, platform or stable release claim follows from the current partial matrix.
 
 ## History: 1.0.x
 

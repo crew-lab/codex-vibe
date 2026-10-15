@@ -1,0 +1,25 @@
+{
+  "updated_on": "2026-10-15",
+  "scope": "documentation-and-sanitized-evidence-only",
+  "implementation_commit": "91afad4a9b6c598d2486c5d22e902f32972e4cac",
+  "main_observed": "881464cf4a86a030775a47104171853f9aecd3df",
+  "github_release_metadata": {
+    "v1.0.0": "published",
+    "v2.0.0": "draft"
+  },
+  "checks": {
+    "markdown_links": "passed",
+    "package_dry_run_excludes_dated_evidence": "passed",
+    "deterministic_acceptance_checks": 7,
+    "deterministic_acceptance": "passed",
+    "secret_scan": "passed",
+    "diff_check": "passed",
+    "evidence_checksums_and_privacy": "passed"
+  },
+  "full_runtime_suite_rerun": false,
+  "frozen_archives_rebuilt": false,
+  "hosted_starts": 0,
+  "main_merged": false,
+  "selected_installation_changed": false,
+  "note": "Earlier package test hit sandbox denial on the user npm cache; rerun with a private task cache passed. No user cache ownership or global configuration was changed."
+}

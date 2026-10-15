@@ -1,0 +1,93 @@
+{
+  "transport": "official-SDK-stdio",
+  "desktop_connection": "not-tested",
+  "hosted_starts": 0,
+  "catalog": [
+    "vibe_review_start",
+    "vibe_edit_start",
+    "vibe_status",
+    "vibe_result",
+    "vibe_close"
+  ],
+  "matched": {
+    "server_version": "2.0.0-rc.5",
+    "server_instance_id": "51e9bd59-94d1-4353-adb2-485befa8d0c9",
+    "session_id": "session-YeNhHT",
+    "policy_path": "<private-path>",
+    "policy_revision": "103da099200772db22729fa85183820955e014ce2991ee147f930bf205a81e45",
+    "restart_required": false,
+    "boot_drift": [],
+    "operation": "review",
+    "requested_workspace": "<private-path>",
+    "workspace": "<private-path>",
+    "eligible": true,
+    "workspace_eligible": true,
+    "candidate": {
+      "version": "2.0.0-rc.5",
+      "sha256": "a3600f7632ea42a221d342734dd1b6cb17deaaf072211693a728e31c0437b053"
+    },
+    "preparation": {
+      "status": "passed",
+      "candidate_sha256": "a3600f7632ea42a221d342734dd1b6cb17deaaf072211693a728e31c0437b053",
+      "version": "2.0.0-rc.5",
+      "reason": "Version-matched no-inference evidence; hosted acceptance remains separate"
+    },
+    "blockers": [],
+    "active_slot": {
+      "busy": false
+    },
+    "runtime": {
+      "executable": "<private-path>",
+      "resolved_executable": "<private-path>",
+      "executable_found": true,
+      "pinned_version": "2.26.1",
+      "version_verified": false,
+      "note": "Vibe was not launched. The app-server executable is resolved only; the exact version 2.26.1 and the installed files are verified when a run starts and drift fails that run closed."
+    },
+    "next_action": "Start the review with readiness_receipt before receipt_expires_at on this same connection. The receipt proves preparation only; it does not authorize the task or guarantee provider availability."
+  },
+  "drift": {
+    "server_version": "2.0.0-rc.5",
+    "server_instance_id": "51e9bd59-94d1-4353-adb2-485befa8d0c9",
+    "session_id": "session-YeNhHT",
+    "policy_path": "<private-path>",
+    "policy_revision": "103da099200772db22729fa85183820955e014ce2991ee147f930bf205a81e45",
+    "restart_required": false,
+    "boot_drift": [],
+    "operation": "review",
+    "requested_workspace": "<private-path>",
+    "workspace": "<private-path>",
+    "eligible": false,
+    "workspace_eligible": true,
+    "candidate": {
+      "version": "2.0.0-rc.5",
+      "sha256": "a3600f7632ea42a221d342734dd1b6cb17deaaf072211693a728e31c0437b053"
+    },
+    "preparation": {
+      "status": "passed",
+      "candidate_sha256": "a3600f7632ea42a221d342734dd1b6cb17deaaf072211693a728e31c0437b053",
+      "version": "2.0.0-rc.5",
+      "reason": "Version-matched no-inference evidence; hosted acceptance remains separate"
+    },
+    "blockers": [
+      {
+        "code": "VSUP_INVALID_STATE",
+        "message": "Connected candidate differs from expected_candidate.",
+        "remediation": "The request conflicts with the current state: check the run status and use an action valid for it, or wait until a shutting-down supervisor has been restarted, or inspect the isolated session path named in the message.",
+        "retryable": false
+      }
+    ],
+    "active_slot": {
+      "busy": false
+    },
+    "runtime": {
+      "executable": "<private-path>",
+      "resolved_executable": "<private-path>",
+      "executable_found": true,
+      "pinned_version": "2.26.1",
+      "version_verified": false,
+      "note": "Vibe was not launched. The app-server executable is resolved only; the exact version 2.26.1 and the installed files are verified when a run starts and drift fails that run closed."
+    },
+    "next_action": "Resolve every blocker and check again. This is a preparation failure, not a Vibe run result; do not substitute another implementer automatically."
+  }
+}

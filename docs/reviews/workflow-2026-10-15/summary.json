@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-10-15",
+  "candidate": "2.0.0-rc.5",
+  "source_commit": "91afad4a9b6c598d2486c5d22e902f32972e4cac",
+  "base_commit": "2ae8e866e94340950beade221802160a33ff2f97",
+  "archive_sha256": "d1fd22ec04e50048c052cdf013b4d235b525dffc2efb11596dd29f8253003f6a",
+  "candidate_distribution_sha256": "a3600f7632ea42a221d342734dd1b6cb17deaaf072211693a728e31c0437b053",
+  "source_patch_sha256": "f054cf2745adc4f3e371fbf149cf5e8878a1536b36ed8ed0158509a13797c655",
+  "runtime": {
+    "node": "24.21.0",
+    "vibe": "2.26.1",
+    "platform": "darwin-arm64"
+  },
+  "milestones": [
+    {
+      "candidate": "2.0.0-rc.3",
+      "tests_passed": 1256
+    },
+    {
+      "candidate": "2.0.0-rc.4",
+      "tests_passed": 1258
+    },
+    {
+      "candidate": "2.0.0-rc.5",
+      "test_files_passed": 87,
+      "tests_passed": 1260
+    }
+  ],
+  "release_verification": "passed",
+  "offline_installed_package_smoke": "passed",
+  "real_npm_offline_fixture": "passed-dependency-free-lifecycle-scripts-disabled",
+  "source_reconstruction": {
+    "status": "passed",
+    "files_compared": 542
+  },
+  "conformance": {
+    "status": "passed",
+    "inference_started": false,
+    "real_credentials_supplied": false,
+    "network_verdict": "none-observed-control-validated",
+    "experiments_attribution": "unverified-host-only-observation",
+    "original_private_report_sha256": "b7f3d280ed7f24e60e92258c68a39dade30c4997965accc6db36016f264fbdfa"
+  },
+  "installed_readiness": {
+    "transport": "official-SDK-stdio",
+    "matched_candidate": "passed",
+    "wrong_candidate": "rejected",
+    "tools": 5,
+    "desktop_registration": "unverified"
+  },
+  "hosted_starts": 0,
+  "selected_installation_changed": false,
+  "unverified": [
+    "exact-Node-20.19.0-floor",
+    "native-desktop-readiness",
+    "hosted-fixture-review-and-edit",
+    "hosted-disconnect-and-soak",
+    "hosted-permission-enforcement",
+    "thinking-generation-effect",
+    "experiments-specific-network-attribution",
+    "nested-tool-gating",
+    "clean-account-installation",
+    "Intel-and-other-platforms",
+    "populated-pnpm-dependency-installation",
+    "integration-with-main-2.0.1"
+  ]
+}

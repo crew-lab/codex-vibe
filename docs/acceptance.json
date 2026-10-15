@@ -48,7 +48,18 @@
       "status": "RUN_BY_focused-tests"
     }
   ],
-  "verified": [],
+  "verified": [
+    {
+      "name": "target-no-inference-conformance-check",
+      "status": "VERIFIED",
+      "evidence_required": "On the target with the installed Vibe 2.26.1 and no provider: vibe-supervisor pin-manifest generated and then verified on the target (with the per-run hashing cost recorded), serverInfo.version 2.26.1, the initialize handshake, session/start with the supervisor profile, and the complete read-back (profile tools exact, only the permitted bundled skill catalogue from ADR 0006, no MCP sources, connectors or hooks, bypass off, unified harness, each VIBE_* setting, thinking off), with no turn and no hosted inference.",
+      "evidence": "2026-10-15: frozen rc.5 installed on macOS arm64 / Node 24.21.0, actual Vibe 2.26.1. One matched-kit check with a fixed fake key passed pin, handshake, review/edit initialization/read-back and cleanup. No turn/start or real credentials. Subject proxy requests absent; control observed. Experiments-specific attribution remains unverified.",
+      "source_commit": "91afad4a9b6c598d2486c5d22e902f32972e4cac",
+      "archive_sha256": "d1fd22ec04e50048c052cdf013b4d235b525dffc2efb11596dd29f8253003f6a",
+      "evidence_record": "docs/reviews/workflow-2026-10-15/summary.json",
+      "original_private_report_sha256": "b7f3d280ed7f24e60e92258c68a39dade30c4997965accc6db36016f264fbdfa"
+    }
+  ],
   "unverified": [
     {
       "name": "node-floor-20.19.0",
@@ -56,14 +67,9 @@
       "evidence_required": "Run full release verification on exactly Node 20.19.0 for this repaired candidate; previous source evidence does not transfer."
     },
     {
-      "name": "target-no-inference-conformance-check",
-      "status": "UNVERIFIED",
-      "evidence_required": "On the target with the installed Vibe 2.26.1 and no provider: vibe-supervisor pin-manifest generated and then verified on the target (with the per-run hashing cost recorded), serverInfo.version 2.26.1, the initialize handshake, session/start with the supervisor profile, and the complete read-back (profile tools exact, only the permitted bundled skill catalogue from ADR 0006, no MCP sources, connectors or hooks, bypass off, unified harness, each VIBE_* setting, thinking off), with no turn and no hosted inference."
-    },
-    {
       "name": "native-readiness-on-candidate",
       "status": "UNVERIFIED",
-      "evidence_required": "On the intended Codex desktop connection, native readiness reports server_version 2.0.0-rc.2 against the frozen 2.0 archive; eligible, no blockers, free slot."
+      "evidence_required": "On the intended Codex desktop connection, readiness must report the selected frozen rc.5 candidate identity, matching preparation PASS, eligible workspace, no blockers and free slot. Installed official-SDK stdio readiness already passed, but does not close this native gate."
     },
     {
       "name": "hosted-review-edit-confirmation",
@@ -78,7 +84,7 @@
     {
       "name": "permission-ask-visible-in-effective-config",
       "status": "UNVERIFIED",
-      "evidence_required": "config/effective/read shows tools.<name>.permission = ask and the denylist for each profile tool (read from Vibe's source, not observed), and an in-workspace read_file reaches the approval handler rather than being allowed by default."
+      "evidence_required": "rc.5 no-inference read-back observed permission=ask and the exact profile denylist. A hosted in-workspace read must still reach the approval handler rather than be allowed by default; the handler half is unverified."
     },
     {
       "name": "thinking-off-effect",
@@ -88,7 +94,7 @@
     {
       "name": "experiments-fetch-off",
       "status": "UNVERIFIED",
-      "evidence_required": "Observe whether experiments.enable = false stops Vibe's experiments request. The setting is read back; its effect is unknown."
+      "evidence_required": "rc.5 read-back and proxy matrix passed with no subject requests and an observed control. Host-only observation does not establish experiments-specific purpose; attributable evidence remains required."
     },
     {
       "name": "nested-run-typescript-shape-and-gating",
@@ -98,18 +104,18 @@
     {
       "name": "clean-account-install",
       "status": "REQUIRED_NOT_RUN",
-      "evidence_required": "Before stable 2.0.0, complete the documented fresh macOS Apple silicon account installation on a frozen, reviewable artifact, recording installation, registration, rollback, and cleanup.",
-      "decision": "Carried over from 1.0.1; the owner performs it with a prepared packet."
+      "evidence_required": "Before stable promotion, complete fresh macOS Apple silicon account installation on the selected frozen artifact, including registration, rollback and cleanup.",
+      "decision": "Owner performs the clean-account sitting; evidence from another archive is not silently carried over."
     }
   ],
   "not_required_for_2_0": [],
   "delivery_requirements": {
-    "source_ci": "There is no GitHub CI and the workflow scope is skipped; npm run verify:release passes locally on the release commit.",
+    "source_ci": "Local release verification passed for source 91afad4. Confirm CI availability and workflow permissions during integration rather than inferring a CI result.",
     "stable_promotion": "Every gate above, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required. 1.0.0 is the last 1.x release with no maintenance line; 2.0.0 is next, and this branch merges to main after the cold review.",
     "hosted_allowance_remaining": 0,
     "published_1_0_0_unchanged": true
   },
-  "historical_evidence": "Everything under the historical keys is version-bound and does not transfer to 2.0.0: the 2.0 runtime has a different engine.",
+  "historical_evidence": "Historical results remain attached to their original source/archive. They do not close gates for rc.5 or a future integrated artifact.",
   "historical_1_0_1_rc_2_acceptance": {
     "candidate": "1.0.1-rc.2",
     "scope": "Programmatic one-shot review and isolated edit; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work.",
@@ -318,7 +324,19 @@
       }
     ]
   },
-  "updated_at": "2026-10-14",
-  "frozen_archive_sha256": null,
-  "packaging_time_snapshot": null
+  "updated_at": "2026-10-15",
+  "frozen_archive_sha256": "d1fd22ec04e50048c052cdf013b4d235b525dffc2efb11596dd29f8253003f6a",
+  "packaging_time_snapshot": {
+    "candidate": "2.0.0-rc.5",
+    "source_commit": "91afad4a9b6c598d2486c5d22e902f32972e4cac",
+    "node": "24.21.0",
+    "platform": "darwin-arm64",
+    "tests_passed": 1260,
+    "test_files_passed": 87,
+    "verify_release": "PASS",
+    "offline_installed_smoke": "PASS",
+    "evidence_record": "docs/reviews/workflow-2026-10-15/summary.json",
+    "note": "Recorded from the frozen packaging run; original acceptance asset and archive remain unchanged. This documentation update does not rebuild them."
+  },
+  "source_commit": "91afad4a9b6c598d2486c5d22e902f32972e4cac"
 }
