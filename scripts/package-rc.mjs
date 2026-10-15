@@ -32,30 +32,30 @@ const tarball = path.join(releaseDir, tarballName);
 await rm(tarball, { force: true });
 run('npm', ['--cache', cache, 'pack', '--ignore-scripts', '--pack-destination', releaseDir]);
 await access(tarball);
+const { candidateIdentity } = await import('../dist/preparation/evidence.js');
+const candidateSha256 = await candidateIdentity();
 run('npm', ['run', 'sbom']);
 const sbom = path.join(releaseDir, 'sbom.spdx.json');
 await copyFile(path.join(root, 'dist', 'sbom.spdx.json'), sbom);
 const acceptancePath = path.join(releaseDir, 'acceptance.json');
 await writeFile(acceptancePath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o644 });
 for (const file of [tarball, sbom, acceptancePath]) await chmod(file, 0o644);
-const files = [tarball, sbom, acceptancePath];
-const sums = [];
-for (const file of files) {
-  const digest = createHash('sha256').update(await readFile(file)).digest('hex');
-  sums.push(`${digest}  ${path.basename(file)}`);
-}
-const sumsPath = path.join(releaseDir, 'SHA256SUMS');
-await writeFile(sumsPath, `${sums.join('\n')}\n`, { mode: 0o644 });
-process.stdout.write(`\nRC package and reports written to ${releaseDir}\n`);
-for (const line of sums) process.stdout.write(`${line}\n`);
-
-const { candidateIdentity } = await import('../dist/preparation/evidence.js');
-const kit = path.join(releaseDir, `preparation-kit-${pkg.version}`);
-await rm(kit, { recursive: true, force: true });
-await mkdir(kit, { mode: 0o700 });
+const { finalizePackage, reportAfterValidation } = await import('./finalize-package.mjs');
 const scriptBytes = await readFile(path.join(root, 'scripts/v2-conformance-check.mjs'));
-await writeFile(path.join(kit, 'v2-conformance-check.mjs'), scriptBytes, { mode: 0o600 });
-await writeFile(path.join(kit, 'manifest.json'), JSON.stringify({ schema_version: 1, version: pkg.version, candidate_sha256: await candidateIdentity(), script_sha256: createHash('sha256').update(scriptBytes).digest('hex') }, null, 2)+'\n', { mode: 0o600 });
-await copyFile(path.join(root, 'docs/preparation.md'), path.join(kit, 'PROCEDURE.md'));
-const kitFiles = ['v2-conformance-check.mjs','manifest.json','PROCEDURE.md'];
-await writeFile(path.join(kit,'SHA256SUMS'), (await Promise.all(kitFiles.map(async name => `${createHash('sha256').update(await readFile(path.join(kit,name))).digest('hex')}  ${name}`))).join('\n')+'\n', {mode:0o600});
+await reportAfterValidation(async () => {
+  const finalized = await finalizePackage({ releaseDir, tarball, version: pkg.version, candidateSha256, scriptBytes,
+    procedureBytes: await readFile(path.join(root, 'docs/preparation.md')), cache, candidateIdentity });
+  const files = [tarball, sbom, acceptancePath, ...finalized.kitFiles];
+  const sums = [];
+  for (const file of files) {
+    const digest = createHash('sha256').update(await readFile(file)).digest('hex');
+    const relativeName = path.relative(releaseDir, file).split(path.sep).join('/');
+    sums.push(`${digest}  ${relativeName}`);
+  }
+  const sumsPath = path.join(releaseDir, 'SHA256SUMS');
+  await writeFile(sumsPath, `${sums.join('\n')}\n`, { mode: 0o644 });
+  return sums;
+}, (sums) => {
+  process.stdout.write(`\nRC package and reports written to ${releaseDir}\n`);
+  for (const line of sums) process.stdout.write(`${line}\n`);
+});
