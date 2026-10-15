@@ -202,6 +202,19 @@
     "hosted_allowance_remaining": 0
   },
   "updated_at": "2026-10-15",
-  "frozen_archive_sha256": null,
-  "packaging_time_snapshot": null
+  "frozen_archive_sha256": "c8d79b8d794b3981bc103ded0b986c452e029a6c15da99342a112509810d4e9a",
+  "packaging_time_snapshot": {
+    "commit": "3de455e",
+    "packaged_on": "2026-10-15",
+    "node": "20.19.0",
+    "npm": "10.8.2",
+    "tests": "88 files, 1285 tests",
+    "assets_sha256": {
+      "vibe-supervisor-2.0.1.tgz": "c8d79b8d794b3981bc103ded0b986c452e029a6c15da99342a112509810d4e9a",
+      "sbom.spdx.json": "93d7e86ef87af4145de0220f3f90e001c7c1f3df9767f824786ef95f2a991f82",
+      "acceptance.json": "bff4b6927b9ef773c65b4e824ec1521e4f099a41ffc707835974f827f091fdd5",
+      "preparation-kit-2.0.1.tar.gz": "2d53d615bb4ba760a5e1f2a3dc19203dfecd5d4b4549a21cb9f7a708ec2606c7"
+    },
+    "offline_cache": "a dedicated npm cache filled with the locked versions (npm cache add per package-lock.json entry)"
+  }
 }
