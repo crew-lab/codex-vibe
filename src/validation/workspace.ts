@@ -45,6 +45,10 @@ async function fingerprint(root:string):Promise<string>{
     }
   };await walk('');if([...links.values()].some(link=>link.expected!==link.seen))throw new Error('External hardlink retained');return digest(canonical(entries));
 }
+export function lockfileNeedsUnsupportedProfile(lock:string):boolean{
+  return /(?<![A-Za-z0-9_-])(?:git\+|git@|file:|link:|workspace:)/.test(lock)||/\b(?:hasInstallScript|requiresBuild)\b/.test(lock);
+}
+
 async function assertProject(directory:string):Promise<{manager:string;lockfile:string}>{
   for(const name of ['.npmrc','.pnpmfile.cjs','pnpmfile.cjs','pnpm-workspace.yaml','.yarnrc','.yarnrc.yml']){
     try{await lstat(path.join(directory,name));throw new Error(`Project configuration ${name} needs an explicitly supported preparation profile`);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
@@ -57,7 +61,7 @@ async function assertProject(directory:string):Promise<{manager:string;lockfile:
   for(const spec of Object.values({...pkg.dependencies,...pkg.devDependencies}))if(/^(?:file:|link:|workspace:|git|https?:|ssh:|github:)/.test(spec))throw new Error('Non-registry dependency needs a supported offline profile');
   const kind=pkg.packageManager.split('@')[0]!;const lockfile=kind==='npm'?'package-lock.json':'pnpm-lock.yaml';
   const lock=await readFile(path.join(directory,lockfile),'utf8');
-  if(/(?:git\+|git@|file:|link:|workspace:|hasInstallScript|requiresBuild)/.test(lock))throw new Error('Lockfile requires unsupported local dependencies or build scripts');
+  if(lockfileNeedsUnsupportedProfile(lock))throw new Error('Lockfile requires unsupported local dependencies or build scripts');
   return {manager:pkg.packageManager,lockfile};
 }
 export async function prepareValidation(options:{source:string;base:string;patchFile:string;output:string;manager:string;cache?:string;install:boolean}):Promise<unknown>{

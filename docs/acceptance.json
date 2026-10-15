@@ -130,6 +130,12 @@
       "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the 2.0 source.",
       "evidence": "2026-10-14, preparing machine (macOS arm64): the 2.0.0 working tree at the version bump (parent commit 4716747) under exactly Node v20.19.0 and npm 10.8.2; npm run verify:release passed (lint, typecheck, build, 83 test files / 1244 tests, acceptance, secret scan, SBOM with 193 entries). No GitHub CI: the workflow token scope is skipped.",
       "result": "pass for that source only; this candidate's node-floor gate is open."
+    },
+    {
+      "name": "validation-populated-pnpm-dependencies",
+      "status": "PASSED_LOCALLY",
+      "evidence_required": "vibe-supervisor validation prepare on a representative project with a populated pnpm store: exact Node and manager pins, frozen lockfile, dependencies inside the owned copies, hooks, lifecycle scripts and fetches off, explicit blockers for unsupported profiles, source preserved and cleanup refusal shown.",
+      "evidence": "2026-10-15, preparing machine (macOS arm64), Node v20.19.0 from nvm, pnpm 9.15.4 installed into that Node: vibe-supervisor validation prepare on a public fixture (two registry dependencies, exact packageManager pin, pnpm-lock.yaml v9) with a pnpm store populated beforehand. Prepared with dependencies installed inside both owned copies and no link resolving outside the validation root; the manifest records Node v20.19.0, pnpm 9.15.4, the base commit, the patch and lockfile hashes. Lifecycle scripts stayed off: with a preinstall exiting 97 and a postinstall exiting 99 the preparation still succeeded. The source checkout stayed clean at its base. Cleanup removed an untouched workspace and retained a changed one (also after a git checkout restore, which rewrites the copy's index). Unsupported profiles (file:, link:, workspace:, git dependencies, requiresBuild, hasInstallScript) are blocked by unit tests. The first run found a defect: the lockfile check matched excludeLinksFromLockfile, present in every pnpm 9 lockfile, so every populated pnpm project was blocked; fixed with regression tests before this pass."
     }
   ],
   "unverified": [
@@ -182,11 +188,6 @@
       "status": "UNVERIFIED",
       "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the frozen source of this candidate.",
       "prior_evidence": "Passed on the 2.0.0 source (node-floor-20.19.0-on-2.0.0-source above); the runtime has changed since, so it does not transfer."
-    },
-    {
-      "name": "validation-populated-pnpm-dependencies",
-      "status": "UNVERIFIED",
-      "evidence_required": "vibe-supervisor validation prepare on a representative project with a populated pnpm store: exact Node and manager pins, frozen lockfile, dependencies inside the owned copies, hooks, lifecycle scripts and fetches off, explicit blockers for unsupported profiles, source preserved and cleanup refusal shown."
     },
     {
       "name": "clean-account-install",
