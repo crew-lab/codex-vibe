@@ -311,3 +311,30 @@ export async function removeVerifiedWorktree(source: string, record: { path: str
 }
 
 export { git as preparationGit };
+
+/** Reconstruct immutable exported bytes in a private index; never read the
+ * worker's current content, check out files, or change the user's index. */
+export async function inspectExport(source: string, base: string, patch: Buffer, paths: readonly string[], maxBytes: number): Promise<{ changedFiles: string[]; files: Record<string, { mode: string; bytes: Buffer } | null> }> {
+  const root = await resolveGitRoot(source);
+  if (await resolveBaseCommit(root, base) !== base) throw new Error('Export base is not an immutable commit');
+  await assertNoExternalFilters(root);
+  return withPrivateIndex(root, async (env) => {
+    await git(root, ['read-tree', base], env);
+    if (patch.length) await git(root, ['apply', '--cached', '--binary', '--whitespace=nowarn', '-'], env, [0], { input: patch, timeoutMs: 30_000, maxOutputBytes: maxBytes });
+    const changedFiles = (await git(root, ['diff', '--cached', '--name-only', '-z', '--no-renames', base, '--'], env)).toString('utf8').split('\0').filter(Boolean);
+    const staged = (await git(root, ['ls-files', '--stage', '-z'], env)).toString('utf8').split('\0');
+    const modes = new Map(staged.filter(Boolean).map((line) => { const tab = line.indexOf('\t'); return [line.slice(tab + 1), line.slice(0, 6)]; }));
+    const files: Record<string, { mode: string; bytes: Buffer } | null> = Object.create(null) as Record<string, { mode: string; bytes: Buffer } | null>;
+    let total = 0;
+    for (const file of paths) {
+      const mode = modes.get(file);
+      if (!mode) { files[file] = null; continue; }
+      if (mode !== '100644' && mode !== '100755') { files[file] = { mode, bytes: Buffer.alloc(0) }; continue; }
+      const bytes = await git(root, ['show', `:${file}`], env, [0], { maxOutputBytes: Math.min(maxBytes - total, 4 * 1024 * 1024) });
+      total += bytes.length;
+      if (total > maxBytes) throw new Error('Verification input limit exceeded');
+      files[file] = { mode, bytes };
+    }
+    return { changedFiles, files };
+  });
+}

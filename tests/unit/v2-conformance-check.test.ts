@@ -1,3 +1,4 @@
+import { BUNDLED_SKILL_NAMES } from '../../src/backends/app-server/bundled-skills.js';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
@@ -76,7 +77,7 @@ async function fakeLog(file: string): Promise<Json[]> {
   return text.split('\n').filter(Boolean).map((line) => JSON.parse(line) as Json);
 }
 
-async function proxyAwareFake(directory: string, attempt: 'experiments-on' | 'always'): Promise<{ appServer: string; manifest: string }> {
+async function proxyAwareFake(directory: string, attempt: 'experiments-on' | 'always' | 'subjects-only'): Promise<{ appServer: string; manifest: string }> {
   await mkdir(directory, { recursive: true });
   const scenarioFile = path.join(directory, 'scenario.json');
   await writeFile(scenarioFile, JSON.stringify({ name: 'proxy-aware' }));
@@ -84,7 +85,7 @@ async function proxyAwareFake(directory: string, attempt: 'experiments-on' | 'al
     "const fs = require('node:fs'); const path = require('node:path'); const net = require('node:net');",
     '(async () => {',
     "  const proxy = process.env.HTTPS_PROXY;",
-    `  const attempt = ${attempt === 'always' ? 'true' : "process.env.VIBE_EXPERIMENTS__ENABLE === 'true'"};`,
+    `  const attempt = ${attempt === 'always' ? 'true' : attempt === 'subjects-only' ? "process.env.VIBE_EXPERIMENTS__ENABLE !== 'true'" : "process.env.VIBE_EXPERIMENTS__ENABLE === 'true' && process.env.VIBE_ENABLE_TELEMETRY === 'true'"};`,
     '  if (proxy && attempt) {',
     '    await new Promise((resolve) => {',
     '      const url = new URL(proxy);',
@@ -115,7 +116,7 @@ async function proxyAwareFake(directory: string, attempt: 'experiments-on' | 'al
 describe('v2 conformance check against the scripted fake app-server', () => {
   it('passes both modes, sends no turn, forwards no real key and leaves nothing behind', async () => {
     const logFile = path.join(scratch, 'fake.log');
-    const fake = await makeLaunchableFakeVibe(path.join(scratch, 'fake'), { scenario: { name: 'conformance', log: logFile } });
+    const fake = await makeLaunchableFakeVibe(path.join(scratch, 'fake'), { scenario: { name: 'conformance', log: logFile, harnessSelectionSource: null, runtime: { skills: BUNDLED_SKILL_NAMES.map((name) => ({ name, source: 'plugin', scope: 'builtin', registry: null })) } } });
     const result = await runCheck(['--manifest', fake.manifest, '--executable', fake.appServer], { MISTRAL_API_KEY: sentinelKey });
 
     expect(result.code, result.stderr).toBe(0);
@@ -180,7 +181,7 @@ describe('v2 conformance check against the scripted fake app-server', () => {
 
   it('sends only a labelled placeholder key when asked and never echoes it', async () => {
     const logFile = path.join(scratch, 'fake.log');
-    const fake = await makeLaunchableFakeVibe(path.join(scratch, 'fake'), { scenario: { name: 'conformance', log: logFile } });
+    const fake = await makeLaunchableFakeVibe(path.join(scratch, 'fake'), { scenario: { name: 'conformance', log: logFile, harnessSelectionSource: null, runtime: { skills: BUNDLED_SKILL_NAMES.map((name) => ({ name, source: 'plugin', scope: 'builtin', registry: null })) } } });
     const result = await runCheck(['--manifest', fake.manifest, '--executable', fake.appServer, '--mode', 'review', '--placeholder-key'], { MISTRAL_API_KEY: sentinelKey });
 
     expect(result.code, result.stderr).toBe(0);
@@ -283,7 +284,7 @@ describe('v2 conformance check against the scripted fake app-server', () => {
     expect(at(result.report, 'network_observation.verdict')).toBe('none-observed-control-validated');
     expect(at(result.report, 'network_observation.subject_attempts')).toEqual([]);
     expect(at(result.report, 'network_observation.control_hosts')).toEqual(['experiments.example.test']);
-    expect(at(result.report, 'gates.experiments-fetch-off.network')).toBe('none-observed-control-validated');
+    expect(at(result.report, 'gates.experiments-fetch-off.network')).toBe('unverified-host-only-observation');
     expect((result.report.runs as Json[]).map((run) => run.label)).toEqual(['review', 'control-experiments-on']);
   }, 60_000);
 
@@ -295,6 +296,15 @@ describe('v2 conformance check against the scripted fake app-server', () => {
     expect(at(result.report, 'network_observation.verdict')).toBe('requests-observed');
     expect(findingIds(result.report, 'fail')).toContain('network-request-observed');
     expect(at((at(result.report, 'network_observation.subject_attempts') as Json[])[0], 'host')).toBe('experiments.example.test');
+  }, 60_000);
+
+  it('fails any subject request even when the control contacted no matching host', async () => {
+    const fake = await proxyAwareFake(path.join(scratch, 'fake'), 'subjects-only');
+    const result = await runCheck(['--manifest', fake.manifest, '--executable', fake.appServer, '--mode', 'review', '--observe-network', '--settle-ms', '100']);
+    expect(result.code).toBe(1);
+    expect(at(result.report, 'network_observation.control_hosts')).toEqual([]);
+    expect(findingIds(result.report, 'fail')).toContain('network-request-observed');
+    expect(at(result.report, 'gates.experiments-fetch-off.network')).toBe('unverified-host-only-observation');
   }, 60_000);
 
   it('calls the observation inconclusive when the control sees no request', async () => {

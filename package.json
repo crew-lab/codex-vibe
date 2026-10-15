@@ -20,7 +20,8 @@
     "README.md",
     "SECURITY.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "scripts/v2-conformance-check.mjs"
   ],
   "scripts": {
     "lint": "eslint .",

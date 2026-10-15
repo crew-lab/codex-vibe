@@ -103,6 +103,20 @@ Besides `message` (the final answer) and `diagnostic`, a run records these event
 
 Select a config with `--config`; otherwise resolution uses `VIBE_SUPERVISOR_HOME`, then the platform default root. Explicit invalid or missing configs fail without fallback. That selection is made once, before `--isolated` switches to a private session directory, and stays the policy source for the life of the connection; the session's copy of `config.toml` is an audit record only. Once serving, a missing selected file fails closed even where startup could have used defaults. Removed keys such as `backend`, `max_concurrent_runs`, idle-session TTL and ACP executable paths are rejected, and `paths.vibe_pin_manifest` is required for runs. A missing `paths.vibe_pin_manifest` is the one problem the commands that repair it tolerate: `pin-manifest`, `allow`, `doctor`, `runs` and `serve` read the file without that key (every other check still applies), so the missing path never blocks its own repair. `serve` starts, but every readiness check and start rereads the file strictly and fails with `VSUP_CONFIG_INVALID` naming `paths.vibe_pin_manifest` and the repair; after the path is set and the manifest written, restart the server, because the path is boot-bound. The config, doctor provenance, data directory and already-open client handshake are separate facts.
 
-Commit or stash the reviewed state before delegating and pass its ref as `base_ref`; uncommitted source bytes are not an edit base.
+Select the existing immutable committed base and pass it as `base_ref`; preserve unrelated uncommitted source changes. Uncommitted bytes are not an edit base.
 
 The supervisor's path checks, session configuration, approval handler and Vibe tool configuration are application policy. They are not a kernel or process sandbox. A worker's account permissions and any content included in its allowed workspace remain relevant.
+
+## Managed configuration isolation
+
+Each worker receives an owned loopback `vibe_base_url` serving only a disabled managed policy; remote admin configuration is excluded ([ADR 0005](adr/0005-target-conformance-repairs.md)). The endpoint is validated through effective read-back before a turn and closed during cleanup. The inference provider endpoint and five MCP operations are unchanged. Nullable harness-selection provenance is accepted; actual unified-harness identity remains required.
+
+## Bundled Vibe skills
+
+Pinned Vibe 2.26.1 bundled plugin skills are permitted by owner decision ([ADR 0006](adr/0006-bundled-vibe-skills.md)): `vibe:create-plugin`, `vibe:skill-creator`, `vibe:vibe`, `vibe:worktree`. The runtime read-back requires plugin source, builtin scope and no registry reference, and rejects unknown or duplicate names; the `config/read` skill count above counts root user and project skills, which stay disabled, so it must still be 0. User/project/registry skills remain disabled. Skills are guidance; their instructions do not authorize tools, paths, shell or network access. The exact review/edit file-tool profiles and approval handler remain unchanged.
+
+## Artifact acceptance and reproducible validation
+
+The five tools remain unchanged in number. Edit start may freeze an [acceptance contract](workflow-acceptance.md); automated checks evaluate exact exported bytes separately from execution and coordinator assessment. Close accepts append-only assessment corrections. Read-only `runs verify` and `runs export` produce sanitized reports and optional patch/projected-event artifacts.
+
+[Version-matched preparation](preparation.md) is now a dispatch gate: workspace eligibility alone is insufficient. Native readiness reports candidate identity, preparation state and optional expected-candidate mismatch. Runtime pin verification remains independent at launch. Model observations and detailed usage are reported where exposed; unknown identities, costs and phase boundaries stay unknown. [Validation preparation](validation-workspace.md) creates independent owned copies and pinned offline dependencies without running project checks or integrating output.

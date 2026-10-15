@@ -739,13 +739,13 @@ async function crash(step) {
 
 function wedge(step) {
   state.wedged = true;
-  record('event', { name: 'wedged', pid: process.pid, ignoreSigterm: step.ignoreSigterm === true });
+  if (step.ignoreSigterm) for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => record('event', { name: 'signalIgnored', signal }));
   process.stdin.pause();
   process.stdin.removeAllListeners('data');
   process.stdin.removeAllListeners('end');
   process.stdin.on('error', () => undefined);
-  if (step.ignoreSigterm) for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => record('event', { name: 'signalIgnored', signal }));
   setInterval(() => undefined, 1000);
+  record('event', { name: 'wedged', pid: process.pid, ignoreSigterm: step.ignoreSigterm === true });
 }
 
 function mergeDeep(target, source) {
@@ -945,11 +945,11 @@ const handlers = {
       config: runtimeSnapshot().config,
       startupIssue: null,
       strippedHistoryImages: 0,
-      skillsCount: (runtime.skills ?? []).length,
+      skillsCount: (runtime.skills ?? []).filter((skill) => skill.scope !== 'builtin').length,
       hooksCount: runtime.hooksCount ?? 0,
       mcpServersTotal: (runtime.mcpSources ?? []).length,
       mcpServersEnabled: (runtime.mcpSources ?? []).length,
-      harnessSelectionSource: scenario.harnessSelectionSource ?? 'default'
+      harnessSelectionSource: Object.hasOwn(scenario, 'harnessSelectionSource') ? scenario.harnessSelectionSource : 'default'
     };
   },
   'config/model/write'(params) {

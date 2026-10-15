@@ -1,3 +1,4 @@
+import { BUNDLED_SKILL_NAMES } from '../../src/backends/app-server/bundled-skills.js';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -130,6 +131,26 @@ describe('compareReadback on unit inputs', () => {
       expect(paths(compareReadback(plan.expectation, observe(wire), { checkThinking: true }))).toEqual(expected);
     });
   }
+
+  it('permits only the pinned bundled plugin catalogue, never user/project/registry lookalikes', () => {
+    const wire = cleanWire(plan.expectation, 'off');
+    const runtime = (wire.runtime as Json).runtime as Json;
+    const skills = BUNDLED_SKILL_NAMES.map((name) => ({ name, source: 'plugin', scope: 'builtin', registry: null }));
+    runtime.skills = skills;
+    expect(compareReadback(plan.expectation, observe(wire), { checkThinking: true })).toEqual([]);
+    for (const bad of [
+      { ...skills[0], scope: 'project' }, { ...skills[0], scope: 'global' },
+      { ...skills[0], source: 'local' }, { ...skills[0], source: 'registry' },
+      { ...skills[0], registry: { skillId: 'foreign' } },
+      { ...skills[0], name: 'vibe:unknown' }, { name: skills[0]!.name },
+      null, 'vibe:vibe'
+    ]) {
+      runtime.skills = [bad];
+      expect(paths(compareReadback(plan.expectation, observe(wire), { checkThinking: true }))).toContain('runtime.skills');
+    }
+    runtime.skills = [skills[0], skills[0]];
+    expect(paths(compareReadback(plan.expectation, observe(wire), { checkThinking: true }))).toContain('runtime.skills');
+  });
 
   it('accepts an empty allowlist on a profile tool and extra agent fields', () => {
     const wire = cleanWire(plan.expectation, 'off');

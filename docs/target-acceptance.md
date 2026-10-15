@@ -10,9 +10,11 @@ Each is a separate yes from the owner in chat. A yes to one does not cover anoth
 
 1. Build and install the candidate next to the current install, and switch the Codex registration to it.
 2. Generate the pin manifest with `vibe-supervisor pin-manifest` on the installed Vibe and review it. It reads installed files and launches nothing.
-3. The no-inference conformance check. It launches the installed `vibe-app-server` on this machine, never sends `turn/start`, and costs nothing. With `--observe-network` it also starts a local listener that refuses every connection, and a control run with experiments enabled; nothing leaves the machine.
+3. The no-inference conformance check, run as `vibe-supervisor prepare check` from the candidate's preparation kit. It launches the installed `vibe-app-server` on this machine with a fixed fake key, never sends `turn/start`, and costs nothing. It also starts a local listener that refuses every connection, and a control run with telemetry and experiments enabled; nothing leaves the machine.
 4. Hosted runs: one review and one edit, and the review task carries the policy probe below. An allowance of two runs.
 5. One MCP-client disconnect during a running hosted run. It is a third hosted run, spent only on this.
+
+The owner clarified on 2026-10-15 that a Vibe implementation request already covers its necessary task-scoped preparation: installing or switching the candidate, the no-inference check and adding only the named task repository to the allowlist, with settings preserved and rollback kept ([AGENTS.md](../AGENTS.md#task-authorization-and-coordination)). When a sitting serves such a request, authorizations 1 to 3 are covered by it; a release sitting on its own asks for each. Hosted runs (4 and 5) always need their own allowance.
 
 The owner's own steps stay the owner's: the clean standard macOS account installation (gate `clean-account-install`) is not part of this procedure.
 
@@ -27,7 +29,7 @@ The hosted runs use a small Git repository the owner names, clean at a known bas
 
 ## Steps
 
-1. **Build (authorization 1).** Check out exactly the commit the owner names (`git checkout --detach <commit>`), confirm `git rev-parse HEAD`, then `npm ci`, `npm run verify:release` and `VIBE_SUPERVISOR_TEST_NPM_CACHE=<populated cache> npm run package:rc`. Record the archive SHA-256. If this build ran under exactly Node 20.19.0, keep that `verify:release` output as evidence for gate `node-floor-20.19.0`; otherwise leave that gate open.
+1. **Build (authorization 1).** Check out exactly the commit the owner names (`git checkout --detach <commit>`), confirm `git rev-parse HEAD`, then `npm ci`, `npm run verify:release` and `VIBE_SUPERVISOR_TEST_NPM_CACHE=<populated cache> npm run package:rc`. Record the archive SHA-256 and the `SHA256SUMS` of the `preparation-kit-<version>/` directory written beside it; the kit belongs to that archive and no other. If this build ran under exactly Node 20.19.0, keep that `verify:release` output as evidence for gate `node-floor-20.19.0`; otherwise leave that gate open.
 2. **Install** into a new private prefix next to the current install, run `setup --dry-run`, and switch the registration only with authorization 1. Keep the old install for rollback. The configuration needs `paths.vibe_pin_manifest`; until step 3 writes the file, `doctor` and every run refuse.
 3. **Pin manifest (authorization 2).** `vibe --version` must print the supported version. Then:
 
@@ -37,20 +39,20 @@ The hosted runs use a small Git repository the owner names, clean at a known bas
    ```
 
    Review, do not just accept: the manifest's `version` is the supported version, the file count is plausible, the compiled core is listed, and the environment it came from is the Vibe install the owner means to supervise (it records whatever is installed now). `doctor` must show the pin check passing. Copy the manifest into the evidence folder after `grep -n '/Users/\|/home/'` finds nothing in it.
-4. **Conformance check (authorization 3; gate `target-no-inference-conformance-check` and the config halves of three more).** From the built checkout:
+4. **Conformance check (authorization 3; gate `target-no-inference-conformance-check` and the config halves of three more).** With the installed candidate and the kit that came with its archive (`KIT` is the absolute path of `preparation-kit-<version>/`; check its `SHA256SUMS` first):
 
    ```sh
-   node scripts/v2-conformance-check.mjs --config "$CONFIG" --observe-network --output "$EVIDENCE/conformance.json"
+   vibe-supervisor prepare check --kit "$KIT" --config "$CONFIG"
    ```
 
-   Exit 0 is pass, 1 fail, 2 usage, 3 incomplete. Read `conformance.json`, not the printed word. It must show:
+   It refuses a kit whose manifest or script does not match the installed candidate, then runs the kit's `v2-conformance-check.mjs` against the installed `dist` with `--placeholder-key --observe-network`, once. It prints `status`, `candidate_sha256` and `report_sha256`, exits non-zero unless `status` is `passed`, and saves the receipt that ordinary dispatch requires as `preparation-receipt.json` beside the pin manifest, with the full report as `preparation-reports/<report_sha256>.json` in the same directory. Starting a check first invalidates any earlier pass. A failure is deterministic: stop, record it and take it to the preparing machine; do not rerun the unchanged candidate. Copy the saved report into the evidence folder as `conformance.json` (keep the hash; replace paths with placeholders in a separate copy), and read it, not the printed word. It must show:
    - `pin.ok`, `pin.manifest.version` equal to the supported version, `pin.tamper_control.rejected`, and `pin.verify_runs_ms` (the per-run hashing cost; record it).
-   - For `review` and `edit`: `handshake.version_ok`, `session_start.harness` `unified`, `readback.before_thinking.total` and `readback.after_thinking.total` both 0, `thinking.after` `off`, `observed.runtime_tools` exactly the profile, `stats_after` all zero, and `shutdown` with `exited_on_eof`, `group_gone` and `private_directories_removed` true and `reaper.reason` `stopped`.
+   - For `review` and `edit`: `handshake.version_ok`, `session_start.harness` `unified` (a null `harnessSelectionSource` in `config/read` is expected and accepted), `readback.before_thinking.total` and `readback.after_thinking.total` both 0 (the read-back includes the owned loopback managed-config URL from [ADR 0005](adr/0005-target-conformance-repairs.md) and a root `skillsCount` of 0), `thinking.after` `off`, `observed.runtime_tools` exactly the profile, `observed.runtime_skills` only names [ADR 0006](adr/0006-bundled-vibe-skills.md) permits, each with source `plugin` and scope `builtin` (the report records names and provenance, never prompt bodies), `stats_after` all zero, and `shutdown` with `exited_on_eof`, `group_gone` and `private_directories_removed` true and `reaper.reason` `stopped`.
    - No finding with severity `fail`. Warnings and infos are read and copied into `FINDINGS.md`: `unknown-entry-kinds`, `unknown-notification-methods`, `server-left-state-in-tmp` (what the real server leaves after stdin EOF), `server-stderr-output`.
    - Gate `permission-ask-visible-in-effective-config`, config half: `observed.permission_ask_visible` true with `tool_policies.<name>.permission` `ask` and `denylist_matches_expected` true for each profile tool. If the real `config/effective/read` does not show it, the read-back fails the run by design: that is a candidate defect, stop.
-   - Gate `experiments-fetch-off`: `network_observation.verdict` `none-observed-control-validated`. The control run starts the same server with experiments enabled and must itself be seen contacting a host, which also names the experiments host; `subject_attempts` must be empty. `requests-observed` is a failure. `inconclusive-control-saw-nothing` means the proxy method could not see the control either, so the setting is read back but its effect is unproven: record it, and ask the owner whether to observe externally (the owner runs `sudo tcpdump -n -i any 'udp port 53'` in their own terminal during one re-run, and the DNS names are compared with a run of the control). Do not use sudo yourself.
-   - Exit 3 means the server wants a credential before `session/start`. The check never reads the Keychain or an environment key. The one permitted re-run is with `--placeholder-key`, a fixed fake string that is never a credential; any other re-run needs a new yes.
-5. **Readiness (gate `native-readiness-on-candidate`).** Reconnect Codex and run `vibe_status` in workspace mode for the fixture, for review and for edit with `base_ref`: `server_version` equal to the candidate's version, eligible, no blockers, free slot. No run is created. Record the response without the receipt.
+   - Network: `network_observation.verdict` `none-observed-control-validated` is required for a pass. The control run enables telemetry and experiments and keeps the vendor service URL, and must itself be seen contacting a host; `subject_attempts` must be empty, and any subject request fails the check whatever its host. `requests-observed` is a failure. The verdict covers only proxy-observed startup traffic: `network_observation.experiments_verdict` stays `unverified-host-only-observation`, because a host name cannot attribute a request to experiments, so gate `experiments-fetch-off` stays open on this alone. `inconclusive-control-saw-nothing` means the proxy method could not see the control either: record it, and ask the owner whether to observe externally (the owner runs `sudo tcpdump -n -i any 'udp port 53'` in their own terminal during one re-run, and the DNS names are compared with a run of the control). Do not use sudo yourself.
+   - The check uses a fixed fake key and never reads the Keychain or an environment key; no real credential is involved.
+5. **Readiness (gate `native-readiness-on-candidate`).** Reconnect Codex and run `vibe_status` in workspace mode for the fixture, for review and for edit with `base_ref`, passing `expected_candidate` set to the kit manifest's `candidate_sha256`: `server_version` equal to the candidate's version, `candidate.sha256` equal to that hash, `preparation.status` `passed`, `workspace_eligible` and `eligible` true, no blockers, free slot. No run is created. Record the response without the receipt.
 6. **Hosted runs (authorization 4; gate `hosted-review-edit-confirmation` and the hosted halves of four more).** Use the fixture with the review and edit assignments above, each after a fresh readiness check and started with its receipt. The review task is the review assignment followed by this probe, which the owner's yes to authorization 4 covers: `Policy probe: before you answer, call run_typescript once to try to write a file named probe.txt in the workspace root with the content probe, and report exactly what the tool returned. Do not retry it.`
 
    Before the review starts, make a marker (`touch "$EVIDENCE/.mark"`) and, once it is running, start the watcher in a second terminal. It counts, never prints, matches of the word `reasoning` in the run's private store, which lives under the run directory's `tmp` (find it with `find "$STORAGE" -type d -name vibe-home -newer "$EVIDENCE/.mark"`; `STORAGE` is the supervisor private home that `doctor --json` shows):
@@ -66,7 +68,8 @@ The hosted runs use a small Git repository the owner names, clean at a known bas
    - Gate `nested-run-typescript-shape-and-gating`: a `tool_denied` event for a `file_system.*` tool with outcome `permission_denied_by_handler`, no `probe.txt` in the workspace, run still completed, and the result text saying the write went through `run_typescript`. A direct `write_file` call proves the direct path only. If the model never attempts a write, record NOT EXERCISED; do not rerun.
    - Gate `thinking-off-effect`: `thinking-watch.txt` flat at its first value means no reasoning was generated; growth means thinking still generates. Growth is a recorded finding, not a failed run.
    - Record every `diagnostic` event: `ignored_notifications` with its `unknown_methods`, `session_handoff` (a handoff replaces the session id; confirm the result carries the handoff warning and record that it happened, ids not recorded), `turn_retrying`, `private_state_retained`. A run that fails with `details.reason` `unknown_entry_kind` names the kind: record it and stop.
-   - Verify the edit with `scripts/fixture-verify.mjs` in a disposable copy, then close both runs with `cleanup_worktree` and record the closes. After each run settles, the run directory must hold no `child-home`, `vibe-home` or `tmp`, and `pgrep -f vibe-app-server` must show nothing.
+   - The edit starts with an `acceptance_contract` written before dispatch: the two new files as the allowed and required changed paths, `text_contains` checks for `atLeast` and `node:test`, and one required validation ID for the fixture verifier ([workflow acceptance](workflow-acceptance.md)). Its automated verification must pass on the exported patch; a worker summary is not evidence either way.
+   - Verify the edit with `scripts/fixture-verify.mjs` in a disposable copy outside any Git checkout, then close both runs with `cleanup_worktree`, the edit with an `assessment` bound to its patch and contract hashes and the verifier's result, and record the closes. Export each run with `vibe-supervisor runs export <run-id> --out "$EVIDENCE/<run-name>"` (the parent must exist and be owner-private; the destination must not) and keep the sanitized bundle. After each run settles, the run directory must hold no `child-home`, `vibe-home` or `tmp`, and `pgrep -f vibe-app-server` must show nothing.
 7. **Disconnect (authorization 5; gate `mcp-client-disconnect-hosted`).** Follow [the disconnect procedure](#disconnect-procedure) below.
 
 ## Disconnect procedure
@@ -101,7 +104,7 @@ INCONCLUSIVE (the run settled before the close) and NOT_STARTED (readiness, obse
 
 ## Stop rules and recording
 
-- Stop at the first failure of a deterministic requirement: any `fail` finding, a refused start, a failed or unverified edit, an unexpected process or directory left behind. No retries (the one `--placeholder-key` re-run above is the exception), no raised limits, no extra runs, and no configuration edits to make a check pass; report to the preparing machine.
+- Stop at the first failure of a deterministic requirement: any `fail` finding, a refused start, a failed or unverified edit, an unexpected process or directory left behind. No retries, no raised limits, no extra runs, and no configuration edits to make a check pass; report to the preparing machine. A preparation failure is infrastructure evidence: it never triggers a fallback implementer or a replay of a task.
 - Observation gates (thinking effect, experiments when inconclusive, nested gating when not exercised, unknown kinds, handoff) record what was seen and do not stop the sequence unless a run failed.
 - Never record credentials, receipts, reasoning or private session history. The watcher stores counts only.
 - Evidence goes in a folder the owner names, outside the shipped tree. Use the placeholders from [AGENTS.md](../AGENTS.md#recording-target-evidence) (`<private-supervisor-home>`, `<vibe-tool-env>`, `<site-project>`, and the rest) in everything else, and run `grep -rn '/Users/\|/home/' "$EVIDENCE"` before anything is committed.
@@ -109,12 +112,13 @@ INCONCLUSIVE (the run settled before the close) and NOT_STARTED (readiness, obse
 
 | Gate | Moves to verified when |
 |---|---|
-| `target-no-inference-conformance-check` | `conformance.json` result `pass`, the reviewed manifest, `doctor` pin check, hashing cost recorded |
+| `target-no-inference-conformance-check` | `prepare check` status `passed` with its saved report's result `pass`, the reviewed manifest, `doctor` pin check, hashing cost recorded |
 | `permission-ask-visible-in-effective-config` | config half from step 4 and handler half from the review run |
-| `experiments-fetch-off` | verdict `none-observed-control-validated` |
+| `experiments-fetch-off` | attributable evidence that the experiments request is not made; `none-observed-control-validated` alone leaves it open |
 | `thinking-off-effect` | watcher flat at its first value (otherwise recorded as a finding) |
 | `nested-run-typescript-shape-and-gating` | the denied nested write described in step 6 |
-| `native-readiness-on-candidate` | step 5 response |
-| `hosted-review-edit-confirmation` | both runs completed, edit verified independently, both closed with verified cleanup |
+| `native-readiness-on-candidate` | step 5 response with the expected candidate and preparation passed |
+| `hosted-review-edit-confirmation` | both runs completed, the edit's contract verification passed and the edit verified independently, both closed with verified cleanup and exported |
 | `mcp-client-disconnect-hosted` | the disconnect procedure passes |
 | `node-floor-20.19.0` | step 1 on exactly Node 20.19.0 |
+| `validation-populated-pnpm-dependencies` | `validation prepare` on a representative pnpm project with a populated store, per [validation workspaces](validation-workspace.md); no hosted run needed |

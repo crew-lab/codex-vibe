@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { validationCommand } from "./cli/validation.js";
+import { prepareCommand } from "./cli/prepare.js";
+import { exportReport, locateSavedRun } from './reporting/export.js';
 import { lstat, open, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -71,6 +74,25 @@ async function runsCommand(args: string[]): Promise<void> {
     } else positional.push(args[index] as string);
   }
   const [subcommand, id] = positional;
+  if (subcommand === 'verify' || subcommand === 'export') {
+    if (!id || !validRunId(id)) fail('runs verify/export requires a run UUID.', 2);
+    let output: string | undefined; let validationFile: string | undefined; let include: ('patch' | 'events')[] = [];
+    const seen = new Set<string>();
+    for (let index = 2; index < positional.length; index++) {
+      const flag = positional[index]!; const value = positional[++index];
+      if (seen.has(flag) || !value || value.startsWith('--')) fail('Invalid or repeated report option.', 2);
+      seen.add(flag);
+      if (flag === '--out') output = path.resolve(value);
+      else if (flag === '--validation') validationFile = path.resolve(value);
+      else if (flag === '--include' && subcommand === 'export' && value.split(',').every((item) => item === 'patch' || item === 'events')) include = [...new Set(value.split(',') as ('patch' | 'events')[])];
+      else fail('Usage: runs verify|export <run-id> --out <directory> [--include patch,events] [--validation <file>]', 2);
+    }
+    if (!output) fail('--out is required.', 2);
+    const resolved = await loadResolvedConfig({ requirePinManifest: false, ...(configPath ? { configPath } : {}) });
+    const directory = await locateSavedRun(resolved.dataDir, id);
+    print(await exportReport({ directory, output, include, ...(validationFile ? { validationFile } : {}), verifyOnly: subcommand === 'verify' }));
+    return;
+  }
   if (positional.length !== (subcommand === 'list' ? 1 : subcommand === 'cleanup' ? (id ? 2 : 1) : 2)) fail('Usage: vibe-supervisor runs [--config <path>] <list|show|tail|cleanup> [run-id]', 2);
   const resolved = await loadResolvedConfig({ requirePinManifest: false, ...(configPath ? { configPath } : {}) }); const config = resolved.config; const dataDir = resolved.dataDir;
   const runsDir = path.join(dataDir, 'runs');
@@ -125,7 +147,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   try {
     if (command === '--version' || command === '-v') { print(APP_VERSION); return; }
     if (command === 'help' || command === '--help' || command === '-h' || !command) {
-      print('Usage: vibe-supervisor <setup --workspace <dir> [--config <path>] [--codex user|project] [--isolated] [--yes|--dry-run]|allow [--config <path>] <dir>|doctor [--json] [--config <path>]|pin-manifest [--config <path>] [--executable <path>] [--output <path>] [--force]|serve --stdio [--config <path>] [--isolated]|runs [--config <path>] list|show|tail|cleanup [run-id]|--version>'); return;
+      print('Usage: vibe-supervisor <setup --workspace <dir> [--config <path>] [--codex user|project] [--isolated] [--yes|--dry-run]|allow [--config <path>] <dir>|doctor [--json] [--config <path>]|pin-manifest [--config <path>] [--executable <path>] [--output <path>] [--force]|serve --stdio [--config <path>] [--isolated]|runs [--config <path>] list|show|tail|cleanup [run-id] | runs verify|export <run-id> --out <directory> [--include patch,events] [--validation <file>]|--version>'); return;
     }
     if (command === 'doctor') return await doctorCommand(args);
     if (command === 'pin-manifest') return await pinManifestCommand(args);
@@ -154,6 +176,8 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
       }
       return await serve(undefined, configPath);
     }
+    if (command === 'validation') { print(await validationCommand(args)); return; }
+    if (command === 'prepare') { const result = await prepareCommand(args); print(result); if ((result as {status?: string}).status !== 'passed') process.exitCode = 1; return; }
     if (command === 'runs') return await runsCommand(args);
     fail(`Unknown command: ${command}`, 2);
   } catch (error) {

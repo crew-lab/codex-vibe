@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "candidate": "2.0.1",
-  "scope": "App-server client: one-shot review and isolated edit through vibe-app-server 2.26.1, one process per run; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work. There is one engine and no backend selector or backend config key.",
+  "scope": "App-server client: one-shot review and isolated edit through vibe-app-server 2.26.1, one process per run; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work. There is one engine and no backend selector or backend config key. Around the five tools: optional frozen acceptance contracts checked against the exact exported patch, append-only coordinator assessments, sanitized run reports, a version-matched preparation pass that gates ordinary dispatch, and owned validation copies.",
   "deterministic": [
     {
       "name": "lint-typecheck-build-tests-acceptance-secret-scan-sbom",
@@ -46,31 +46,109 @@
     {
       "name": "authoritative-policy-reread-readiness-receipt-and-restart-required",
       "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "owned-loopback-managed-config-endpoint-and-readback",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "bundled-skill-catalogue-provenance-readback",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "acceptance-contract-exact-patch-checks-and-append-only-assessment",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "sanitized-run-verify-and-export",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "preparation-kit-receipt-binding-and-dispatch-gate",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "validation-copies-offline-npm-fixture-and-owned-cleanup",
+      "status": "RUN_BY_focused-tests"
+    }
+  ],
+  "evidence_builds": [
+    {
+      "label": "workflow candidate",
+      "source_commit": "91afad4a9b6c598d2486c5d22e902f32972e4cac",
+      "base_commit": "2ae8e866e94340950beade221802160a33ff2f97",
+      "archive_sha256": "d1fd22ec04e50048c052cdf013b4d235b525dffc2efb11596dd29f8253003f6a",
+      "candidate_distribution_sha256": "a3600f7632ea42a221d342734dd1b6cb17deaaf072211693a728e31c0437b053",
+      "source_patch_sha256": "f054cf2745adc4f3e371fbf149cf5e8878a1536b36ed8ed0158509a13797c655",
+      "runtime": "macOS arm64, Node 24.21.0, Vibe 2.26.1",
+      "recorded_on": "2026-10-15",
+      "evidence_packet": "The sanitized evidence packet at commit 2e920d3 (summary, conformance, readiness and checksums records); source only, never shipped. Full logs, packages and source snapshots stay in the operator's private delivery directory.",
+      "transfers_to_candidate": false,
+      "note": "The packet's own README says it does not certify a later integrated package. This candidate integrates the same workflow source with the one-version cleanup, so its bytes differ and its gates below stay open until rerun."
+    },
+    {
+      "label": "2.0.0 draft release",
+      "source_commit": "f2c2119",
+      "archive_sha256": "485ecce329560507e54f1450790629f877e3623754e56ea11343a81dc753576f",
+      "target_evidence": "none",
+      "transfers_to_candidate": false,
+      "note": "Packaged from 0101f28 plus a test-race fix and a packaging fix, without the workflow features. Its src/ is identical to the 2.0.0 runtime whose first no-inference target check failed on the null harnessSelectionSource and saw startup connections (ADR 0005)."
     }
   ],
   "verified": [
     {
-      "name": "node-floor-20.19.0",
+      "name": "workflow-candidate-release-verification-and-offline-smoke",
       "status": "PASSED_LOCALLY",
+      "build": "workflow candidate",
+      "evidence": "2026-10-15, macOS arm64, Node 24.21.0: npm run verify:release passed (lint, typecheck, build, 87 test files / 1260 tests, acceptance, secret scan, SBOM); the offline installed-package smoke passed with the exact five-tool catalogue and the isolated reconnect; the exported source patch reconstructed 542 source files byte for byte."
+    },
+    {
+      "name": "workflow-candidate-target-no-inference-conformance-check",
+      "status": "VERIFIED",
+      "build": "workflow candidate",
+      "evidence": "2026-10-15, the frozen archive installed on the target (macOS arm64, Node 24.21.0) against the installed Vibe 2.26.1: one matched-kit check with a fixed fake key and no turn/start passed pin (783 files, tamper control rejected), handshake, review and edit initialization, the full read-back before and after thinking (no mismatch) and cleanup. Network observation none-observed-control-validated: no subject request, control observed. Original private report sha256 b7f3d280ed7f24e60e92258c68a39dade30c4997965accc6db36016f264fbdfa.",
+      "result": "pass; permission ask and the exact denylist visible in config/effective/read; thinking off read back; the four bundled skills reported with source plugin and scope builtin; the server left nothing in tmp after stdin EOF; one unknown notification method (runtime/updated, info); experiments-specific attribution unverified (host-only observation); approval handler, thinking effect and nested gating need a hosted run."
+    },
+    {
+      "name": "workflow-candidate-installed-sdk-readiness",
+      "status": "VERIFIED",
+      "build": "workflow candidate",
+      "evidence": "2026-10-15, the installed archive through the official MCP SDK over stdio, not the desktop connection: five tools callable; readiness with the matching candidate eligible, preparation passed, no blockers, free slot; a deliberately wrong expected_candidate rejected with VSUP_INVALID_STATE. Receipt fields removed before recording.",
+      "result": "pass; native desktop readiness not tested."
+    },
+    {
+      "name": "workflow-candidate-validation-helper-npm-offline-fixture",
+      "status": "PASSED_LOCALLY",
+      "build": "workflow candidate",
+      "evidence": "2026-10-15: independent baseline and candidate copies, source preserved, cleanup refused after a modified file, and a real npm dependency-free offline install with a deliberately failing lifecycle script suppressed.",
+      "result": "pass; populated pnpm dependency graphs not demonstrated."
+    },
+    {
+      "name": "node-floor-20.19.0-on-2.0.0-source",
+      "status": "PASSED_LOCALLY",
+      "build": "the 2.0.0 working tree at the version bump (parent commit 4716747)",
       "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the 2.0 source.",
-      "evidence": "2026-10-14, preparing machine (macOS arm64): the 2.0.0 working tree at the version bump (parent commit 4716747) under exactly Node v20.19.0 and npm 10.8.2; npm run verify:release passed (lint, typecheck, build, 83 test files / 1244 tests, acceptance, secret scan, SBOM with 193 entries). No GitHub CI: the workflow token scope is skipped."
+      "evidence": "2026-10-14, preparing machine (macOS arm64): the 2.0.0 working tree at the version bump (parent commit 4716747) under exactly Node v20.19.0 and npm 10.8.2; npm run verify:release passed (lint, typecheck, build, 83 test files / 1244 tests, acceptance, secret scan, SBOM with 193 entries). No GitHub CI: the workflow token scope is skipped.",
+      "result": "pass for that source only; this candidate's node-floor gate is open."
     }
   ],
   "unverified": [
     {
       "name": "target-no-inference-conformance-check",
       "status": "UNVERIFIED",
-      "evidence_required": "On the target with the installed Vibe 2.26.1 and no provider: vibe-supervisor pin-manifest generated and then verified on the target (with the per-run hashing cost recorded), serverInfo.version 2.26.1, the initialize handshake, session/start with the supervisor profile, and the complete read-back (profile tools exact, no skills, MCP sources, connectors or hooks, bypass off, unified harness, each VIBE_* setting, thinking off), with no turn and no hosted inference."
+      "evidence_required": "On the target with the installed Vibe 2.26.1 and no provider, with this build's preparation kit (vibe-supervisor prepare check): vibe-supervisor pin-manifest generated and then verified on the target (with the per-run hashing cost recorded), serverInfo.version 2.26.1, the initialize handshake, session/start with the supervisor profile, and the complete read-back (profile tools exact, only the bundled skill catalogue ADR 0006 permits, the owned loopback managed-config URL from ADR 0005, no MCP sources, connectors or hooks, bypass off, unified harness, each VIBE_* setting, thinking off), with no turn and no hosted inference.",
+      "prior_evidence": "Passed once for the workflow candidate (workflow-candidate-target-no-inference-conformance-check above); not run on this build."
     },
     {
       "name": "native-readiness-on-candidate",
       "status": "UNVERIFIED",
-      "evidence_required": "On the intended Codex desktop connection, native readiness reports the server_version of the frozen archive under test; eligible, no blockers, free slot."
+      "evidence_required": "On the intended Codex desktop connection, readiness reports the server_version and candidate identity of the frozen archive under test, matching preparation PASS, an eligible workspace, no blockers and a free slot.",
+      "prior_evidence": "The workflow candidate passed readiness through the official SDK over stdio, which does not close this native gate."
     },
     {
       "name": "hosted-review-edit-confirmation",
       "status": "UNVERIFIED",
-      "evidence_required": "With a new owner allowance of two hosted runs: one review and one edit on the frozen fixture with readiness receipts, the edit verified independently in a disposable copy, both closed with verified cleanup. Stop on first failure; no retries."
+      "evidence_required": "With a new owner allowance of two hosted runs: one review and one edit on the frozen fixture with readiness receipts, the edit carrying an acceptance contract and verified independently in a disposable copy, both closed with verified cleanup and exported with runs export. Stop on first failure; no retries."
     },
     {
       "name": "mcp-client-disconnect-hosted",
@@ -80,7 +158,8 @@
     {
       "name": "permission-ask-visible-in-effective-config",
       "status": "UNVERIFIED",
-      "evidence_required": "config/effective/read shows tools.<name>.permission = ask and the denylist for each profile tool (read from Vibe's source, not observed), and an in-workspace read_file reaches the approval handler rather than being allowed by default."
+      "evidence_required": "config/effective/read shows tools.<name>.permission = ask and the denylist for each profile tool, and an in-workspace read_file reaches the approval handler rather than being allowed by default.",
+      "prior_evidence": "The workflow candidate's no-inference read-back observed permission ask and the exact denylist (config half). The handler half needs a hosted run."
     },
     {
       "name": "thinking-off-effect",
@@ -90,7 +169,8 @@
     {
       "name": "experiments-fetch-off",
       "status": "UNVERIFIED",
-      "evidence_required": "Observe whether experiments.enable = false stops Vibe's experiments request. The setting is read back; its effect is unknown."
+      "evidence_required": "Attributable evidence that experiments.enable = false stops Vibe's experiments request. The setting is read back; a host-only proxy observation cannot attribute a request to experiments.",
+      "prior_evidence": "The workflow candidate's proxy matrix showed no subject request with an observed control (none-observed-control-validated); experiments attribution stayed unverified-host-only-observation."
     },
     {
       "name": "nested-run-typescript-shape-and-gating",
@@ -98,16 +178,27 @@
       "evidence_required": "The hosted-review probe in docs/target-acceptance.md (step 6) shows that a write_file or edit called from inside run_typescript arrives as the same file_system.* effect and reaches deny. From Vibe's Rust tests and code reading only."
     },
     {
+      "name": "node-floor-20.19.0",
+      "status": "UNVERIFIED",
+      "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the frozen source of this candidate.",
+      "prior_evidence": "Passed on the 2.0.0 source (node-floor-20.19.0-on-2.0.0-source above); the runtime has changed since, so it does not transfer."
+    },
+    {
+      "name": "validation-populated-pnpm-dependencies",
+      "status": "UNVERIFIED",
+      "evidence_required": "vibe-supervisor validation prepare on a representative project with a populated pnpm store: exact Node and manager pins, frozen lockfile, dependencies inside the owned copies, hooks, lifecycle scripts and fetches off, explicit blockers for unsupported profiles, source preserved and cleanup refusal shown."
+    },
+    {
       "name": "clean-account-install",
       "status": "REQUIRED_NOT_RUN",
-      "evidence_required": "Before stable 2.0.0, complete the documented fresh macOS Apple silicon account installation on a frozen, reviewable artifact, recording installation, registration, rollback, and cleanup.",
-      "decision": "The owner performs it with a prepared packet."
+      "evidence_required": "Before stable promotion, complete the documented fresh macOS Apple silicon account installation on the frozen, reviewable artifact, recording installation, registration, rollback, and cleanup.",
+      "decision": "The owner performs it with a prepared packet; evidence from another archive is not carried over."
     }
   ],
   "not_required_for_2_0": [],
   "delivery_requirements": {
     "source_ci": "There is no GitHub CI and the workflow scope is skipped; npm run verify:release passes locally on the release commit.",
-    "stable_promotion": "Every gate above, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required. Only the latest release is supported.",
+    "stable_promotion": "Every gate above, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required. The integrated build is frozen with package:rc and proven by its own target sitting; no receipt or result of the workflow candidate or the 2.0.0 draft archive transfers. Only the latest release is supported.",
     "hosted_allowance_remaining": 0
   },
   "updated_at": "2026-10-15",
