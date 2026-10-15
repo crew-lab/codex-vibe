@@ -6,6 +6,7 @@ Unreleased; on main since 2026-10-15. It combines the one-version cleanup with t
 
 One version:
 
+- Fixed: the validation helper's lockfile check matched `excludeLinksFromLockfile`, which every pnpm 9 lockfile contains, so every pnpm project was blocked; it now matches only dependency specifiers.
 - One supported version: only the latest release is supported, and Vibe 2.26.1 is the only Vibe release described or accepted.
 - The development history, the recorded evidence of earlier candidates and the superseded launcher decision record are removed from the tree. The wire facts keep their basis in [compatibility](docs/compatibility.md#source-basis): the Vibe tag commit and the SHA-256 of every file read.
 - New [target acceptance procedure](docs/target-acceptance.md): the reusable steps, authorizations and stop rules that prove a build against one Vibe release on the machine that runs Vibe, including the disconnect procedure. The evidence placeholders are in AGENTS.md.

@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { it, expect } from 'vitest';
-import { prepareValidation, cleanValidation } from '../../src/validation/workspace.js';
+import { prepareValidation, cleanValidation, lockfileNeedsUnsupportedProfile } from '../../src/validation/workspace.js';
 it.each([false,true])('creates independent copies and safely cleans up (offline install=%s)',async(install)=>{
  const root=await realpath(await mkdtemp(path.join(tmpdir(),'validation-fixture-')));
  try{
@@ -29,3 +29,19 @@ it.each([false,true])('creates independent copies and safely cleans up (offline 
   expect(await cleanValidation(output)).toMatchObject({status:'removed'});
  }finally{await rm(root,{recursive:true,force:true});}
 },30_000);
+
+it('accepts a pnpm 9 lockfile whose settings mention excludeLinksFromLockfile', () => {
+  const lock = "lockfileVersion: '9.0'\n\nsettings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\n\nimporters:\n\n  .:\n    dependencies:\n      ms:\n        specifier: 2.1.3\n        version: 2.1.3\n";
+  expect(lockfileNeedsUnsupportedProfile(lock)).toBe(false);
+});
+
+it.each([
+  ['a file dependency', '      local:\n        specifier: file:../local\n'],
+  ['a link dependency', '      local:\n        specifier: link:../local\n'],
+  ['a workspace dependency', '      sibling:\n        specifier: workspace:*\n'],
+  ['a git dependency', '"resolved": "git+https://example.invalid/repo.git"'],
+  ['a package that requires a build', '  native@0.1.0:\n    requiresBuild: true\n'],
+  ['an npm package with an install script', '"hasInstallScript": true']
+])('blocks a lockfile with %s', (_name, lock) => {
+  expect(lockfileNeedsUnsupportedProfile(lock)).toBe(true);
+});
