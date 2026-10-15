@@ -40,7 +40,7 @@ describe('workspace readiness over a real --isolated stdio connection', () => {
     const env = { ...(process.env as Record<string, string>), VIBE_SUPERVISOR_HOME: data };
 
     const transport = new StdioClientTransport({ command: process.execPath, args: [cli, 'serve', '--stdio', '--isolated'], env, stderr: 'pipe' });
-    const client = new Client({ name: 'readiness-test', version: '1.0.0' }); clients.push(client);
+    const client = new Client({ name: 'readiness-test', version: '0.0.1' }); clients.push(client);
     await client.connect(transport);
     const check = async (workspace: string) => JSON.parse(text(await client.callTool({ name: 'vibe_status', arguments: { workspace, operation: 'review' } }))) as Record<string, unknown> & { blockers: { code: string }[] };
 

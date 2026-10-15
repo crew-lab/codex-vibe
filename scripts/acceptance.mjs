@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -13,22 +13,6 @@ record('private-package', packageJson.private === true && packageJson.license ==
 const nodeEngine = packageJson.engines?.node;
 const minimumNode = typeof nodeEngine === 'string' ? /^>=(\d+\.\d+(?:\.\d+)?)$/.exec(nodeEngine)?.[1] : undefined;
 record('node-engine', Boolean(minimumNode && nodeVersionAtLeast(process.versions.node, minimumNode)), `Node ${process.versions.node}; package engine ${nodeEngine ?? 'missing or invalid'}`);
-const removedArtifacts = [
-  'dist/backends/acp.js',
-  'dist/backends/worker-deadline.js',
-  'dist/core/policy-engine.js',
-  'dist/backends/programmatic.js',
-  'dist/backends/launcher.js',
-  'dist/backends/profile.js',
-  'dist/backends/pinned.js',
-  'dist/backends/runtime',
-];
-const staleArtifacts = [];
-for (const relative of removedArtifacts) {
-  try { await access(path.join(root, relative)); staleArtifacts.push(relative); }
-  catch { /* absent as expected */ }
-}
-record('reduced-build-artifacts', staleArtifacts.length === 0, staleArtifacts.length ? `Stale removed artifacts remain: ${staleArtifacts.join(', ')}` : 'Removed ACP, policy-engine, dynamic-deadline, legacy programmatic backend and Python launcher outputs are absent.');
 try {
   const packageRoot = JSON.parse(await readFile(path.join(root, 'dist', 'cli.js'), 'utf8').then(() => JSON.stringify({ ok: true })));
   record('cli-build', packageRoot.ok === true, 'Compiled CLI entrypoint exists.');

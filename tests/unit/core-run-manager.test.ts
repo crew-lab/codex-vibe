@@ -88,13 +88,13 @@ describe("RunManager core lifecycle", () => {
     const meta = JSON.parse(await readFile(metaPath, "utf8"));
     expect(meta.supervisor_version).toBe(APP_VERSION);
     // A later supervisor must not overwrite the recorded creator release.
-    meta.supervisor_version = "0.9.0-rc.4";
+    meta.supervisor_version = "3.1.4-beta.2";
     await writeFile(metaPath, JSON.stringify(meta), { mode: 0o600 });
     const restarted = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [new FakeBackend()]);
     try {
       await restarted.initialize();
-      expect((await restarted.status({ run_id: started.run_id })).supervisor_version).toBe("0.9.0-rc.4");
-      expect((await restarted.result({ run_id: started.run_id, detail: "full" })).supervisor_version).toBe("0.9.0-rc.4");
+      expect((await restarted.status({ run_id: started.run_id })).supervisor_version).toBe("3.1.4-beta.2");
+      expect((await restarted.result({ run_id: started.run_id, detail: "full" })).supervisor_version).toBe("3.1.4-beta.2");
     } finally { await restarted.shutdown(); }
   });
 
@@ -213,7 +213,7 @@ describe("RunManager worker death after the supervisor deadline", () => {
       const started = await manager.reviewStart({ task: "review", cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
       vi.setSystemTime(Date.now() + (TEST_CONFIG.limits.reviewTimeoutSeconds + 1) * 1000);
-      await backend.callbacks?.onState("failed", { error: supervisorError("VSUP_BACKEND_CRASHED", "Vibe ACP exited null") });
+      await backend.callbacks?.onState("failed", { error: supervisorError("VSUP_BACKEND_CRASHED", "Vibe exited null") });
       const status = await manager.status({ run_id: started.run_id });
       expect(status.state).toBe("failed");
       expect(status.error?.code).toBe("VSUP_TIMEOUT");
@@ -227,7 +227,7 @@ describe("RunManager worker death after the supervisor deadline", () => {
       const started = await manager.reviewStart({ task: "review", cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
       vi.setSystemTime(Date.now() + 60_000);
-      await backend.callbacks?.onState("failed", { error: supervisorError("VSUP_BACKEND_CRASHED", "Vibe ACP exited null") });
+      await backend.callbacks?.onState("failed", { error: supervisorError("VSUP_BACKEND_CRASHED", "Vibe exited null") });
       expect((await manager.status({ run_id: started.run_id })).error?.code).toBe("VSUP_BACKEND_CRASHED");
     } finally { await manager.shutdown(); }
   });

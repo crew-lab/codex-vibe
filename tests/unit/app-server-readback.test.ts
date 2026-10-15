@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  CLIENT_ENTRYPOINT,
   buildConfigEffectiveRead,
   buildRuntimeRead,
   buildSessionReadyWait,
@@ -229,7 +230,7 @@ class FixtureClient {
   }
 
   async startSession(agentConfig: Json): Promise<string> {
-    await this.call('initialize', { clientInfo: { name: 'vibe-supervisor', version: '2.0.0', entrypoint: 'programmatic' }, capabilities: { callbackKinds: ['approval'] } });
+    await this.call('initialize', { clientInfo: { name: 'vibe-supervisor', version: '2.0.0', entrypoint: CLIENT_ENTRYPOINT }, capabilities: { callbackKinds: ['approval'] } });
     this.child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'initialized', params: {} })}\n`);
     const started = await this.call('session/start', { agentConfig, historyLimit: 200 });
     this.started = started;
