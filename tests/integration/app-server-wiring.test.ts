@@ -352,7 +352,7 @@ async function buildStack(scenario: string, options: { config?: Partial<Supervis
   const output = new PassThrough();
   const server = createSupervisorMcpServer(manager, { config });
   await server.connect(new StdioServerTransport(input, output));
-  const client = new Client({ name: 'wiring-test-client', version: '1.0.0' });
+  const client = new Client({ name: 'wiring-test-client', version: '0.0.1' });
   clients.push(client);
   await client.connect(new StdioClientHarness(input, output));
   return { base, source, data, logFile, wrapper, manager, backend, client };

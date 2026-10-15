@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { CLIENT_ENTRYPOINT } from '../../src/backends/app-server/protocol.js';
 
 const root = path.resolve(import.meta.dirname, '..', '..');
 const fixture = path.join(root, 'tests', 'fixtures', 'fake-vibe-app-server.mjs');
@@ -132,7 +133,7 @@ class FakeClient {
 
   async handshake(callbackKinds: string[] = ['approval']) {
     const result = await this.ok('initialize', {
-      clientInfo: { name: 'vibe-supervisor', version: '2.0.0', entrypoint: 'programmatic' },
+      clientInfo: { name: 'vibe-supervisor', version: '2.0.0', entrypoint: CLIENT_ENTRYPOINT },
       capabilities: { callbackKinds, clientTools: [], disabledNotifications: [] }
     });
     this.notify('initialized', {});

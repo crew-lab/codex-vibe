@@ -370,7 +370,7 @@ async function connect(manager: RunManagerTools, limits: Partial<SupervisorConfi
   const input = new PassThrough(); const output = new PassThrough();
   const server = createSupervisorMcpServer(manager, { config: { ...TEST_CONFIG, limits: { ...TEST_CONFIG.limits, ...limits } } });
   await server.connect(new StdioServerTransport(input, output));
-  const client = new Client({ name: "shape-test-client", version: "1.0.0" }); clients.push(client);
+  const client = new Client({ name: "shape-test-client", version: "0.0.1" }); clients.push(client);
   await client.connect(new StdioClientHarness(input, output));
   return client;
 }

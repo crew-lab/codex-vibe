@@ -36,37 +36,37 @@ function sections(patch: Buffer): Buffer[] {
   return text.split(/^(?=diff --git )/m).filter(Boolean).map((section) => Buffer.from(section, 'latin1'));
 }
 
-async function legacyExport(exported: { patchPath: string; patch: Buffer }): Promise<{ patchPath: string; sha256: string }> {
+async function concatenatedExport(exported: { patchPath: string; patch: Buffer }): Promise<{ patchPath: string; sha256: string }> {
   const parts = sections(exported.patch);
   expect(parts.length).toBe(3);
   const tracked = parts.filter((part) => part.toString('latin1').includes('index ') && !part.toString('latin1').includes('new file mode'));
   const untracked = parts.filter((part) => part.toString('latin1').includes('new file mode'));
-  const legacy = Buffer.concat([...tracked, ...untracked]);
-  expect(legacy.equals(exported.patch)).toBe(false);
-  await writeFile(exported.patchPath, legacy);
-  return { patchPath: exported.patchPath, sha256: createHash('sha256').update(legacy).digest('hex') };
+  const concatenated = Buffer.concat([...tracked, ...untracked]);
+  expect(concatenated.equals(exported.patch)).toBe(false);
+  await writeFile(exported.patchPath, concatenated);
+  return { patchPath: exported.patchPath, sha256: createHash('sha256').update(concatenated).digest('hex') };
 }
 
 describe('worktree cleanup verification', () => {
   it('accepts a reordered verified patch but retains its dirty worktree', async () => {
     const { repo, worktree, base, exported } = await setup();
-    const legacy = await legacyExport(exported);
-    await expect(removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, legacy, worktree)).rejects.toThrow(/uncommitted or untracked files/i);
+    const concatenated = await concatenatedExport(exported);
+    await expect(removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, concatenated, worktree)).rejects.toThrow(/uncommitted or untracked files/i);
     await expect(stat(worktree)).resolves.toBeDefined();
   });
 
   it('still refuses a one-byte content change in the reordered patch comparison', async () => {
     const { repo, worktree, base, exported } = await setup();
-    const legacy = await legacyExport(exported);
+    const concatenated = await concatenatedExport(exported);
     await writeFile(path.join(worktree, 'a-new.txt'), 'untrackeX\n');
-    await expect(removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, legacy, worktree)).rejects.toThrow(/changed after export/);
+    await expect(removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, concatenated, worktree)).rejects.toThrow(/changed after export/);
     expect(await readFile(path.join(worktree, 'a-new.txt'), 'utf8')).toBe('untrackeX\n');
   });
 
   it('still refuses a tampered saved artifact', async () => {
     const { repo, worktree, base, exported } = await setup();
-    const legacy = await legacyExport(exported);
-    await writeFile(legacy.patchPath, Buffer.concat([await readFile(legacy.patchPath), Buffer.from('\n')]));
-    await expect(removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, legacy, worktree)).rejects.toThrow(/verification failed/);
+    const concatenated = await concatenatedExport(exported);
+    await writeFile(concatenated.patchPath, Buffer.concat([await readFile(concatenated.patchPath), Buffer.from('\n')]));
+    await expect(removeVerifiedWorktree(repo, { path: worktree, baseRef: base, createdBySupervisor: true }, concatenated, worktree)).rejects.toThrow(/verification failed/);
   });
 });

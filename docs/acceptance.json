@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "candidate": "2.0.0",
-  "scope": "App-server client: one-shot review and isolated edit through vibe-app-server 2.26.1, one process per run; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work. The legacy harness path, the Python launcher and the backend config key are removed.",
+  "candidate": "2.0.1",
+  "scope": "App-server client: one-shot review and isolated edit through vibe-app-server 2.26.1, one process per run; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work. There is one engine and no backend selector or backend config key.",
   "deterministic": [
     {
       "name": "lint-typecheck-build-tests-acceptance-secret-scan-sbom",
@@ -95,232 +95,22 @@
     {
       "name": "nested-run-typescript-shape-and-gating",
       "status": "UNVERIFIED",
-      "evidence_required": "The hosted-review probe in the target brief (step 6) shows that a write_file or edit called from inside run_typescript arrives as the same file_system.* effect and reaches deny. From Vibe's Rust tests and code reading only."
+      "evidence_required": "The hosted-review probe in docs/target-acceptance.md (step 6) shows that a write_file or edit called from inside run_typescript arrives as the same file_system.* effect and reaches deny. From Vibe's Rust tests and code reading only."
     },
     {
       "name": "clean-account-install",
       "status": "REQUIRED_NOT_RUN",
       "evidence_required": "Before stable 2.0.0, complete the documented fresh macOS Apple silicon account installation on a frozen, reviewable artifact, recording installation, registration, rollback, and cleanup.",
-      "decision": "Carried over from 1.0.1; the owner performs it with a prepared packet."
+      "decision": "The owner performs it with a prepared packet."
     }
   ],
   "not_required_for_2_0": [],
   "delivery_requirements": {
     "source_ci": "There is no GitHub CI and the workflow scope is skipped; npm run verify:release passes locally on the release commit.",
-    "stable_promotion": "Every gate above, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required. 1.0.0 is the last 1.x release with no maintenance line; 2.0.0 is next, and this branch merges to main after the cold review.",
-    "hosted_allowance_remaining": 0,
-    "published_1_0_0_unchanged": true
+    "stable_promotion": "Every gate above, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required. Only the latest release is supported.",
+    "hosted_allowance_remaining": 0
   },
-  "historical_evidence": "Everything under the historical keys is version-bound and does not transfer to 2.0.0: the 2.0 runtime has a different engine.",
-  "historical_1_0_1_rc_2_acceptance": {
-    "candidate": "1.0.1-rc.2",
-    "scope": "Programmatic one-shot review and isolated edit; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work.",
-    "deterministic": [
-      {
-        "name": "lint-typecheck-build-tests-python-acceptance-secret-scan-sbom",
-        "status": "RUN_BY_verify:release"
-      },
-      {
-        "name": "offline-installed-package-smoke-exact-five-tool-catalog",
-        "status": "RUN_BY_smoke:install"
-      },
-      {
-        "name": "reviewed-baseline-source-invariants-and-snapshot-verification",
-        "status": "RUN_BY_focused-tests"
-      },
-      {
-        "name": "single-slot-settlement-close-and-worktree-ownership",
-        "status": "RUN_BY_focused-tests"
-      },
-      {
-        "name": "restart-marks-interrupted-runs-failed-without-replay",
-        "status": "RUN_BY_focused-tests"
-      },
-      {
-        "name": "installed-mcp-saved-run-reconnect-status-result-close",
-        "status": "RUN_BY_smoke:install"
-      },
-      {
-        "name": "active-disconnect-rehearsal-fake-backend-plain-and-isolated-review-and-edit",
-        "status": "RUN_BY_focused-tests"
-      },
-      {
-        "name": "authoritative-policy-reread-readiness-receipt-and-restart-required",
-        "status": "RUN_BY_focused-tests"
-      },
-      {
-        "name": "node-floor-20.19.0",
-        "status": "VERIFIED",
-        "evidence": "docs/reviews/practical-tool-fix-2026-10-13/rc1-node20-supplement.json"
-      }
-    ],
-    "verified": [
-      {
-        "name": "node-floor-20.19.0",
-        "status": "PASSED_LOCALLY",
-        "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the rc.2 source.",
-        "evidence": "2026-10-14, preparing machine (macOS arm64): rc.2 working tree under exactly Node v20.19.0 and npm 10.8.2; npm run verify:release passed (66 files, 652 tests passed, 2 skipped; 95 Python tests; lint, typecheck, build, acceptance, secret scan, SBOM). Also passed on Node 24. CI matrix on branch claude/ci-checks awaits the push token workflow scope."
-      }
-    ],
-    "unverified": [
-      {
-        "name": "native-readiness-on-candidate",
-        "status": "UNVERIFIED",
-        "evidence_required": "On the intended Codex desktop connection, native readiness reports server_version 1.0.1-rc.2 against the frozen rc.2 archive; eligible, no blockers, free slot."
-      },
-      {
-        "name": "installed-vibe-profile-check",
-        "status": "UNVERIFIED",
-        "evidence_required": "On the target with the installed Vibe 2.26.1 and no provider, tests/fixtures/vibe-profile-check.py passes: the pinned sources match, a tool outside the profile is refused at invocation and by ToolManager.get, and no skill is available or invocable with the supervisor environment. No hosted inference."
-      },
-      {
-        "name": "hosted-review-edit-confirmation",
-        "status": "UNVERIFIED",
-        "evidence_required": "With a new owner allowance of two hosted runs: one review and one edit on the frozen fixture with readiness receipts, the edit verified independently in a disposable copy, both closed with verified cleanup. Stop on first failure; no retries."
-      },
-      {
-        "name": "clean-account-install",
-        "status": "REQUIRED_NOT_RUN",
-        "evidence_required": "Before stable 1.0.1, complete the documented fresh macOS Apple silicon account installation on a frozen, reviewable artifact, recording installation, registration, rollback, and cleanup.",
-        "decision": "Required before stable1.0.1. Owner requested packet and will test later; same-account rehearsal does not satisfy this gate.",
-        "evidence": "docs/reviews/rc1-integration-2026-10-14/FRESH-ACCOUNT.md"
-      }
-    ],
-    "not_required_for_1_0": [],
-    "runtime_equivalence": {
-      "status": "FALSE",
-      "baseline": "1.0.1-rc.1",
-      "reason": "rc.2 refuses tools outside the profile at invocation, pins three more Vibe sources, disables Vibe skills, keeps an unsafe diagnostics file from failing a run, and records cancelled tool calls.",
-      "prior_candidate_gate_evidence_applies": false
-    },
-    "delivery_requirements": {
-      "source_ci": "Verify current-head GitHub CI for the rc.2 source.",
-      "stable_promotion": "Fresh-account acceptance, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required.",
-      "hosted_allowance_remaining": 0,
-      "published_1_0_0_unchanged": true
-    },
-    "frozen_archive_sha256": null,
-    "packaging_time_snapshot": null,
-    "note": "Recorded for 1.0.1-rc.2, which lives on release/1.0. 2.0.0 replaces the launcher with an app-server client, so none of this transfers; the rc.2 gates were never closed.",
-    "updated_at": "2026-10-14"
-  },
-  "historical_1_0_0_acceptance": {
-    "candidate": "1.0.0",
-    "runtime_equivalence_to_0_9_0_rc_28": "TRUE by owner decision for the frozen 1.0.0 release only",
-    "verified": [
-      {
-        "name": "native-readiness-on-candidate",
-        "status": "VERIFIED",
-        "evidence_required": "On the intended Codex desktop connection and exact frozen artifact, vibe_status in workspace mode for the fixture (review, and edit with base_ref) and for the approved second workspace: server_version 0.9.0-rc.28, server_instance_id, policy_path, policy_revision, eligible, blockers, active_slot, runtime and readiness_receipt recorded; no run created. Procedure: docs/history/rc28-target-runbook.md section C.",
-        "evidence": "docs/history/reviews/rc28-target-test-2026-10-13/",
-        "result": "PASS 2026-10-13 on the target (native-readiness.json); target archive sha256 9179a091830e548d9ebd3c13bd6f12997f22a86bda6964d827c23e1a55773bbf built from runtime source bef0985. Runtime source of 1.0.0 is identical to rc.28 (bef0985); this result applies to 1.0.0 by owner decision 2026-10-13 together with release-archive-confirmation."
-      },
-      {
-        "name": "hosted-review-edit-matrix",
-        "status": "VERIFIED",
-        "evidence_required": "Against one frozen artifact/config/baseline: five total sequential runs (an initial review, an initial edit, then three additional review or edit), each preceded by readiness and started with its readiness_receipt; stop on first failure; record run IDs, stop_reason, state, timings, exact artifact/source/config/baseline hashes, independent patch checks, usage where available, and cleanup receipts.",
-        "evidence": "docs/history/reviews/rc28-target-test-2026-10-13/",
-        "result": "PASS 2026-10-13: matrix cases 1 to 5 (normal review, verified edit, review and edit at the turn limit, normal review) with readiness receipts, no retries or repairs (matrix-1..5-result.json, matrix-2-verification.json). Runtime source of 1.0.0 is identical to rc.28 (bef0985); this result applies to 1.0.0 by owner decision 2026-10-13 together with release-archive-confirmation."
-      },
-      {
-        "name": "provider-authentication-for-this-candidate",
-        "status": "VERIFIED",
-        "evidence_required": "Observe authentication only during an authorized real run against the exact frozen candidate; doctor, readiness and initialize-only checks do not qualify.",
-        "evidence": "docs/history/reviews/rc28-target-test-2026-10-13/",
-        "result": "PASS 2026-10-13: authenticated hosted inference in the matrix runs. Runtime source of 1.0.0 is identical to rc.28 (bef0985); this result applies to 1.0.0 by owner decision 2026-10-13 together with release-archive-confirmation."
-      },
-      {
-        "name": "active-disconnect-hosted",
-        "status": "VERIFIED",
-        "evidence_required": "One real client disconnect during a running hosted run through the official client (one observation, owner decision 2026-10-13): the server exits, the worker process group is gone, the owner lock is released, the run is failed and never relaunched, and an edit worktree is kept until vibe_close cleanup. A run that settled before the disconnect does not qualify. Procedure: docs/history/case7-disconnect-brief.md.",
-        "result": "PASS 2026-10-13: official-client run 56c3920b-6758-4751-8b57-f58b2803942e; independently observed active worker disappearance, lock release, failed no-replay record and retained edit worktree; native close removed the pristine worktree. Desktop case 6 remains INCONCLUSIVE. Owner adopted one official-client observation on 2026-10-13.",
-        "evidence": "docs/history/reviews/rc28-target-test-2026-10-13/matrix-7-client.json"
-      },
-      {
-        "name": "release-archive-confirmation",
-        "status": "VERIFIED",
-        "evidence_required": "On the 1.0.0 archive built from the release commit and installed on the target: native readiness on the Codex desktop connection reporting server_version 1.0.0, then one review and one edit on the frozen fixture, each started with its readiness receipt; the edit patch verified independently and the run closed with verified cleanup. Stop on first failure; no retries.",
-        "result": "PASS 2026-10-13 on exact archive 4e91e90bb7cb48c4411e1dc02820e91abddd690fc430f15a65ad6a9f3bd1c610: native readiness 1.0.0; review f8f9c56f-0ffb-4b5f-b338-a125ba7f310e; edit 377bc531-70e9-4dd4-b10e-4de8c2a03253 independently verified (9 cases, 6 worker tests), both closed. Cleanup requested; dirty export retained as required by policy.",
-        "evidence": "docs/history/reviews/v1-confirmation-2026-10-13/release-evidence.json"
-      }
-    ],
-    "not_required_for_1_0": [
-      {
-        "name": "live-allowlist-change-without-restart",
-        "status": "OPTIONAL",
-        "evidence_required": "On the same connection without restarting Codex: removing an allowlisted root from the selected config makes readiness ineligible with the reason and a new policy_revision; restoring it makes readiness eligible again with a new revision and the same server_instance_id.",
-        "decision": "OPTIONAL: covered by deterministic tests (policy reread); observe on the target if convenient, not a 1.0 criterion."
-      },
-      {
-        "name": "boot-key-change-restart-required",
-        "status": "OPTIONAL",
-        "evidence_required": "On the same connection: changing a boot-bound key gives restart_required with the key in boot_drift; restoring it clears it.",
-        "decision": "OPTIONAL: covered by deterministic tests; not a 1.0 criterion."
-      },
-      {
-        "name": "clean-account-install",
-        "status": "DEFERRED",
-        "evidence_required": "After authorization and a reviewable frozen tarball, execute the documented install/config/doctor/registration workflow in a fresh Apple silicon macOS account with a person present; record OS/architecture, Node, artifact hash, exact config/registration diff, rollback outcome, and cleanup.",
-        "decision": "DEFERRED to 1.0.1 by owner decision 2026-10-12."
-      },
-      {
-        "name": "node-floor-20.19.0-ci",
-        "status": "DROPPED",
-        "evidence_required": "CI jobs on exactly Node 20.19.0 and 24 pass; the workflow change is on the local branch claude/ci-node-floor and awaits the push token's workflow scope.",
-        "decision": "DROPPED by owner decision 2026-10-12: the local exact-20.19.0 verify:release pass is recorded and CI runs 20.19.x; the exact-floor CI job remains on branch claude/ci-node-floor."
-      }
-    ],
-    "historical_evidence": "Version-bound prior candidate reports remain in docs/history. The rc.28 target evidence applies to 1.0.0 only through identical runtime source and the release-archive confirmation."
-  },
-  "historical_1_0_1_rc_1_acceptance": {
-    "archive_sha256": "2442e35579d30dbc9b28bab4abaddfbb0a7c1e782055ba83cc4187ca24946b98",
-    "note": "Recorded for 1.0.1-rc.1. rc.2 changes the launcher and run manager, so these results do not transfer; they remain evidence for the tool inventory check and the hosted lifecycle on rc.1.",
-    "verified": [
-      {
-        "name": "native-readiness-on-candidate",
-        "status": "VERIFIED",
-        "evidence_required": "On the intended Codex desktop connection, verify native readiness and exact server version 1.0.1-rc.1 against the frozen candidate artifact.",
-        "evidence": "docs/reviews/rc1-hosted-2026-10-14/final-readiness.json",
-        "result": "Native 1.0.1-rc.1 eligible, policy matched, slot free after safe closes."
-      },
-      {
-        "name": "hosted-review-edit-matrix",
-        "status": "VERIFIED",
-        "evidence_required": "Run the authorized candidate-specific review/edit matrix with readiness receipts and independent patch verification on the exact frozen artifact.",
-        "evidence": "docs/reviews/rc1-hosted-2026-10-14/REPORT.md",
-        "result": "Accepted cases 1,2b,3,4,5. Original case2 FAIL retained; case2b separately authorized and independently passed18 tests without repair. Seven starts used, no retries."
-      },
-      {
-        "name": "provider-authentication-for-this-candidate",
-        "status": "VERIFIED",
-        "evidence_required": "Observe provider authentication during an authorized real run against this exact candidate.",
-        "evidence": "docs/reviews/rc1-hosted-2026-10-14/case2b-result.json",
-        "result": "Observed real hosted inference and effective read/edit invocations against frozen candidate."
-      },
-      {
-        "name": "active-disconnect-hosted",
-        "status": "VERIFIED",
-        "evidence_required": "Observe active disconnect handling through the official client on this exact candidate.",
-        "evidence": "docs/reviews/rc1-hosted-2026-10-14/case6-independent-review.md",
-        "result": "Observed runtime PASS for one official-client active disconnect; raw helper FAIL preserved. Worker exit, lock release, failed nonretryable no-replay record and protected cleanup verified."
-      },
-      {
-        "name": "release-archive-confirmation",
-        "status": "VERIFIED",
-        "evidence_required": "Confirm native readiness and one review plus one independently verified edit on the exact candidate archive, with verified cleanup.",
-        "evidence": "docs/reviews/rc1-hosted-2026-10-14/REPORT.md",
-        "result": "Native readiness, accepted review and separately authorized accepted edit on exact frozen rc.1 archive; safe close. Does not confirm a future changed stable archive."
-      },
-      {
-        "name": "node-floor-20.19.0",
-        "status": "VERIFIED",
-        "evidence_required": "Run candidate verification on exactly Node 20.19.0. No such local binary was available; do not transfer the 1.0.0 result.",
-        "evidence": "docs/reviews/practical-tool-fix-2026-10-13/rc1-node20-supplement.json",
-        "result": "Full candidate verification on exact20.19.0 passed; recorded after freeze without archive rebuild."
-      }
-    ]
-  },
-  "updated_at": "2026-10-14",
+  "updated_at": "2026-10-15",
   "frozen_archive_sha256": null,
   "packaging_time_snapshot": null
 }
