@@ -32,6 +32,7 @@ const tarball = path.join(releaseDir, tarballName);
 await rm(tarball, { force: true });
 run('npm', ['--cache', cache, 'pack', '--ignore-scripts', '--pack-destination', releaseDir]);
 await access(tarball);
+run('npm', ['run', 'sbom']);
 const sbom = path.join(releaseDir, 'sbom.spdx.json');
 await copyFile(path.join(root, 'dist', 'sbom.spdx.json'), sbom);
 const acceptancePath = path.join(releaseDir, 'acceptance.json');
