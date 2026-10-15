@@ -1,0 +1,18 @@
+{
+  "server_version": "2.0.0-rc.2",
+  "candidate": null,
+  "preparation_status": "not_reported",
+  "workspace_eligible": null,
+  "eligible": false,
+  "active_slot": {
+    "busy": false
+  },
+  "restart_required": false,
+  "blockers": [
+    {
+      "code": "VSUP_WORKSPACE_INVALID",
+      "message": "Workspace path is invalid or outside configured roots"
+    }
+  ],
+  "native_readiness": "pending reconnect"
+}
