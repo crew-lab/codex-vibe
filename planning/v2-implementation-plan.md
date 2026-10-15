@@ -224,4 +224,4 @@ Delete the remote branches listed in the Handoff: the four merged `claude/v1.*` 
 
 **`Handoff.md`**, under "Pointers":
 
-> Implementation plan for 2.0.0 and 2.0.1: [planning/v2-implementation-plan.md](planning/v2-implementation-plan.md).
+> Implementation plan for 2.0.0 and 2.0.1: `planning/v2-implementation-plan.md` (added as a link in the Handoff's pointers).
