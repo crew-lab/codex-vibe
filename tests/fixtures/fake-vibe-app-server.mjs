@@ -946,11 +946,11 @@ const handlers = {
       config: runtimeSnapshot().config,
       startupIssue: null,
       strippedHistoryImages: 0,
-      skillsCount: (runtime.skills ?? []).length,
+      skillsCount: (runtime.skills ?? []).filter((skill) => skill.scope !== 'builtin').length,
       hooksCount: runtime.hooksCount ?? 0,
       mcpServersTotal: (runtime.mcpSources ?? []).length,
       mcpServersEnabled: (runtime.mcpSources ?? []).length,
-      harnessSelectionSource: scenario.harnessSelectionSource ?? 'default'
+      harnessSelectionSource: Object.hasOwn(scenario, 'harnessSelectionSource') ? scenario.harnessSelectionSource : 'default'
     };
   },
   'config/model/write'(params) {

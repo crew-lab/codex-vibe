@@ -1,3 +1,5 @@
+import { modelObservationSchema } from "../reporting/telemetry.js";
+import { checkPreparation, type PreparationStatus } from "../preparation/evidence.js";
 import { constants as fsConstants } from 'node:fs';
 import { access, rm } from 'node:fs/promises';
 import path from 'node:path';
@@ -41,6 +43,7 @@ import {
   authFailureText, classifyFailureText, classifyStartFailure, rateLimitFailure, stderrTailText,
   versionMismatchOnStderr, versionUnsupported
 } from './app-server/failure.js';
+import { configureManagedConfigEndpoint, startManagedConfigEndpoint, type ManagedConfigEndpoint } from './app-server/managed-config.js';
 import { SUPPORTED_VIBE } from './app-server/supported-vibe.js';
 
 const BACKEND_KIND: BackendKind = 'app-server';
@@ -86,6 +89,7 @@ export const DEFAULT_APP_SERVER_TIMING: Readonly<AppServerTiming> = {
 };
 
 export interface AppServerBackendOptions {
+  preparation?: { check: (config: SupervisorConfig) => Promise<PreparationStatus> };
   executable?: string;
   expectedServerVersion?: string;
   pin?: { manifestPath?: string; verify?: (executable: string) => Promise<unknown> };
@@ -186,6 +190,7 @@ function usageFaultError(fault: UsageFault): SupervisorError {
 }
 
 interface RunParts {
+  preparation: PreparationStatus;
   input: StartRunInput;
   callbacks: BackendCallbacks;
   options: AppServerBackendOptions;
@@ -201,6 +206,7 @@ type TurnEnd = 'turn' | 'forced';
 
 class AppServerRun {
   readonly handle: BackendRunHandle;
+  private readonly preparation: PreparationStatus;
   private readonly input: StartRunInput;
   private readonly callbacks: BackendCallbacks;
   private readonly options: AppServerBackendOptions;
@@ -213,6 +219,7 @@ class AppServerRun {
   private readonly secrets: string[];
   private readonly deadlineAt: number;
   private readonly handler: ApprovalHandler;
+  private managedConfigEndpoint: ManagedConfigEndpoint | undefined;
   private readonly stderrRedactor: StreamingRedactor;
   private readonly turnDone = deferred<TurnEnd>();
   private readonly startReported = deferred<void>();
@@ -226,6 +233,7 @@ class AppServerRun {
   private reaper: ReaperHandle | undefined;
   private processor!: EventProcessor;
   private usage: UsageTracker | undefined;
+  private readonly modelObservations: import("../reporting/telemetry.js").ModelObservation[] = [];
   private openedSessionId = '';
   private turnId = '';
   private completedTurn: Turn | null = null;
@@ -250,6 +258,7 @@ class AppServerRun {
   private lastUsageEmit = 0;
 
   constructor(parts: RunParts) {
+    this.preparation = parts.preparation;
     this.input = parts.input;
     this.callbacks = parts.callbacks;
     this.options = parts.options;
@@ -293,7 +302,7 @@ class AppServerRun {
       throw failure;
     }
     const process = this.processRecord;
-    try { await this.callbacks.onState('running', process ? { process } : undefined); }
+    try { await this.callbacks.onState('running', { preparation: this.preparation, ...(process ? { process } : {}), modelObservations: [...this.modelObservations] }); }
     catch (error) { reportBackgroundFailure('app-server-running', error); }
     void this.supervise().catch((error: unknown) => reportBackgroundFailure('app-server-supervise', error));
     this.startReported.resolve();
@@ -335,6 +344,12 @@ class AppServerRun {
     await assertNoProjectVibeExtensions(input.cwd);
     await assertNoProjectVibeExtensions(input.workerWorkspace);
     if (this.shuttingDown) throw this.startAbort ?? supervisorError('VSUP_CANCELLED', 'The run was stopped before the app-server was spawned.');
+    this.managedConfigEndpoint = await startManagedConfigEndpoint();
+    configureManagedConfigEndpoint(this.plan, this.managedConfigEndpoint.url);
+    if (this.shuttingDown) {
+      await this.managedConfigEndpoint.close();
+      throw this.startAbort ?? supervisorError('VSUP_CANCELLED', 'The run stopped before spawning.');
+    }
     const environment: NodeJS.ProcessEnv = { ...buildChildEnvironment(process.env), ...this.plan.environment, ...this.credential.environment() };
     const inboundBudget = Math.max(input.limits.maxEventBytes, 1);
     let child: ManagedProcess;
@@ -451,6 +466,11 @@ class AppServerRun {
       throw supervisorError('VSUP_BACKEND_ERROR', `Vibe did not apply the supervisor session configuration: ${formatReadbackMismatches(mismatches)}`, {
         reason: 'readback_mismatch', fields: mismatches.slice(0, 20).map((item) => item.path), total: mismatches.length
       });
+    }
+    if (checkThinking) {
+      if (this.modelObservations.length >= 100) throw supervisorError('VSUP_OUTPUT_LIMIT', 'Model observation limit exceeded.');
+      this.modelObservations.push(modelObservationSchema.parse({ observed_at: new Date().toISOString(), source: 'runtime/read', reported_name: runtime.runtime.activeModel?.name ?? null, prices_per_million: { input: runtime.runtime.stats.inputPricePerMillion, output: runtime.runtime.stats.outputPricePerMillion, cached_input: runtime.runtime.stats.cachedInputPricePerMillion }, session_model: sessionStart.state.session.model, alias: runtime.runtime.activeModel?.alias ?? null, thinking: runtime.runtime.activeModel?.thinking ?? null }));
+      if (this.startReported.settled) await this.callbacks.onState('running', { modelObservations: [...this.modelObservations] });
     }
     return runtime;
   }
@@ -893,6 +913,7 @@ class AppServerRun {
       if (!this.hurriedFlag) await Promise.race([child.done.then(() => undefined, () => undefined), sleep(this.timing.stdinGraceMs), this.hurried.promise]);
       if (child.child.pid !== undefined) await child.terminate(this.hurriedFlag ? 0 : this.timing.terminateGraceMs);
     }
+    await this.managedConfigEndpoint?.close();
     if (this.reaper) {
       const outcome = await this.reaper.stop();
       if (outcome.reason === 'deadline' || outcome.reason === 'supervisor-gone') this.emit('diagnostic', 'warning', { text: `The process reaper ended the worker (${outcome.reason}).`, reason: 'reaper_fired' }, 'supervisor');
@@ -965,6 +986,8 @@ export class AppServerBackend implements SupervisorBackend {
     }
   }
 
+  async preparationCheck(): Promise<PreparationStatus> { return (this.options.preparation?.check ?? checkPreparation)(this.config); }
+
   async runtimeCheck(): Promise<RuntimeCheck> {
     const command = this.options.executable ?? this.config.paths?.vibe ?? 'vibe';
     const note = `Vibe was not launched. The app-server executable is resolved only; the exact version ${SUPPORTED_VIBE} and the installed files are verified when a run starts and drift fails that run closed.`;
@@ -984,6 +1007,8 @@ export class AppServerBackend implements SupervisorBackend {
     let verifiedExecutable: string;
     try { verifiedExecutable = await this.verifyPin(executable); }
     catch (error) { throw toSupervisorError(error, []); }
+    const preparation = await this.preparationCheck();
+    if (preparation.status !== 'passed') throw supervisorError('VSUP_INVALID_STATE', 'Matching candidate conformance is required before dispatch. Run prepare check with the version-matched kit.', { preparation });
     const resolution = await (this.options.resolveCredential ?? resolveCredential)();
     if (!resolution.credential) {
       throw supervisorError('VSUP_AUTH_REQUIRED', 'No Mistral credential was found for the Vibe app-server.', { credential_status: resolution.status, ...(resolution.detail ? { detail: resolution.detail } : {}) });
@@ -994,7 +1019,7 @@ export class AppServerBackend implements SupervisorBackend {
     } catch (error) { throw toSupervisorError(error, []); }
     const listing = await buildWorkspaceListing(input.workerWorkspace, this.options.listing);
     const run = new AppServerRun({
-      input, callbacks, options: this.runOptions, timing: this.timing, executable: verifiedExecutable, plan, listing,
+      input, callbacks, preparation, options: this.runOptions, timing: this.timing, executable: verifiedExecutable, plan, listing,
       credential: resolution.credential, expectedVersion: this.options.expectedServerVersion ?? SUPPORTED_VIBE
     });
     return run.start();

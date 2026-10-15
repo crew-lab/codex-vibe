@@ -99,8 +99,9 @@ async function loadDist(dist) {
       load('backends/app-server/supported-vibe.js'),
       load('backends/app-server.js')
     ]);
+    const managedConfig = await load('backends/app-server/managed-config.js');
     const version = await load('version.js').then((module) => module.APP_VERSION, () => null);
-    return { pin, protocol, readback, sessionConfig, jsonrpc, managed, reaper, environment, redaction, failure, supported, appServer, version };
+    return { pin, protocol, readback, sessionConfig, jsonrpc, managed, reaper, environment, redaction, failure, supported, appServer, managedConfig, version };
   } catch (error) {
     throw new UsageError(`The built supervisor modules could not be loaded from ${dist}: ${error instanceof Error ? error.message : String(error)}. Run npm run build first or pass --dist <dir>.`);
   }
@@ -349,7 +350,11 @@ async function main(argv) {
     const childEnvironment = { ...environment.buildChildEnvironment(process.env), ...plan.environment };
     delete childEnvironment.MISTRAL_API_KEY;
     if (options.placeholderKey) childEnvironment.MISTRAL_API_KEY = PLACEHOLDER_KEY;
-    if (control) childEnvironment.VIBE_EXPERIMENTS__ENABLE = 'true';
+    if (control) {
+      childEnvironment.VIBE_EXPERIMENTS__ENABLE = 'true';
+      childEnvironment.VIBE_ENABLE_TELEMETRY = 'true';
+    }
+    let managedConfigEndpoint;
     if (proxy) {
       proxy.current.run = label;
       for (const name of PROXY_VARIABLES) childEnvironment[name] = `http://127.0.0.1:${proxy.port}`;
@@ -383,6 +388,12 @@ async function main(argv) {
       };
 
       await stage('spawn', async () => {
+        if (!control) {
+          managedConfigEndpoint = await dist.managedConfig.startManagedConfigEndpoint();
+          dist.managedConfig.configureManagedConfigEndpoint(plan, managedConfigEndpoint.url);
+          childEnvironment.VIBE_VIBE_BASE_URL = managedConfigEndpoint.url;
+          record.child_environment_names = Object.keys(childEnvironment).sort();
+        }
         child = managed.spawnManaged(executable, [], {
           cwd: runDirectory,
           env: childEnvironment,
@@ -509,6 +520,7 @@ async function main(argv) {
         };
         record.observed = {
           runtime_tools: secondRuntime.value.runtime.tools.map((tool) => tool.name).sort(),
+          runtime_skills: secondRuntime.value.runtime.skills.map((skill) => isRecord(skill) ? { name: skill.name, source: skill.source, scope: skill.scope } : { malformed: true }),
           tool_policies: policies,
           permission_ask_visible: profileTools.every((tool) => policies[tool].permission === 'ask'),
           settings: Object.fromEntries(plan.expectation.settings.map((setting) => {
@@ -559,7 +571,8 @@ async function main(argv) {
       }
     } finally {
       if (deadlineTimer) clearTimeout(deadlineTimer);
-      record.shutdown = await shutdownRun();
+      try { record.shutdown = await shutdownRun(); }
+      finally { await managedConfigEndpoint?.close(); }
     }
     record.stderr.tail = stderrTail.split('\n').filter((line) => line.trim()).slice(-5).join('\n').slice(-400);
     if (record.stderr.bytes > 0 && !record.blocked) note('server-stderr-output', 'info', 'The server wrote to standard error; the redacted tail is in the run record.', { bytes: record.stderr.bytes });
@@ -630,19 +643,20 @@ async function main(argv) {
     const controlHosts = new Set(controlAttempts.map((item) => item.host));
     const summary = {
       method: 'local-refusing-proxy',
-      description: 'The child gets HTTP(S)_PROXY and ALL_PROXY pointing at a local listener that records only the method, host and port of the first request line and answers 403. Nothing is forwarded. The control run starts the same server with experiments enabled to show that the method can see a request at all.',
+      description: 'The child gets HTTP(S)_PROXY and ALL_PROXY pointing at a local listener that records only the method, host and port of the first request line and answers 403. Nothing is forwarded. The control enables telemetry and experiments and retains the vendor service URL. A shared host alone cannot attribute traffic to experiments; the observer sees CONNECT authority only, not encrypted paths.',
       proxy_variables: PROXY_VARIABLES,
       no_proxy: NO_PROXY_VALUE,
       subject_attempts: subject,
       control_attempts: controlAttempts,
       control_hosts: [...controlHosts].sort(),
+      experiments_verdict: 'unverified-host-only-observation',
       verdict: ''
     };
     if (subject.length > 0) {
       summary.verdict = 'requests-observed';
       for (const item of subject) {
         const matchesControl = controlHosts.has(item.host);
-        addFinding('network-request-observed', matchesControl ? 'fail' : 'warn', `${item.run} attempted ${item.method} ${item.host}:${item.port ?? 'unknown'}${matchesControl ? ', a host the experiments-enabled control also contacted' : ''}.`, item.run, { host: item.host, port: item.port, matches_control: matchesControl });
+        addFinding('network-request-observed', 'fail', `${item.run} attempted ${item.method} ${item.host}:${item.port ?? 'unknown'}${matchesControl ? ', a host the experiments-enabled control also contacted' : ''}.`, item.run, { host: item.host, port: item.port, matches_control: matchesControl });
       }
     } else if (controlAttempts.length > 0) summary.verdict = 'none-observed-control-validated';
     else {
@@ -667,7 +681,7 @@ async function main(argv) {
     'target-no-inference-conformance-check': report.result,
     'permission-ask-visible-in-effective-config': { config: askVisible ? 'visible' : askAbsent ? 'not-visible' : 'unknown', approval_handler_reached: 'needs-hosted-run' },
     'thinking-off-effect': { setting_read_back: thinkingConfirmed, levels: subjectRuns[0]?.thinking?.levels ?? null, effect: 'needs-hosted-run' },
-    'experiments-fetch-off': { setting_read_back: experimentsOff, network: report.network_observation?.verdict ?? 'not-observed' },
+    'experiments-fetch-off': { setting_read_back: experimentsOff, network: report.network_observation?.experiments_verdict ?? 'not-observed' },
     'nested-run-typescript-shape-and-gating': { check: 'needs-hosted-run' }
   };
   report.finished_at = new Date().toISOString();

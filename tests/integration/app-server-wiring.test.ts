@@ -135,7 +135,7 @@ describe('backend selection by configuration', () => {
     chmodSync(executable, 0o755);
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source], paths: { appServer: executable, vibePinManifest: path.join(base, 'manifest.json') } }), path.join(base, 'data')));
     const ready = await manager.status({ workspace: source, operation: 'review', wait_seconds: 0 });
-    expect(ready).toMatchObject({ eligible: true, runtime: { executable_found: true, resolved_executable: executable, pinned_version: '2.26.1', version_verified: false } });
+    expect(ready).toMatchObject({ workspace_eligible: true, eligible: false, preparation: { status: "missing" }, runtime: { executable_found: true, resolved_executable: executable, pinned_version: '2.26.1', version_verified: false } });
 
     const absent = scratch();
     const absentSource = makeWorkspace(absent);
@@ -341,7 +341,7 @@ async function buildStack(scenario: string, options: { config?: Partial<Supervis
   const config = appServerConfig({ allowedWorkspaceRoots: [source], ...options.config });
   const backend = new AppServerBackend(config, {
     executable: wrapper,
-    pin: { verify: async () => undefined },
+    preparation: { check: async () => ({ status: "passed" as const, candidate_sha256: null, version: "fixture", reason: "Fake ACP fixture evidence only" }) }, pin: { verify: async () => undefined },
     resolveCredential: async (): Promise<CredentialResolution> => ({ status: 'environment', detail: '', credential: new ResolvedCredential(SECRET) }),
     reaper: { pollMs: 50, graceMs: 200 },
     timing: TIMING,
@@ -418,7 +418,7 @@ describe('end to end through the MCP surface with the fake app-server', () => {
   }, 60_000);
 
   it('refuses to start when the pin check fails, before any server is launched', async () => {
-    const stack = await buildStack('allowed-call', { backend: { pin: { verify: async () => { throw new PinCheckError('file-mismatch', 'Installed files differ from the pinned digests.'); } } } });
+    const stack = await buildStack('allowed-call', { backend: { preparation: { check: async () => ({ status: "passed" as const, candidate_sha256: null, version: "fixture", reason: "Fake ACP fixture evidence only" }) }, pin: { verify: async () => { throw new PinCheckError('file-mismatch', 'Installed files differ from the pinned digests.'); } } } });
     const finished = await call(stack.client, 'vibe_review_start', { task: 'Review.', cwd: stack.source, wait_seconds: 30 });
     expect(finished).toMatchObject({ state: 'failed', error: { code: 'VSUP_VIBE_VERSION_UNSUPPORTED' } });
     expect(existsSync(stack.logFile)).toBe(false);
@@ -437,7 +437,7 @@ describe('doctor with the app-server backend', () => {
     const wrapper = path.join(base, 'vibe-app-server');
     writeFileSync(wrapper, `#!/bin/sh\necho launched >> '${logFile}'\nexit 0\n`);
     chmodSync(wrapper, 0o755);
-    return { backend: new AppServerBackend(config, { executable: wrapper, pin: { verify } }), launched: () => existsSync(logFile) };
+    return { backend: new AppServerBackend(config, { executable: wrapper, preparation: { check: async () => ({ status: "passed" as const, candidate_sha256: null, version: "fixture", reason: "Fake ACP fixture evidence only" }) }, pin: { verify } }), launched: () => existsSync(logFile) };
   }
 
   it('reports the vibe check from the pin verifier without launching the server', async () => {

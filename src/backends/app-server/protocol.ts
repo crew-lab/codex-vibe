@@ -563,7 +563,7 @@ export interface RuntimeSnapshot {
   issues: unknown[];
   bypassToolPermissions: boolean;
   stats: AgentStats;
-  activeModel: { alias: string | null; thinking: string | null } | null;
+  activeModel: { alias: string | null; thinking: string | null; name?: string | null } | null;
   activeAgent: { name: string | null } | null;
 }
 
@@ -583,7 +583,7 @@ const runtimeSchema = z.object({
   bypassToolPermissions: z.boolean(),
   activeAgent: z.object({ name: nullableString }).nullish(),
   config: z.object({
-    activeModel: z.object({ alias: nullableString, thinking: nullableString }).nullish()
+    activeModel: z.object({ alias: nullableString, thinking: nullableString, name: nullableString.optional() }).nullish()
   }).nullish()
 });
 
@@ -597,7 +597,7 @@ function toRuntimeSnapshot(raw: z.output<typeof runtimeSchema>): RuntimeSnapshot
     issues: raw.issues,
     bypassToolPermissions: raw.bypassToolPermissions,
     stats: raw.stats,
-    activeModel: raw.config?.activeModel ? { alias: raw.config.activeModel.alias, thinking: raw.config.activeModel.thinking } : null,
+    activeModel: raw.config?.activeModel ? { alias: raw.config.activeModel.alias, thinking: raw.config.activeModel.thinking, ...(raw.config.activeModel.name === undefined ? {} : { name: raw.config.activeModel.name }) } : null,
     activeAgent: raw.activeAgent ? { name: raw.activeAgent.name } : null
   };
 }
@@ -612,13 +612,13 @@ export function parseConfigEffectiveReadResult(value: unknown): { config: Record
 }
 
 export interface ConfigReadResult {
-  harnessSelectionSource: string;
+  harnessSelectionSource: string | null;
   hooksCount: number | null;
   skillsCount: number | null;
 }
 
 export function parseConfigReadResult(value: unknown): ConfigReadResult {
-  const raw = parseWith(z.object({ harnessSelectionSource: z.string(), hooksCount: nonNegativeInt.nullish(), skillsCount: nonNegativeInt.nullish() }), value, 'config/read result');
+  const raw = parseWith(z.object({ harnessSelectionSource: z.string().nullable(), hooksCount: nonNegativeInt.nullish(), skillsCount: nonNegativeInt.nullish() }), value, 'config/read result');
   return { harnessSelectionSource: raw.harnessSelectionSource, hooksCount: raw.hooksCount ?? null, skillsCount: raw.skillsCount ?? null };
 }
 

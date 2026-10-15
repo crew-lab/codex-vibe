@@ -1,3 +1,4 @@
+import { BUNDLED_SKILL_NAMES } from '../../src/backends/app-server/bundled-skills.js';
 import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -97,7 +98,7 @@ class Harness {
     const supplied = harness.options ?? {};
     const options: AppServerBackendOptions = {
       executable: wrapper,
-      pin: { verify: async () => { this.order.push('pin'); } },
+      preparation: { check: async () => ({ status: "passed" as const, candidate_sha256: null, version: "fixture", reason: "Fake ACP fixture evidence only" }) }, pin: { verify: async () => { this.order.push('pin'); } },
       resolveCredential: async (): Promise<CredentialResolution> => {
         this.order.push('credential');
         return { status: 'environment', detail: '', credential: new ResolvedCredential(SECRET) };
@@ -228,6 +229,7 @@ describe('app-server backend: clean runs', () => {
     expect(toolCall).toHaveLength(1);
     expect(toolCall[0]?.data).toMatchObject({ name: 'read_file', tool: 'file_system.read_file', kind: 'read', outcome: 'executed' });
 
+    expect(harness.states.flatMap(item => item.update?.modelObservations ?? [])).toEqual(expect.arrayContaining([expect.objectContaining({ source: 'runtime/read', thinking: 'off' })]));
     expect(terminal.update?.usage?.tokensUsed).toBe(1500);
     expect(terminal.update?.usage?.cost?.authoritative).toBe(false);
     expect(terminal.update?.usage?.cost?.amount).toBeCloseTo(0.00108, 8);
@@ -319,6 +321,19 @@ describe('app-server backend: clean runs', () => {
     for (const name of ['child-home', 'vibe-home', 'tmp']) expect(statSync(path.join(harness.runDirectory, name)).mode & 0o777).toBe(0o700);
     expect(statSync(profile).mode & 0o777).toBe(0o600);
     await harness.backend.close(started.handle);
+    harness.expectCleanedUp();
+  });
+
+  it('owns the managed-config listener for the worker lifetime and closes it with the run', async () => {
+    const harness = new Harness('hold');
+    const started = await harness.start();
+    const start = harness.log().find((entry) => entry.kind === 'start');
+    const endpoint = (start?.env as Json).VIBE_VIBE_BASE_URL as string;
+    expect(endpoint).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    const url = `${endpoint}/api/v1/code/managed-config`;
+    expect(await (await fetch(url)).json()).toEqual({ state: 'disabled' });
+    await harness.backend.close(started.handle);
+    await expect(fetch(url)).rejects.toThrow();
     harness.expectCleanedUp();
   });
 
@@ -530,7 +545,7 @@ describe('app-server backend: outcomes', () => {
 
 describe('app-server backend: startup failures', () => {
   it('refuses to spawn when the pin check fails', async () => {
-    const harness = new Harness('allowed-call', { options: { pin: { verify: async () => { throw new PinCheckError('file-mismatch', 'Installed files differ from the pinned digests.', { mismatched: { total: 1 } }); } } } });
+    const harness = new Harness('allowed-call', { options: { preparation: { check: async () => ({ status: "passed" as const, candidate_sha256: null, version: "fixture", reason: "Fake ACP fixture evidence only" }) }, pin: { verify: async () => { throw new PinCheckError('file-mismatch', 'Installed files differ from the pinned digests.', { mismatched: { total: 1 } }); } } } });
     const failure = await rejection(harness.start());
 
     expect(failure).toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED', details: { reason: 'file-mismatch' } });
@@ -596,6 +611,38 @@ describe('app-server backend: startup failures', () => {
 
     expect(failure.code).toBe('VSUP_AUTH_REQUIRED');
     expect(harness.frames('turn/start')).toHaveLength(0);
+    harness.expectCleanedUp();
+  });
+
+  it('rejects remote managed-config drift before a turn and releases its listener on failed start', async () => {
+    const harness = new Harness({ name: 'managed-config-drift', effectiveConfig: { vibe_base_url: 'https://remote.example.test' } });
+    const failure = await rejection(harness.start());
+    expect(failure).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'readback_mismatch' } });
+    expect(failure.details?.fields).toContain('config.vibe_base_url');
+    expect(harness.frames('turn/start')).toHaveLength(0);
+    const start = harness.log().find((entry) => entry.kind === 'start');
+    const endpoint = (start?.env as Json).VIBE_VIBE_BASE_URL as string;
+    await expect(fetch(`${endpoint}/api/v1/code/managed-config`)).rejects.toThrow();
+    harness.expectCleanedUp();
+  });
+
+  it('accepts bundled plugin skills while retaining the exact file-tool profile', async () => {
+    const skills = BUNDLED_SKILL_NAMES.map((name) => ({ name, source: 'plugin', scope: 'builtin', registry: null }));
+    const harness = new Harness({ name: 'bundled-skills', harnessSelectionSource: null, runtime: { skills }, steps: [{ op: 'say', text: 'checked' }] });
+    const terminal = await harness.run();
+    expect(terminal.state).toBe('completed');
+    expect(harness.frames('session/start')[0]?.params).toMatchObject({ agentConfig: { enabledTools: ['read_file'] } });
+    await harness.backend.close(harness.handle!);
+    harness.expectCleanedUp();
+  });
+
+  it('accepts the unified null selection-source response before a bounded turn', async () => {
+    const harness = new Harness({ name: 'nullable-selection', harnessSelectionSource: null, steps: [{ op: 'say', text: 'checked' }] });
+    await harness.start();
+    const terminal = await harness.terminal;
+    expect(terminal.state).toBe('completed');
+    expect(harness.frames('turn/start')).toHaveLength(1);
+    await harness.backend.close(harness.handle!);
     harness.expectCleanedUp();
   });
 
@@ -822,7 +869,7 @@ describe('app-server backend: probe and runtime check', () => {
     expect(probe).toMatchObject({ available: true, version: '2.26.1' });
     expect(harness.log()).toEqual([]);
 
-    const failing = new AppServerBackend(DEFAULT_CONFIG, { executable: '/x/vibe-app-server', pin: { verify: async () => { throw new PinCheckError('file-mismatch', 'differs'); } } });
+    const failing = new AppServerBackend(DEFAULT_CONFIG, { executable: '/x/vibe-app-server', preparation: { check: async () => ({ status: "passed" as const, candidate_sha256: null, version: "fixture", reason: "Fake ACP fixture evidence only" }) }, pin: { verify: async () => { throw new PinCheckError('file-mismatch', 'differs'); } } });
     expect(await failing.probe()).toMatchObject({ available: false, details: { code: 'VSUP_VIBE_VERSION_UNSUPPORTED' } });
     const unconfigured = new AppServerBackend(DEFAULT_CONFIG, { executable: '/x/vibe-app-server' });
     expect(await unconfigured.probe()).toMatchObject({ available: false, details: { code: 'VSUP_VIBE_VERSION_UNSUPPORTED' } });

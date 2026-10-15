@@ -9,6 +9,8 @@ import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord,
 import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { RunManager } from "../../src/core/run-manager.js";
 import { runToWire } from "../../src/core/serialization.js";
+import { acceptanceContractSchema, contractDigest } from "../../src/acceptance/schema.js";
+import { exportReport } from "../../src/reporting/export.js";
 import { createDetachedWorktree } from "../../src/git/worktree.js";
 
 const exec = promisify(execFile);
@@ -235,6 +237,36 @@ describe("close under concurrency and failure", () => {
       expect(closed).toMatchObject({ run_id: started.run_id, state: "closed", worktree_removed: false });
       expect((context.manager as unknown as { activeSlots: number }).activeSlots).toBe(0);
       expect(context.backend.closes).toBe(3);
+    } finally { await context.manager.shutdown(); }
+  });
+});
+
+
+describe("frozen patch assessment", () => {
+  it("accepts actual disclosure despite a misleading summary and appends a correction after closure", async () => {
+    const context = await setup();
+    try {
+      const contract = acceptanceContractSchema.parse({ schema_version: 1, allowed_changed_paths: ["tracked.txt"], checks: [{ id: "disclosure", kind: "text_contains", path: "tracked.txt", value: "Developing BMS practice." }], required_validations: ["build"] });
+      const started = await context.manager.editStart({ task: "edit", cwd: context.source, acceptance_contract: contract });
+      await waitFor(() => stateOf(context.manager, started.run_id), value => value === "running");
+      await writeFile(path.join(context.data, "worktrees", started.run_id, "tracked.txt"), "Developing BMS practice.\n");
+      await context.backend.callbacks.get(started.run_id)?.onState("completed", { result: { summary: "Disclosure omitted", stopReason: "end_turn" } });
+      await waitFor(() => stateOf(context.manager, started.run_id), value => value === "completed");
+      const result = await context.manager.result({ run_id: started.run_id });
+      expect(result.verification).toMatchObject({ status: "passed" });
+      const meta = JSON.parse(await readFile(path.join(runDir(context.data, started.run_id), "meta.json"), "utf8"));
+      const patchHash = meta.result.artifacts.find((a: {name: string}) => a.name === "diff.patch").sha256;
+      const binding = { patch_sha256: patchHash, contract_sha256: contractDigest(contract), reason: "Independent inspection" };
+      await expect(context.manager.close({ run_id: started.run_id, assessment: { ...binding, decision: "accepted", validations: [] } })).rejects.toThrow(/required coordinator validations/);
+      await context.manager.close({ run_id: started.run_id, assessment: { ...binding, decision: "rejected", validations: [] } });
+      await context.manager.close({ run_id: started.run_id, assessment: { ...binding, decision: "accepted", validations: [{ id: "build", status: "passed" }] } });
+      const exported = path.join(context.parent, "report");
+      await exportReport({ directory: runDir(context.data, started.run_id), output: exported });
+      const report = JSON.parse(await readFile(path.join(exported, "report.json"), "utf8"));
+      expect(report.assessment).toBe("accepted");
+      expect(report.assessments).toHaveLength(2);
+      expect(JSON.stringify(report)).not.toContain(context.source);
+      await expect(exportReport({ directory: runDir(context.data, started.run_id), output: exported })).rejects.toThrow(/already exists/);
     } finally { await context.manager.shutdown(); }
   });
 });

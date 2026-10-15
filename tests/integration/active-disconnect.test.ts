@@ -1,3 +1,4 @@
+import { writeFakePreparation } from "../unit/support/fake-preparation.js";
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -59,6 +60,7 @@ async function sandbox() {
 
   const launchable = await makeLaunchableFakeVibe(fake, { scenario: { name: 'hold', steps: [{ op: 'say', text: 'Working.' }, { op: 'hold' }] }, spawnGrandchild: true });
   await writeFile(path.join(data, 'config.toml'), `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[paths]\nvibe = ${JSON.stringify(launchable.vibe)}\nvibe_pin_manifest = ${JSON.stringify(launchable.manifest)}\n`, { mode: 0o600 });
+  await writeFakePreparation(path.join(data, "config.toml"));
   const workerRecord = launchable.workerRecord;
   return { parent, workspace, data, workerRecord };
 }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.0-rc.2 — allow pinned Vibe bundled skill catalogue
+
+Owner-approved policy adjustment: accept only the four Vibe 2.26.1 packaged plugin skill names with builtin scope, plugin source and no registry reference. Keep user/project/registry skills disabled, reject duplicate/unknown/provenance-free entries, and retain the exact file-tool profile and all approval/path restrictions. No prior target acceptance transfers.
+
+## 2.0.0-rc.1 — target conformance repairs
+
+Unreleased candidate. Accept nullable unified-harness selection provenance without weakening actual harness or hooks/skills checks. Reproduce null in fake-server coverage. Replace the vendor managed-config service with a per-run owned loopback service that serves only a disabled policy, require its URL in effective read-back, and close it with the worker. Correct network controls to enable both telemetry and experiments, fail any observed subject request, and leave experiments attribution unverified from host-only observations. No prior target acceptance transfers.
+
 ## 2.0.0 — one engine: a client of Vibe's app-server
 
 Version set on 2026-10-14. The GitHub release follows the target-machine acceptance recorded in `docs/acceptance.json`.
@@ -283,3 +291,21 @@ Refuse uncorrelated or overlapping ACP permission requests by selecting an offer
 ## 0.9.0-rc.1
 
 Initial private release candidate: local MCP stdio server, review/edit run lifecycle, private persistence, detached-worktree patch artifacts, CLI diagnostics/configuration, and a pinned Vibe launcher compatibility shim. Production authentication and long-run ACP gates remain unverified; see `docs/history/acceptance.md`.
+
+## 2.0.0-rc.3 — artifact acceptance
+
+- Optional frozen edit acceptance contracts; deterministic checks over base plus exact exported patch.
+- Separate execution, verification and append-only coordinator assessment, including correction after closure.
+- Read-only run verification and sanitized report export with hashes and optional exact patch/projected events.
+
+## 2.0.0-rc.4 — observable preparation
+
+- Preserve prompt/completion/cache/model-call metrics and runtime-price cost provenance; record startup/handoff model alias observations without inferring underlying weights.
+- Version-matched preparation kit and private conformance receipts; dispatch requires matching PASS evidence.
+- Readiness distinguishes workspace eligibility, preparation evidence and expected candidate drift.
+
+## 2.0.0-rc.5 — reproducible validation and coordinator workflow
+
+- Owned baseline/candidate copies with exact patch binding, pinned offline dependency preparation and conservative fingerprint-based cleanup.
+- Explicit main-chat coordination, deterministic artifact acceptance and evidence-backed Luna fallback; preserve attribution, budgets and correction history.
+- Include runtime-reported model names and snapshot price observations when available; retain unknown provider/underlying identities.
