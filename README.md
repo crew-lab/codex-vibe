@@ -4,7 +4,7 @@ A local MCP server for one bounded Mistral Vibe review or isolated edit. It expo
 
 This is an application policy boundary, **not an operating-system sandbox**. A delegated run uses your account's permissions, and permitted workspace content is sent to Mistral. Review [SECURITY.md](SECURITY.md) before use.
 
-This is `vibe-supervisor` `2.0.0`; the previously published release is `1.0.0`. 2.0 has one engine: the supervisor is a client of Vibe's `vibe-app-server` protocol, one server process per run. It verifies the installed Vibe against a pin manifest before each run, reads the effective configuration back before the model sees a prompt, answers every approval itself, and refuses any tool outside the profile. The model's tool catalogue still lists write tools that are refused when called, not hidden. Release 1.0.0, which used Vibe's legacy harness, is the last 1.x release; there is no 1.x maintenance line. 2.0 acceptance gates are open in the [acceptance record](docs/acceptance.json), and no 1.0.x evidence transfers. Supported platform claims remain limited to macOS Apple silicon with Mistral Vibe 2.26.1. See [compatibility](docs/compatibility.md).
+This is `vibe-supervisor` `2.0.1`. It has one engine: the supervisor is a client of Vibe's `vibe-app-server` protocol, one server process per run. It verifies the installed Vibe against a pin manifest before each run, reads the effective configuration back before the model sees a prompt, answers every approval itself, and refuses any tool outside the profile. The model's tool catalogue still lists write tools that are refused when called, not hidden. Only the latest release is supported. The target acceptance gates are open in the [acceptance record](docs/acceptance.json). Supported platform claims remain limited to macOS Apple silicon with Mistral Vibe 2.26.1. See [compatibility](docs/compatibility.md).
 
 ## Requirements
 
@@ -41,8 +41,7 @@ node dist/cli.js doctor --config "$CONFIG" --json
 node dist/cli.js serve --stdio --isolated --config "$CONFIG"
 ```
 
-Replace `$PWD` with the intended canonical repository path if it is not the current directory. `paths.vibe_pin_manifest` is required in the config; `allow` on a new config sets it beside the config file, and `pin-manifest` writes that file from the installed Vibe (review what it recorded, since it records whatever is installed). A 1.0 config needs that key added and any `backend` key removed. An explicit missing or invalid config fails for doctor/serve and never falls back. Without an override, it uses `~/Library/Application Support/VibeSupervisor-oneshot` on macOS, `%APPDATA%/VibeSupervisor-oneshot` on Windows, or `${XDG_DATA_HOME:-~/.local/share}/vibe-supervisor-oneshot` on Linux. `VIBE_SUPERVISOR_HOME` explicitly selects another root. Do not point it at legacy `VibeSupervisor` data.
-
+Replace `$PWD` with the intended canonical repository path if it is not the current directory. `paths.vibe_pin_manifest` is required in the config; `allow` on a new config sets it beside the config file, and `pin-manifest` writes that file from the installed Vibe (review what it recorded, since it records whatever is installed). A config with a `backend` key is rejected. An explicit missing or invalid config fails for doctor/serve and never falls back. Without an override, it uses `~/Library/Application Support/VibeSupervisor-oneshot` on macOS, `%APPDATA%/VibeSupervisor-oneshot` on Windows, or `${XDG_DATA_HOME:-~/.local/share}/vibe-supervisor-oneshot` on Linux. `VIBE_SUPERVISOR_HOME` explicitly selects another root.
 Codex `setup` generates `--isolated` registrations by default. Each connection owns a separate private storage directory, so another chat can connect without competing for the same owner lock. Existing registrations need the flag added and the connection reloaded; setup previews that change before writing it. Each instance still permits one active run. Direct `serve` without `--isolated` remains available for a deliberately shared storage owner.
 
 Bind preparation, doctor, allow, and serve to the same explicit config. For a separately installed artifact, use its exact executable path and config for every command. Identify the connection that will own the run with a `vibe_status` readiness call and its `server_version`, which does not depend on an MCP initialization handshake; an installed CLI or doctor result cannot identify a previously open desktop connection.
@@ -64,4 +63,4 @@ The package ships one coordinator skill at `skills/vibe-supervisor`. It describe
 - [Behavior and lifecycle](docs/functionality.md)
 - [Security](docs/security.md) and [error codes](docs/errors.md)
 - [Vibe compatibility and unverified gates](docs/compatibility.md)
-- [Acceptance record](docs/acceptance.json)
+- [Acceptance record](docs/acceptance.json) and the [target acceptance procedure](docs/target-acceptance.md)

@@ -7,14 +7,14 @@ const record: RunRecord = {
   limits: { timeoutSeconds: 240, maxTurns: 12, maxEventBytes: 1024, maxTranscriptBytes: 1024, maxArtifactBytes: 1024 }
 };
 describe('persisted creator version', () => {
-  it('roundtrips a recorded version and preserves legacy absence', () => {
-    expect(runFromWire(runToWire({ ...record, supervisorVersion: '0.9.0-rc.4' })).supervisorVersion).toBe('0.9.0-rc.4');
+  it('roundtrips a recorded version and preserves an absent version', () => {
+    expect(runFromWire(runToWire({ ...record, supervisorVersion: '3.1.4-beta.2' })).supervisorVersion).toBe('3.1.4-beta.2');
     expect(runFromWire(runToWire(record)).supervisorVersion).toBeUndefined();
   });
   it.each([null, 12, '', 'unknown', '0.9.0\n', '0.9.0-' + 'a'.repeat(129)])('rejects invalid persisted version %s', value => {
     expect(() => runFromWire({ ...runToWire(record), supervisor_version: value })).toThrow('Invalid persisted supervisor version');
   });
-  it('serializes only the app-server backend and refuses legacy ACP records', () => {
+  it('serializes only the app-server backend and refuses records of any other backend', () => {
     const wire = runToWire(record);
     expect(wire.backend).toBe('app-server');
     expect(() => runFromWire({ ...wire, backend: 'acp' })).toThrow('Invalid persisted run record');

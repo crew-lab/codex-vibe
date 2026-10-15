@@ -184,8 +184,7 @@ export class RunManager {
         const file = path.join(directory, "meta.json");
         const info = await lstat(file);
         if (info.isSymbolicLink() || !info.isFile() || info.size > MAX_META_BYTES) continue;
-        const raw = JSON.parse(await readFile(file, "utf8")) as { backend?: unknown };
-        if (raw && raw.backend === "acp") continue;
+        const raw = JSON.parse(await readFile(file, "utf8"));
         const record = runFromWire(raw);
         if (record.runId !== entry.name || !isPathWithinRoot(this.runRoot, path.resolve(directory))) continue;
         const runtime = this.makeRuntime(record, directory, "", [], true);

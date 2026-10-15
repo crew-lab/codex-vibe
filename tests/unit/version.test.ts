@@ -54,7 +54,7 @@ describe('single version source', () => {
     const input = new PassThrough(); const output = new PassThrough();
     const server = createSupervisorMcpServer({} as unknown as RunManagerTools, { config: DEFAULT_CONFIG });
     await server.connect(new StdioServerTransport(input, output));
-    const client = new Client({ name: 'version-test', version: '1.0.0' });
+    const client = new Client({ name: 'version-test', version: '0.0.1' });
     await client.connect(new Harness(input, output));
     try { expect(client.getServerVersion()?.version).toBe(await manifestVersion('../../package.json')); }
     finally { await client.close(); }

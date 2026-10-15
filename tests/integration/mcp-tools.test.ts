@@ -52,7 +52,7 @@ describe('MCP stdio tool surface', () => {
     } satisfies RunManagerTools;
     const server = createSupervisorMcpServer(manager, { config: { ...TEST_CONFIG, limits: { ...TEST_CONFIG.limits, maxMcpResultChars: 500 } } });
     await server.connect(new StdioServerTransport(input, output));
-    const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
+    const client = new Client({ name: 'mcp-test-client', version: '0.0.1' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
     const { tools } = await client.listTools();
     expect(tools).toHaveLength(5);
@@ -80,7 +80,7 @@ describe('MCP stdio tool surface', () => {
     } satisfies RunManagerTools;
     const server = createSupervisorMcpServer(manager, { config: { ...TEST_CONFIG, limits: { ...TEST_CONFIG.limits } } });
     await server.connect(new StdioServerTransport(input, output));
-    const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
+    const client = new Client({ name: 'mcp-test-client', version: '0.0.1' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
     const error = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp' } });
     expect(error.isError).toBe(true);
@@ -98,7 +98,7 @@ describe('MCP stdio tool surface', () => {
     } satisfies RunManagerTools;
     const server = createSupervisorMcpServer(manager, { config: { ...TEST_CONFIG, limits: { ...TEST_CONFIG.limits } } });
     await server.connect(new StdioServerTransport(input, output));
-    const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
+    const client = new Client({ name: 'mcp-test-client', version: '0.0.1' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
     const failed = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp' } });
     expect(failed.isError).toBe(true);
@@ -120,7 +120,7 @@ describe('MCP stdio tool surface', () => {
     const logged: string[] = [];
     const server = createSupervisorMcpServer(manager, { config: { ...TEST_CONFIG, limits: { ...TEST_CONFIG.limits } }, onError: (message) => logged.push(message) });
     await server.connect(new StdioServerTransport(input, output));
-    const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
+    const client = new Client({ name: 'mcp-test-client', version: '0.0.1' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
     const failed = await client.callTool({ name: 'vibe_status', arguments: { run_id: '123e4567-e89b-42d3-a456-426614174000' } });
     expect(failed.isError).toBe(true);
@@ -141,7 +141,7 @@ describe('MCP stdio tool surface', () => {
     } satisfies RunManagerTools;
     const server = createSupervisorMcpServer(manager, { config: { ...TEST_CONFIG, limits: { ...TEST_CONFIG.limits } } });
     await server.connect(new StdioServerTransport(input, output));
-    const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
+    const client = new Client({ name: 'mcp-test-client', version: '0.0.1' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
     const failed = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp' } });
     expect(errorText(failed)).toContain('VSUP_STORAGE_ERROR');
@@ -155,7 +155,7 @@ describe('MCP stdio tool surface', () => {
     } satisfies RunManagerTools;
     const server = createSupervisorMcpServer(manager, { config: { ...TEST_CONFIG } });
     await server.connect(new StdioServerTransport(input, output));
-    const client = new Client({ name: 'mcp-test-client', version: '1.0.0' }); clients.push(client);
+    const client = new Client({ name: 'mcp-test-client', version: '0.0.1' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
     return { client, tools: (await client.listTools()).tools };
   }

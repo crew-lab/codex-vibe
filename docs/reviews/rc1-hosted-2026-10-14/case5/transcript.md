@@ -1,1 +1,0 @@
-no defect found

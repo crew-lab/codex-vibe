@@ -38,6 +38,7 @@ import {
   parseSessionStartResult,
   parseTurnStartResult,
   serverErrorIssues,
+  CLIENT_ENTRYPOINT,
   type HistoryEntry,
   type ServerNotification
 } from '../../src/backends/app-server/protocol.js';
@@ -58,7 +59,7 @@ describe('request builders', () => {
     expect(buildInitialize({ name: 'vibe-supervisor', version: '2.0.0' })).toEqual({
       method: 'initialize',
       params: {
-        clientInfo: { name: 'vibe-supervisor', version: '2.0.0', entrypoint: 'programmatic' },
+        clientInfo: { name: 'vibe-supervisor', version: '2.0.0', entrypoint: CLIENT_ENTRYPOINT },
         capabilities: { callbackKinds: ['approval'] }
       }
     });

@@ -115,12 +115,12 @@ describe('reviewed baseline preparation',{timeout:60_000},()=>{
   expect(await readFile(path.join(source,'.git/index'))).toEqual(index);expect(await git('status','--porcelain')).toBe(status);expect(await git('rev-parse','HEAD')).toBe(ref);expect(digest(await readFile(configPath))).toBe(configHash);expect(await readFile(configPath,'utf8')).toBe(config);
  });
  it('uses the explicit artifact config for preparation despite obsolete default keys and needs no live connection',async()=>{
-  const {root,parent,input}=await setup();const legacy=path.join(root,'legacy');const artifact=path.join(root,'artifact');await mkdir(legacy,{mode:0o700});await mkdir(artifact,{mode:0o700});
-  const legacyBytes='version = 1\nbackend = "acp"\n';await writeFile(path.join(legacy,'config.toml'),legacyBytes,{mode:0o600});
+  const {root,parent,input}=await setup();const obsolete=path.join(root,'obsolete');const artifact=path.join(root,'artifact');await mkdir(obsolete,{mode:0o700});await mkdir(artifact,{mode:0o700});
+  const obsoleteBytes='version = 1\nbackend = "acp"\n';await writeFile(path.join(obsolete,'config.toml'),obsoleteBytes,{mode:0o600});
   const configPath=path.join(artifact,'config.toml');await writeFile(configPath,`version = 1\nallowed_workspace_roots = [${JSON.stringify(root)}]\n[paths]\nvibe_pin_manifest = "/unused/vibe-pin-manifest.json"\n`,{mode:0o600});
-  const manifest=path.join(root,'review.json');await writeFile(manifest,JSON.stringify(input),{mode:0o600});const cli=path.resolve('scripts/prepare-reviewed-baseline.mjs');const env={...process.env,VIBE_SUPERVISOR_HOME:legacy,VIBE_SUPERVISOR_DIST_DIR:process.env.VIBE_SUPERVISOR_TEST_DIST};
+  const manifest=path.join(root,'review.json');await writeFile(manifest,JSON.stringify(input),{mode:0o600});const cli=path.resolve('scripts/prepare-reviewed-baseline.mjs');const env={...process.env,VIBE_SUPERVISOR_HOME:obsolete,VIBE_SUPERVISOR_DIST_DIR:process.env.VIBE_SUPERVISOR_TEST_DIST};
   const dry=await exec('node',[cli,manifest,'--config',configPath],{cwd:root,env});const result=JSON.parse(dry.stdout);expect(result.status).toBe('validated_dry_run');expect(result.configuration.config_source).toBe('explicit');expect(result.configuration.config_path).toBe(configPath);expect(result.configuration.config_fingerprint).toMatch(/^[a-f0-9]{64}$/);expect(result.source_invariants.head).toMatch(/^[a-f0-9]{40,64}$/);expect(await readdir(parent)).toEqual([]);
-  const created=await exec('node',[cli,manifest,'--config',configPath,'--create','--expect-manifest-sha256',result.manifest_sha256],{cwd:root,env});expect(JSON.parse(created.stdout).status).toBe('prepared');expect(await readFile(path.join(legacy,'config.toml'),'utf8')).toBe(legacyBytes);
+  const created=await exec('node',[cli,manifest,'--config',configPath,'--create','--expect-manifest-sha256',result.manifest_sha256],{cwd:root,env});expect(JSON.parse(created.stdout).status).toBe('prepared');expect(await readFile(path.join(obsolete,'config.toml'),'utf8')).toBe(obsoleteBytes);
  });
  it('allows an unrelated sibling creation while reading a private manifest without weakening path checks',async()=>{
   const {root,input}=await setup();const home=path.join(root,'config');await mkdir(home,{mode:0o700});
@@ -133,7 +133,7 @@ describe('reviewed baseline preparation',{timeout:60_000},()=>{
   expect(JSON.parse(result.stdout).status).toBe('validated_dry_run');expect((await lstat(sibling)).isDirectory()).toBe(true);
  });
  it('names an explicit missing config and never falls back to a valid default home',async()=>{
-  const {root,parent,input}=await setup();const home=path.join(root,'legacy');await mkdir(home,{mode:0o700});const fallback='version = 1\nallowed_workspace_roots = ['+JSON.stringify(root)+']\n[paths]\nvibe_pin_manifest = "/unused/vibe-pin-manifest.json"\n';await writeFile(path.join(home,'config.toml'),fallback,{mode:0o600});
+  const {root,parent,input}=await setup();const home=path.join(root,'obsolete');await mkdir(home,{mode:0o700});const fallback='version = 1\nallowed_workspace_roots = ['+JSON.stringify(root)+']\n[paths]\nvibe_pin_manifest = "/unused/vibe-pin-manifest.json"\n';await writeFile(path.join(home,'config.toml'),fallback,{mode:0o600});
   const missing=path.join(root,'missing-artifact.toml');const manifest=path.join(root,'review.json');await writeFile(manifest,JSON.stringify(input),{mode:0o600});const cli=path.resolve('scripts/prepare-reviewed-baseline.mjs');const env={...process.env,VIBE_SUPERVISOR_HOME:home,VIBE_SUPERVISOR_DIST_DIR:process.env.VIBE_SUPERVISOR_TEST_DIST};
   try{await exec('node',[cli,manifest,'--config',missing],{cwd:root,env});throw new Error('missing explicit config unexpectedly succeeded');}
   catch(error){const failure=error as {stderr?:string;stdout?:string};expect(failure.stdout).toBe('');expect(JSON.parse(failure.stderr??'')).toMatchObject({status:'preparation_failed',code:'VSBASE_CONFIG_INVALID',stage:'config',config_path:missing});}
