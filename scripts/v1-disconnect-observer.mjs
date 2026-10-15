@@ -173,7 +173,7 @@ export async function readRunStates(dataDir) {
       result.push({
         run_id: entry.name,
         state: meta.state,
-        ...(meta.backend === 'acp' || meta.backend === 'programmatic' ? { backend: meta.backend } : {}),
+        ...(meta.backend === 'app-server' ? { backend: meta.backend } : {}),
         ...(meta.mode === 'review' || meta.mode === 'edit' ? { mode: meta.mode } : {}),
         ...(typeof meta.updated_at === 'string' ? { updated_at: meta.updated_at } : {}),
         ...(typeof meta.started_at === 'string' ? { started_at: meta.started_at } : {}),

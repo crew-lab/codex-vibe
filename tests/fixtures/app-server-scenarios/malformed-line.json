@@ -1,0 +1,4 @@
+{
+  "name": "malformed-line",
+  "steps": [ { "op": "malformedLine", "text": "{not json" } ]
+}

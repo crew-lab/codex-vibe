@@ -1,0 +1,12 @@
+{
+  "name": "handoff-usage",
+  "baselineStats": { "inputPricePerMillion": 0.4, "outputPricePerMillion": 2, "cachedInputPricePerMillion": 0.04 },
+  "steps": [
+    { "op": "stats", "stats": { "modelCalls": 2, "sessionPromptTokens": 1000, "sessionCompletionTokens": 200, "sessionCachedTokens": 400, "contextTokens": 1200 } },
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts" } },
+    { "op": "handoff", "kind": "compacted", "newSessionId": "fake-session-0002", "resetStats": true },
+    { "op": "stats", "stats": { "modelCalls": 1, "sessionPromptTokens": 300, "sessionCompletionTokens": 100, "sessionCachedTokens": 100, "contextTokens": 400 } },
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts" } },
+    { "op": "say", "text": "Finished after the handoff." }
+  ]
+}

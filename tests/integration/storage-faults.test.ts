@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 
 type Wire = { state?: string; result?: unknown; workspace_snapshot_sha256?: string; limits?: { max_turns?: number } };
@@ -36,7 +36,7 @@ afterEach(async () => {
 });
 
 class FakeBackend implements SupervisorBackend {
-  readonly kind = 'programmatic' as const;
+  readonly kind = 'app-server' as const;
   readonly callbacks = new Map<string, BackendCallbacks>();
   async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
@@ -48,12 +48,12 @@ class FakeBackend implements SupervisorBackend {
   async recover(_record: RunRecord) { return undefined; }
 }
 
-async function harness(overrides: Partial<typeof DEFAULT_CONFIG> = {}) {
+async function harness(overrides: Partial<typeof TEST_CONFIG> = {}) {
   const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-storage-')); roots.push(parent);
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data');
   await mkdir(source); await writeFile(path.join(source, 'file.txt'), 'content\n');
   const backend = new FakeBackend();
-  const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], ...overrides }, data, [backend]);
+  const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source], ...overrides }, data, [backend]);
   return { backend, manager, source, data };
 }
 
@@ -190,7 +190,7 @@ describe('storage faults', () => {
     } finally { collector.stop(); await h.manager.shutdown(); }
   }, 30_000);
 
-  it('does not reject a programmatic run when recording an event fails', async () => {
+  it('does not reject a run when recording an event fails', async () => {
     const collector = collectUnhandledRejections();
     const h = await harness();
     const manager = h.manager;

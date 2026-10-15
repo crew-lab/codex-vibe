@@ -1,0 +1,7 @@
+{
+  "name": "unknown-entry-kind",
+  "steps": [
+    { "op": "unknownEntry", "kind": "hologram", "entry": { "payload": { "note": "could hide a call" } } },
+    { "op": "say", "text": "unreachable for a fail-closed client" }
+  ]
+}

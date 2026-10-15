@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 
 const fault = vi.hoisted(() => ({ events: false }));
@@ -24,7 +24,7 @@ const roots: string[] = [];
 afterEach(async () => { fault.events = false; await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
 class FakeBackend implements SupervisorBackend {
-  readonly kind = 'programmatic' as const;
+  readonly kind = 'app-server' as const;
   readonly callbacks = new Map<string, BackendCallbacks>();
   async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
@@ -41,7 +41,7 @@ describe('an event flush that hits ENOSPC', () => {
     const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-flush-')); roots.push(parent);
     const source = path.join(parent, 'source'); const data = path.join(parent, 'data'); await mkdir(source); await writeFile(path.join(source, 'file.txt'), 'content\n');
     const backend = new FakeBackend();
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       for (let attempt = 0; attempt < 500 && (await manager.status({ run_id: started.run_id })).state !== 'running'; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
@@ -63,7 +63,7 @@ describe('an event flush that hits ENOSPC', () => {
     const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-flush-')); roots.push(parent);
     const source = path.join(parent, 'source'); const data = path.join(parent, 'data'); await mkdir(source); await writeFile(path.join(source, 'file.txt'), 'content\n');
     const backend = new FakeBackend();
-    const manager = new RunManager({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       const started = await manager.reviewStart({ task: 'review', cwd: source });
       for (let attempt = 0; attempt < 500 && (await manager.status({ run_id: started.run_id })).state !== 'running'; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));

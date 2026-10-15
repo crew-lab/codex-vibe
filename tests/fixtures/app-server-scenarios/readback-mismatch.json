@@ -1,0 +1,5 @@
+{
+  "name": "readback-mismatch",
+  "runtime": { "hooksCount": 1 },
+  "steps": [ { "op": "say", "text": "must never run" } ]
+}

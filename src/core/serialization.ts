@@ -1,4 +1,4 @@
-import { REMEDIATION } from "../contracts.js";
+import { REMEDIATION, isBackendKind } from "../contracts.js";
 import type { RunRecord, SupervisorErrorCode, SupervisorEvent } from "../contracts.js";
 
 type JsonObject = Record<string, unknown>;
@@ -61,19 +61,19 @@ export function eventToWire(event: SupervisorEvent): JsonObject {
 }
 
 export function eventFromWire(value: unknown): SupervisorEvent {
-  if (!isObject(value) || value.schema_version !== 1 || !Number.isSafeInteger(value.seq) || typeof value.timestamp !== "string" || Number.isNaN(Date.parse(value.timestamp)) || typeof value.run_id !== "string" || typeof value.backend !== "string" || value.backend !== "programmatic" || typeof value.source !== "string" || !["supervisor", "vibe"].includes(value.source) || typeof value.type !== "string" || typeof value.severity !== "string" || !["debug", "info", "warning", "error"].includes(value.severity) || !isObject(value.data)) throw new TypeError("Invalid persisted supervisor event");
-  return { schemaVersion: 1, seq: value.seq as number, timestamp: value.timestamp, runId: value.run_id, backend: "programmatic", source: value.source as SupervisorEvent["source"], type: value.type, severity: value.severity as SupervisorEvent["severity"], data: value.data };
+  if (!isObject(value) || value.schema_version !== 1 || !Number.isSafeInteger(value.seq) || typeof value.timestamp !== "string" || Number.isNaN(Date.parse(value.timestamp)) || typeof value.run_id !== "string" || !isBackendKind(value.backend) || typeof value.source !== "string" || !["supervisor", "vibe"].includes(value.source) || typeof value.type !== "string" || typeof value.severity !== "string" || !["debug", "info", "warning", "error"].includes(value.severity) || !isObject(value.data)) throw new TypeError("Invalid persisted supervisor event");
+  return { schemaVersion: 1, seq: value.seq as number, timestamp: value.timestamp, runId: value.run_id, backend: value.backend, source: value.source as SupervisorEvent["source"], type: value.type, severity: value.severity as SupervisorEvent["severity"], data: value.data };
 }
 
 export function runFromWire(value: unknown): RunRecord {
-  if (!isObject(value) || value.schema_version !== 1 || typeof value.run_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.run_id) || typeof value.backend !== "string" || value.backend !== "programmatic" || typeof value.mode !== "string" || (value.mode !== "review" && value.mode !== "edit") || typeof value.state !== "string" || !RUN_STATES.has(value.state as RunRecord["state"])) throw new TypeError("Invalid persisted run record");
+  if (!isObject(value) || value.schema_version !== 1 || typeof value.run_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.run_id) || !isBackendKind(value.backend) || typeof value.mode !== "string" || (value.mode !== "review" && value.mode !== "edit") || typeof value.state !== "string" || !RUN_STATES.has(value.state as RunRecord["state"])) throw new TypeError("Invalid persisted run record");
   if (value.supervisor_version !== undefined && (typeof value.supervisor_version !== "string" || value.supervisor_version.length > 128 || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(value.supervisor_version))) throw new TypeError("Invalid persisted supervisor version");
   const limits = asObject(value.limits);
   const run: RunRecord = {
     schemaVersion: 1,
     ...(typeof value.supervisor_version === "string" ? { supervisorVersion: value.supervisor_version } : {}),
     runId: value.run_id,
-    backend: "programmatic",
+    backend: value.backend,
     mode: value.mode,
     state: value.state as RunRecord["state"],
     sourceWorkspace: stringValue(value.source_workspace),

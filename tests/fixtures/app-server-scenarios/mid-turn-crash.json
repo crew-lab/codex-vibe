@@ -1,0 +1,7 @@
+{
+  "name": "mid-turn-crash",
+  "steps": [
+    { "op": "say", "text": "Starting." },
+    { "op": "crash", "exitCode": 139, "message": "fake-vibe-app-server: simulated crash" }
+  ]
+}

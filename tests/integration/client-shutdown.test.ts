@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 const exec = promisify(execFile);
 const repo = path.resolve(import.meta.dirname, '..', '..');
-const server = path.join(repo, 'tests', 'fixtures', 'fake-programmatic-supervisor-server.mjs');
+const server = path.join(repo, 'tests', 'fixtures', 'fake-supervisor-server.mjs');
 const canonicalTmp = await realpath(tmpdir());
 type Reply = { run_id?: string; state?: string; error?: unknown };
 const DEADLINE_MS = 5000;
@@ -48,7 +48,7 @@ async function sandbox() {
   await git(workspace, ['add', 'a.js']);
   await git(workspace, ['-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'init']);
   const config = path.join(data, 'config.toml');
-  await writeFile(config, `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n`, { mode: 0o600 });
+  await writeFile(config, `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[paths]\nvibe_pin_manifest = ${JSON.stringify(path.join(data, 'vibe-pin-manifest.json'))}\n`, { mode: 0o600 });
   return { parent, workspace, data, config };
 }
 

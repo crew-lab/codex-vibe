@@ -1,0 +1,7 @@
+{
+  "name": "edit-call",
+  "steps": [
+    { "op": "call", "tool": "file_system.search_replace", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts", "changes": [ { "oldString": "const a = 1;", "newString": "const a = 2;", "replaceAll": false } ] } },
+    { "op": "say", "text": "The edit was applied." }
+  ]
+}

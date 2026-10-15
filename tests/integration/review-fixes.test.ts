@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend, SupervisorConfig } from "../../src/contracts.js";
-import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { RunManager } from "../../src/core/run-manager.js";
 import { bounded } from "../../src/mcp/tools.js";
 import { toolSchemas } from "../../src/mcp/schemas.js";
@@ -16,7 +16,7 @@ const exec = promisify(execFile);
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
 class FakeBackend implements SupervisorBackend {
-  readonly kind = "programmatic" as const;
+  readonly kind = "app-server" as const;
   handle: BackendRunHandle | undefined;
   callbacks: BackendCallbacks | undefined;
   beforeReturn: ((input: StartRunInput) => Promise<void>) | undefined;
@@ -35,7 +35,7 @@ async function setup(backend = new FakeBackend(), overrides: Partial<SupervisorC
   const parent = await mkdtemp(join(canonicalTmp, "vsup-review-")); roots.push(parent);
   const source = join(parent, "source"); const data = join(parent, "data");
   await mkdir(source);
-  const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], ...overrides };
+  const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [source], ...overrides };
   const manager = new RunManager(config, data, [backend]);
   return { parent, source, data, manager, backend };
 }
@@ -250,7 +250,7 @@ const INTEGRITY = { status: "changed", changed_paths: ["a.txt"], changed_paths_t
 describe("result cap shaping", () => {
   function bigCompactEdit(): Record<string, unknown> {
     return {
-      run_id: RUN_ID, state: "completed", backend: "programmatic",
+      run_id: RUN_ID, state: "completed", backend: "app-server",
       summary: "Done", warnings: ["careful"], integrity: INTEGRITY,
       worker: "/data/worktrees/run",
       changed_files: Array.from({ length: 50 }, (_, index) => `src/some/deeply/nested/module-${String(index).padStart(2, "0")}/file.ts`),
@@ -344,7 +344,7 @@ describe("result cap shaping", () => {
       expect(compact.patch).toBeUndefined();
       expect(compact.patch_path).toEqual(expect.stringContaining("diff.patch"));
       expect(compact.patch_bytes).toBeGreaterThan(3000);
-      expect(JSON.stringify(compact).length).toBeLessThanOrEqual(DEFAULT_CONFIG.limits.maxMcpResultChars);
+      expect(JSON.stringify(compact).length).toBeLessThanOrEqual(TEST_CONFIG.limits.maxMcpResultChars);
     } finally { await manager.shutdown(); }
   });
 

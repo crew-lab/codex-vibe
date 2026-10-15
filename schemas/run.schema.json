@@ -9,7 +9,7 @@
     "schema_version": { "const": 1 },
     "supervisor_version": { "type": "string", "maxLength": 128 },
     "run_id": { "type": "string", "format": "uuid" },
-    "backend": { "const": "programmatic" },
+    "backend": { "const": "app-server" },
     "mode": { "enum": ["review", "edit"] },
     "state": { "enum": ["starting", "running", "completed", "failed", "cancelled", "closing", "closed"] },
     "source_workspace": { "type": "string" },

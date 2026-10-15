@@ -27,7 +27,7 @@ Proposed solution
 1. Is the `vibe-app-server` JSON-RPC protocol supported for third-party clients, and is it versioned so a client can check compatibility before starting a session?
 2. `--legacy-harness` is described as a temporary escape hatch kept until the legacy runtime is removed. Is there a planned removal timeline, and will there be a deprecation period?
 3. On the legacy path, does `export.json` from `--output-dir` fill `usage` and `cost_usd`? The README documents both and the schema allows null; I have not yet observed a legacy run's export.
-4. On the Unified Harness, reading the 2.26.1 source, `enabled_tools` denies tools at execution but the catalogue the model sees still lists `write_file`, `edit`, the shell tool and `run_typescript`, and there is no `grep` builtin. Is there a supported way for a client to narrow the catalogue itself, to disable subagents, background processes, managed shell, plugins and skills for a session, and to keep reasoning out of the session store?
+4. On the Unified Harness, reading the 2.26.1 source, `enabled_tools` denies tools at execution but the catalogue the model sees still lists `write_file`, `edit`, the shell tool and `run_typescript`, and `grep` (a builtin on the legacy path) is not in the Unified catalogue. Is there a supported way for a client to narrow the catalogue itself, to disable subagents, background processes, managed shell, plugins and skills for a session, and to keep reasoning out of the session store?
 5. Is the headless contract (exit codes, outcomes, `export.json` `schema_version` 1) considered stable across releases?
 
 Additional context

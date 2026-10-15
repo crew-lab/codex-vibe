@@ -2,7 +2,7 @@ import { chmod, copyFile, lstat, readFile, realpath, rename, rm } from 'node:fs/
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { parse, stringify } from 'smol-toml';
-import { resolveCommand } from '../backends/launcher.js';
+import { resolveCommand } from '../backends/app-server/executable.js';
 import { configFingerprint, loadResolvedConfig, resolveConfigSelection } from '../config/config.js';
 import { APP_VERSION } from '../version.js';
 import { validateConfig } from '../config/validation.js';
@@ -94,6 +94,20 @@ async function resolvePaths(document: Document, notes: string[]): Promise<boolea
   return changed;
 }
 
+export const DEFAULT_PIN_MANIFEST_NAME = 'vibe-pin-manifest.json';
+
+function ensurePinManifestPath(document: Document, file: string, notes: string[]): boolean {
+  const existing = document.paths ?? {};
+  if (!existing || typeof existing !== 'object' || Array.isArray(existing)) return false;
+  const paths = existing as Record<string, unknown>;
+  if (paths.vibe_pin_manifest !== undefined) return false;
+  const manifest = path.join(path.dirname(file), DEFAULT_PIN_MANIFEST_NAME);
+  paths.vibe_pin_manifest = manifest;
+  document.paths = paths;
+  notes.push(`vibe_pin_manifest: set to ${manifest}; write it on the machine that runs Vibe with \`vibe-supervisor pin-manifest\` before the first run.`);
+  return true;
+}
+
 async function writeConfig(file: string, text: string, created: boolean): Promise<void> {
   if (created) { await createPrivateFile(file, text); return; }
   const temp = `${file}.${process.pid}.tmp`;
@@ -102,6 +116,8 @@ async function writeConfig(file: string, text: string, created: boolean): Promis
   await rename(temp, file);
 }
 
+export const MISSING_PIN_MANIFEST_NOTE = 'paths.vibe_pin_manifest is not set, so every run fails closed until it is. Set it to an absolute path in this config, write the manifest there with `vibe-supervisor pin-manifest`, and restart the server.';
+
 export async function planWorkspaceConfig(canonical: string, options: { resolveExecutables: boolean; configPath?: string }): Promise<WorkspacePlan> {
   const file = resolveConfigSelection(options.configPath).configPath;
   const existing = await readConfigSource(file);
@@ -109,12 +125,15 @@ export async function planWorkspaceConfig(canonical: string, options: { resolveE
   const document: Document = existing?.document ?? parse(initialConfigText()) as Document;
   const notes: string[] = [];
   const added = await addRoot(document, canonical);
-  const pathsChanged = options.resolveExecutables ? await resolvePaths(document, notes) : false;
+  const resolvedChanged = options.resolveExecutables ? await resolvePaths(document, notes) : false;
+  const manifestChanged = created || options.resolveExecutables ? ensurePinManifestPath(document, file, notes) : false;
+  const pathsChanged = resolvedChanged || manifestChanged;
   try {
-    const config = validateConfig(document);
+    const config = validateConfig(document, undefined, { requirePinManifest: options.resolveExecutables });
     await validateWorkspaceRootsAtUse(config.allowedWorkspaceRoots);
+    if (config.paths?.vibePinManifest === undefined) notes.push(MISSING_PIN_MANIFEST_NOTE);
   }
-  catch (error) { throw configInvalid(`Invalid supervisor configuration at ${file}; no changes were made: ${(error as Error).message} Supported fields are version, allowed_workspace_roots, retention, limits, and paths.vibe. Remove unsupported fields instead of relying on them.`); }
+  catch (error) { throw configInvalid(`Invalid supervisor configuration at ${file}; no changes were made: ${(error as Error).message} Supported fields are version, allowed_workspace_roots, retention, limits (including max_tokens and max_cost_usd), and paths (vibe, app_server, vibe_pin_manifest). Remove unsupported fields instead of relying on them.`); }
   const changed = created || added || pathsChanged;
   return { file, created, added, canonical, notes, changed, ...(changed ? { text: stringify(document) } : {}) };
 }
@@ -230,5 +249,6 @@ export async function allowCommand(args: string[]): Promise<void> {
   if (!workspace || workspace.startsWith('--')) return fail('Usage: vibe-supervisor allow [--config <path>] <dir>', 2);
   const update = await updateWorkspaceConfig(workspace, { resolveExecutables: false, ...(configPath ? { configPath } : {}) });
   say(update.added ? `Allowed workspace: ${update.canonical} (${update.file})` : `Workspace already allowed: ${update.canonical}`);
+  for (const note of update.notes) say(note);
   reportUpdate(update);
 }

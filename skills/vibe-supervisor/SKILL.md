@@ -6,9 +6,9 @@ license: MIT
 
 # Vibe Supervisor
 
-The supervisor exposes five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. It runs exactly Vibe 2.26.1 through the validated legacy programmatic harness; other versions fail closed. Each owning server/storage instance accepts one active run; a competing start is rejected immediately. A run is one-shot: there are no interactive permission grants, follow-up prompts, or restart recovery. If the supervisor restarts during work, the run is marked failed and its task is never replayed. Completed means execution ended; the coordinator still owns acceptance and cleanup.
+The supervisor exposes five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. It runs exactly Vibe 2.26.1 through its pinned `vibe-app-server`, verified against a pin manifest before each run; other versions and any file drift fail closed. Each owning server/storage instance accepts one active run; a competing start is rejected immediately. A run is one-shot: there are no interactive permission grants, follow-up prompts, or restart recovery. If the supervisor restarts during work, the run is marked failed and its task is never replayed. Completed means execution ended; the coordinator still owns acceptance and cleanup.
 
-Shell and network tools are disabled. The supervisor's policy is not an OS sandbox. Reviews can read and search an allowlisted workspace; edits need a Git repository root and explicit `base_ref`, and run in a detached supervisor-owned worktree. The worker's patch is exported for review and is never applied, committed, merged, or pushed automatically.
+Shell and network tools are disabled. The supervisor's policy is not an OS sandbox. Reviews are read-only (`read_file`) over an allowlisted workspace, with a bounded workspace file listing in the prompt and no search tool; edits can read, write and edit inside the worktree, need a Git repository root and explicit `base_ref`, and run in a detached supervisor-owned worktree. The worker's patch is exported for review and is never applied, committed, merged, or pushed automatically.
 
 ## Prepare before connecting
 

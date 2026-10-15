@@ -4,19 +4,23 @@ import { StringDecoder } from 'node:string_decoder';
 import { buildChildEnvironment } from '../security/environment.js';
 
 export class BoundedCollector {
-  private data = Buffer.alloc(0);
+  private chunks: Buffer[] = [];
+  private size = 0;
   truncated = false;
-  constructor(readonly maxBytes: number) {
+  constructor(readonly maxBytes: number, private readonly retain = true) {
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) throw new RangeError('maxBytes must be a non-negative integer');
   }
+  get bytes(): number { return this.size; }
   push(chunk: Uint8Array): void {
-    const bytes = Buffer.from(chunk);
-    const remaining = this.maxBytes - this.data.length;
-    if (bytes.length > remaining) this.truncated = true;
-    if (remaining > 0) this.data = Buffer.concat([this.data, bytes.subarray(0, remaining)]);
+    const remaining = this.maxBytes - this.size;
+    if (chunk.length > remaining) this.truncated = true;
+    if (remaining <= 0) return;
+    const kept = chunk.length > remaining ? chunk.subarray(0, remaining) : chunk;
+    this.size += kept.length;
+    if (this.retain) this.chunks.push(Buffer.from(kept));
   }
-  toBuffer(): Buffer { return Buffer.from(this.data); }
-  toString(encoding: BufferEncoding = 'utf8'): string { return this.data.toString(encoding); }
+  toBuffer(): Buffer { return Buffer.concat(this.chunks, this.retain ? this.size : 0); }
+  toString(encoding: BufferEncoding = 'utf8'): string { return this.toBuffer().toString(encoding); }
 }
 
 export interface ManagedProcessOptions {
@@ -25,6 +29,7 @@ export interface ManagedProcessOptions {
   forwardEnv?: readonly string[];
   maxStdoutBytes?: number;
   maxStderrBytes?: number;
+  retainStdout?: boolean;
   stdio?: SpawnOptions['stdio'];
   onStdout?: (text: string) => void;
   onStderr?: (text: string) => void;
@@ -46,7 +51,7 @@ export interface ManagedProcess {
 /** Spawn executable + argv directly; shell parsing is deliberately unavailable. */
 export function spawnManaged(executable: string, args: readonly string[], options: ManagedProcessOptions): ManagedProcess {
   if (!executable || !Array.isArray(args) || args.some((arg) => typeof arg !== 'string')) throw new TypeError('Expected executable and argument array');
-  const stdout = new BoundedCollector(options.maxStdoutBytes ?? 2 * 1024 * 1024);
+  const stdout = new BoundedCollector(options.maxStdoutBytes ?? 2 * 1024 * 1024, options.retainStdout ?? true);
   const stderr = new BoundedCollector(options.maxStderrBytes ?? 2 * 1024 * 1024);
   const stdoutDecoder = new StringDecoder('utf8');
   const stderrDecoder = new StringDecoder('utf8');

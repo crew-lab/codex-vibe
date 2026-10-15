@@ -1,0 +1,7 @@
+{
+  "name": "unrecorded-approval-meta",
+  "steps": [
+    { "op": "call", "tool": "file_system.write_file", "mode": "auto", "approvalMeta": false, "input": { "filePath": "${cwd}/src/untracked.ts", "content": "export {};\n" } },
+    { "op": "say", "text": "A write whose result carried no approval metadata." }
+  ]
+}

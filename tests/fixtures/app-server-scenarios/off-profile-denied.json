@@ -1,0 +1,7 @@
+{
+  "name": "off-profile-denied",
+  "steps": [
+    { "op": "call", "tool": "file_system.write_file", "mode": "never", "input": { "filePath": "${cwd}/src/leak.ts", "content": "oops\n" } },
+    { "op": "say", "text": "The write was refused." }
+  ]
+}

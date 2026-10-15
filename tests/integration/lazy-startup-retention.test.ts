@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parse } from 'smol-toml';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunRecord, RunState, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
 import { SCHEMA_VERSION } from '../../src/contracts.js';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { eventToWire, runToWire } from '../../src/core/serialization.js';
 import { applyCodexPlan, planCodexConfig } from '../../src/cli/codex.js';
@@ -26,7 +26,7 @@ afterEach(async () => {
 });
 
 class FakeBackend implements SupervisorBackend {
-  readonly kind = 'programmatic' as const;
+  readonly kind = 'app-server' as const;
   readonly callbacks = new Map<string, BackendCallbacks>();
   async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
@@ -50,7 +50,7 @@ function eventsText(runId: string, bytes: number): string {
   const lines: string[] = [];
   let size = 0;
   for (let seq = 1; size < bytes; seq += 1) {
-    const line = JSON.stringify(eventToWire({ schemaVersion: SCHEMA_VERSION, seq, timestamp: '2026-01-01T00:00:00.000Z', runId, backend: 'programmatic', source: 'vibe', type: 'tool_call', severity: 'info', data: { title: `call ${seq}`, filler: 'f'.repeat(300) } }));
+    const line = JSON.stringify(eventToWire({ schemaVersion: SCHEMA_VERSION, seq, timestamp: '2026-01-01T00:00:00.000Z', runId, backend: 'app-server', source: 'vibe', type: 'tool_call', severity: 'info', data: { title: `call ${seq}`, filler: 'f'.repeat(300) } }));
     lines.push(line); size += line.length + 1;
   }
   return `${lines.join('\n')}\n`;
@@ -60,10 +60,10 @@ async function seed(data: string, source: string, options: { state: RunState; ag
   const runId = randomUUID();
   const updated = new Date(Date.now() - (options.ageDays ?? 0) * DAY).toISOString();
   const record: RunRecord = {
-    schemaVersion: SCHEMA_VERSION, runId, backend: 'programmatic', mode: options.worktree ? 'edit' : 'review', state: options.state,
+    schemaVersion: SCHEMA_VERSION, runId, backend: 'app-server', mode: options.worktree ? 'edit' : 'review', state: options.state,
     sourceWorkspace: source, workerWorkspace: options.worktree ?? source, createdAt: updated, updatedAt: updated, finishedAt: updated,
     taskSha256: 'a'.repeat(64),
-    limits: { timeoutSeconds: 600, maxTurns: 5, maxEventBytes: DEFAULT_CONFIG.limits.maxEventBytes, maxTranscriptBytes: DEFAULT_CONFIG.limits.maxTranscriptBytes, maxArtifactBytes: DEFAULT_CONFIG.limits.maxArtifactBytes },
+    limits: { timeoutSeconds: 600, maxTurns: 5, maxEventBytes: TEST_CONFIG.limits.maxEventBytes, maxTranscriptBytes: TEST_CONFIG.limits.maxTranscriptBytes, maxArtifactBytes: TEST_CONFIG.limits.maxArtifactBytes },
     ...(options.worktree ? { worktree: { path: options.worktree, baseRef: 'HEAD', createdBySupervisor: true } } : {})
   };
   const directory = path.join(data, 'runs', runId);
@@ -74,7 +74,7 @@ async function seed(data: string, source: string, options: { state: RunState; ag
 }
 
 const exists = (file: string) => stat(file).then(() => true, () => false);
-const configFor = (source: string, overrides: Partial<typeof DEFAULT_CONFIG> = {}) => ({ ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], ...overrides });
+const configFor = (source: string, overrides: Partial<typeof TEST_CONFIG> = {}) => ({ ...TEST_CONFIG, allowedWorkspaceRoots: [source], ...overrides });
 
 describe('lazy startup', () => {
   it('initializes 200 runs with 1 MiB event logs without reading events, and loads them on demand', async () => {
@@ -164,7 +164,7 @@ describe('automatic retention', () => {
     const control = await seed(data, source, { state: 'closed', ageDays: 30 });
     const corrupt = await seed(data, source, { state: 'closed', ageDays: 30 });
     const corruptMeta = path.join(data, 'runs', corrupt, 'meta.json');
-    const unrecognized = '{"schemaVersion":999,"backend":"programmatic"}\n';
+    const unrecognized = '{"schemaVersion":999,"backend":"app-server"}\n';
     await writeFile(corruptMeta, unrecognized, { mode: 0o600 });
     const old = new Date(Date.now() - 31 * DAY);
     await utimes(path.dirname(corruptMeta), old, old);

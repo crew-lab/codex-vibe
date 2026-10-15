@@ -1,0 +1,8 @@
+{
+  "name": "approval-reused",
+  "steps": [
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts" } },
+    { "op": "call", "tool": "file_system.read_file", "mode": "auto", "source": "user", "approvalType": "ask", "callbackId": "approval-call-0001", "input": { "filePath": "${cwd}/src/index.ts" } },
+    { "op": "say", "text": "Unreachable after the reuse." }
+  ]
+}

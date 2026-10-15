@@ -2,9 +2,10 @@ import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { RunManager } from '../../src/core/run-manager.js';
-import { ProgrammaticBackend } from '../../src/backends/programmatic.js';
+import { AppServerBackend } from '../../src/backends/app-server.js';
+import { ResolvedCredential, type CredentialResolution } from '../../src/backends/app-server/credentials.js';
 
 const canonicalTmp = await realpath(tmpdir());
 const roots: string[] = [];
@@ -38,18 +39,18 @@ async function failedRun(manager: RunManager, source: string) {
   return status;
 }
 
-describe('programmatic launcher errors identify missing runtime components', () => {
+describe('app-server start errors identify missing runtime components', () => {
+  const injected = {
+    pin: { verify: async () => undefined },
+    resolveCredential: async (): Promise<CredentialResolution> => ({ status: 'environment', detail: '', credential: new ResolvedCredential('labels-credential-abcdefghijklmnop') })
+  };
+
   it('reports an absolute shebang interpreter that does not exist', async () => {
     const { root, source, data } = await makeRoot();
-    const script = path.join(root, 'vibe');
+    const script = path.join(root, 'vibe-app-server');
     await writeExecutable(script, '#!/nonexistent/dir/python3\n');
-    const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], paths: { vibe: script } };
-    const backend = new ProgrammaticBackend(config);
-    const probe = await backend.probe();
-    expect(probe.available).toBe(false);
-    expect(probe.details).toMatchObject({ interpreter_missing: true, interpreter: '/nonexistent/dir/python3' });
-    expect(probe.details?.executable_missing).toBeUndefined();
-    const manager = new RunManager(config, data, [backend]);
+    const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [source], paths: { ...TEST_CONFIG.paths, appServer: script } };
+    const manager = new RunManager(config, data, [new AppServerBackend(config, injected)]);
     try {
       const status = await failedRun(manager, source);
       expect(status.error).toMatchObject({ code: 'VSUP_VIBE_NOT_FOUND', message: expect.stringContaining('/nonexistent/dir/python3') });
@@ -57,31 +58,20 @@ describe('programmatic launcher errors identify missing runtime components', () 
     } finally { await manager.shutdown(); }
   });
 
-  it('reports a python3 interpreter that is not on PATH', async () => {
+  it('reports a configured app-server executable that does not exist', async () => {
     const { root, source, data } = await makeRoot();
-    const script = path.join(root, 'vibe');
-    await writeExecutable(script, '#!/usr/bin/env python3\n');
-    const empty = path.join(root, 'empty-path'); await mkdir(empty);
-    process.env.PATH = empty;
-    const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], paths: { vibe: script } };
-    const backend = new ProgrammaticBackend(config);
-    const probe = await backend.probe();
-    expect(probe.available).toBe(false);
-    expect(probe.details?.executable_missing).toBeUndefined();
-    const manager = new RunManager(config, data, [backend]);
-    try {
-      expect((await failedRun(manager, source)).error).toMatchObject({ code: 'VSUP_VIBE_NOT_FOUND', message: expect.stringContaining('python3') });
-    } finally { await manager.shutdown(); }
+    const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [source], paths: { ...TEST_CONFIG.paths, appServer: path.join(root, 'no-such-vibe-app-server') } };
+    const manager = new RunManager(config, data, [new AppServerBackend(config)]);
+    try { expect((await failedRun(manager, source)).error).toMatchObject({ code: 'VSUP_VIBE_NOT_FOUND' }); }
+    finally { await manager.shutdown(); }
   });
 
-  it('reports a configured Vibe executable that does not exist', async () => {
+  it('reports a bare vibe name that is not on PATH', async () => {
     const { root, source, data } = await makeRoot();
-    const missing = path.join(root, 'no-such-vibe');
-    const config = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], paths: { vibe: missing } };
-    const backend = new ProgrammaticBackend(config);
-    const probe = await backend.probe();
-    expect(probe.details).toMatchObject({ executable_missing: true });
-    const manager = new RunManager(config, data, [backend]);
+    const empty = path.join(root, 'empty-path'); await mkdir(empty);
+    process.env.PATH = empty;
+    const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [source], paths: { ...TEST_CONFIG.paths, vibe: 'vibe' } };
+    const manager = new RunManager(config, data, [new AppServerBackend(config)]);
     try { expect((await failedRun(manager, source)).error).toMatchObject({ code: 'VSUP_VIBE_NOT_FOUND' }); }
     finally { await manager.shutdown(); }
   });

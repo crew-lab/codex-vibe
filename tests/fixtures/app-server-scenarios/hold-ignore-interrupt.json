@@ -1,0 +1,7 @@
+{
+  "name": "hold-ignore-interrupt",
+  "interrupt": "ignore",
+  "steps": [
+    { "op": "hold" }
+  ]
+}

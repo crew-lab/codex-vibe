@@ -10,7 +10,7 @@
     "supervisor_version": { "type": ["string", "null"] },
     "run_id": { "type": "string", "format": "uuid" },
     "state": { "enum": ["starting", "running", "completed", "failed", "cancelled", "closing", "closed"] },
-    "backend": { "const": "programmatic" },
+    "backend": { "const": "app-server" },
     "stop_reason": { "type": "string" },
     "summary": { "type": "string" },
     "workspace": { "type": "object", "properties": { "source": { "type": "string" }, "worker": { "type": "string" } } },

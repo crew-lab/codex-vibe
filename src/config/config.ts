@@ -16,6 +16,7 @@ export interface LoadConfigOptions {
   env?: NodeJS.ProcessEnv;
   /** Read this exact config file. An explicit path never falls back. */
   configPath?: string;
+  requirePinManifest?: boolean;
 }
 
 export interface ConfigSelection {
@@ -72,9 +73,13 @@ export function configFingerprint(config: SupervisorConfig): string {
       maxTranscriptBytes: config.limits.maxTranscriptBytes,
       maxArtifactBytes: config.limits.maxArtifactBytes,
       workerProgressTimeoutSeconds: config.limits.workerProgressTimeoutSeconds,
-      maxMcpResultChars: config.limits.maxMcpResultChars
+      maxMcpResultChars: config.limits.maxMcpResultChars,
+      ...(config.limits.maxTokens === undefined ? {} : { maxTokens: config.limits.maxTokens }),
+      ...(config.limits.maxCostUsd === undefined ? {} : { maxCostUsd: config.limits.maxCostUsd })
     },
-    ...(config.paths?.vibe ? { vibePath: config.paths.vibe } : {})
+    ...(config.paths?.vibe ? { vibePath: config.paths.vibe } : {}),
+    ...(config.paths?.appServer ? { appServerPath: config.paths.appServer } : {}),
+    ...(config.paths?.vibePinManifest ? { pinManifestPath: config.paths.vibePinManifest } : {})
   };
   return createHash("sha256").update(JSON.stringify(semantic)).digest("hex");
 }
@@ -117,13 +122,13 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Super
     if ((stat.mode & 0o022) !== 0) throw new Error("Config must not be writable by group or others; run chmod 600 on it.");
     const source = await handle.readFile("utf8");
     const raw = parse(source);
-    const config = validateConfig(raw, env.HOME ?? env.USERPROFILE);
+    const config = validateConfig(raw, env.HOME ?? env.USERPROFILE, { requirePinManifest: options.requirePinManifest ?? true });
     await inspectWorkspaceRoots(config.allowedWorkspaceRoots, env.HOME ?? env.USERPROFILE);
     return config;
   } catch (error) {
     if (error instanceof Error) {
       throw Object.assign(new Error(`Invalid supervisor configuration: ${error.message}`, { cause: error }), {
-        supervisor: supervisorError("VSUP_CONFIG_INVALID", `Invalid configuration file ${selection.configPath}: ${error.message} Supported fields are version, allowed_workspace_roots, retention, limits, and paths.vibe; remove unsupported fields.`, { configPath: selection.configPath })
+        supervisor: supervisorError("VSUP_CONFIG_INVALID", `Invalid configuration file ${selection.configPath}: ${error.message} Supported fields are version, allowed_workspace_roots, retention, limits (including max_tokens and max_cost_usd), and paths (vibe, app_server, vibe_pin_manifest); remove unsupported fields.`, { configPath: selection.configPath })
       });
     }
     throw error;

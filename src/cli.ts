@@ -12,6 +12,7 @@ import { createIsolatedRunRouter } from './core/isolated-run-router.js';
 import { APP_VERSION } from './version.js';
 import { doctorCommand } from './cli/diagnose.js';
 import { fail } from './cli/fail.js';
+import { pinManifestCommand } from './cli/pin.js';
 import { allowCommand, setupCommand } from './cli/setup.js';
 import { installProcessGuards } from './diagnostics/background.js';
 import { readNdjsonRecovering } from './persistence/ndjson.js';
@@ -22,7 +23,7 @@ import { environmentSecrets, redactSecrets } from './security/redaction.js';
 
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
 async function getManager(ownerLock?: OwnerLock, configPath?: string, isolatedHome?: string): Promise<{ manager: RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> }; config: Awaited<ReturnType<typeof loadConfig>>; dataDir: string; policy: ReturnType<typeof selectedConfigPolicy> }> {
-  const resolved = await loadResolvedConfig({ createDataDir: isolatedHome === undefined, ...(configPath ? { configPath } : {}) });
+  const resolved = await loadResolvedConfig({ createDataDir: isolatedHome === undefined, requirePinManifest: false, ...(configPath ? { configPath } : {}) });
   const config = resolved.config;
   const dataDir = isolatedHome ?? resolved.dataDir;
   const policy = selectedConfigPolicy(resolved.configPath);
@@ -71,7 +72,7 @@ async function runsCommand(args: string[]): Promise<void> {
   }
   const [subcommand, id] = positional;
   if (positional.length !== (subcommand === 'list' ? 1 : subcommand === 'cleanup' ? (id ? 2 : 1) : 2)) fail('Usage: vibe-supervisor runs [--config <path>] <list|show|tail|cleanup> [run-id]', 2);
-  const resolved = await loadResolvedConfig(configPath ? { configPath } : {}); const config = resolved.config; const dataDir = resolved.dataDir;
+  const resolved = await loadResolvedConfig({ requirePinManifest: false, ...(configPath ? { configPath } : {}) }); const config = resolved.config; const dataDir = resolved.dataDir;
   const runsDir = path.join(dataDir, 'runs');
   if (subcommand === 'list') {
     let entries: string[];
@@ -124,9 +125,10 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   try {
     if (command === '--version' || command === '-v') { print(APP_VERSION); return; }
     if (command === 'help' || command === '--help' || command === '-h' || !command) {
-      print('Usage: vibe-supervisor <setup --workspace <dir> [--config <path>] [--codex user|project] [--isolated] [--yes|--dry-run]|allow [--config <path>] <dir>|doctor [--json] [--config <path>]|serve --stdio [--config <path>] [--isolated]|runs [--config <path>] list|show|tail|cleanup [run-id]|--version>'); return;
+      print('Usage: vibe-supervisor <setup --workspace <dir> [--config <path>] [--codex user|project] [--isolated] [--yes|--dry-run]|allow [--config <path>] <dir>|doctor [--json] [--config <path>]|pin-manifest [--config <path>] [--executable <path>] [--output <path>] [--force]|serve --stdio [--config <path>] [--isolated]|runs [--config <path>] list|show|tail|cleanup [run-id]|--version>'); return;
     }
     if (command === 'doctor') return await doctorCommand(args);
+    if (command === 'pin-manifest') return await pinManifestCommand(args);
     if (command === 'setup') return await setupCommand(args);
     if (command === 'allow') return await allowCommand(args);
     if (command === 'serve') {
