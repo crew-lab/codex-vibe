@@ -145,22 +145,22 @@ describe('one-shot restart behavior', () => {
     } finally { await manager.shutdown(); }
   });
 
-  it.each(['acp', 'programmatic'])('leaves historical %s metadata and artifacts byte-identical and never loads or cleans them', async (historical) => {
+  it('skips a saved record with an unknown backend, leaving its metadata and artifacts byte-identical', async () => {
     const { source, data } = await setup();
     const record = baseRecord(source);
-    const directory = await writeRecord(data, record, historical);
+    const directory = await writeRecord(data, record, 'unknown-backend');
     const metaPath = path.join(directory, 'meta.json');
     const before = await readFile(metaPath, 'utf8');
     const artifactDir = path.join(directory, 'artifacts');
     await mkdir(artifactDir);
-    const artifactPath = path.join(artifactDir, 'legacy.txt');
-    await writeFile(artifactPath, 'historical output\n');
+    const artifactPath = path.join(artifactDir, 'output.txt');
+    await writeFile(artifactPath, 'saved output\n');
     const backend = new FakeBackend();
     const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
       await manager.initialize();
       expect(await readFile(metaPath, 'utf8')).toBe(before);
-      expect(await readFile(artifactPath, 'utf8')).toBe('historical output\n');
+      expect(await readFile(artifactPath, 'utf8')).toBe('saved output\n');
       expect(backend.starts).toBe(0);
       await expect(manager.status({ run_id: record.runId })).rejects.toMatchObject({ code: 'VSUP_NOT_FOUND' });
       expect(await readdir(path.join(data, 'runs'))).toContain(record.runId);

@@ -59,7 +59,7 @@ async function launch(box: Awaited<ReturnType<typeof sandbox>>, mode = 'exit') {
   });
   const stderr: string[] = [];
   transport.stderr?.on('data', (chunk: Buffer) => { stderr.push(chunk.toString()); });
-  const client = new Client({ name: 'client-shutdown-test', version: '1.0.0' });
+  const client = new Client({ name: 'client-shutdown-test', version: '0.0.1' });
   await client.connect(transport);
   const pid = transport.pid as number;
   strays.add(pid);

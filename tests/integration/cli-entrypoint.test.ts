@@ -41,16 +41,16 @@ describe('CLI executable entry point', () => {
   it('doctor selects the explicit artifact config over an obsolete default home and reports sanitized provenance', async () => {
     const root = await mkdtemp(path.join(await realpath(tmpdir()), 'vsup-cli-config-'));
     roots.push(root);
-    const legacy = path.join(root, 'legacy'); const selected = path.join(root, 'artifact'); const workspace = path.join(root, 'workspace');
-    await Promise.all([mkdir(legacy), mkdir(selected), mkdir(workspace)]);
-    const legacyBytes = 'version = 1\nbackend = "acp"\n';
-    await writeFile(path.join(legacy, 'config.toml'), legacyBytes, { mode: 0o600 });
+    const obsolete = path.join(root, 'obsolete'); const selected = path.join(root, 'artifact'); const workspace = path.join(root, 'workspace');
+    await Promise.all([mkdir(obsolete), mkdir(selected), mkdir(workspace)]);
+    const obsoleteBytes = 'version = 1\nbackend = "acp"\n';
+    await writeFile(path.join(obsolete, 'config.toml'), obsoleteBytes, { mode: 0o600 });
     const fake = await makeFakeVibeEnvironment(root);
     const manifest = path.join(selected, 'vibe-pin-manifest.json');
     await writeFile(manifest, serializePinManifest(await generatePinManifest({ executable: fake.shim })), { mode: 0o600 });
     const config = `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[paths]\nvibe = ${JSON.stringify(fake.vibeShim)}\nvibe_pin_manifest = ${JSON.stringify(manifest)}\n`;
     const configFile = path.join(selected, 'config.toml'); await writeFile(configFile, config, { mode: 0o600 });
-    const { stdout, stderr } = await exec(process.execPath, [cli, 'doctor', '--json', '--config', configFile], { env: { ...process.env, VIBE_SUPERVISOR_HOME: legacy } });
+    const { stdout, stderr } = await exec(process.execPath, [cli, 'doctor', '--json', '--config', configFile], { env: { ...process.env, VIBE_SUPERVISOR_HOME: obsolete } });
     expect(stderr).toBe('');
     const report = JSON.parse(stdout) as { provenance: { application_entrypoint: string; runtime_module: string; config_path: string; config_source: string; config_fingerprint: string; data_directory: string }; checks: Array<{ name: string; ok: boolean }> };
     expect(report.provenance).toMatchObject({ config_path: configFile, config_source: 'explicit', data_directory: selected });
@@ -58,6 +58,6 @@ describe('CLI executable entry point', () => {
     expect(report.provenance.runtime_module).toBe(path.join(path.dirname(cli), 'diagnostics', 'doctor.js'));
     expect(report.provenance.config_fingerprint).toMatch(/^[a-f0-9]{64}$/);
     expect(report.checks.find(check => check.name === 'vibe')?.ok).toBe(true);
-    expect(await readFile(path.join(legacy, 'config.toml'), 'utf8')).toBe(legacyBytes);
+    expect(await readFile(path.join(obsolete, 'config.toml'), 'utf8')).toBe(obsoleteBytes);
   });
 });
