@@ -157,7 +157,7 @@ All of these stay unverified for this build until evidence is recorded here and 
 | Exact Node 20.19.0 floor | Full release verification of this build's frozen source on exactly the declared minimum. The pass on the 2.0.0 source does not transfer. |
 | Populated pnpm validation | `validation prepare` on a representative project with a populated pnpm store, with explicit blockers for unsupported profiles. |
 
-Also open: a clean macOS account installation of the frozen archive. macOS Apple silicon is the supported platform. Linux and Windows code paths may exist, but 2.0 makes no support claim for them, and Intel and other MCP clients have no acceptance. `.codex-plugin/plugin.json` remains an unverified source scaffold and is not part of the npm package; its declarations do not establish plugin installation or registration support.
+Also open: a clean macOS account installation of the frozen archive. macOS Apple silicon is the supported platform. Linux and Windows code paths may exist, but 2.0 makes no support claim for them, and Intel and other MCP clients have no acceptance. Codex plugin packaging is not offered.
 
 ## Target conformance corrections
 

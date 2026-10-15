@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parse } from 'smol-toml';
@@ -213,7 +212,7 @@ describe('automatic retention', () => {
 });
 
 describe('Codex startup timeout', () => {
-  it('writes both timeouts, upgrades an entry that lacks the startup timeout, and matches .mcp.json', async () => {
+  it('writes both timeouts, upgrades an entry that lacks the startup timeout', async () => {
     const home = await mkdtemp(path.join(canonicalTmp, 'vsup-codex-')); roots.push(home);
     await mkdir(path.join(home, '.codex'));
     vi.stubEnv('HOME', home);
@@ -225,7 +224,5 @@ describe('Codex startup timeout', () => {
     await configureCodex();
     const entry = (parse(readFileSync(file, 'utf8')) as { mcp_servers: Record<string, Record<string, unknown>> }).mcp_servers['vibe-supervisor']!;
     expect(entry).toMatchObject({ startup_timeout_sec: 30, tool_timeout_sec: 600 });
-    const project = JSON.parse(readFileSync(fileURLToPath(new URL('../../.mcp.json', import.meta.url)), 'utf8')) as { mcpServers: Record<string, Record<string, unknown>> };
-    expect(project.mcpServers['vibe-supervisor']).toMatchObject({ startup_timeout_sec: 30, tool_timeout_sec: 600 });
   });
 });

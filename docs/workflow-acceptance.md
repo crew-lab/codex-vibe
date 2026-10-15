@@ -3,7 +3,7 @@
 Edit requests may supply an optional strict `acceptance_contract` before dispatch:
 
 ```json
-{"schema_version":1,"allowed_changed_paths":["src/app/page.tsx"],"required_changed_paths":["src/app/page.tsx"],"checks":[{"id":"disclosure","kind":"text_contains","path":"src/app/page.tsx","value":"developing its building management systems"}],"required_validations":["build"]}
+{"schema_version":1,"allowed_changed_paths":["src/app/page.tsx"],"required_changed_paths":["src/app/page.tsx"],"checks":[{"id":"heading","kind":"text_contains","path":"src/app/page.tsx","value":"Release notes"}],"required_validations":["build"]}
 ```
 
 Supported assertions are `file_exists`, `file_absent`, `text_contains`, `text_not_contains`, and `file_sha256`. Paths are exact repository-relative names, not globs. The normalized contract is hashed and frozen before launch. Exact checks inspect the committed base plus exported patch using a private Git index; worker summaries and subsequent worktree edits are not evidence. Checks never execute project code. Private bounded file snapshots allow re-verification after worktree cleanup. Missing, unsafe or changed inputs produce `incomplete`, never PASS.
