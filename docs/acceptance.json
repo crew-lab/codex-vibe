@@ -70,6 +70,22 @@
     {
       "name": "validation-copies-offline-npm-fixture-and-owned-cleanup",
       "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "usage-ceilings-and-tool-counts-persisted",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "excluded-globs-merged-denied-and-read-back",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "runs-usefulness-from-bound-assessments",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "approval-ledger-and-pin-identity-in-run-export",
+      "status": "RUN_BY_focused-tests"
     }
   ],
   "evidence_builds": [
@@ -330,6 +346,38 @@
       "result": "NOT EXERCISED 2026-10-16: the review's final answer reports tools.file_system.writeFile is not a function and its event sequence holds no denied nested write; not rerun. The probe text now names tools.file_system.write_file with path and content, checked against the pinned source (docs/hosted-continuation.md).",
       "build": "2.0.1 corrected archive",
       "carry_over": "Not exercised on 2.0.1, so nothing to carry. It needs a hosted review with the corrected probe; none is proposed for 2.0.2 unless the owner authorizes the optional execution-provenance review, which can carry the probe."
+    },
+    {
+      "name": "hosted-usage-recorded",
+      "status": "UNVERIFIED",
+      "build": "2.1.0 (unreleased)",
+      "evidence_required": "In the 2.1 hosted review: meta.json and result.json carry prompt and completion tokens, model_calls (or null when Vibe's statistics carry none), a cost estimate marked authoritative false, and tool_calls counts equal to the run's tool_call and tool_denied events; the ceilings in force are in limits.",
+      "prior_evidence": "Fixture and integration tests cover it (tests/integration/usage-record.test.ts with the usage-tool-counts scenario, tests/unit/run-record-fields.test.ts, tests/unit/app-server-usage.test.ts).",
+      "carry_over": "Nothing to carry: 2.1 has no archive yet. It rides the one 2.1 hosted review."
+    },
+    {
+      "name": "hosted-excluded-glob-readback-and-denial",
+      "status": "UNVERIFIED",
+      "build": "2.1.0 (unreleased)",
+      "evidence_required": "With one exclusion for the fixture: the conformance check run with --excluded-glob shows denylist_matches_expected true for every profile tool, and the 2.1 hosted review, asked to read the excluded file, records tool_denied (outcome permission_denied_by_policy, or reason path_excluded) and completes. This is also the first observation of Vibe itself denying a merged exclusion entry; a bare directory glob is expected to deny the directory and not the files below it, which the handler covers.",
+      "prior_evidence": "Fixture tests cover the merged denylist, the read-back mismatch, the handler and listing judgement and a scenario with an excluded read (tests/unit/config.test.ts, app-server-session-config.test.ts, app-server-approvals.test.ts, app-server-workspace-listing.test.ts, app-server-readback.test.ts, tests/integration/app-server-backend.test.ts, tests/unit/v2-conformance-check.test.ts). No real denied call has been observed for any denylist entry.",
+      "carry_over": "Nothing to carry. Any change to scripts/v2-conformance-check.mjs changes the candidate identity, so 2.1 ships its own kit and its own conformance run."
+    },
+    {
+      "name": "hosted-run-exported",
+      "status": "UNVERIFIED",
+      "build": "2.1.0 (unreleased)",
+      "evidence_required": "The 2.1 hosted edit exported with runs export: every artifact digest matches, approvals.json covers every tool_call and tool_denied entry id, the pin identity equals the target's manifest, and no machine path remains.",
+      "prior_evidence": "Fixture tests cover the ledger and pin in the bundle, a digest mismatch and a truncated ledger (tests/unit/acceptance.test.ts, tests/integration/app-server-backend.test.ts).",
+      "carry_over": "Nothing to carry. A 2.0.1 export has no ledger and no pin."
+    },
+    {
+      "name": "hosted-close-acceptance-recorded",
+      "status": "UNVERIFIED",
+      "build": "2.1.0 (unreleased)",
+      "evidence_required": "The 2.1 hosted edit is closed from the client with an assessment bound to its patch and contract; meta.json carries it and runs usefulness prints the row with the run's usage. A review stays not assessable.",
+      "prior_evidence": "Fixture tests cover the report (tests/unit/runs-usefulness.test.ts).",
+      "carry_over": "Nothing to carry."
     },
     {
       "name": "clean-account-install",
