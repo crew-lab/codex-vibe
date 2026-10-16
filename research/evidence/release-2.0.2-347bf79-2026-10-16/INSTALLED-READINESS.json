@@ -1,0 +1,23 @@
+{
+  "server_version": "2.0.2",
+  "candidate": {
+    "version": "2.0.2",
+    "sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1"
+  },
+  "preparation_status": "passed",
+  "workspace_eligible": true,
+  "eligible": true,
+  "active_slot": {
+    "busy": false
+  },
+  "restart_required": false,
+  "blockers": [],
+  "tools": [
+    "vibe_close",
+    "vibe_edit_start",
+    "vibe_result",
+    "vibe_review_start",
+    "vibe_status"
+  ],
+  "native_readiness": "not established by SDK"
+}
