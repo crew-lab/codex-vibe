@@ -1,0 +1,9 @@
+{
+  "name": "approval-ledger",
+  "steps": [
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts", "offset": null, "limit": 2000 } },
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts", "offset": 0, "limit": 500 } },
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "/etc/passwd", "offset": null, "limit": 2000 } },
+    { "op": "say", "text": "Two reads ran and one was refused." }
+  ]
+}

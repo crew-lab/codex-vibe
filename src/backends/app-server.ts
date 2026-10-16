@@ -1,13 +1,14 @@
 import { modelObservationSchema } from "../reporting/telemetry.js";
 import { checkPreparation, type PreparationStatus } from "../preparation/evidence.js";
+import { createHash } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
-import { access, rm } from 'node:fs/promises';
+import { access, open, realpath, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type {
-  BackendCallbacks, BackendCapabilities, BackendKind, BackendRunHandle, BackendStartResult, EventSeverity,
-  ProcessRecord, ResultSummary, RuntimeCheck, StartRunInput, SupervisorBackend, SupervisorConfig, SupervisorError, ToolCallCounts
+  ApprovalLedgerEntry, ApprovalLedgerSnapshot, BackendCallbacks, BackendCapabilities, BackendKind, BackendRunHandle, BackendStartResult, EventSeverity,
+  PinIdentity, ProcessRecord, ResultSummary, RuntimeCheck, StartRunInput, SupervisorBackend, SupervisorConfig, SupervisorError, ToolCallCounts
 } from '../contracts.js';
-import { supervisorError } from '../contracts.js';
+import { MAX_APPROVAL_LEDGER_RECORDS, supervisorError } from '../contracts.js';
 import { describeFailure, reportBackgroundFailure } from '../diagnostics/background.js';
 import { sanitizeForPersistence } from '../persistence/atomic.js';
 import { spawnManaged, type ManagedProcess } from '../process/managed.js';
@@ -17,7 +18,7 @@ import { WorkspacePathError } from '../security/paths.js';
 import { assertNoProjectVibeExtensions } from '../security/workspace-guard.js';
 import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { APP_VERSION } from '../version.js';
-import { ApprovalHandler, type ApprovalHandlerOptions, type PendingApproval } from './app-server/approvals.js';
+import { ApprovalHandler, type ApprovalHandlerOptions, type ApprovalRecord, type PendingApproval } from './app-server/approvals.js';
 import { resolveCredential, type CredentialResolution, type ResolvedCredential } from './app-server/credentials.js';
 import { EventProcessor, auditSessionHistory, unfinishedEffectFatal, type EffectRecord, type EventFatal, type EventSignal, type HistoryAudit } from './app-server/events.js';
 import {
@@ -25,7 +26,7 @@ import {
   type JsonObject, type NotificationHandler
 } from './app-server/jsonrpc.js';
 import { mapOutcome, type RunOutcome, type SupervisorCondition } from './app-server/outcome.js';
-import { PinCheckError, verifyPinnedInstall } from './app-server/pin.js';
+import { DEFAULT_PIN_LIMITS, PinCheckError, locateEnvironment, parsePinManifest, verifyPinnedInstall } from './app-server/pin.js';
 import {
   MAX_PAGE_LIMIT, ProtocolParseError, buildCallbackResult, buildConfigEffectiveRead, buildConfigRead, buildInitialize,
   buildInitialized, buildRuntimeRead, buildSessionHistoryList, buildSessionRead, buildSessionReadyWait, buildSessionStart,
@@ -65,6 +66,9 @@ const TOOL_NAMES: Readonly<Record<string, string>> = {
 const TOOL_KINDS: Readonly<Record<string, string>> = { read_file: 'read', write_file: 'edit', edit: 'edit' };
 const STOP_REQUEST_KINDS: ReadonlySet<SupervisorCondition['kind']> = new Set(['budget', 'cancelled', 'deadline']);
 const BENIGN_SERVER_ERRORS: ReadonlySet<string> = new Set(['stale_turn', 'conflict', 'not_found', 'callback_closed']);
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+const VERSION_TEXT = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const MAX_VERSION_CHARS = 128;
 
 export interface AppServerTiming {
   requestTimeoutMs: number;
@@ -196,10 +200,46 @@ interface RunParts {
   options: AppServerBackendOptions;
   timing: AppServerTiming;
   executable: string;
+  pin: PinIdentity | undefined;
   credential: ResolvedCredential;
   plan: SessionConfigPlan;
   expectedVersion: string;
   listing: WorkspaceListing;
+}
+
+interface VerifiedPin {
+  executable: string;
+  pin: PinIdentity | undefined;
+}
+
+function ledgerEntry(record: ApprovalRecord): ApprovalLedgerEntry {
+  const { callbackId, relatedEntryId, turnId, tool, path: recordedPath, fingerprint, decision, reason } = record;
+  return { callbackId, relatedEntryId, turnId, tool, path: recordedPath, fingerprint, decision, reason };
+}
+
+function reportedPin(value: unknown): PinIdentity | undefined {
+  if (value === null || typeof value !== 'object') return undefined;
+  const { vibeVersion, manifestSha256, recordSha256 } = value as Record<string, unknown>;
+  if (typeof vibeVersion !== 'string' || vibeVersion.length > MAX_VERSION_CHARS || !VERSION_TEXT.test(vibeVersion)) return undefined;
+  if (typeof manifestSha256 !== 'string' || !SHA256_HEX.test(manifestSha256) || typeof recordSha256 !== 'string' || !SHA256_HEX.test(recordSha256)) return undefined;
+  return { vibeVersion, manifestSha256, recordSha256 };
+}
+
+async function readManifestBytes(file: string): Promise<Buffer> {
+  const unreadable = (): PinCheckError => new PinCheckError('manifest-unreadable', 'The pin manifest cannot be read as a bounded regular file.');
+  let handle;
+  try { handle = await open(await realpath(file), fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0)); }
+  catch { throw unreadable(); }
+  try {
+    const info = await handle.stat();
+    if (!info.isFile() || info.size > DEFAULT_PIN_LIMITS.maxManifestBytes) throw unreadable();
+    const data = await handle.readFile();
+    if (data.length > DEFAULT_PIN_LIMITS.maxManifestBytes) throw unreadable();
+    return data;
+  } catch (error) {
+    if (error instanceof PinCheckError) throw error;
+    throw unreadable();
+  } finally { await handle.close(); }
 }
 
 type TurnEnd = 'turn' | 'forced';
@@ -212,6 +252,7 @@ class AppServerRun {
   private readonly options: AppServerBackendOptions;
   private readonly timing: AppServerTiming;
   private readonly executable: string;
+  private readonly pin: PinIdentity | undefined;
   private readonly credential: ResolvedCredential;
   private readonly plan: SessionConfigPlan;
   private readonly expectedVersion: string;
@@ -257,6 +298,7 @@ class AppServerRun {
   private hurriedFlag = false;
   private stderrTail = '';
   private lastUsageEmit = 0;
+  private ledgerOverflowed = false;
 
   constructor(parts: RunParts) {
     this.preparation = parts.preparation;
@@ -265,6 +307,7 @@ class AppServerRun {
     this.options = parts.options;
     this.timing = parts.timing;
     this.executable = parts.executable;
+    this.pin = parts.pin;
     this.credential = parts.credential;
     this.plan = parts.plan;
     this.expectedVersion = parts.expectedVersion;
@@ -276,6 +319,7 @@ class AppServerRun {
     this.handler = new ApprovalHandler({
       mode: parts.input.mode,
       workspace: parts.input.workerWorkspace,
+      excludedGlobs: parts.input.excludedGlobs,
       currentSessionId: () => this.sessionId,
       ...(parts.options.approvals?.deadlineMs === undefined ? {} : { deadlineMs: parts.options.approvals.deadlineMs }),
       ...(parts.options.approvals?.evaluate === undefined ? {} : { evaluate: parts.options.approvals.evaluate })
@@ -303,7 +347,7 @@ class AppServerRun {
       throw failure;
     }
     const process = this.processRecord;
-    try { await this.callbacks.onState('running', { preparation: this.preparation, ...(process ? { process } : {}), modelObservations: [...this.modelObservations] }); }
+    try { await this.callbacks.onState('running', { preparation: this.preparation, ...(process ? { process } : {}), ...(this.pin ? { pin: { ...this.pin } } : {}), modelObservations: [...this.modelObservations] }); }
     catch (error) { reportBackgroundFailure('app-server-running', error); }
     void this.supervise().catch((error: unknown) => reportBackgroundFailure('app-server-supervise', error));
     this.startReported.resolve();
@@ -504,6 +548,7 @@ class AppServerRun {
   private async answer(pending: PendingApproval): Promise<void> {
     try {
       const verdict = await pending.verdict;
+      if (verdict.reason === 'ledger_full') this.ledgerOverflowed = true;
       await this.rpc(buildCallbackResult(this.sessionId, pending.callbackId, verdict.decision), (value) => parseAcceptedResult(value, 'callback/result result'), this.timing.requestTimeoutMs);
     } catch (error) {
       if (error instanceof JsonRpcServerError && BENIGN_SERVER_ERRORS.has(error.code)) return;
@@ -781,9 +826,16 @@ class AppServerRun {
       await this.callbacks.onState(outcome.state, {
         ...(usage ? { usage } : {}),
         ...(result ? { result } : {}),
-        ...(outcome.error ? { error: outcome.error } : {})
+        ...(outcome.error ? { error: outcome.error } : {}),
+        approvals: this.approvalSnapshot()
       });
     } catch (error) { reportBackgroundFailure('app-server-terminal-state', error); }
+  }
+
+  private approvalSnapshot(): ApprovalLedgerSnapshot {
+    const all = this.handler.ledger.all();
+    const records = all.slice(0, MAX_APPROVAL_LEDGER_RECORDS).map(ledgerEntry);
+    return { records, truncated: this.ledgerOverflowed || all.length > records.length };
   }
 
   private unfinishedEffects(audit: HistoryAudit | null): EventFatal | null {
@@ -972,15 +1024,24 @@ export class AppServerBackend implements SupervisorBackend {
     return resolveAppServerExecutable(this.config, this.options.executable);
   }
 
-  private async verifyPin(executable: string): Promise<string> {
+  private async verifyPin(executable: string): Promise<VerifiedPin> {
     const { pin } = this.options;
     if (pin?.verify) {
       const verified = await pin.verify(executable);
       const reported = (verified as { executable?: unknown } | null | undefined)?.executable;
-      return typeof reported === 'string' && path.isAbsolute(reported) ? reported : executable;
+      return { executable: typeof reported === 'string' && path.isAbsolute(reported) ? reported : executable, pin: reportedPin(verified) };
     }
     const manifestPath = pin?.manifestPath ?? this.config.paths?.vibePinManifest;
-    if (manifestPath) return (await verifyPinnedInstall({ executable, manifestPath })).executable;
+    if (manifestPath) {
+      await locateEnvironment(executable);
+      const bytes = await readManifestBytes(manifestPath);
+      const manifest = parsePinManifest(bytes.toString('utf8'));
+      const pinned = await verifyPinnedInstall({ executable, manifest });
+      return {
+        executable: pinned.executable,
+        pin: { vibeVersion: pinned.version, manifestSha256: createHash('sha256').update(bytes).digest('hex'), recordSha256: pinned.recordSha256 }
+      };
+    }
     throw new PinCheckError('manifest-unreadable', 'No pin manifest is configured, so the installed Vibe cannot be verified. Set paths.vibe_pin_manifest in the selected config to an absolute path, write the manifest there with `vibe-supervisor pin-manifest`, and restart the server.');
   }
 
@@ -1014,8 +1075,8 @@ export class AppServerBackend implements SupervisorBackend {
     let executable: string;
     try { executable = await this.appServerExecutable(); }
     catch { throw supervisorError('VSUP_VIBE_NOT_FOUND', 'The vibe-app-server executable could not be located next to the configured Vibe.'); }
-    let verifiedExecutable: string;
-    try { verifiedExecutable = await this.verifyPin(executable); }
+    let verified: VerifiedPin;
+    try { verified = await this.verifyPin(executable); }
     catch (error) { throw toSupervisorError(error, []); }
     const preparation = await this.preparationCheck();
     if (preparation.status !== 'passed') throw supervisorError('VSUP_INVALID_STATE', 'Matching candidate conformance is required before dispatch. Run prepare check with the version-matched kit.', { preparation });
@@ -1025,11 +1086,11 @@ export class AppServerBackend implements SupervisorBackend {
     }
     let plan: SessionConfigPlan;
     try {
-      plan = buildSessionConfig({ mode: input.mode, workspace: input.workerWorkspace, runDirectory: input.runDirectory, maxTurns: input.limits.maxTurns });
+      plan = buildSessionConfig({ mode: input.mode, workspace: input.workerWorkspace, runDirectory: input.runDirectory, maxTurns: input.limits.maxTurns, excludedGlobs: input.excludedGlobs });
     } catch (error) { throw toSupervisorError(error, []); }
-    const listing = await buildWorkspaceListing(input.workerWorkspace, this.options.listing);
+    const listing = await buildWorkspaceListing(input.workerWorkspace, this.options.listing, input.excludedGlobs);
     const run = new AppServerRun({
-      input, callbacks, preparation, options: this.runOptions, timing: this.timing, executable: verifiedExecutable, plan, listing,
+      input, callbacks, preparation, options: this.runOptions, timing: this.timing, executable: verified.executable, pin: verified.pin, plan, listing,
       credential: resolution.credential, expectedVersion: this.options.expectedServerVersion ?? SUPPORTED_VIBE
     });
     return run.start();

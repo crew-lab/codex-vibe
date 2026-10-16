@@ -1,0 +1,9 @@
+{
+  "name": "excluded-read",
+  "steps": [
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts", "offset": null, "limit": 2000 } },
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "${cwd}/fixtures/private/customers.json", "offset": null, "limit": 2000 } },
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "${cwd}/deploy/prod.tfvars", "offset": null, "limit": 2000 } },
+    { "op": "say", "text": "One read ran and two excluded reads were refused." }
+  ]
+}
