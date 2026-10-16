@@ -9,7 +9,9 @@ import {
   REVIEW_TOOLS,
   callbackContext,
   canonicalJson,
+  createExcludedMatcher,
   evaluateApproval,
+  excludedRelativePath,
   inputFingerprint,
   isProfileTool,
   isWriteTool,
@@ -278,6 +280,90 @@ describe('restrictedRelativePath', () => {
     expect(restrictedRelativePath('keys/server.PEM')).toBe('path_secret');
     expect(restrictedRelativePath('nested\\deep\\id.key')).toBe('path_secret');
     expect(restrictedRelativePath('environment.ts')).toBeNull();
+  });
+});
+
+describe('excluded globs', () => {
+  const excluded = ['*.tfvars', 'fixtures/private/**', 'dumps/*.sql', 'a/**/z.txt', 'vault'];
+  const matches = (relative: string, globs: readonly string[] = excluded) => excludedRelativePath(relative, globs);
+
+  it('matches a one-segment glob against every segment at any depth', () => {
+    for (const relative of ['prod.tfvars', 'infra/prod.tfvars', 'a/b/c/d/prod.tfvars', 'vault', 'src/vault/key.json', 'vault/deep/er/file']) expect(matches(relative), relative).toBe(true);
+    for (const relative of ['prod.tfvars.md', 'infra/tfvars', 'src/vaulted/key.json', 'src/my-vault.ts']) expect(matches(relative), relative).toBe(false);
+  });
+
+  it('anchors a multi-segment glob at the workspace root, with * inside one segment and ** across any number', () => {
+    for (const relative of ['fixtures/private/a.json', 'fixtures/private/x/y/z.json', 'fixtures/private', 'dumps/full.sql', 'a/z.txt', 'a/b/z.txt', 'a/b/c/d/z.txt']) expect(matches(relative), relative).toBe(true);
+    for (const relative of ['dumps/nested/full.sql', 'dumps/full.sql.bak', 'src/dumps/full.sql', 'src/fixtures/private/a.json', 'fixtures/public/a.json', 'fixtures/privates/a.json', 'b/a/z.txt', 'a/z.txt.bak']) expect(matches(relative), relative).toBe(false);
+  });
+
+  it('matches case-insensitively, as the secret patterns do, and splits on either separator', () => {
+    expect(matches('Prod.TFVars')).toBe(true);
+    expect(matches('FIXTURES/Private/a.json')).toBe(true);
+    expect(matches('fixtures\\private\\a.json')).toBe(true);
+  });
+
+  it('matches nothing without globs and handles a glob made only of **', () => {
+    expect(matches('src/index.ts', [])).toBe(false);
+    expect(matches('src/index.ts', ['**'])).toBe(true);
+    expect(matches('src/index.ts', ['*'])).toBe(true);
+    expect(createExcludedMatcher([])(['src'])).toBe(false);
+  });
+
+  it('does not take exponential time on many ** segments', () => {
+    const glob = Array.from({ length: 16 }, () => '**').join('/');
+    const segments = [...Array.from({ length: 60 }, (_, index) => `d${index}`), 'x'];
+    const started = Date.now();
+    expect(createExcludedMatcher([glob])(segments)).toBe(true);
+    expect(createExcludedMatcher([`${Array.from({ length: 15 }, () => '**').join('/')}/never`])(segments)).toBe(false);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it('judges a path_excluded for a basename glob at depth, an anchored glob and **, for existing and new files', async () => {
+    const judge = async (raw: string) => {
+      const judgement = await judgeWorkspacePath(workspace, raw, excluded);
+      return judgement.allowed ? 'allowed' : judgement.reason;
+    };
+    for (const raw of ['prod.tfvars', 'nested/deep/new.tfvars', 'fixtures/private/a.json', path.join(workspace, 'fixtures', 'private', 'x', 'y.json'), 'dumps/new.sql', 'a/b/z.txt', 'src/vault/key']) {
+      expect(await judge(raw), raw).toBe('path_excluded');
+    }
+  });
+
+  it('approves a path that only looks similar', async () => {
+    for (const raw of ['src/index.ts', 'prod.tfvars.md', 'dumps/nested/full.sql', 'fixtures/public/a.json', 'fixtures/privates/a.json', 'src/fixtures/private/a.json', 'src/vaulted.ts']) {
+      expect(await judgeWorkspacePath(workspace, raw, excluded), raw).toMatchObject({ allowed: true });
+    }
+  });
+
+  it('keeps the reserved and secret reasons ahead of an exclusion and leaves everything open without exclusions', async () => {
+    expect(await judgeWorkspacePath(workspace, '.env', ['.env'])).toEqual({ allowed: false, reason: 'path_secret' });
+    expect(await judgeWorkspacePath(workspace, '.git/config', ['**'])).toEqual({ allowed: false, reason: 'path_reserved' });
+    expect(await judgeWorkspacePath(workspace, 'prod.tfvars')).toMatchObject({ allowed: true });
+    expect(await judgeWorkspacePath(workspace, 'prod.tfvars', [])).toMatchObject({ allowed: true });
+  });
+
+  it('judges the real location and the lexical path, so a symlink cannot launder an excluded file', async () => {
+    await mkdir(path.join(workspace, 'fixtures', 'private'), { recursive: true });
+    await writeFile(path.join(workspace, 'fixtures', 'private', 'a.json'), '{}');
+    await symlink(path.join(workspace, 'fixtures', 'private', 'a.json'), path.join(workspace, 'innocent.json'));
+    await symlink(path.join(workspace, 'src', 'index.ts'), path.join(workspace, 'prod.tfvars'));
+    expect(await judgeWorkspacePath(workspace, 'innocent.json', excluded)).toEqual({ allowed: false, reason: 'path_excluded' });
+    expect(await judgeWorkspacePath(workspace, 'prod.tfvars', excluded)).toEqual({ allowed: false, reason: 'path_excluded' });
+  });
+
+  it('denies an excluded file for review and edit through the approval evaluation, and approves its neighbour', async () => {
+    const options = (mode: 'review' | 'edit') => ({ mode, workspace, excludedGlobs: excluded });
+    expect(await evaluateApproval(options('review'), request('file_system.read_file', { filePath: 'fixtures/private/a.json' }))).toEqual({ decision: 'deny', reason: 'path_excluded' });
+    expect(await evaluateApproval(options('edit'), request('file_system.write_file', { filePath: 'infra/main.tfvars', content: '' }))).toEqual({ decision: 'deny', reason: 'path_excluded' });
+    expect(await evaluateApproval(options('edit'), request('file_system.search_replace', { filePath: 'dumps/full.sql', changes: [] }))).toEqual({ decision: 'deny', reason: 'path_excluded' });
+    expect(await evaluateApproval(options('review'), request('file_system.read_file', { filePath: 'src/index.ts' }))).toEqual({ decision: 'approve', reason: null });
+  });
+
+  it('records the exclusion in the ledger when the handler denies it', async () => {
+    const handler = new ApprovalHandler({ mode: 'review', workspace, excludedGlobs: excluded });
+    const verdict = await handler.decide(request('file_system.read_file', { filePath: 'fixtures/private/a.json' }));
+    expect(verdict).toEqual({ decision: 'deny', reason: 'path_excluded' });
+    expect(handler.ledger.all()).toMatchObject([{ tool: 'file_system.read_file', decision: 'deny', reason: 'path_excluded' }]);
   });
 });
 

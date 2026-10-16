@@ -5,7 +5,7 @@ import { access, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   BackendCallbacks, BackendCapabilities, BackendKind, BackendRunHandle, BackendStartResult, EventSeverity,
-  ProcessRecord, ResultSummary, RuntimeCheck, StartRunInput, SupervisorBackend, SupervisorConfig, SupervisorError
+  ProcessRecord, ResultSummary, RuntimeCheck, StartRunInput, SupervisorBackend, SupervisorConfig, SupervisorError, ToolCallCounts
 } from '../contracts.js';
 import { supervisorError } from '../contracts.js';
 import { describeFailure, reportBackgroundFailure } from '../diagnostics/background.js';
@@ -225,6 +225,7 @@ class AppServerRun {
   private readonly startReported = deferred<void>();
   private readonly hurried = deferred<void>();
   private readonly emittedEffects = new Set<string>();
+  private readonly toolCalls: ToolCallCounts = { executed: 0, deniedByHandler: 0, deniedByPolicy: 0 };
   private readonly background = new Set<Promise<unknown>>();
   private readonly conditions: SupervisorCondition[] = [];
   private readonly warnings: string[] = [];
@@ -730,8 +731,11 @@ class AppServerRun {
     const name = TOOL_NAMES[effect.tool] ?? effect.tool;
     const location = effect.path === null ? {} : { path: effect.path };
     if (effect.outcome === 'executed') {
+      this.toolCalls.executed += 1;
       this.emit('tool_call', 'info', { name, tool: effect.tool, kind: TOOL_KINDS[name] ?? 'other', outcome: effect.outcome, entry_id: effect.entryId, ...location });
     } else if (effect.outcome === 'permission_denied_by_handler' || effect.outcome === 'permission_denied_by_policy') {
+      if (effect.outcome === 'permission_denied_by_handler') this.toolCalls.deniedByHandler += 1;
+      else this.toolCalls.deniedByPolicy += 1;
       const reason = this.handler.ledger.forEffect(effect.entryId)?.reason ?? effect.outcome;
       this.emit('tool_denied', 'warning', { tool: effect.tool, outcome: effect.outcome, reason, entry_id: effect.entryId, ...location });
     }
@@ -768,7 +772,7 @@ class AppServerRun {
     }
     await this.eventChain;
     const warnings = [...outcome.warnings, ...this.warnings];
-    const usage = this.usage?.state;
+    const usage = this.usage ? { ...this.usage.state, toolCalls: { ...this.toolCalls } } : undefined;
     const result: ResultSummary | undefined = outcome.state === 'completed'
       ? { stopReason: outcome.stopReason ?? 'end_turn', summary: bounded?.text ?? '', ...(warnings.length > 0 ? { warnings } : {}) }
       : undefined;

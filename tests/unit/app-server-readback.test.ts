@@ -132,6 +132,23 @@ describe('compareReadback on unit inputs', () => {
     });
   }
 
+  it('expects every merged exclusion in the read-back denylist of each profile tool', () => {
+    const excluded = ['*.tfvars', 'fixtures/private/**'];
+    const withExclusions = buildSessionConfig({ mode: 'edit', workspace, runDirectory: '/srv/runs/run-0003', maxTurns: 5, excludedGlobs: excluded });
+    const clean = cleanWire(withExclusions.expectation, 'off');
+    expect(compareReadback(withExclusions.expectation, observe(clean), { checkThinking: true })).toEqual([]);
+    const withoutExclusions = cleanWire(plan.expectation, 'off');
+    expect(paths(compareReadback(withExclusions.expectation, observe(withoutExclusions), { checkThinking: true }))).toEqual([
+      'config.tools.read_file.denylist', 'config.tools.write_file.denylist', 'config.tools.edit.denylist'
+    ]);
+    for (const dropped of [`${workspace}/*.tfvars`, `${workspace}/**/*.tfvars`, `${workspace}/fixtures/private/**`]) {
+      const wire = cleanWire(withExclusions.expectation, 'off');
+      const policy = (((wire.effective as Json).config as Json).tools as Record<string, Json>).read_file as Json;
+      policy.denylist = (policy.denylist as string[]).filter((entry) => entry !== dropped);
+      expect(paths(compareReadback(withExclusions.expectation, observe(wire), { checkThinking: true })), dropped).toEqual(['config.tools.read_file.denylist']);
+    }
+  });
+
   it('permits only the pinned bundled plugin catalogue, never user/project/registry lookalikes', () => {
     const wire = cleanWire(plan.expectation, 'off');
     const runtime = (wire.runtime as Json).runtime as Json;

@@ -52,6 +52,12 @@ describe('usageFromStats', () => {
     expect(toUsageState(summary)).toEqual({ tokensUsed: 15, promptTokens: 10, completionTokens: 5, cachedTokens: null, modelCalls: null, costSource: "runtime-stats-prices" });
   });
 
+  it('keeps a model-call count that Vibe did not report as null beside the token counts', () => {
+    const state = toUsageState(usageFromStats(null, stats({ promptTokens: 40, completionTokens: 10, cachedTokens: 5, modelCalls: null })));
+    expect(state).toMatchObject({ promptTokens: 40, completionTokens: 10, cachedTokens: 5, modelCalls: null, tokensUsed: 50 });
+    expect('modelCalls' in state).toBe(true);
+  });
+
   it('builds the usage state with a non-authoritative cost and the context window', () => {
     const state = toUsageState(usageFromStats(stats(), stats({ promptTokens: 1000, completionTokens: 1000 }), 4096));
     expect(state).toMatchObject({ tokensUsed: 2000, contextSize: 4096, cost: { amount: expect.closeTo(0.0024, 10), currency: 'USD', authoritative: false } });
@@ -158,6 +164,15 @@ describe('UsageTracker across a session handoff', () => {
     expect(later.summary).toMatchObject({ promptTokens: 1300, completionTokens: 300, tokensUsed: 1600, modelCalls: 4 });
     expect(later.summary.costAmount).toBeCloseTo((600 * 0.4 + 400 * 0.04 + 200 * 2 + 200 * 0.4 + 100 * 0.04 + 100 * 2) / 1e6, 12);
     expect(tracker.stats?.promptTokens).toBe(300);
+  });
+
+  it('hands the carried prompt, completion, cached and model-call totals to the persisted usage state', () => {
+    const tracker = new UsageTracker(stats(), {});
+    tracker.update(stats({ promptTokens: 1000, completionTokens: 200, cachedTokens: 400, modelCalls: 3 }));
+    tracker.handoff(stats({ promptTokens: 0, completionTokens: 0, cachedTokens: 0, modelCalls: 0 }));
+    tracker.update(stats({ promptTokens: 300, completionTokens: 100, cachedTokens: 100, modelCalls: 1 }));
+    expect(tracker.state).toMatchObject({ promptTokens: 1300, completionTokens: 300, cachedTokens: 500, modelCalls: 4, tokensUsed: 1600, costSource: 'runtime-stats-prices' });
+    expect(tracker.state.toolCalls).toBeUndefined();
   });
 
   it('counts a reset that already holds usage in full and keeps what was carried', () => {

@@ -6,13 +6,14 @@ import { loadResolvedConfig } from '../config/config.js';
 import { readNdjsonRecovering } from '../persistence/ndjson.js';
 import { supervisorError } from '../contracts.js';
 import { fail } from './fail.js';
+import { runsUsefulness } from './runs/usefulness.js';
 
 export const MAX_SESSION_DIRECTORIES = 128;
 export const SESSION_SCAN_LIMIT_MESSAGE = 'The isolated session namespace exceeds its safe scan limit; inspect it manually.';
 const SESSION_NAME = /^session-[A-Za-z0-9]{6}$/;
 const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_RUN_JSON_BYTES = 100 * 1024 * 1024;
-const RUNS_USAGE = 'Usage: vibe-supervisor runs [--config <path>] <list|show|tail|cleanup> [run-id]';
+const RUNS_USAGE = 'Usage: vibe-supervisor runs [--config <path>] <list|show|tail|cleanup|usefulness|verify|export> [run-id]';
 const REPORT_USAGE = 'Usage: runs verify|export <run-id> --out <directory> [--include patch,events] [--validation <file>]';
 
 export interface RunsServices {
@@ -34,7 +35,8 @@ export const RUNS_SUBCOMMANDS: Readonly<Record<string, RunsSubcommand>> = {
   tail: tailRun,
   cleanup: cleanupRuns,
   verify: reportRun,
-  export: reportRun
+  export: reportRun,
+  usefulness: runsUsefulness
 };
 
 export async function runsCommand(args: readonly string[], services: RunsServices): Promise<void> {
