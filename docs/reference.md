@@ -120,8 +120,8 @@ A start records the `policy_revision` it was admitted under in its run record an
 - `serve --stdio [--config <path>] [--isolated]` runs the MCP server. It starts without `paths.vibe_pin_manifest`; every readiness check and start then fails closed with `VSUP_CONFIG_INVALID` and the remedy, because the policy is reread strictly each time.
 - `prepare check --kit <directory> --config <file>` runs the [matched no-inference check](preparation.md) once and saves private evidence; it does not start inference.
 - `validation prepare|clean` manages [owned offline validation copies](validation-workspace.md), without running general project checks.
-- `runs verify|export <run-id> --out <directory>` writes [sanitized verification/report bundles](workflow-acceptance.md); optional patch/events and coordinator validation manifests retain exact bindings.
-- `runs list|show|tail|cleanup` inspects or cleans saved runs according to ownership and fresh-export checks.
+- `runs verify|export <run-id> --out <directory>` writes [sanitized verification/report bundles](workflow-acceptance.md); optional patch/events and coordinator validation manifests retain exact bindings. The report's `execution.state` keeps the outcome after close and `timestamps.started` the first observed running time; with `--include events`, the `reasoning_observation` diagnostic keeps `streamed_entries`, `history_entries` and `history_audited`.
+- `runs list|show|tail|cleanup` inspects or cleans saved runs according to ownership and fresh-export checks. A saved record carries `state`, the terminal `execution_state` once the run has settled (kept through `closing` and `closed`), and `started_at` once the run was observed running.
 
 Use `vibe-supervisor <command> --help` for current options. The explicit selected config and the connection already open in a desktop client are separate facts; identify the owning connection by a `vibe_status` readiness call and its `server_version`, which works whether or not the client protocol has an initialization handshake, and confirm the five tools are callable there.
 

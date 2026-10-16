@@ -22,7 +22,7 @@ describe('persisted creator version', () => {
 });
 
 describe('persisted execution outcome', () => {
-  it.each(['completed', 'failed', 'cancelled'] as const)('roundtrips %s and leaves legacy closed records unknown', (executionState) => {
+  it.each(['completed', 'failed', 'cancelled'] as const)('roundtrips %s and leaves records written without an outcome unknown', (executionState) => {
     const wire = runToWire({ ...record, executionState });
     expect(wire.execution_state).toBe(executionState);
     expect(runFromWire(wire).executionState).toBe(executionState);

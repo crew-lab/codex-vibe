@@ -1,22 +1,23 @@
 # vibe-supervisor development plan
 
-One plan for everything from here: landing the integrated 2.0.1 on main, packaging and proving it on the target, publishing it as the first 2.x release, the 2.1 and 2.2 lines, the outreach that rides on them, and what never gets built. Written 2026-10-15 and revised the same day three times: after the owner merged the 2.0.1 cleanup ahead of the 2.0.0 release, after the parallel workflow line (`codex/workflow-acceptance-reporting` at `2e920d3`) was integrated, and after the integration reached main (`6c645e3`) and GitHub was reduced to `main`. This plan supersedes both lines' earlier plans; they stay reachable at `881464c` and `2e920d3`. Not shipped.
+One plan for everything from here: landing the integrated 2.0.1 on main, packaging and proving it on the target, publishing it as the first 2.x release, the 2.1 and 2.2 lines, the outreach that rides on them, and what never gets built. Written 2026-10-15 and revised the same day three times: after the owner merged the 2.0.1 cleanup ahead of the 2.0.0 release, after the parallel workflow line (`codex/workflow-acceptance-reporting` at `2e920d3`) was integrated, and after the integration reached main (`6c645e3`) and GitHub was reduced to `main`; revised again on 2026-10-16 after the target sitting. This plan supersedes both lines' earlier plans; they stay reachable at `881464c` and `2e920d3`. Not shipped.
 
 The reasons behind it are in the [development strategy](../docs/development-strategy.md); the live status is in the [Handoff](../Handoff.md); the evidence behind each choice is in [marketing/strategy.md](../marketing/strategy.md), [marketing/interest.md](../marketing/interest.md), [research/features-2026-10-14.md](../research/features-2026-10-14.md) and [research/antigravity-2026-10-14.md](../research/antigravity-2026-10-14.md). Two companions hold the long parts: the [release notes template](release-notes-2.0.0.md) (written for 2.0.0, reused for 2.0.1) and the [2.1 design sketches](2.1-designs.md).
 
 ## 1. Where we are
 
+Revised 2026-10-16 after the target sitting; the hosted results are in [research/evidence/hosted-2.0.1-2026-10-16/](../research/evidence/hosted-2.0.1-2026-10-16/REPORT.md) and the packaging results in [research/evidence/package-kit-identity-2026-10-15/](../research/evidence/package-kit-identity-2026-10-15/REPORT.md).
+
 | Item | State |
 |---|---|
-| Main | `6c645e3`, pushed 2026-10-15: version 2.0.1 with the one-version cleanup and the integrated workflow line. No `docs/history/`, `docs/reviews/`, ADR 0003 or `v1-*` files; `tests/unit/no-legacy-references.test.ts` guards it. `npm run verify:release` passes on the exact pushed tree under Node 20.19.0: 88 files, 1,286 tests, acceptance, secret scan, SBOM |
-| Integration | Done (`6c645e3`). The workflow's evidence packet is out of the tree and summarized in `docs/acceptance.json`; the target brief's amendments are in `docs/target-acceptance.md`. Two things were fixed during it: a private project name in `marketing/strategy.md` became `<site-project>`, and a readiness race in the fake server's wedge step (it reported `wedged` before installing its SIGTERM handlers) |
-| Workflow line | `91afad4` (implementation) and `2e920d3` (status and evidence), both in main's history; the remote branch is deleted. Its candidate, archive `d1fd22ec04e50048c052cdf013b4d235b525dffc2efb11596dd29f8253003f6a`, passed release verification (1,260 tests in 87 files), the offline smoke, the no-inference conformance check on the installed Vibe 2.26.1 and installed SDK readiness; zero hosted starts |
-| v2.0.0 draft | Created by the owner with target `f2c2119` (`0101f28` plus two non-runtime fixes), archive `485ecce329560507e54f1450790629f877e3623754e56ea11343a81dc753576f`. Its runtime is the one the target rejected (ADR 0005, ADR 0006); no target evidence. Recommendation: do not publish |
-| Gates | Every gate of the integrated build is open in `docs/acceptance.json`; the workflow candidate's results and the 2.0.0 source's node-floor run are recorded as evidence for those builds only |
-| Target kit | `docs/target-acceptance.md` is the procedure; `package:rc` writes `preparation-kit-<version>/` beside the archive, and `prepare check` with that kit replaces the direct conformance-script run |
-| Installations | The desktop connection is still on an earlier workflow candidate; the workflow candidate was installed only in a disposable prefix |
+| Main | 2.0.1 with the one-version cleanup, the integrated workflow line (`6c645e3`), the target's packaging repair (`44dc6f8`) and reporting repair (`2a49abd`). No `docs/history/`, `docs/reviews/`, ADR 0003 or `v1-*` files; `tests/unit/no-legacy-references.test.ts` guards it. `npm run verify:release`: 89 files, 1,305 tests |
+| Frozen archive | Packaged on the target from `44dc6f8` under Node 20.19.0: archive `7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e`, candidate and kit identity `8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4`. The first target packet (`8b288b8`) was rejected because its kit named bytes the archive did not hold; the preparing machine's `9d2bbde` package is the reference build only. Main's runtime has changed since (`2a49abd`), so a build of main is a new candidate |
+| Installations | The frozen archive is installed side by side on the target and selected in the desktop registration with the persistent Node 20.19.0; rollback backups kept |
+| Gates | `VERIFIED` for the frozen archive: package and kit identity, Node 20.19.0 floor, no-inference conformance, installed and native readiness. Rejected: the hosted review (answer quality) and, reported only on an unmerged branch, the hosted edit (its contract). Open: the disconnect (authorized, next), `permission = "ask"` (both halves observed, per-tool report not in the repository), thinking effect, experiments attribution, nested gating (NOT EXERCISED), clean-account installation |
+| Hosted allowance | Three starts authorized for the sitting; two used; the last is authorized for the disconnect only |
+| Target kit | `docs/target-acceptance.md` is the procedure; `package:rc` writes `preparation-kit-<version>/` beside the archive and installs the exact archive offline to prove the binding before it reports success |
 | Packaging cache | `/Users/r.senchuk/.npm`, the default npm cache on the preparing machine; its `_cacache` is populated (about 1.3 GB). Not an owner input |
-| Repository | GitHub holds `main` only; every other branch was deleted after an ancestry check against `origin/main`. Locally: `main` in the primary checkout and this session's worktree; the old worktrees and merged local branches are removed |
+| Repository | GitHub holds `main` only; the target's unmerged `explore_project_details` branch, which added a worker other than Vibe, was deleted on 2026-10-16 |
 | Outreach | Drafts only: the dev.to article, the interest note's asks, the marketing calendar. Nothing posted |
 
 ## 2. Delivered
@@ -30,6 +31,8 @@ The reasons behind it are in the [development strategy](../docs/development-stra
 | Workflow 2: observable preparation | Token, model-call, model and price observations; the version-matched kit and private receipt; readiness with workspace eligibility, candidate, preparation and expected-candidate drift; dispatch gated on the pass | 1,258 tests, release checks, offline smoke |
 | Workflow 3: validation and coordination | Owned validation copies with offline dependency preparation; the main-chat coordinator and the evidence-backed fallback in the skill | 1,260 tests in 87 files; no-inference conformance and installed SDK readiness on the target |
 | Integration | One line on main with both sets of work (`6c645e3`) | 88 files, 1,286 tests in `verify:release` on the pushed tree |
+| Package and kit binding | Identity captured right after `npm pack`; the exact archive installed offline and compared with the kit before success (`44dc6f8`) | 89 files, 1,296 tests in `package:rc` on the target under Node 20.19.0; the corrected archive's conformance and native readiness |
+| Execution provenance | The outcome kept through close as `execution_state`, `started_at` from the first running observation, the count-only `reasoning_observation` diagnostic (`2a49abd`) | 89 files, 1,305 tests; not in the frozen archive |
 
 Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily cost ledger and the other items in section 6 remain separate from the per-run primitives above.
 
@@ -39,18 +42,19 @@ Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily co
 |---|---|---|---|
 | 1 | Done: integration on main (`6c645e3`), pushed; GitHub reduced to `main` | — | — |
 | 2 | Done: the owner deleted the v2.0.0 draft (2026-10-15) | — | — |
-| 3 | Done: packaged from `9d2bbde` (after the pnpm fix); archive `73c28081…`, kit `4c0fdc17…`; identity recorded in `docs/acceptance.json` | — | — |
+| 3 | Done: the reference package from `9d2bbde` on the preparing machine | — | — |
 | 4 | Done: populated pnpm validation passed on a public fixture after fixing the lockfile check | — | — |
-| 5 | On the target: fetch main via git, fill an offline npm cache with the locked versions, `npm run package:rc` under Node 20.19.0, record the target-built archive and kit SHA-256 (archives are not byte-reproducible across machines; the target tests and the release publishes those bytes) | Target agent | **Fetch main on the target** |
-| 6 | Run `docs/target-acceptance.md` on the target-built archive; record the results on an evidence branch | Target agent | **Authorizations (1 to 3 covered when the sitting serves an implementation request), three hosted runs, name the evidence folder** |
-| 7 | Clean-account installation of the same archive | You | **Do it, with the packet in 4.6** |
-| 8 | Review and merge the evidence branch into main | Coordinator | Yes to the merge and `make push` |
-| 9 | Repo readiness: rename, description, topics | Coordinator prepares | **Decide the rename; run two `gh` commands** |
-| 10 | Publish v2.0.1 as a draft, verify, then publish | Coordinator prepares | **Run `gh release create`, then `gh release edit`** |
-| 11 | Decide the plugin scaffold (branches and worktrees are done) | You | Decided 2026-10-15: deleted; rebuilt in 2.2 (4.11) |
-| 12 | 2.1 merges to main | Agents, Coordinator | Scope reading for Antigravity; the wheel download |
+| 5 | Done on the target: packaging from git (first packet rejected, corrected archive `7978719c…`), installation, pin, `doctor`, one `prepare check` PASS, SDK and native readiness PASS; recorded in `docs/acceptance.json` | — | — |
+| 6 | Done, rejected: the hosted review (answer quality); the hosted edit, reported on an unmerged branch (its contract). Neither retried | — | — |
+| 7 | Next: the MCP-client disconnect with the last authorized start, on the installed archive; evidence branch pushed | Target agent | Given 2026-10-16 (authorization 5) |
+| 8 | Review and merge the disconnect evidence branch | Coordinator | Yes to the merge and `make push` |
+| 9 | Clean-account installation of the frozen archive | You | **Do it, with the packet in 4.6** |
+| 10 | Decide worker answer quality against another bounded hosted allowance: spend one on the review and edit gate, or publish with it open and the rejections stated as a limit. Decide the bytes too: the tested frozen archive without `2a49abd`, or a new frozen build of main, which needs its own preparation, readiness and hosted evidence | You | **Both decisions** |
+| 11 | Repo readiness: rename, description, topics | Coordinator prepares | **Decide the rename; run two `gh` commands** |
+| 12 | Publish v2.0.1 as a draft, verify, then publish | Coordinator prepares | **Run `gh release create`, then `gh release edit`** |
+| 13 | 2.1 merges to main | Agents, Coordinator | Scope reading for Antigravity; the wheel download |
 
-Open decisions that do not block packaging are in section 4.12. Nothing else blocks 2.0.1 stable. Steps 4 to 7 can overlap once step 3 is done; step 9 can happen any time before the first outreach post.
+Open decisions that do not block the release are in section 4.12. Steps 7 and 9 can overlap; step 11 can happen any time before the first outreach post.
 
 ## 4. 2.0.1 to published
 
@@ -59,6 +63,8 @@ Open decisions that do not block packaging are in section 4.12. Nothing else blo
 Landed as `6c645e3` and pushed. `git merge --no-ff 2e920d3` on `claude/integrate-workflow` (from `881464c`). The workflow line's product work is kept whole: `src/acceptance/`, `src/reporting/`, `src/preparation/`, `src/validation/`, `src/cli/prepare.ts`, `src/cli/validation.ts`, the managed-config endpoint and bundled-skill read-back, the run-manager, contract, serialization, CLI and MCP schema changes, the tests and the schemas; ADR 0005 and ADR 0006; `docs/preparation.md`, `docs/validation-workspace.md`, `docs/workflow-acceptance.md`. Main's rules are kept: version 2.0.1 everywhere, no `docs/history/` or `docs/reviews/`, neutral script names (the workflow's edit to `tests/v1-disconnect-client.test.mjs` landed on `tests/disconnect-client.test.mjs`), candidate names out of every scanned file. The evidence packet `docs/reviews/workflow-2026-10-15/` left the tree and is summarized in `docs/acceptance.json` (`evidence_builds`, the `workflow-candidate-*` entries); `docs/history/v2-target-brief.md` stays deleted, and its two amendments are in `docs/target-acceptance.md` (step 4 runs `prepare check`, the skills and managed-config criteria, the network rule, the owner's authorization clarification). Before the merge commit: lint, typecheck, build, the full suite, acceptance, secret scan, `git diff --check`, no unmerged path. The first full run failed one test under load (the fake server's wedge step signalled readiness before installing its signal handlers); the fixture now installs them first, and the rerun passed. No separate cold review of the merge diff was run; the merged code is the workflow line's own, verified on its candidate, and the resolution touched documents, versions and one fixture.
 
 ### 4.2 Package (coordinator, preparing machine)
+
+Done as the reference build (`9d2bbde`). The archive under test was then packaged on the target from git, because archives are not byte-reproducible across machines; the identity record in `docs/acceptance.json` names that archive. The commands below remain the way to package a reference build.
 
 Package in a detached worktree at the exact main commit that carries the integration, under Node 20.19.0, with the default cache. The worktree keeps main's checkout untouched.
 
@@ -111,6 +117,8 @@ tar -tzf vibe-supervisor-2.0.1.tgz | grep -E '^package/(docs/(history|reviews)|m
 
 ### 4.3 Target run (target agent, target machine)
 
+Run on 2026-10-15 and 2026-10-16 with the target packaging its own archive instead of receiving one: steps 1 to 5 passed on the corrected archive, step 6 stopped at the rejected review, and the edit was reported later from an unmerged branch. Step 7, the disconnect, is authorized and next. The transfer and rebuild instructions below described the earlier plan to ship the preparing machine's archive.
+
 **Transfer (you).** Copy `vibe-supervisor-2.0.1.tgz`, `SHA256SUMS` and the `preparation-kit-2.0.1/` directory from `release/2.0.1/` to the target by whatever private means you use, and tell the target agent the archive's SHA-256 and the kit's `candidate_sha256` from the Handoff.
 
 **One checkout on the target** at the packaged commit, for the procedure, the scripts and the official client SDK, plus the installed archive:
@@ -147,7 +155,7 @@ npm install --ignore-scripts --offline --prefix "$PREFIX" "$ARCHIVE" && "$PREFIX
 | 3. `pin-manifest`, review it, `doctor` | 2 | pin half of the conformance check |
 | 4. `prepare check` with the frozen kit | 3 | `target-no-inference-conformance-check`, config half of `permission-ask-visible-in-effective-config`, setting half of `thinking-off-effect`, the proxy half of `experiments-fetch-off` (the gate stays open without attribution) |
 | 5. Native readiness with `expected_candidate` | 3 | `native-readiness-on-candidate` |
-| 6. One review (probe, reasoning watcher) and one edit with an acceptance contract, verified with the fixture verifier, closed with an assessment, exported | 4: two hosted runs | `hosted-review-edit-confirmation`, handler half of `permission-ask`, effect half of `thinking-off-effect`, `nested-run-typescript-shape-and-gating` |
+| 6. One review (probe, reasoning counts) and one edit with an acceptance contract, verified with the fixture verifier, closed with an assessment, exported | 4: two hosted runs | `hosted-review-edit-confirmation`, handler half of `permission-ask`, effect half of `thinking-off-effect`, `nested-run-typescript-shape-and-gating` |
 | 7. One observed MCP-client disconnect | 5: one hosted run | `mcp-client-disconnect-hosted` |
 
 Authorizations 1 to 3 are covered by the request itself when the sitting serves a Vibe implementation request (AGENTS.md, task authorization); otherwise each is a separate yes. The same sitting answers the open protocol questions in the Handoff; the agent writes each answer, with the observation behind it, into `$EVIDENCE/FINDINGS.md`. Placeholders from AGENTS.md ("Recording target evidence") apply to every file before it leaves the target. When the sitting ends, pass or stop, the agent writes a digest file into the folder:
@@ -208,7 +216,7 @@ Every row fails closed, so a finding costs a fix and a new sitting, never a sile
 | Approved effects lack `execute` / `ask` / `user` | First approved read fails `unapproved_effect` | `src/backends/app-server/events.ts`, the approval-metadata check in the effect validator: accept the observed triple only for an effect linked to the handler's own ledger record with equal fingerprint, tool and turn | Observed triple plus ledger link passes, without link fails, in `app-server-events.test.ts`; a scenario in `tests/fixtures/app-server-scenarios/` | Yes: it changes what the event validator counts as approved | Coordinator drafts; you approve |
 | Unknown history entry kind | `unknown_entry_kind` naming the kind | `protocol.ts` `parseHistoryEntry` gains a case; `events.ts` ignores it only if its schema cannot carry a tool call or effect | A scenario with the kind in the history and in `history/entryAdded` | No if it cannot carry a call; yes if it can | Coordinator |
 | Legitimate `write_file` over the 8 MiB frame cap | `VSUP_OUTPUT_LIMIT` (`line_too_long`) | Document the limit in `docs/reference.md`, or derive the line cap from `limits.max_event_bytes` (bounded above) in `src/backends/app-server.ts` (`MAX_LINE_BYTES`) and `jsonrpc.ts` | Frame at the new cap passes, one byte over fails, in `app-server-jsonrpc.test.ts` | No | You |
-| Thinking stays on | The watcher count grows | Documentation only: `docs/security.md` and `docs/compatibility.md` say reasoning is generated and held in the throwaway store until close | None | No | You |
+| Thinking stays on | `reasoning_observation` reports positive `streamed_entries` or `history_entries` | Documentation only: `docs/security.md` and `docs/compatibility.md` say reasoning is generated and held in the throwaway store until close | None | No | You |
 | Callback expires before 5 s | Callback error before the verdict | `DEFAULT_DECISION_DEADLINE_MS` in `src/backends/app-server/approvals.ts` below the observed expiry; AGENTS.md's "5-second deadline" wording follows | Deadline test at the new value; `approval-stall.json` scenario | No (shorter); the AGENTS.md line is your edit | Coordinator |
 | `maxTurns` not enforced and `modelCalls` null | A review runs past its limit | `checkBudget` in `src/backends/app-server/usage.ts` and the start sequence in `src/backends/app-server.ts` fail closed when the first statistics carry no model-call count; if Vibe never reports one, every run fails, so the real fix counts model calls from history | `stats-usage.json` variant with null `modelCalls` | No | Coordinator |
 | The real install fails the pin (`file-extra`, `file-unsafe`) | `doctor` or the conformance check refuses | Covered-directory rules in `src/backends/app-server/pin.ts`, only for files Vibe itself writes after install, named exactly | A fixture environment with that file in `app-server-pin.test.ts` | No if exact; yes if a directory is excluded | Coordinator; you approve |

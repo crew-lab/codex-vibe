@@ -4,7 +4,7 @@ The 2026-10-16 review completed but its final answer reversed the two negative-n
 
 ## Local repairs and candidate boundary
 
-Execution outcome must survive closing independently of acceptance, and start/finish times must come from actual transitions. Legacy closed records without a saved outcome remain unknown. Count-only structured reasoning diagnostics replace the lexical watcher, without retaining content or weakening the persistence filter. The installed candidate is still the previously frozen 2.0.1 build; source changes require a new frozen archive, matched kit, installation and preparation before hosted validation. No installation, conformance rerun or hosted start is part of this local repair.
+Execution outcome must survive closing independently of acceptance, and start/finish times must come from actual transitions. A closed record written without a saved outcome stays `unknown`. Count-only structured reasoning diagnostics replace the lexical watcher, without retaining content or weakening the persistence filter. The installed candidate is still the previously frozen 2.0.1 build; source changes require a new frozen archive, matched kit, installation and preparation before hosted validation. No installation, conformance rerun or hosted start is part of this local repair.
 
 ## Pinned probe API
 
@@ -55,5 +55,7 @@ Keep the original 12-turn/180-second bounds. Before dispatch the coordinator fre
 ## Bounded continuation proposal — not dispatched
 
 Two starts remain unused from the original authorization: the isolated edit and disconnect test. Preserve those allocations; this repair does not silently spend one on a review retry. After a new packet passes preparation and native readiness, an explicitly resumed continuation can perform those two original tests in order with their original limits and stop rules. Keep the edit's exact two-file acceptance contract, independent disposable verification and bound close assessment; use the existing official-client disconnect procedure for the third gate.
+
+What happened next, 2026-10-16: an unmerged target branch reports that the edit was run on source `2a49abd` and rejected by its acceptance contract; no evidence packet for it is on main. The owner then authorized the one remaining start for the disconnect only, on the installed 2.0.1 candidate. No start is left for the revised review above.
 
 Even if both pass, the prior review stays rejected and hosted review/edit acceptance remains incomplete. A run of the revised review above requires an explicit budget decision: an additional start or a reallocation that defers one of the other gates. Do not replay the failed assignment automatically. Fresh-account installation, provider-side reasoning-generation effect and other platform gates remain unverified until supported by their own evidence.

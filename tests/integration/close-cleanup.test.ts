@@ -342,13 +342,13 @@ describe("run report execution lifecycle", () => {
     } finally { await context.manager.shutdown(); }
   });
 
-  it("keeps legacy closed records without an execution outcome unknown", async () => {
+  it("keeps closed records written without an execution outcome unknown", async () => {
     const context = await setup();
     try {
       await context.manager.initialize();
       const runId = randomUUID();
       const now = new Date().toISOString();
-      const legacy: RunRecord = {
+      const withoutOutcome: RunRecord = {
         schemaVersion: 1, runId, backend: "app-server", mode: "review", state: "closed",
         sourceWorkspace: context.source, workerWorkspace: context.source, createdAt: now, updatedAt: now,
         finishedAt: now, taskSha256: "a".repeat(64),
@@ -356,8 +356,8 @@ describe("run report execution lifecycle", () => {
       };
       const directory = runDir(context.data, runId);
       await mkdir(directory, { recursive: true, mode: 0o700 });
-      await writeFile(path.join(directory, "meta.json"), JSON.stringify(runToWire(legacy)), { mode: 0o600 });
-      const output = path.join(context.parent, "legacy-report");
+      await writeFile(path.join(directory, "meta.json"), JSON.stringify(runToWire(withoutOutcome)), { mode: 0o600 });
+      const output = path.join(context.parent, "without-outcome-report");
       await exportReport({ directory, output });
       const report = JSON.parse(await readFile(path.join(output, "report.json"), "utf8")) as { execution: { state: string }; timestamps: { started: string | null } };
       expect(report.execution.state).toBe("unknown");
