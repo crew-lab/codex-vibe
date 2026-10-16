@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, mkdir, readFile, readdir, stat, writeFile, rm, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, stat, symlink, writeFile, rm, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { parse } from 'smol-toml';
@@ -64,6 +64,72 @@ describe('CLI local setup', () => {
     await configureCodex(true);
     expect(await readFile(file, 'utf8')).toBe(source);
     expect((await readdir(codex)).filter(name => name.startsWith('config.toml.bak-'))).toHaveLength(1);
+  });
+});
+
+describe('CLI runs list across isolated sessions', () => {
+  let errorSpy: ReturnType<typeof vi.spyOn> | undefined;
+  const errors: string[] = [];
+  afterEach(() => { errorSpy?.mockRestore(); errorSpy = undefined; errors.length = 0; });
+
+  const rootRun = '0b0b9a49-8a52-4c3b-9e31-6d0f1f2a3b4c';
+  const sessionRun = '5f2c7e1a-3d4b-4e5f-a6b7-c8d9e0f1a2b3';
+
+  async function dataRoot(): Promise<{ data: string; config: string }> {
+    const data = await tempDir();
+    const config = path.join(data, 'config.toml');
+    await writeFile(config, 'version = 1\nallowed_workspace_roots = []\n', { mode: 0o600 });
+    captureOutput();
+    errorSpy = vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: string | Uint8Array) => { errors.push(String(chunk)); return true; }) as typeof process.stderr.write);
+    return { data, config };
+  }
+
+  async function savedRun(home: string, runId: string): Promise<void> {
+    const directory = path.join(home, 'runs', runId);
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    await writeFile(path.join(directory, 'meta.json'), JSON.stringify({ schema_version: 1, run_id: runId, usage: { tool_calls: { executed: 3, denied_by_handler: 1, denied_by_policy: 1 } } }), { mode: 0o600 });
+  }
+
+  it('lists runs stored under the data root and under isolated sessions', async () => {
+    const { data, config } = await dataRoot();
+    await savedRun(data, rootRun);
+    await mkdir(path.join(data, 'mcp-sessions'), { mode: 0o700 });
+    await savedRun(path.join(data, 'mcp-sessions', 'session-Ab12Cd'), sessionRun);
+    await runCli(['runs', '--config', config, 'list']);
+    const rows = JSON.parse(output.join('')) as Array<{ run_id: string; usage?: { tool_calls?: unknown } }>;
+    expect(rows.map((row) => row.run_id)).toEqual([rootRun, sessionRun]);
+    expect(rows[1]?.usage?.tool_calls).toEqual({ executed: 3, denied_by_handler: 1, denied_by_policy: 1 });
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('refuses more session directories than the router scans', async () => {
+    const { data, config } = await dataRoot();
+    const sessions = path.join(data, 'mcp-sessions');
+    await mkdir(sessions, { mode: 0o700 });
+    await Promise.all(Array.from({ length: 129 }, (_, index) => mkdir(path.join(sessions, `session-${String(index).padStart(6, '0')}`), { mode: 0o700 })));
+    await runCli(['runs', '--config', config, 'list']);
+    expect(output.join('')).toBe('');
+    expect(errors.join('')).toContain('VSUP_INVALID_STATE: The isolated session namespace exceeds its safe scan limit; inspect it manually.');
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('refuses a session directory that resolves through a link', async () => {
+    const { data, config } = await dataRoot();
+    const sessions = path.join(data, 'mcp-sessions');
+    await mkdir(sessions, { mode: 0o700 });
+    const elsewhere = await tempDir();
+    await savedRun(elsewhere, sessionRun);
+    await symlink(elsewhere, path.join(sessions, 'session-Zz99Yy'));
+    await runCli(['runs', '--config', config, 'list']);
+    expect(errors.join('')).toMatch(/VSUP_INVALID_STATE: An unsafe session directory was found/);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('rejects an unknown runs subcommand with the usage line', async () => {
+    const { config } = await dataRoot();
+    await runCli(['runs', '--config', config, 'usefulness-unknown']);
+    expect(errors.join('')).toContain('Usage: vibe-supervisor runs');
+    expect(process.exitCode).toBe(2);
   });
 });
 

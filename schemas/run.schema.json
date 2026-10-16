@@ -158,12 +158,56 @@
         },
         "max_artifact_bytes": {
           "type": "integer"
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_cost_usd": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000
+        },
+        "max_model_calls": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     },
     "usage": {
+      "$ref": "#/$defs/usage"
+    },
+    "excluded_globs": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    },
+    "pin": {
       "type": "object",
-      "additionalProperties": true
+      "additionalProperties": false,
+      "required": [
+        "vibe_version",
+        "manifest_sha256",
+        "record_sha256"
+      ],
+      "properties": {
+        "vibe_version": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "manifest_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "record_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
     },
     "result": {
       "type": "object",
@@ -724,6 +768,93 @@
         "reason"
       ],
       "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tokens_used": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "prompt_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "completion_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cached_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "model_calls": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "context_size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cost_source": {
+          "enum": [
+            "runtime-stats-prices"
+          ]
+        },
+        "cost": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "amount",
+            "currency",
+            "authoritative"
+          ],
+          "properties": {
+            "amount": {
+              "type": "number",
+              "minimum": 0
+            },
+            "currency": {
+              "type": "string"
+            },
+            "authoritative": {
+              "const": false
+            }
+          }
+        },
+        "tool_calls": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "executed",
+            "denied_by_handler",
+            "denied_by_policy"
+          ],
+          "properties": {
+            "executed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "denied_by_handler": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "denied_by_policy": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
     }
   }
 }

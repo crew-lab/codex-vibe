@@ -25,6 +25,9 @@ export interface RunLimits {
   maxEventBytes: number;
   maxTranscriptBytes: number;
   maxArtifactBytes: number;
+  maxTokens?: number;
+  maxCostUsd?: number;
+  maxModelCalls?: number;
 }
 
 export interface WorktreeRecord {
@@ -39,6 +42,12 @@ export interface ProcessRecord {
   version?: string;
 }
 
+export interface ToolCallCounts {
+  executed: number;
+  deniedByHandler: number;
+  deniedByPolicy: number;
+}
+
 export interface UsageState {
   promptTokens?: number;
   completionTokens?: number;
@@ -48,6 +57,31 @@ export interface UsageState {
   tokensUsed?: number;
   contextSize?: number;
   cost?: { amount: number; currency: string; authoritative: false };
+  toolCalls?: ToolCallCounts;
+}
+
+export interface PinIdentity {
+  vibeVersion: string;
+  manifestSha256: string;
+  recordSha256: string;
+}
+
+export const MAX_APPROVAL_LEDGER_RECORDS = 4096;
+
+export interface ApprovalLedgerEntry {
+  callbackId: string;
+  relatedEntryId: string | null;
+  turnId: string | null;
+  tool: string | null;
+  path: string | null;
+  fingerprint: string | null;
+  decision: "approve" | "deny";
+  reason: string | null;
+}
+
+export interface ApprovalLedgerSnapshot {
+  records: ApprovalLedgerEntry[];
+  truncated: boolean;
 }
 
 export interface ResultArtifact {
@@ -119,8 +153,10 @@ export interface RunRecord {
   assessments?: Assessment[];
   policyRevision?: string;
   admittedRoot?: string;
+  excludedGlobs?: string[];
   workspaceSnapshotSha256?: string;
   process?: ProcessRecord;
+  pin?: PinIdentity;
   limits: RunLimits;
   usage?: UsageState;
   preparation?: import("./preparation/evidence.js").PreparationStatus;
@@ -160,6 +196,7 @@ export interface SupervisorConfig {
     maxCostUsd?: number;
   };
   paths?: { vibe?: string; appServer?: string; vibePinManifest?: string };
+  excludedGlobs?: Record<string, string[]>;
 }
 
 export interface StartRunInput {
@@ -171,6 +208,7 @@ export interface StartRunInput {
   runDirectory: string;
   baseRef?: string;
   contextFiles?: string[];
+  excludedGlobs: string[];
   limits: RunLimits;
 }
 
@@ -189,11 +227,15 @@ export interface BackendRunHandle {
   readonly opaque: unknown;
 }
 
+export type BackendStateUpdate = Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "modelObservations" | "preparation" | "pin">> & {
+  approvals?: ApprovalLedgerSnapshot;
+};
+
 export interface BackendCallbacks {
   onEvent(event: Omit<SupervisorEvent, "schemaVersion" | "seq" | "timestamp" | "runId" | "backend">): void | Promise<void>;
   onActivity?(kind: string): void;
   onSpawn?(handle: BackendRunHandle): void;
-  onState(state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "modelObservations" | "preparation">>): void | Promise<void>;
+  onState(state: RunState, update?: BackendStateUpdate): void | Promise<void>;
 }
 
 export interface BackendStartResult {
