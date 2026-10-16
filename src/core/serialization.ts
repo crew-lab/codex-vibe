@@ -24,6 +24,7 @@ export function runToWire(run: RunRecord): JsonObject {
     backend: run.backend,
     mode: run.mode,
     state: run.state,
+    ...(run.executionState ? { execution_state: run.executionState } : {}),
     source_workspace: run.sourceWorkspace,
     worker_workspace: run.workerWorkspace,
     ...(run.worktree ? { worktree: {
@@ -100,6 +101,10 @@ export function runFromWire(value: unknown): RunRecord {
       maxArtifactBytes: numberValue(limits.max_artifact_bytes)
     }
   };
+  if (value.execution_state !== undefined) {
+    if (value.execution_state !== "completed" && value.execution_state !== "failed" && value.execution_state !== "cancelled") throw new TypeError("Invalid persisted execution state");
+    run.executionState = value.execution_state;
+  }
   if (value.acceptance_contract !== undefined) run.acceptanceContract = acceptanceContractSchema.parse(value.acceptance_contract);
   if (value.verification !== undefined) run.verification = verificationSchema.parse(value.verification);
   if (value.assessments !== undefined) run.assessments = parseAssessments(value.assessments);

@@ -1082,7 +1082,10 @@ export class RunManager {
     if (update?.result) runtime.record.result = update.result;
     if (update?.process) runtime.record.process = update.process;
     if (outcome) { await this.settle(runtime, outcome); return; }
-    await this.setState(runtime, state, update);
+    await this.setState(runtime, state, {
+      ...update,
+      ...(state === "running" && !runtime.record.startedAt ? { startedAt: new Date().toISOString() } : {})
+    });
   }
 
   private reportedOutcome(runtime: Runtime, state: RunState, error: SupervisorError | undefined): SettleOutcome | undefined {
@@ -1160,6 +1163,7 @@ export class RunManager {
     const now = new Date().toISOString();
     const lastSeen = [record.createdAt, record.updatedAt, record.launchedAt];
     record.state = "failed";
+    record.executionState = "failed";
     record.error = supervisorError("VSUP_BACKEND_CRASHED", "The supervisor restarted while this one-shot run was active. The task was not resumed or replayed.");
     record.updatedAt = now; record.finishedAt = now;
     const leftover = await this.removeLeftoverPrivateState(runtime, lastSeen);
@@ -1427,6 +1431,8 @@ export class RunManager {
   private async setState(runtime: Runtime, state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "modelObservations" | "preparation"> & { startedAt?: string; finishedAt?: string }>): Promise<void> {
     if (isTerminal(runtime.record.state) && state !== "closing" && state !== "closed") return;
     assertTransition(runtime.record.state, state);
+    if (state === "completed" || state === "failed" || state === "cancelled") runtime.record.executionState = state;
+    else if ((state === "closing" || state === "closed") && !runtime.record.executionState && (runtime.record.state === "completed" || runtime.record.state === "failed" || runtime.record.state === "cancelled")) runtime.record.executionState = runtime.record.state;
     runtime.record.state = state;
     runtime.record.updatedAt = new Date().toISOString();
     if (update?.preparation) runtime.record.preparation = update.preparation;

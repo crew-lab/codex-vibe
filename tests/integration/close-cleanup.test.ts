@@ -22,12 +22,14 @@ afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root,
 class CloseBackend implements SupervisorBackend {
   readonly kind = "app-server" as const;
   callbacks = new Map<string, BackendCallbacks>();
+  announceRunning = false;
   closeGate: Promise<void> | undefined;
   closeFailure: "none" | "throws" | "rejects" = "none";
   closes = 0;
   async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     this.callbacks.set(input.runId, callbacks);
+    if (this.announceRunning) await callbacks.onState("running");
     return { handle: { runId: input.runId, backend: this.kind, opaque: {} }, initialState: "running" };
   }
   async cancel(handle: BackendRunHandle) { await this.callbacks.get(handle.runId)?.onState("cancelled"); }
@@ -267,6 +269,99 @@ describe("frozen patch assessment", () => {
       expect(report.assessments).toHaveLength(2);
       expect(JSON.stringify(report)).not.toContain(context.source);
       await expect(exportReport({ directory: runDir(context.data, started.run_id), output: exported })).rejects.toThrow(/already exists/);
+    } finally { await context.manager.shutdown(); }
+  });
+});
+
+describe("run report execution lifecycle", () => {
+  it.each(["completed", "failed", "cancelled"] as const)("preserves a %s review outcome and observed start time after close", async (outcome) => {
+    const backend = new CloseBackend();
+    backend.announceRunning = true;
+    const context = await setup(backend);
+    try {
+      const started = await context.manager.reviewStart({ task: "review lifecycle", cwd: context.source });
+      await waitFor(() => stateOf(context.manager, started.run_id), (state) => state === "running");
+      const callbacks = backend.callbacks.get(started.run_id)!;
+      const directory = runDir(context.data, started.run_id);
+      const metaPath = path.join(directory, "meta.json");
+      const firstRunning = await waitFor(
+        () => readFile(metaPath, "utf8").then((text) => JSON.parse(text) as { started_at?: string }),
+        (meta) => typeof meta.started_at === "string"
+      );
+      expect(firstRunning.started_at).toBeTruthy();
+      await callbacks.onState("running", { modelObservations: [] });
+      const repeatedRunning = JSON.parse(await readFile(metaPath, "utf8")) as { started_at?: string };
+      expect(repeatedRunning.started_at).toBe(firstRunning.started_at);
+      if (outcome === "completed") {
+        await callbacks.onEvent({ source: "supervisor", type: "diagnostic", severity: "info", data: {
+          reason: "reasoning_observation", streamed_entries: 0, history_entries: null, history_audited: false, detail: "discard"
+        } });
+        await callbacks.onEvent({ source: "supervisor", type: "diagnostic", severity: "info", data: {
+          reason: "reasoning_observation", streamed_entries: -1, history_entries: 1.5, history_audited: "false", detail: "arbitrary diagnostic text"
+        } });
+        await callbacks.onEvent({ source: "supervisor", type: "diagnostic", severity: "info", data: {
+          reason: "reasoning_observation", streamed_entries: "0", history_entries: "2", history_audited: true, detail: "also arbitrary"
+        } });
+        await callbacks.onState("completed", { result: { summary: "review complete", stopReason: "end_turn" } });
+      } else if (outcome === "failed") {
+        await callbacks.onState("failed", { error: { code: "VSUP_BACKEND_ERROR", message: "Review failed.", remediation: "Inspect backend diagnostics and retry if the problem is transient.", retryable: true } });
+      } else {
+        await context.manager.cancel({ run_id: started.run_id });
+      }
+      await waitFor(() => stateOf(context.manager, started.run_id), (state) => state === outcome);
+      const settled = await waitFor(
+        () => readFile(metaPath, "utf8").then((text) => JSON.parse(text) as { execution_state?: string; started_at?: string; finished_at?: string }),
+        (meta) => meta.execution_state === outcome
+      );
+      expect(settled.started_at).toBe(firstRunning.started_at);
+      await context.manager.close({ run_id: started.run_id });
+      const closed = JSON.parse(await readFile(path.join(directory, "meta.json"), "utf8")) as { execution_state?: string; started_at?: string; finished_at?: string };
+      expect(closed).toMatchObject({ execution_state: outcome, started_at: settled.started_at, finished_at: settled.finished_at });
+      const output = path.join(context.parent, `report-${outcome}`);
+      await exportReport({ directory, output, include: outcome === "completed" ? ["events"] : [] });
+      const report = JSON.parse(await readFile(path.join(output, "report.json"), "utf8")) as { execution: { state: string }; timestamps: { started: string | null } };
+      expect(report.execution.state).toBe(outcome);
+      expect(report.timestamps.started).toBe(settled.started_at);
+      if (outcome === "completed") {
+        const events = JSON.parse(await readFile(path.join(output, "events.json"), "utf8")) as Array<Record<string, unknown>>;
+        expect(events).toContainEqual(expect.objectContaining({
+          reason: "reasoning_observation", streamed_entries: 0, history_entries: null, history_audited: false
+        }));
+        const invalidNumericFields = events.find((event) => event.seq === 2)!;
+        expect(invalidNumericFields.reason).toBe("reasoning_observation");
+        expect(invalidNumericFields).not.toHaveProperty("streamed_entries");
+        expect(invalidNumericFields).not.toHaveProperty("history_entries");
+        expect(invalidNumericFields).not.toHaveProperty("history_audited");
+        const stringNumericFields = events.find((event) => event.seq === 3)!;
+        expect(stringNumericFields.reason).toBe("reasoning_observation");
+        expect(stringNumericFields).not.toHaveProperty("streamed_entries");
+        expect(stringNumericFields).not.toHaveProperty("history_entries");
+        expect(JSON.stringify(events)).not.toContain("discard");
+        expect(JSON.stringify(events)).not.toContain("arbitrary");
+      }
+    } finally { await context.manager.shutdown(); }
+  });
+
+  it("keeps legacy closed records without an execution outcome unknown", async () => {
+    const context = await setup();
+    try {
+      await context.manager.initialize();
+      const runId = randomUUID();
+      const now = new Date().toISOString();
+      const legacy: RunRecord = {
+        schemaVersion: 1, runId, backend: "app-server", mode: "review", state: "closed",
+        sourceWorkspace: context.source, workerWorkspace: context.source, createdAt: now, updatedAt: now,
+        finishedAt: now, taskSha256: "a".repeat(64),
+        limits: { timeoutSeconds: 240, maxTurns: 12, maxEventBytes: 1024 * 1024, maxTranscriptBytes: 1024 * 1024, maxArtifactBytes: 1024 * 1024 }
+      };
+      const directory = runDir(context.data, runId);
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      await writeFile(path.join(directory, "meta.json"), JSON.stringify(runToWire(legacy)), { mode: 0o600 });
+      const output = path.join(context.parent, "legacy-report");
+      await exportReport({ directory, output });
+      const report = JSON.parse(await readFile(path.join(output, "report.json"), "utf8")) as { execution: { state: string }; timestamps: { started: string | null } };
+      expect(report.execution.state).toBe("unknown");
+      expect(report.timestamps.started).toBeNull();
     } finally { await context.manager.shutdown(); }
   });
 });

@@ -59,7 +59,14 @@ async function diagnosticProjection(directory: string, record: RunRecord): Promi
       const outcome = typeof data.outcome === 'string' ? data.outcome.slice(0, 100) : 'unknown';
       const type = typeof e.type === 'string' ? e.type.slice(0, 100) : 'unknown';
       const key = `${type}:${name}:${outcome}`; counts[key] = (counts[key] ?? 0) + 1;
-      if (events.length < 10_000) events.push({ seq: e.seq, timestamp: e.timestamp, type, severity: e.severity, name, outcome, ...(typeof data.reason === 'string' ? { reason: data.reason.slice(0, 100) } : {}) });
+      if (events.length < 10_000) events.push({ seq: e.seq, timestamp: e.timestamp, type, severity: e.severity, name, outcome,
+        ...(typeof data.reason === 'string' ? { reason: data.reason.slice(0, 100) } : {}),
+        ...(data.reason === 'reasoning_observation' ? {
+          ...(Number.isSafeInteger(data.streamed_entries) && (data.streamed_entries as number) >= 0 ? { streamed_entries: data.streamed_entries } : {}),
+          ...(data.history_entries === null || (Number.isSafeInteger(data.history_entries) && (data.history_entries as number) >= 0) ? { history_entries: data.history_entries } : {}),
+          ...(typeof data.history_audited === 'boolean' ? { history_audited: data.history_audited } : {})
+        } : {})
+      });
     }
     return { events, counts, complete: events.length === previous && gaps === 0, gaps };
   } catch { return { events: [], counts: {}, complete: false, gaps: 0 }; }
@@ -81,7 +88,7 @@ export async function exportReport(options: { directory: string; output: string;
   }
   const report = publicValue({
     schema_version: 1, run_id: record.runId, supervisor_version: record.supervisorVersion ?? null, mode: record.mode,
-    execution: { state: verification.execution_state ?? (record.state === 'closed' ? 'unknown' : record.state), stop_reason: record.result?.stopReason ?? null },
+    execution: { state: verification.execution_state ?? record.executionState ?? (record.state === 'closed' ? 'unknown' : record.state), stop_reason: record.result?.stopReason ?? null },
     verification: verificationSummary(verification), assessment: record.assessments?.at(-1)?.decision ?? 'unassessed', assessments: record.assessments ?? [],
     provenance: { task_sha256: record.taskSha256, base_commit: verification.base_commit ?? record.worktree?.baseRef ?? null, patch_sha256: patchArtifact?.sha256 ?? null, contract_sha256: record.acceptanceContract ? contractDigest(record.acceptanceContract) : null, policy_revision: record.policyRevision ?? null },
     timestamps: { created: record.createdAt, launched: record.launchedAt ?? null, started: record.startedAt ?? null, finished: record.finishedAt ?? null },

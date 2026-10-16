@@ -466,6 +466,19 @@ describe('app-server backend: approvals and the event audit', () => {
     expect(emitted).not.toContain('abcdef123456');
     expect(emitted).toContain('[REDACTED]');
     expect(terminal.update?.result?.summary).not.toContain(SECRET);
+    expect(harness.eventsOfType('diagnostic').find((event) => event.data.reason === 'reasoning_observation')?.data).toMatchObject({
+      streamed_entries: 1, history_entries: 1, history_audited: true
+    });
+  });
+
+  it('does not count the word reasoning in ordinary messages or configuration as a reasoning entry', async () => {
+    const harness = new Harness({ name: 'reasoning-word-is-not-an-entry', steps: [{ op: 'say', text: 'The reasoning setting is off.' }] });
+    const terminal = await harness.run();
+    expect(terminal.state).toBe('completed');
+    expect(harness.eventsOfType('diagnostic').find((event) => event.data.reason === 'reasoning_observation')?.data).toMatchObject({
+      streamed_entries: 0, history_entries: 0, history_audited: true
+    });
+    harness.expectCleanedUp();
   });
 });
 
