@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 import { validationCommand } from "./cli/validation.js";
 import { prepareCommand } from "./cli/prepare.js";
-import { exportReport, locateSavedRun } from './reporting/export.js';
-import { lstat, open, readdir, realpath } from 'node:fs/promises';
+import { runsCommand } from './cli/runs.js';
+import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { constants as fsConstants } from 'node:fs';
 import { loadConfig, loadResolvedConfig, resolveConfigSelection } from './config/config.js';
 import { selectedConfigPolicy } from './config/policy.js';
 import { inspectWorkspaceRoots } from './security/paths.js';
@@ -18,7 +17,6 @@ import { fail } from './cli/fail.js';
 import { pinManifestCommand } from './cli/pin.js';
 import { allowCommand, setupCommand } from './cli/setup.js';
 import { installProcessGuards } from './diagnostics/background.js';
-import { readNdjsonRecovering } from './persistence/ndjson.js';
 import { startMcpStdio } from './mcp/server.js';
 import type { RunManagerTools } from './mcp/tools.js';
 import { supervisorError, type SupervisorErrorCode } from './contracts.js';
@@ -60,86 +58,9 @@ async function serve(ownerLock?: OwnerLock, configPath?: string, isolated?: { se
   process.once('SIGTERM', () => { void close(); });
 }
 
-function validRunId(id: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
-}
-
-async function runsCommand(args: string[]): Promise<void> {
-  let configPath: string | undefined; const positional: string[] = [];
-  for (let index = 0; index < args.length; index++) {
-    if (args[index] === '--config') {
-      const value = args[++index];
-      if (!value || value.startsWith('--') || configPath) fail('runs --config requires one path.', 2);
-      configPath = path.resolve(value);
-    } else positional.push(args[index] as string);
-  }
-  const [subcommand, id] = positional;
-  if (subcommand === 'verify' || subcommand === 'export') {
-    if (!id || !validRunId(id)) fail('runs verify/export requires a run UUID.', 2);
-    let output: string | undefined; let validationFile: string | undefined; let include: ('patch' | 'events')[] = [];
-    const seen = new Set<string>();
-    for (let index = 2; index < positional.length; index++) {
-      const flag = positional[index]!; const value = positional[++index];
-      if (seen.has(flag) || !value || value.startsWith('--')) fail('Invalid or repeated report option.', 2);
-      seen.add(flag);
-      if (flag === '--out') output = path.resolve(value);
-      else if (flag === '--validation') validationFile = path.resolve(value);
-      else if (flag === '--include' && subcommand === 'export' && value.split(',').every((item) => item === 'patch' || item === 'events')) include = [...new Set(value.split(',') as ('patch' | 'events')[])];
-      else fail('Usage: runs verify|export <run-id> --out <directory> [--include patch,events] [--validation <file>]', 2);
-    }
-    if (!output) fail('--out is required.', 2);
-    const resolved = await loadResolvedConfig({ requirePinManifest: false, ...(configPath ? { configPath } : {}) });
-    const directory = await locateSavedRun(resolved.dataDir, id);
-    print(await exportReport({ directory, output, include, ...(validationFile ? { validationFile } : {}), verifyOnly: subcommand === 'verify' }));
-    return;
-  }
-  if (positional.length !== (subcommand === 'list' ? 1 : subcommand === 'cleanup' ? (id ? 2 : 1) : 2)) fail('Usage: vibe-supervisor runs [--config <path>] <list|show|tail|cleanup> [run-id]', 2);
-  const resolved = await loadResolvedConfig({ requirePinManifest: false, ...(configPath ? { configPath } : {}) }); const config = resolved.config; const dataDir = resolved.dataDir;
-  const runsDir = path.join(dataDir, 'runs');
-  if (subcommand === 'list') {
-    let entries: string[];
-    try { entries = await readdir(runsDir); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') { print([]); return; } throw error; }
-    const rows: unknown[] = [];
-    for (const runId of entries.filter(validRunId)) {
-      try {
-        const record = await readJsonPrivate(path.join(runsDir, runId, 'meta.json'));
-        rows.push(record);
-      } catch { /* ignore partial or invalid run directories */ }
-    }
-    print(rows); return;
-  }
-  if (subcommand === 'show') {
-    if (!id || !validRunId(id)) fail('runs show requires a valid run UUID.', 2);
-    const directory = path.join(runsDir, id);
-    const [record, result] = await Promise.all([
-      readJsonPrivate(path.join(directory, 'meta.json')),
-      readJsonPrivate(path.join(directory, 'result.json')).catch(() => undefined),
-    ]);
-    print({ record, result }); return;
-  }
-  if (subcommand === 'tail') {
-    if (!id || !validRunId(id)) fail('runs tail requires a valid run UUID.', 2);
-    const events = await readNdjsonRecovering(path.join(runsDir, id, 'events.ndjson'), { maxBytes: config.limits.maxEventBytes });
-    print(events.slice(-20)); return;
-  }
-  if (subcommand === 'cleanup') {
-    if (id && !validRunId(id)) fail('runs cleanup run-id must be a valid UUID.', 2);
-    const { manager } = await getManager(undefined, configPath);
-    try { print(await manager.cleanup(id)); } finally { await manager.shutdown(); }
-    return;
-  }
-  fail('Usage: vibe-supervisor runs <list|show|tail|cleanup> [run-id]', 2);
-}
-
-async function readJsonPrivate(file: string): Promise<unknown> {
-  const directory = await lstat(path.dirname(file));
-  if (directory.isSymbolicLink() || !directory.isDirectory()) throw new Error('Unsafe run record directory.');
-  const handle = await open(file, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
-  try {
-    const info = await handle.stat();
-    if (!info.isFile() || info.size > 100 * 1024 * 1024) throw new Error('Unsafe or oversized run record.');
-    return JSON.parse(await handle.readFile('utf8')) as unknown;
-  } finally { await handle.close(); }
+async function cleanupWithManager(configPath: string | undefined, runId: string | undefined): Promise<unknown> {
+  const { manager } = await getManager(undefined, configPath);
+  try { return await manager.cleanup(runId); } finally { await manager.shutdown(); }
 }
 
 export async function runCli(argv = process.argv.slice(2)): Promise<void> {
@@ -178,7 +99,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
     }
     if (command === 'validation') { print(await validationCommand(args)); return; }
     if (command === 'prepare') { const result = await prepareCommand(args); print(result); if ((result as {status?: string}).status !== 'passed') process.exitCode = 1; return; }
-    if (command === 'runs') return await runsCommand(args);
+    if (command === 'runs') return await runsCommand(args, { cleanup: cleanupWithManager });
     fail(`Unknown command: ${command}`, 2);
   } catch (error) {
     const errorValue = error && typeof error === 'object' ? error as { code?: unknown; message?: unknown; supervisor?: unknown } : {};

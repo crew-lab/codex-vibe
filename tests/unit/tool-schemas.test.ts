@@ -39,4 +39,16 @@ describe("MCP tool input schemas", () => {
     expect(toolSchemas.vibe_result.parse({ run_id: runId })).toMatchObject({ detail: "compact" });
   });
 
+  it("records a close decision only through assessment, never a separate accepted field", () => {
+    const hash = "a".repeat(64);
+    const assessment = { decision: "accepted", reason: "Checked independently", patch_sha256: hash, contract_sha256: hash };
+    expect(toolSchemas.vibe_close.parse({ run_id: runId })).toEqual({ run_id: runId, cleanup_worktree: false });
+    expect(toolSchemas.vibe_close.parse({ run_id: runId, assessment })).toMatchObject({ assessment: { decision: "accepted", validations: [] } });
+    expect(Object.keys(toolSchemas.vibe_close.shape)).toEqual(["run_id", "cleanup_worktree", "assessment"]);
+    expect(() => toolSchemas.vibe_close.parse({ run_id: runId, accepted: true })).toThrow();
+    expect(() => toolSchemas.vibe_close.parse({ run_id: runId, accepted: false, reason: "No" })).toThrow();
+    expect(() => toolSchemas.vibe_close.parse({ run_id: runId, assessment: { ...assessment, reason: "" } })).toThrow();
+    expect(() => toolSchemas.vibe_close.parse({ run_id: runId, assessment: { ...assessment, decision: "maybe" } })).toThrow();
+  });
+
 });
