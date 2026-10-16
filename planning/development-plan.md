@@ -385,15 +385,17 @@ Ranked by demand evidence, fit with the boundaries and effort in the features re
 
 | # | Item | Already in 2.0.1 | Remaining | Size | Gate | ADR |
 |---|---|---|---|---|---|---|
-| 1 | Usage, ceilings and tool-call counts in every run record; `runs list` covers isolated sessions | Prompt, completion and cached tokens, model calls, cost source, model observations | Tool-call counts; `runs list` over `mcp-sessions/` (lookup exists for `runs verify` and `runs export`) | S | Fixture + the 2.1 hosted review | No |
-| 2 | Recorded decisions and `runs usefulness` | Append-only `assessment` on `vibe_close`, bound to hashes | `runs usefulness` printing the log rows from assessments; no second decision field | S | Fixture + the 2.1 hosted close | No |
-| 3 | `excluded_globs` per allowed root, merged into the profile denylist, the handler and the listing, read back | — | All | S | Fixture + the 2.1 hosted review | No |
+| 1 | **Implemented on the branch, pending review and its hosted gate.** Usage, ceilings and tool-call counts in every run record; `runs list` covers isolated sessions | Prompt, completion and cached tokens, model calls, cost source, model observations | Tool-call counts; `runs list` over `mcp-sessions/` (lookup exists for `runs verify` and `runs export`) | S | Fixture + the 2.1 hosted review | No |
+| 2 | **Implemented on the branch, pending review and its hosted gate.** Recorded decisions and `runs usefulness` | Append-only `assessment` on `vibe_close`, bound to hashes | `runs usefulness` printing the log rows from assessments; no second decision field | S | Fixture + the 2.1 hosted close | No |
+| 3 | **Implemented on the branch, pending review and its hosted gate.** `excluded_globs` per allowed root, merged into the profile denylist, the handler and the listing, read back | — | All | S | Fixture + the 2.1 hosted review | No |
 | 4 | Findings for reviews: `output: "findings"`, `findings.json`, `runs sarif` | — | All | M | Fixture + the 2.1 hosted review | No |
 | 5 | Search sidecar for reviews | — | All | L | Fixture + its own hosted review; the nested-gating evidence first | Yes (0007) |
-| 6 | Audit bundles with the approval ledger | `runs export` bundle with hashes, optional patch and projected events | The approval ledger saved per run and added to the bundle | S | Fixture + one exported hosted run | No |
+| 6 | **Implemented on the branch, pending review and its hosted gate** (the ledger and the pin identity in the existing `runs export` bundle; no single-file bundle, `--redact-paths` or bundle schema was built). Audit bundles with the approval ledger | `runs export` bundle with hashes, optional patch and projected events | The approval ledger saved per run and added to the bundle | S | Fixture + one exported hosted run | No |
 | 7 | Vibe candidate script and the wheel-derived shipped manifest | The preparation kit (not a trust root) | All | M | Your yes to the wheel download; conformance check on the target | No |
 | 8 | Antigravity as a verified MCP client: docs, client-neutral skill wording, four gates | — | All | S docs + target | Your scope reading; an account on the target; three hosted runs | No |
 | 9 | Per-language task templates in the skill | The coordinator, acceptance and preparation guidance | The templates | S | Review | No |
+
+**Status 2026-10-16.** Items 1, 2, 3 and 6 are implemented on branch `claude/2.1-wave-1` (waves 0 to 2 in `404b801`, `f6c852e` and `e4c1608`, documented in wave 3), pending cold review, the coordinator's release verification and the hosted gates in `docs/acceptance.json` (`hosted-usage-recorded`, `hosted-excluded-glob-readback-and-denial`, `hosted-run-exported`, `hosted-close-acceptance-recorded`). Items 4, 5, 7, 8 and 9 are not built. Two designs changed in delivery: item 2 kept only `runs usefulness` on the existing assessments, and item 6 extended the existing report directory instead of adding a single-file bundle.
 
 Order: wave 0 (contracts) first, then 1, 2, 3, 4, 6 and 7 in parallel, the backend wiring, then 5 and 8 after the 2.0.1 evidence. One 2.1 target sitting covers 1 to 4 and 6 with one review and one edit; 5 and 8 add their own runs. Section 9 has the graph and the waves. Any change to `scripts/v2-conformance-check.mjs`, `dist` or `schemas` changes the candidate identity, so 2.1 ships its own kit.
 

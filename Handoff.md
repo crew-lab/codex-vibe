@@ -68,6 +68,17 @@ Main's documents now agree with this evidence: `docs/acceptance.json` records th
 
 Main's changes after `44dc6f8` are version 2.0.2, unreleased: the reporting fixes of `2a49abd` and `41070f5` (execution outcome and start time kept through close, the structured `reasoning_observation` counts, the run schema's `execution_state`, a reworded export message) and documentation. Launch, the pin, the read-back, approvals, the event validator, cleanup, packaging and the conformance script are unchanged. Both package manifests say 2.0.2. `docs/acceptance.json` now names 2.0.2 as the candidate with `frozen_archive_sha256` and `packaging_time_snapshot` null; the 2.0.1 archive's identity and snapshot are under `evidence_builds`, its passed gates are the `v2.0.1-archive-*` entries, and each open 2.0.2 gate's `carry_over` proposes whether the 2.0.1 evidence is a basis and what 2.0.2 still needs. Changelog entry `## 2.0.2`; notes: [planning/release-notes-2.0.2.md](planning/release-notes-2.0.2.md).
 
+## 2.1 in progress — 2026-10-16
+
+Plan items 1, 2, 3 and 6 are implemented on branch `claude/2.1-wave-1`, pending cold review and the coordinator's `verify:release`; nothing is merged to main, the package version is still 2.0.2 and no 2.1 archive exists. Design: [planning/2.1-designs.md](planning/2.1-designs.md), with the delivered shapes in [reference](docs/reference.md), [workflow acceptance](docs/workflow-acceptance.md) and the [changelog](CHANGELOG.md).
+
+- Wave 0, `404b801`: contracts for usage counts and ceilings, `excluded_globs`, the approval ledger, the pin identity and the `runs` subcommand table; new `src/cli/runs.ts` (the bounded enumerator over the data root and at most 128 isolated sessions, so `runs list` spans them).
+- Wave 1, `f6c852e`: tool-call counts in run records, per-workspace exclusions (validation, fingerprint, session configuration, handler, listing, schema, example), `runs usefulness`, and the ledger and pin in exports.
+- Wave 2, `e4c1608`: exclusions, the pin identity and the ledger wired into the backend; `runs usefulness` reports zero runs without a data directory; `--excluded-glob` on the conformance script.
+- Reaper test: the reaper's deadline is fixed before startup begins, so the test of the reaper killing a wedged group (`tests/integration/app-server-backend.test.ts`) gave the run no room to start under parallel load. It now takes the startup allowance into the reaper margin. Test only; no runtime change.
+
+Not done: items 4, 5, 7, 8 and 9 of the plan. Four hosted observations are open as `UNVERIFIED` gates in `docs/acceptance.json` (`hosted-usage-recorded`, `hosted-excluded-glob-readback-and-denial`, `hosted-run-exported`, `hosted-close-acceptance-recorded`); they ride one hosted review and one hosted edit on a 2.1 archive, which needs a new owner allowance. The conformance script and schemas changed, so 2.1 ships its own candidate identity and kit.
+
 ## Release identity
 
 - **Source.** `vibe-supervisor` 2.0.2 on main, unreleased and not packaged. The workflow integration reached main at `6c645e3`; the target's packaging repair (`44dc6f8`) and reporting repair (`2a49abd`) are on main as well. Vibe remains pinned to 2.26.1. The source, distributed archive, installed candidate and connected desktop server are distinct identities and need their own evidence. A build of main is a new candidate, 2.0.2.
