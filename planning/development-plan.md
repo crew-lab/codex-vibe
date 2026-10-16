@@ -20,6 +20,8 @@ Revised 2026-10-16 after the target sitting; the hosted results are in [research
 | Repository | GitHub holds `main` only; the target's unmerged `explore_project_details` branch, which added a worker other than Vibe, was deleted on 2026-10-16 |
 | Outreach | Drafts only: the dev.to article, the interest note's asks, the marketing calendar. Nothing posted |
 
+**Owner decision 2026-10-16:** worker answer quality is a documented limit; no further hosted allowance for the review and edit. v2.0.1 is published from the tested archive (`7978719c…`, tag at `44dc6f8`) as a pre-release while the disconnect and the clean-account installation are open; main's later changes go into 2.0.2. Notes: [release-notes-2.0.1.md](release-notes-2.0.1.md); the publish commands are in the Handoff.
+
 ## 2. Delivered
 
 | Milestone | Scope | Evidence |

@@ -24,6 +24,22 @@ A later target-machine record (branch `explore_project_details`, commit `7f1ca6d
 
 That branch also added an Antigravity worker backend on top of the earlier engine and recorded private machine paths; it was not merged, because a worker other than Vibe is excluded (ADR 0004 and the strategy's "Antigravity as a worker: no"), and it was deleted from GitHub on 2026-10-16.
 
+### Owner decision — 2026-10-16: worker answer quality is a documented limit; publish
+
+The owner chose option (a): no further hosted allowance for the review and edit. `hosted-review-edit-confirmation` is recorded as `OWNER_ACCEPTED_LIMITATION` in `docs/acceptance.json`, not passed, and the limit is stated in the README, [security](docs/security.md#what-is-not-isolated), compatibility and the changelog. Publishing follows the evidence: the bytes the target tested are archive `7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e` from `44dc6f8`, so v2.0.1 is tagged at `44dc6f8` and published from the target-held assets; main's later changes (`2a49abd` reporting fixes, the run schema's `execution_state`, documentation) go into 2.0.2. While the disconnect and the clean-account installation are open, v2.0.1 is published as a pre-release; it becomes the latest release once both are recorded. Release notes: [planning/release-notes-2.0.1.md](planning/release-notes-2.0.1.md).
+
+To publish, on the target Mac, from a checkout of main and the folder that holds the tested delivery (the archive `7978719c…`, `preparation-kit-2.0.1.tar.gz`, the SBOM, the packaging report and their `SHA256SUMS`). The first command asks for that folder; the second refuses unless the archive hash matches the tested one, then creates the tag at `44dc6f8` and the pre-release:
+
+```bash
+read -r DELIVERY
+```
+
+```bash
+cd "$DELIVERY" && test "$(shasum -a 256 vibe-supervisor-2.0.1.tgz | cut -d' ' -f1)" = 7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e && shasum -a 256 -c SHA256SUMS && gh release create v2.0.1 --repo crew-lab/codex-vibe --target 44dc6f815c1b80ac75c0ce2613373e38ed2421c8 --prerelease --title "Vibe Supervisor 2.0.1" --notes-file "$OLDPWD/planning/release-notes-2.0.1.md" vibe-supervisor-2.0.1.tgz preparation-kit-2.0.1.tar.gz sbom.spdx.json acceptance.json SHA256SUMS
+```
+
+If the kit is still a folder rather than `preparation-kit-2.0.1.tar.gz`, pack it first with `tar -czf preparation-kit-2.0.1.tar.gz preparation-kit-2.0.1` and add it to `SHA256SUMS`. Once the disconnect and the clean-account installation are recorded, `gh release edit v2.0.1 --repo crew-lab/codex-vibe --prerelease=false --latest` makes it the latest release.
+
 ### Owner decision — 2026-10-16: the target may fix code
 
 The earlier rule that the target records evidence and changes no code is replaced. The target may fix code it finds broken, on a branch from main that it pushes for review; it never pushes to main or publishes, a code fix makes a new candidate whose earlier evidence does not transfer, and the coordinator reviews the branch (private-path scan, `npm run verify:release`) and merges it. This matches what happened: the target authored `44dc6f8` (the package and kit identity binding) and `2a49abd` (execution provenance and reasoning counts), which were reviewed and merged. The rule is in [AGENTS.md](AGENTS.md#code-changes-on-the-target-machine), the strategy's working rules and the [target acceptance procedure](docs/target-acceptance.md).
