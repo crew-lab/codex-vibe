@@ -1,5 +1,6 @@
 import { BUNDLED_SKILL_NAMES } from '../../src/backends/app-server/bundled-skills.js';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -10,8 +11,12 @@ import { ResolvedCredential, type CredentialResolution } from '../../src/backend
 import { PinCheckError } from '../../src/backends/app-server/pin.js';
 import { CLIENT_ENTRYPOINT } from '../../src/backends/app-server/protocol.js';
 import { PROFILE_TOOLS, TOOL_PERMISSION, workspaceDenylist } from '../../src/backends/app-server/session-config.js';
+import { SUPPORTED_VIBE } from '../../src/backends/app-server/supported-vibe.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
-import type { BackendCallbacks, BackendRunHandle, BackendStartResult, RunLimits, RunMode, RunState, StartRunInput, SupervisorError } from '../../src/contracts.js';
+import type { BackendCallbacks, BackendRunHandle, BackendStartResult, PinIdentity, RunLimits, RunMode, RunState, StartRunInput, SupervisorConfig, SupervisorError } from '../../src/contracts.js';
+import { RunManager } from '../../src/core/run-manager.js';
+import { exportReport } from '../../src/reporting/export.js';
+import { makeLaunchableFakeVibe } from '../unit/support/launchable-fake-vibe.js';
 
 const root = path.resolve(import.meta.dirname, '..', '..');
 const fixture = path.join(root, 'tests', 'fixtures', 'fake-vibe-app-server.mjs');
@@ -57,6 +62,8 @@ interface HarnessOptions {
   contextFiles?: string[];
   workspaceFiles?: Record<string, string>;
   gitRepository?: boolean;
+  excludedGlobs?: string[];
+  effectiveExcludedGlobs?: string[];
 }
 
 class Harness {
@@ -90,7 +97,8 @@ class Harness {
     if (harness.gitRepository) execFileSync('git', ['init', '-q'], { cwd: this.workspace, stdio: 'ignore' });
     const scenarioFile = path.join(this.base, 'scenario.json');
     const document = typeof scenario === 'string' ? JSON.parse(readFileSync(path.join(scenarioDirectory, `${scenario}.json`), 'utf8')) as Json : scenario;
-    const profileTools = Object.fromEntries(PROFILE_TOOLS[harness.mode ?? 'review'].map((tool) => [tool, { permission: TOOL_PERMISSION, denylist: workspaceDenylist(this.workspace) }]));
+    const effectiveDenylist = workspaceDenylist(this.workspace, harness.effectiveExcludedGlobs ?? harness.excludedGlobs ?? []);
+    const profileTools = Object.fromEntries(PROFILE_TOOLS[harness.mode ?? 'review'].map((tool) => [tool, { permission: TOOL_PERMISSION, denylist: effectiveDenylist }]));
     const effective = { ...(document.effectiveConfig as Json | undefined) };
     writeFileSync(scenarioFile, JSON.stringify({ ...document, effectiveConfig: { ...effective, tools: { ...profileTools, ...(effective.tools as Json | undefined) } } }));
     const wrapper = path.join(this.base, 'vibe-app-server');
@@ -117,6 +125,7 @@ class Harness {
       workerWorkspace: this.workspace,
       runDirectory: this.runDirectory,
       ...(harness.contextFiles ? { contextFiles: harness.contextFiles } : {}),
+      excludedGlobs: harness.excludedGlobs ?? [],
       limits: { timeoutSeconds: 20, maxTurns: 20, maxEventBytes: 50_000_000, maxTranscriptBytes: 10_000_000, maxArtifactBytes: 10_000_000, ...harness.limits }
     };
     harnesses.push(this);
@@ -792,9 +801,16 @@ describe('app-server backend: deadline, cancel, close and termination', () => {
   }, 20_000);
 
   it('lets the reaper kill a wedged group at its recorded deadline', async () => {
-    const harness = new Harness('wedge', { limits: { timeoutSeconds: 30 }, options: { timing: { reaperMarginMs: -28_000 }, reaper: { pollMs: 50, graceMs: 200 } } });
+    const runTimeoutMs = 60_000;
+    const startupRoomMs = 6_000;
+    const harness = new Harness('wedge', {
+      limits: { timeoutSeconds: runTimeoutMs / 1000 },
+      options: { timing: { reaperMarginMs: startupRoomMs - runTimeoutMs }, reaper: { pollMs: 50, graceMs: 200 } }
+    });
     const terminal = await harness.run();
 
+    expect(harness.states[0]?.state).toBe('running');
+    expect(harness.fixtureEvents('wedged')).toHaveLength(1);
     expect(terminal.state).toBe('failed');
     expect(errorOf(terminal).code).toBe('VSUP_BACKEND_CRASHED');
     expect(harness.eventsOfType('diagnostic').some((event) => event.data.reason === 'reaper_fired')).toBe(true);
@@ -1302,4 +1318,154 @@ describe('app-server backend: configuration counts and unfinished effects', () =
     expect(terminal.update?.result).toBeUndefined();
     harness.expectCleanedUp();
   });
+});
+
+describe('app-server backend: per-workspace exclusions', () => {
+  const excludedGlobs = ['*.tfvars', 'fixtures/private/**'];
+  const workspaceFiles = {
+    'fixtures/private/customers.json': '[]\n',
+    'fixtures/public/sample.json': '{}\n',
+    'deploy/prod.tfvars': 'region = "x"\n',
+    'deploy/main.tf': 'terraform {}\n'
+  };
+
+  it('denies an excluded read in the handler with path_excluded, records it as tool_denied and completes', async () => {
+    const harness = new Harness('excluded-read', { excludedGlobs, workspaceFiles });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(harness.eventsOfType('tool_call').map((event) => event.data.path)).toEqual([`${harness.workspace}/src/index.ts`]);
+    expect(harness.eventsOfType('tool_denied').map((event) => [event.data.reason, event.data.outcome, event.data.path])).toEqual([
+      ['path_excluded', 'permission_denied_by_handler', `${harness.workspace}/fixtures/private/customers.json`],
+      ['path_excluded', 'permission_denied_by_handler', `${harness.workspace}/deploy/prod.tfvars`]
+    ]);
+    expect(terminal.update?.usage?.toolCalls).toEqual({ executed: 1, deniedByHandler: 2, deniedByPolicy: 0 });
+    harness.expectCleanedUp();
+  });
+
+  it('approves the same reads when the root has no exclusions', async () => {
+    const harness = new Harness('excluded-read', { workspaceFiles });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(harness.eventsOfType('tool_call')).toHaveLength(3);
+    expect(harness.eventsOfType('tool_denied')).toHaveLength(0);
+  });
+
+  it('leaves excluded files out of the workspace listing', async () => {
+    const harness = new Harness('allowed-call', { gitRepository: true, excludedGlobs, workspaceFiles });
+    await harness.run();
+    const prompt = ((harness.frames('turn/start')[0]?.params as Json).message as Array<{ text: string }>)[0]?.text ?? '';
+
+    expect(prompt).toContain('- deploy/main.tf\n- fixtures/public/sample.json\n- src/index.ts\n');
+    expect(prompt).not.toContain('customers.json');
+    expect(prompt).not.toContain('prod.tfvars');
+  });
+
+  it('fails the read-back closed when the server drops the exclusions from its effective configuration', async () => {
+    const harness = new Harness('allowed-call', { excludedGlobs, effectiveExcludedGlobs: [] });
+    const failure = await rejection(harness.start());
+
+    expect(failure).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'readback_mismatch' } });
+    expect(failure.details?.fields).toContain('config.tools.read_file.denylist');
+    expect(harness.frames('turn/start')).toHaveLength(0);
+    harness.expectCleanedUp();
+  });
+});
+
+describe('app-server backend: pin identity and approval ledger', () => {
+  const identity: PinIdentity = { vibeVersion: '2.26.1', manifestSha256: 'a1'.repeat(32), recordSha256: 'b2'.repeat(32) };
+
+  it('reports the verified pin identity in the first running update only', async () => {
+    const harness = new Harness('allowed-call', { options: { pin: { verify: async () => ({ ...identity }) } } });
+    const terminal = await harness.run();
+
+    expect(harness.states[0]).toMatchObject({ state: 'running', update: { pin: identity } });
+    expect(harness.states.slice(1).some((item) => item.update?.pin !== undefined)).toBe(false);
+    expect(terminal.state).toBe('completed');
+  });
+
+  it('reports no pin when the injected check names none', async () => {
+    const harness = new Harness('allowed-call');
+    await harness.run();
+    expect(harness.states.some((item) => item.update?.pin !== undefined)).toBe(false);
+  });
+
+  it('hands the approval ledger over in the terminal update without the session id', async () => {
+    const harness = new Harness('approval-ledger');
+    const terminal = await harness.run();
+    const approvals = terminal.update?.approvals;
+
+    expect(terminal.state).toBe('completed');
+    expect(approvals?.truncated).toBe(false);
+    expect(approvals?.records.map((record) => [record.decision, record.reason, record.tool])).toEqual([
+      ['approve', null, 'file_system.read_file'],
+      ['approve', null, 'file_system.read_file'],
+      ['deny', 'path_outside_workspace', 'file_system.read_file']
+    ]);
+    for (const record of approvals?.records ?? []) {
+      expect(Object.keys(record).sort()).toEqual(['callbackId', 'decision', 'fingerprint', 'path', 'reason', 'relatedEntryId', 'tool', 'turnId']);
+      expect(record.fingerprint).toMatch(/^[0-9a-f]{64}$/);
+    }
+    const executed = harness.eventsOfType('tool_call').map((event) => event.data.entry_id);
+    const denied = harness.eventsOfType('tool_denied').map((event) => event.data.entry_id);
+    expect(approvals?.records.map((record) => record.relatedEntryId)).toEqual([...executed, ...denied]);
+    expect(harness.states.slice(0, -1).some((item) => item.update?.approvals !== undefined)).toBe(false);
+  });
+});
+
+describe('app-server backend through the run manager: pin, ledger and export', () => {
+  const managers: RunManager[] = [];
+  const scratch: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(managers.splice(0).map((manager) => manager.shutdown().catch(() => undefined)));
+    for (const directory of scratch.splice(0)) rmSync(directory, { recursive: true, force: true });
+  });
+
+  it('saves the real pin identity in meta.json, writes approvals.json and includes it in runs export', async () => {
+    const base = realpathSync(mkdtempSync(path.join(tmpdir(), 'vsup-pin-ledger-')));
+    scratch.push(base);
+    const source = path.join(base, 'workspace');
+    mkdirSync(path.join(source, 'src'), { recursive: true });
+    writeFileSync(path.join(source, 'src', 'index.ts'), 'export const a = 1;\n');
+    const scenario = JSON.parse(readFileSync(path.join(scenarioDirectory, 'approval-ledger.json'), 'utf8')) as Json;
+    const fake = await makeLaunchableFakeVibe(path.join(base, 'fake'), { scenario });
+    const manifestBytes = readFileSync(fake.manifest);
+    const config: SupervisorConfig = { ...DEFAULT_CONFIG, allowedWorkspaceRoots: [source], paths: { vibePinManifest: fake.manifest } };
+    const backend = new AppServerBackend(config, {
+      executable: fake.appServer,
+      preparation: { check: async () => ({ status: 'passed' as const, candidate_sha256: null, version: 'fixture', reason: 'Fake ACP fixture evidence only' }) },
+      resolveCredential: async (): Promise<CredentialResolution> => ({ status: 'environment', detail: '', credential: new ResolvedCredential(SECRET) }),
+      reaper: { pollMs: 50, graceMs: 200 },
+      timing: FAST_TIMING
+    });
+    const data = path.join(base, 'data');
+    const manager = new RunManager(config, data, [backend]);
+    managers.push(manager);
+    const finished = await manager.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 60 });
+    expect(finished.state).toBe('completed');
+    const directory = path.join(data, 'runs', finished.run_id);
+
+    const meta = JSON.parse(readFileSync(path.join(directory, 'meta.json'), 'utf8')) as Json;
+    expect(meta.pin).toEqual({
+      vibe_version: SUPPORTED_VIBE,
+      manifest_sha256: createHash('sha256').update(manifestBytes).digest('hex'),
+      record_sha256: (JSON.parse(manifestBytes.toString('utf8')) as { record_sha256: string }).record_sha256
+    });
+
+    const ledger = JSON.parse(readFileSync(path.join(directory, 'artifacts', 'approvals.json'), 'utf8')) as { run_id: string; truncated: boolean; records: Json[] };
+    expect(ledger.run_id).toBe(finished.run_id);
+    expect(ledger.truncated).toBe(false);
+    expect(ledger.records.map((record) => [record.decision, record.reason])).toEqual([['approve', null], ['approve', null], ['deny', 'path_outside_workspace']]);
+    expect(ledger.records.every((record) => !('session_id' in record) && typeof record.callback_id === 'string')).toBe(true);
+
+    const output = path.join(base, 'bundle');
+    await exportReport({ directory, output });
+    const exported = JSON.parse(readFileSync(path.join(output, 'approvals.json'), 'utf8')) as { records: Json[] };
+    expect(exported.records.map((record) => record.decision)).toEqual(['approve', 'approve', 'deny']);
+    const report = JSON.parse(readFileSync(path.join(output, 'report.json'), 'utf8')) as Json;
+    expect(report.approvals).toMatchObject({ file: 'approvals.json', records: 3, truncated: false });
+    expect(report.pin).toEqual(meta.pin);
+  }, 90_000);
 });

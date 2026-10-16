@@ -7,6 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { generatePinManifest, serializePinManifest } from '../../src/backends/app-server/pin.js';
+import { workspaceDenylist } from '../../src/backends/app-server/session-config.js';
 import { makeFakeVibeEnvironment } from './support/fake-vibe-environment.js';
 import { makeLaunchableFakeVibe } from './support/launchable-fake-vibe.js';
 
@@ -315,6 +316,29 @@ describe('v2 conformance check against the scripted fake app-server', () => {
     expect(at(result.report, 'network_observation.verdict')).toBe('inconclusive-control-saw-nothing');
     expect(findingIds(result.report, 'warn')).toContain('network-method-inconclusive');
   }, 60_000);
+
+  it('merges repeatable --excluded-glob values into the profile denylist and reads them back', async () => {
+    const fake = await makeLaunchableFakeVibe(path.join(scratch, 'fake'), { scenario: { name: 'conformance', harnessSelectionSource: null, runtime: { skills: BUNDLED_SKILL_NAMES.map((name) => ({ name, source: 'plugin', scope: 'builtin', registry: null })) } } });
+    const globs = ['*.tfvars', 'fixtures/private/**', '*.tfvars'];
+    const result = await runCheck(['--manifest', fake.manifest, '--executable', fake.appServer, '--mode', 'review', ...globs.flatMap((glob) => ['--excluded-glob', glob])]);
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(at(result.report, 'options.excluded_globs')).toEqual(['*.tfvars', 'fixtures/private/**']);
+    const merged = workspaceDenylist('/conformance/workspace', ['*.tfvars', 'fixtures/private/**']).length;
+    expect(merged).toBe(workspaceDenylist('/conformance/workspace').length + 3);
+    const run = (result.report.runs as Json[])[0]!;
+    expect(at(run, 'observed.tool_policies.read_file.denylist_entries')).toBe(merged);
+    expect(at(run, 'observed.tool_policies.read_file.denylist_matches_expected')).toBe(true);
+    expect(at(run, 'readback.before_thinking.total')).toBe(0);
+  }, 60_000);
+
+  it('rejects an unsafe --excluded-glob with exit code 2 before launching anything', async () => {
+    const invalid = await runCheck(['--manifest', path.join(scratch, 'm.json'), '--excluded-glob', '../outside']);
+    expect(invalid.code).toBe(2);
+    expect(invalid.stderr).toContain('--excluded-glob');
+    const empty = await runCheck(['--manifest', path.join(scratch, 'm.json'), '--excluded-glob']);
+    expect(empty.code).toBe(2);
+  }, 30_000);
 
   it('rejects missing and unknown arguments with exit code 2', async () => {
     const missing = await runCheck([]);

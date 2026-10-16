@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { chmod, mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { RunRecord } from '../../src/contracts.js';
@@ -126,6 +127,41 @@ describe('runs usefulness', () => {
     written.length = 0;
     await runsUsefulness(invocation(config));
     expect(written.join('')).toBe('No edit runs with a decision; 1 settled edit run without a decision; 0 reviews not assessable (review).\n');
+  });
+
+  it('reports zero runs when the data directory does not exist yet', async () => {
+    const { data } = await dataRoot();
+    const missing = path.join(data, 'not-created');
+    vi.stubEnv('VIBE_SUPERVISOR_HOME', missing);
+    try {
+      const unconfigured = { ...invocation(''), configPath: undefined };
+      await runsUsefulness(unconfigured);
+      expect(written.join('')).toBe('No edit runs with a decision; 0 settled edit runs without a decision; 0 reviews not assessable (review).\n');
+      written.length = 0;
+      await runsUsefulness({ ...unconfigured, positional: ['usefulness', '--json'] });
+      expect(JSON.parse(written.join('').trim())).toEqual({
+        kind: 'summary', since: null, accepted: 0, rejected: 0, deferred: 0, unassessed: 0, not_assessable_review: 0, unbound_assessments: 0, unreadable: 0, acceptance_rate: null
+      });
+      expect(existsSync(missing)).toBe(false);
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it('still refuses a data root that is present but unsafe', async () => {
+    const { data } = await dataRoot();
+    const target = path.join(data, 'elsewhere');
+    await mkdir(target, { mode: 0o700 });
+    const linked = path.join(data, 'linked-home');
+    await symlink(target, linked);
+    vi.stubEnv('VIBE_SUPERVISOR_HOME', linked);
+    try {
+      await expect(runsUsefulness({ ...invocation(''), configPath: undefined })).rejects.toThrow(/symlink/);
+    } finally { vi.unstubAllEnvs(); }
+    const { config } = await dataRoot();
+    const exposed = path.join(path.dirname(config), 'runs');
+    await mkdir(exposed, { mode: 0o700 });
+    await chmod(exposed, 0o777);
+    await expect(runsUsefulness(invocation(config))).rejects.toMatchObject({ code: 'VSUP_INVALID_STATE' });
+    expect(written.join('')).toBe('');
   });
 
   it('rejects bad options with the usage exit code', async () => {

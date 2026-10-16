@@ -64,7 +64,10 @@ export async function resolveDataDir(configPath: string | undefined): Promise<{ 
 }
 
 export async function enumerateRunDirectories(dataDir: string): Promise<string[]> {
+  if (!await lstat(dataDir).then(() => true, (error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return false; throw error; })) return [];
   const root = await realpath(dataDir);
+  const info = await lstat(root);
+  if (!info.isDirectory() || foreignOwner(info.uid)) throw invalidState(`The supervisor data root ${dataDir} is not a directory owned by the current user; inspect it manually.`);
   const homes = [root, ...await sessionHomes(path.join(root, 'mcp-sessions'))];
   const directories: string[] = [];
   for (const home of homes) directories.push(...await runDirectoriesIn(path.join(home, 'runs')));
