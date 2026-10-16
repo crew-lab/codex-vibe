@@ -52,6 +52,10 @@ For documentation-only changes, verify local links and `git diff --check`; a ful
 
 Report checks actually performed. Fake Vibe fixtures and initialization-only probes do not prove hosted behavior. The 2.0 gates in [docs/compatibility.md](docs/compatibility.md#unverified-gates) stay unverified until their evidence is recorded there. Handoff.md holds the working rules for where evidence may come from.
 
+### Code changes on the target machine
+
+The owner decided on 2026-10-16 that the target machine may fix code. The target may fix code it finds broken, on a branch from main that it pushes for review; it never pushes to main or publishes, a code fix makes a new candidate whose earlier evidence does not transfer, and the coordinator reviews the branch (private-path scan, `npm run verify:release`) and merges it.
+
 ### Recording target evidence
 
 The repository is public. Evidence recorded on the target machine (outputs of the [target acceptance procedure](docs/target-acceptance.md), reports, manifests) never contains a machine path, a credential, a readiness receipt, reasoning or private session history. Replace these before anything is committed, longest prefix first, and keep the exact bytes of any file whose hash is recorded elsewhere:
