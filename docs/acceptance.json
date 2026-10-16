@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "candidate": "2.0.1",
+  "candidate": "2.0.2",
   "scope": "App-server client: one-shot review and isolated edit through vibe-app-server 2.26.1, one process per run; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work. There is one engine and no backend selector or backend config key. Around the five tools: optional frozen acceptance contracts checked against the exact exported patch, append-only coordinator assessments, sanitized run reports, a version-matched preparation pass that gates ordinary dispatch, and owned validation copies.",
   "deterministic": [
     {
@@ -85,7 +85,25 @@
       "recorded_on": "2026-10-15 to 2026-10-16",
       "evidence_packet": "research/evidence/package-kit-identity-2026-10-15/ (identity, preparation, installed and native readiness) and research/evidence/hosted-2.0.1-2026-10-16/ (the hosted review); source only, never shipped. The raw conformance report, receipts and configuration backups stay in the target's private state.",
       "installed_candidate": true,
-      "note": "Packaged by the target agent from the frozen source, installed side by side on the same machine and selected in the desktop registration. Main has changed the runtime since (2a49abd: execution outcome, start time and structured reasoning counts), so a build of current main is a new candidate: none of this evidence transfers to it."
+      "note": "Packaged by the target agent from the frozen source, installed side by side on the same machine and selected in the desktop registration. It is the 2.0.1 release. Main has changed the runtime since (2a49abd: execution outcome, start time and structured reasoning counts; 41070f5: the run schema's execution_state), so 2.0.2 is a new candidate: none of this evidence transfers to it, and each 2.0.2 gate's carry_over says whether it is a reasonable basis and what 2.0.2 still needs.",
+      "release": "v2.0.1, tagged at 44dc6f8 and published as a pre-release by the owner from this archive and its target-held delivery (kit, SBOM, packaging report, SHA256SUMS).",
+      "transfers_to_candidate": false,
+      "packaging_time_snapshot": {
+        "commit": "44dc6f815c1b80ac75c0ce2613373e38ed2421c8",
+        "packaged_on": "2026-10-15",
+        "packaged_by": "the target agent, in an isolated checkout, then installed on the same machine",
+        "node": "20.19.0",
+        "npm": "10.8.2",
+        "tests": "89 files, 1296 tests",
+        "candidate_sha256": "8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4",
+        "conformance_script_sha256": "7d563e9c346c5f687545f0c2989787a9ba4570e659ad27b6c03a354ac6bc490e",
+        "assets_sha256": {
+          "vibe-supervisor-2.0.1.tgz": "7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e"
+        },
+        "assets_not_recorded": "The SBOM, packaging report and kit-file hashes are in the target's delivery SHA256SUMS; the evidence on main records only that the delivery and kit checksums passed.",
+        "offline_cache": "a dedicated npm cache filled with the locked versions",
+        "supersedes": "the rejected 8b288b8 packet (archive 18d46d1c...) and the reference package from 9d2bbde (archive 73c28081...)"
+      }
     },
     {
       "label": "2.0.1 rejected packet",
@@ -129,7 +147,7 @@
   ],
   "verified": [
     {
-      "name": "package-kit-identity-binding-on-corrected-archive",
+      "name": "v2.0.1-archive-package-kit-identity-binding",
       "status": "VERIFIED",
       "build": "2.0.1 corrected archive",
       "evidence_required": "The archive under test and its preparation kit come from one packaging run: the kit names the candidate identity of the packaged dist, an offline lifecycle-disabled installation of the exact archive reports that identity, version and conformance-script hash, and the delivery and kit checksums verify.",
@@ -137,7 +155,7 @@
       "result": "PASS: archive sha256 7978719c0010c8ba, candidate and kit 8b1b7dd556ea985e, script 7d563e9c346c5f68; package:rc's final installation gate and a separate offline installation by the target's coordinator both matched; delivery and kit checksums passed; the temporary installations were removed. The rejected 8b288b8 packet is preserved with its mismatched identities."
     },
     {
-      "name": "target-no-inference-conformance-check",
+      "name": "v2.0.1-archive-target-no-inference-conformance-check",
       "status": "VERIFIED",
       "evidence_required": "On the target with the installed Vibe 2.26.1 and no provider, with this build's preparation kit (vibe-supervisor prepare check): vibe-supervisor pin-manifest generated and then verified on the target (with the per-run hashing cost recorded), serverInfo.version 2.26.1, the initialize handshake, session/start with the supervisor profile, and the complete read-back (profile tools exact, only the bundled skill catalogue ADR 0006 permits, the owned loopback managed-config URL from ADR 0005, no MCP sources, connectors or hooks, bypass off, unified harness, each VIBE_* setting, thinking off), with no turn and no hosted inference.",
       "prior_evidence": "The workflow candidate passed it on 2026-10-15 (workflow-candidate-target-no-inference-conformance-check); that result belongs to its own archive.",
@@ -146,23 +164,23 @@
       "result": "PASS once on the installed Vibe 2.26.1 with the matched kit: pin reviewed (783 files, compiled core included) and doctor passed, per-check pin hashing 166, 158 and 149 ms; fixed fake key, no turn/start, zero reported tokens; zero read-back mismatches for both profiles, thinking off, the expected tool and permission policies, builtin skills with the expected provenance; no subject network request with a validated refusing observer; all three child processes exited on EOF, groups gone, private directories removed; two informational runtime/updated findings, no fail finding. Experiments-specific attribution stays unverified."
     },
     {
-      "name": "installed-sdk-readiness-on-candidate",
+      "name": "v2.0.1-archive-installed-sdk-readiness",
       "status": "VERIFIED",
       "build": "2.0.1 corrected archive",
       "evidence": "research/evidence/package-kit-identity-2026-10-15/INSTALLED-READINESS.json, 2026-10-15, through the official MCP SDK over stdio; receipt fields removed.",
       "result": "pass: server 2.0.1, expected candidate, preparation passed, eligible workspace, free slot, no blockers or restart, exact five-tool catalogue. Not native evidence."
     },
     {
-      "name": "native-readiness-on-candidate",
+      "name": "v2.0.1-archive-native-readiness",
       "status": "VERIFIED",
       "evidence_required": "On the intended Codex desktop connection, readiness reports the server_version and candidate identity of the frozen archive under test, matching preparation PASS, an eligible workspace, no blockers and a free slot.",
-      "prior_evidence": "Installed SDK readiness on the same candidate passed first (installed-sdk-readiness-on-candidate) and does not close this native gate by itself.",
+      "prior_evidence": "Installed SDK readiness on the same candidate passed first (v2.0.1-archive-installed-sdk-readiness) and does not close this native gate by itself.",
       "build": "2.0.1 corrected archive",
       "evidence": "research/evidence/package-kit-identity-2026-10-15/NATIVE-READINESS-2026-10-16.json and NATIVE-READINESS-2026-10-16.md; the 2026-10-15 NATIVE-READINESS.json records the pending state before the desktop reconnect.",
       "result": "PASS 2026-10-16 on the native desktop connection with expected_candidate: server 2.0.1, candidate 8b1b7dd556ea985e, preparation passed, workspace and dispatch eligible, free slot, no blockers, no restart required, exactly the five tools. No run started and no receipt persisted. The hosted review re-checked readiness before dispatch and after close."
     },
     {
-      "name": "node-floor-20.19.0",
+      "name": "v2.0.1-archive-node-floor-20.19.0",
       "status": "VERIFIED",
       "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the frozen source of this candidate.",
       "prior_evidence": "Passed on the 2.0.0 source (node-floor-20.19.0-on-2.0.0-source); that result does not transfer.",
@@ -214,74 +232,123 @@
   ],
   "unverified": [
     {
+      "name": "package-kit-identity-binding",
+      "status": "UNVERIFIED",
+      "build": "2.0.2",
+      "evidence_required": "The archive under test and its preparation kit come from one packaging run: the kit names the candidate identity of the packaged dist, an offline lifecycle-disabled installation of the exact archive reports that identity, version and conformance-script hash, and the delivery and kit checksums verify.",
+      "prior_evidence": "v2.0.1-archive-package-kit-identity-binding passed on archive 7978719c0010c8ba.",
+      "carry_over": "Basis for the procedure only: the packaging code is unchanged since 44dc6f8, so the 2.0.1 pass shows package:rc binds the kit to the archive it ships with. Identity belongs to an archive, so 2.0.2 needs its own package:rc on the target from git and the identity check of that archive (kit candidate, offline installation, version 2.0.2, conformance-script hash, delivery and kit checksums). The conformance script is unchanged, so its hash should again be 7d563e9c346c5f68."
+    },
+    {
+      "name": "node-floor-20.19.0",
+      "status": "UNVERIFIED",
+      "build": "2.0.2",
+      "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the frozen source of this candidate.",
+      "prior_evidence": "v2.0.1-archive-node-floor-20.19.0 passed for 44dc6f8 (89 files, 1296 tests). The 2.0.2 source changes (2a49abd) were reported passing verify:release under Node 20.19.0 on the repair branch (89 files, 1305 tests); that is not a frozen source.",
+      "carry_over": "Not carried: the 2.0.2 package:rc on the target under exactly Node 20.19.0 closes it in the same step as packaging."
+    },
+    {
+      "name": "target-no-inference-conformance-check",
+      "status": "UNVERIFIED",
+      "build": "2.0.2",
+      "evidence_required": "On the target with the installed Vibe 2.26.1 and no provider, with this build's preparation kit (vibe-supervisor prepare check): vibe-supervisor pin-manifest generated and then verified on the target (with the per-run hashing cost recorded), serverInfo.version 2.26.1, the initialize handshake, session/start with the supervisor profile, and the complete read-back (profile tools exact, only the bundled skill catalogue ADR 0006 permits, the owned loopback managed-config URL from ADR 0005, no MCP sources, connectors or hooks, bypass off, unified harness, each VIBE_* setting, thinking off), with no turn and no hosted inference.",
+      "prior_evidence": "v2.0.1-archive-target-no-inference-conformance-check passed once on archive 7978719c0010c8ba; the workflow candidate passed it earlier on its own archive.",
+      "carry_over": "Reasonable basis for the result: Since 44dc6f8 the runtime changed in reporting only (2a49abd: execution_state and started_at kept through close, the count-only reasoning_observation diagnostic; 41070f5: the run schema's execution_state and a reworded export message). Launch, the pin, the session configuration and read-back, the approval handler, the event validator, cleanup, packaging (scripts/package-rc.mjs, scripts/finalize-package.mjs) and scripts/v2-conformance-check.mjs are unchanged. The preparation receipt is bound to the candidate bytes, so ordinary dispatch of 2.0.2 needs one prepare check on its archive anyway; that one check closes this gate. Expect the same outcome; any difference is a finding."
+    },
+    {
+      "name": "installed-sdk-readiness-on-candidate",
+      "status": "UNVERIFIED",
+      "build": "2.0.2",
+      "evidence_required": "Through the official MCP SDK over stdio, readiness on the installed archive reports its server_version and candidate identity, preparation passed, an eligible workspace, a free slot, no blockers, no restart required and exactly the five tools, and rejects a wrong expected_candidate.",
+      "prior_evidence": "v2.0.1-archive-installed-sdk-readiness passed on candidate 8b1b7dd556ea985e.",
+      "carry_over": "Not carried: readiness names the candidate identity, so it is rerun on the installed 2.0.2 archive through the official MCP SDK after its prepare check. No inference."
+    },
+    {
+      "name": "native-readiness-on-candidate",
+      "status": "UNVERIFIED",
+      "build": "2.0.2",
+      "evidence_required": "On the intended Codex desktop connection, readiness reports the server_version and candidate identity of the frozen archive under test, matching preparation PASS, an eligible workspace, no blockers and a free slot.",
+      "prior_evidence": "v2.0.1-archive-native-readiness passed on 2026-10-16 on the native desktop connection.",
+      "carry_over": "Not carried: rerun on the native desktop connection with expected_candidate set to the 2.0.2 candidate after the registration is switched (rollback kept). No inference."
+    },
+    {
+      "name": "execution-provenance-on-hosted-run",
+      "status": "UNVERIFIED",
+      "build": "2.0.2",
+      "evidence_required": "On a closed hosted run of the 2.0.2 archive, runs export reports execution.state completed (not unknown) and timestamps.started, and with --include events the reasoning_observation diagnostic carries streamed_entries, history_entries and history_audited.",
+      "prior_evidence": "Fixture and integration tests cover it (tests/integration/close-cleanup.test.ts, tests/integration/app-server-backend.test.ts, tests/integration/recovery.test.ts, tests/unit/run-provenance.test.ts). The deleted, unmerged target branch reported it observed on source 2a49abd for edit run 6074df5d-6d51-4a44-ab1c-78fdadea76f2 (state closed, execution_state completed, start time kept; streamed 0, history 0, audit complete); no evidence packet is on main.",
+      "carry_over": "Proposed as optional, owner decision: the change is reporting only and is covered by tests, so 2.0.2 can be published without a hosted run. Showing it on a real run needs one hosted review on the 2.0.2 archive, which needs a new owner allowance; no edit is needed for it.",
+      "decision": "Owner: publish 2.0.2 on the no-inference checks alone, or authorize one review start for this gate."
+    },
+    {
       "name": "hosted-review-edit-confirmation",
       "status": "OWNER_ACCEPTED_LIMITATION",
       "evidence_required": "With a new owner allowance of two hosted runs: one review and one edit on the frozen fixture with readiness receipts, the edit carrying an acceptance contract and verified independently in a disposable copy, both closed with verified cleanup and exported with runs export. Stop on first failure; no retries.",
       "prior_evidence": "Review rejected, 2026-10-16, research/evidence/hosted-2.0.1-2026-10-16/: run 5d12adfe-27c5-42ce-9d7a-de713bb5c197 on candidate 8b1b7dd556ea985e completed end_turn with read-only integrity, two executed read_file calls, no unapproved effect and verified cleanup, but its final answer reversed both negative-number cases (reported true, false where the fixture gives false, true); the coordinator rejected it on answer quality. Its export reports execution unknown and no start time, a reporting defect fixed in source at 2a49abd and not in the installed candidate. Edit reported only on an unmerged target branch (explore_project_details, 7f1ca6d, since deleted): run 6074df5d-6d51-4a44-ab1c-78fdadea76f2 on source 2a49abd completed end_turn in its worktree and was rejected by its frozen acceptance contract (node:assert with strict instead of node:assert/strict, no node:test); no evidence packet for it is on main.",
       "result": "REJECTED 2026-10-16: the review failed on worker answer quality; the edit is reported rejected on its contract. Supervisor isolation, permissions, events and cleanup were observed working. Not retried; a new review or edit needs a new owner allowance.",
-      "owner_decision": "2026-10-16: the owner chose to document worker answer quality as a limit and publish rather than spend another hosted allowance. The gate is not passed: no accepted hosted review or edit exists. Supervisor behaviour in both runs (read-only integrity, worktree isolation, approvals, events, cleanup) was observed working. Worker answer quality is not guaranteed and is not a supervisor gate. On the target, the hosted review ran with read-only integrity and verified cleanup but its answer was wrong, and the hosted edit was reported rejected by its acceptance contract; the supervisor's isolation, permissions, events and cleanup were observed working in both. Verify every result independently: the acceptance contract, the export and your own checks decide, never the worker's summary."
+      "owner_decision": "2026-10-16: the owner chose to document worker answer quality as a limit and publish rather than spend another hosted allowance. The gate is not passed: no accepted hosted review or edit exists. Supervisor behaviour in both runs (read-only integrity, worktree isolation, approvals, events, cleanup) was observed working. Worker answer quality is not guaranteed and is not a supervisor gate. On the target, the hosted review ran with read-only integrity and verified cleanup but its answer was wrong, and the hosted edit was reported rejected by its acceptance contract; the supervisor's isolation, permissions, events and cleanup were observed working in both. Verify every result independently: the acceptance contract, the export and your own checks decide, never the worker's summary.",
+      "build": "2.0.1 corrected archive",
+      "carry_over": "Carried to 2.0.2 as the same owner-accepted limitation: it concerns worker answer quality, which no 2.0.2 change touches, and the supervisor behaviour observed in both runs (read-only integrity, worktree isolation, approvals, events, cleanup) runs through unchanged code. No new hosted review or edit is proposed for 2.0.2."
     },
     {
       "name": "mcp-client-disconnect-hosted",
       "status": "UNVERIFIED",
       "evidence_required": "One real client disconnect during a running hosted run on the 2.0 engine, through the official client: the server exits, the worker process group is gone, the owner lock is released, the run is failed and never relaunched, the private directories are deleted, and an edit worktree is kept until vibe_close cleanup.",
-      "result": "PENDING: not run. On 2026-10-16 the owner authorized the one remaining hosted start for this gate only, on the installed 2.0.1 candidate, following the disconnect procedure in docs/target-acceptance.md; stop at the first failure."
+      "result": "PENDING: not run. On 2026-10-16 the owner authorized the one remaining hosted start for this gate only, on the installed 2.0.1 candidate, following the disconnect procedure in docs/target-acceptance.md; stop at the first failure.",
+      "build": "2.0.1 corrected archive",
+      "carry_over": "Its evidence belongs to 2.0.1: the authorized start runs on the installed 2.0.1 candidate. Proposed basis for 2.0.2 once it passes, owner to confirm: the disconnect, owner-lock, reaper and cleanup paths are unchanged, and restart recovery only also records execution_state failed, which the recovery tests cover. 2.0.2 then needs no hosted disconnect of its own. If it fails, the fix is a new candidate and neither archive's gate closes."
     },
     {
       "name": "permission-ask-visible-in-effective-config",
       "status": "UNVERIFIED",
       "evidence_required": "config/effective/read shows tools.<name>.permission = ask and the denylist for each profile tool, and an in-workspace read_file reaches the approval handler rather than being allowed by default.",
       "prior_evidence": "Workflow candidate: the no-inference read-back observed permission ask and the exact denylist (config half). Corrected 2.0.1 candidate: its preparation check passed with the expected tool and permission policies, and its hosted review executed two in-workspace read_file calls through the handler with no unapproved effect (handler half).",
-      "result": "Both halves observed on candidate 8b1b7dd556ea985e; not moved, because the per-tool fields this gate names (permission_ask_visible, denylist_matches_expected) are in the sanitized conformance report kept with the target packet, not in the repository. The coordinator moves it after reading that report."
+      "result": "Both halves observed on candidate 8b1b7dd556ea985e; not moved, because the per-tool fields this gate names (permission_ask_visible, denylist_matches_expected) are in the sanitized conformance report kept with the target packet, not in the repository. The coordinator moves it after reading that report.",
+      "build": "2.0.1 corrected archive",
+      "carry_over": "The per-tool fields come from the conformance report, so the 2.0.2 prepare check produces the config half again for its own archive; the handler half is the 2.0.1 hosted review's, through an unchanged approval handler, and is a reasonable basis. The coordinator moves the gate after reading the per-tool fields in either sanitized report."
     },
     {
       "name": "thinking-off-effect",
       "status": "UNVERIFIED",
       "evidence_required": "Observe whether config/model/write reasoningEffort off stops the model from generating reasoning. The read-back confirms the setting only.",
-      "result": "FINDING 2026-10-16: the hosted review used the lexical file watcher, whose counts (0, then 3, then 0) cannot be attributed to generated reasoning. The structured reasoning_observation diagnostic exists in source from 2a49abd, not in the installed candidate; the unmerged target branch reports streamed 0, history 0, audit complete for the edit run, which is not on main. Zero counts would establish none observed, not the generation effect."
+      "result": "FINDING 2026-10-16: the hosted review used the lexical file watcher, whose counts (0, then 3, then 0) cannot be attributed to generated reasoning. The structured reasoning_observation diagnostic exists in source from 2a49abd, not in the installed candidate; the unmerged target branch reports streamed 0, history 0, audit complete for the edit run, which is not on main. Zero counts would establish none observed, not the generation effect.",
+      "build": "2.0.1 corrected archive",
+      "carry_over": "2.0.2 is the first archive with the structured reasoning_observation counts. They record observed entries only, so even a hosted 2.0.2 run leaves this gate unverified on zero counts; nothing is carried and no run is proposed for it."
     },
     {
       "name": "experiments-fetch-off",
       "status": "UNVERIFIED",
       "evidence_required": "Attributable evidence that experiments.enable = false stops Vibe's experiments request. The setting is read back; a host-only proxy observation cannot attribute a request to experiments.",
-      "prior_evidence": "The workflow candidate's proxy matrix showed no subject request with an observed control (none-observed-control-validated). The corrected 2.0.1 candidate's preparation check again observed no subject request with a validated refusing observer. Experiments attribution stays unverified-host-only-observation for both."
+      "prior_evidence": "The workflow candidate's proxy matrix showed no subject request with an observed control (none-observed-control-validated). The corrected 2.0.1 candidate's preparation check again observed no subject request with a validated refusing observer. Experiments attribution stays unverified-host-only-observation for both.",
+      "build": "2.0.1 corrected archive",
+      "carry_over": "The network controls are unchanged; the 2.0.2 prepare check repeats the host-only observation, which cannot close the gate. Nothing is carried."
     },
     {
       "name": "nested-run-typescript-shape-and-gating",
       "status": "UNVERIFIED",
       "evidence_required": "The hosted-review probe in docs/target-acceptance.md (step 6) shows that a write_file or edit called from inside run_typescript arrives as the same file_system.* effect and reaches deny. From Vibe's Rust tests and code reading only.",
-      "result": "NOT EXERCISED 2026-10-16: the review's final answer reports tools.file_system.writeFile is not a function and its event sequence holds no denied nested write; not rerun. The probe text now names tools.file_system.write_file with path and content, checked against the pinned source (docs/hosted-continuation.md)."
+      "result": "NOT EXERCISED 2026-10-16: the review's final answer reports tools.file_system.writeFile is not a function and its event sequence holds no denied nested write; not rerun. The probe text now names tools.file_system.write_file with path and content, checked against the pinned source (docs/hosted-continuation.md).",
+      "build": "2.0.1 corrected archive",
+      "carry_over": "Not exercised on 2.0.1, so nothing to carry. It needs a hosted review with the corrected probe; none is proposed for 2.0.2 unless the owner authorizes the optional execution-provenance review, which can carry the probe."
     },
     {
       "name": "clean-account-install",
       "status": "REQUIRED_NOT_RUN",
       "evidence_required": "Before stable promotion, complete the documented fresh macOS Apple silicon account installation on the frozen, reviewable artifact, recording installation, registration, rollback, and cleanup.",
-      "decision": "The owner performs it with a prepared packet; evidence from another archive is not carried over."
+      "decision": "The owner performs it with a prepared packet; evidence from another archive is not carried over.",
+      "carry_over": "Installation, registration and rollback are unchanged since 44dc6f8. Proposed, owner to confirm: run it once on the archive that is promoted to stable. If 2.0.2 is published before 2.0.1 leaves pre-release, run it on the 2.0.2 archive instead of on 7978719c; otherwise run it on 7978719c for 2.0.1 as planned and rerun it for 2.0.2 before its stable promotion."
     }
   ],
   "not_required_for_2_0": [],
   "delivery_requirements": {
     "source_ci": "There is no GitHub CI and the workflow scope is skipped; npm run verify:release passes locally on the release commit.",
-    "stable_promotion": "Every gate above, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required. The release publishes the bytes the target tested; no receipt or result of the workflow candidate, the 2.0.0 draft archive, the reference package or the rejected packet transfers. Main now carries runtime changes the frozen archive lacks (2a49abd), so publishing them means a new frozen archive, kit, preparation and its own hosted evidence; publishing the frozen archive means releasing without them. Only the latest release is supported.",
+    "stable_promotion": "Every gate above, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required. A release publishes the bytes the target tested. v2.0.1 is the tested archive 7978719c from 44dc6f8, published as a pre-release; it becomes the latest release once the disconnect and the clean-account installation are recorded. 2.0.2 is published only from its own target-built archive after its own packaging, identity, no-inference conformance and readiness checks; no receipt or result of 2.0.1, the workflow candidate, the 2.0.0 draft archive, the reference package or the rejected packet transfers, and a gate is carried over only where its carry_over note says so and the owner confirms. Only the latest release is supported.",
     "hosted_allowance_remaining": 1,
-    "hosted_allowance_note": "Three hosted starts were authorized for the 2.0.1 sitting. The review used one (recorded on main); the edit used a second (reported only on an unmerged target branch). On 2026-10-16 the owner authorized the last one for the MCP-client disconnect only; no other hosted start is authorized."
+    "hosted_allowance_note": "Three hosted starts were authorized for the 2.0.1 sitting. The review used one (recorded on main); the edit used a second (reported only on an unmerged target branch). On 2026-10-16 the owner authorized the last one for the MCP-client disconnect only, on the installed 2.0.1 candidate. 2.0.2 has no hosted allowance.",
+    "candidate_minimum_target_checks": "For 2.0.2, no hosted start: package:rc from git on the target under Node 20.19.0, the archive and kit identity check, install side by side and pin-manifest and doctor, one prepare check, installed SDK readiness, then the registration switch and native readiness with expected_candidate, rollback kept. Optional, with a new owner allowance: one hosted review for execution-provenance-on-hosted-run."
   },
   "updated_at": "2026-10-16",
-  "frozen_archive_sha256": "7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e",
-  "packaging_time_snapshot": {
-    "commit": "44dc6f815c1b80ac75c0ce2613373e38ed2421c8",
-    "packaged_on": "2026-10-15",
-    "packaged_by": "the target agent, in an isolated checkout, then installed on the same machine",
-    "node": "20.19.0",
-    "npm": "10.8.2",
-    "tests": "89 files, 1296 tests",
-    "candidate_sha256": "8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4",
-    "conformance_script_sha256": "7d563e9c346c5f687545f0c2989787a9ba4570e659ad27b6c03a354ac6bc490e",
-    "assets_sha256": {
-      "vibe-supervisor-2.0.1.tgz": "7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e"
-    },
-    "assets_not_recorded": "The SBOM, packaging report and kit-file hashes are in the target's delivery SHA256SUMS; the evidence on main records only that the delivery and kit checksums passed.",
-    "offline_cache": "a dedicated npm cache filled with the locked versions",
-    "supersedes": "the rejected 8b288b8 packet (archive 18d46d1c...) and the reference package from 9d2bbde (archive 73c28081...)"
-  }
+  "frozen_archive_sha256": null,
+  "packaging_time_snapshot": null,
+  "candidate_note": "2.0.2 is the source on main after 44dc6f8 and is not packaged yet; frozen_archive_sha256 and packaging_time_snapshot are filled from its target packaging. The 2.0.1 archive's identity and packaging snapshot are under evidence_builds."
 }
