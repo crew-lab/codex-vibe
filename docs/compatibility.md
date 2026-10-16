@@ -163,6 +163,10 @@ Recorded in `acceptance.json` as the `v2.0.1-archive-*` entries for the correcte
 | Exact Node 20.19.0 floor | PASS 2026-10-15 for the frozen source `44dc6f8` (89 files, 1,296 tests). Later source is not covered. |
 | Populated pnpm validation | PASSED_LOCALLY 2026-10-15 on a public fixture with pnpm 9.15.4; no hosted run needed. |
 
+## Reporting repair target: disconnect observation
+
+On 2026-10-16, exact target source `2a49abd`, archive SHA-256 `133e77bdf20fc1cc839d3f0e5bfcdc644aa5ec09e4eb02558fb43cd1b8d191a8` and candidate `1c3c135862e2fe888428a2bf67fc6cd02fe9852259a494e7d624e2a3e96a45c0` passed the real hosted disconnect procedure under Node 20.19.0/Vibe 2.26.1 on macOS arm64. The official client closed while running; observer evidence shows released lock and worker groups after exit; reconnect read failed without replay; private directories were removed; the source stayed unchanged; native close removed the clean worktree after a separate live owner released its lock. Bound evidence is source-only: `research/evidence/disconnect-2a49abd-2026-10-16/REPORT.md`. This is a per-build verified entry in acceptance.json; the existing global packaging snapshot names different bytes and is not promoted by this evidence. Review/edit acceptance remains failed/unverified and no hosted allowance remains.
+
 ## Unverified gates
 
 These stay unverified until their evidence is recorded here and in `acceptance.json`. The first two rows are the 2.0.2 archive's own checks; the rest were observed, or left open, on the 2.0.1 archive.
