@@ -58,7 +58,7 @@ describe("supervisor config", () => {
   });
 
   it("rejects removed backend and scheduling keys", () => {
-    for (const value of ["acp", "app-server"]) expect(() => validateConfig({ ...base, backend: value }), value).toThrow(/backend/);
+    for (const value of ["acp", "other", ""]) expect(() => validateConfig({ ...base, backend: value }), value).toThrow(/backend/);
     expect(() => validateConfig({ ...base, max_concurrent_runs: 1 })).toThrow(/max_concurrent_runs/);
     expect(() => validateConfig({ ...base, worker_idle_ttl_seconds: 1 })).toThrow(/worker_idle_ttl_seconds/);
     expect(() => validateConfig({ ...base, paths: { ...manifestPaths, vibe_acp: "vibe-acp" } })).toThrow(/vibe_acp/);
@@ -168,8 +168,18 @@ describe("app-server keys", () => {
     expect(config.paths).toEqual({ vibePinManifest: "/data/vibe-pin-manifest.json" });
   });
 
-  it("no longer accepts a backend key in any form", () => {
-    for (const value of ["acp", "app-server", "", 1, null]) expect(() => validateConfig({ version: 1, backend: value, paths: appServer.paths }), String(value)).toThrow(/backend/);
+  it("accepts supported backends and rejects unknown backends", () => {
+    for (const value of ["acp", "other", "", 1, null]) expect(() => validateConfig({ version: 1, backend: value, paths: appServer.paths }), String(value)).toThrow(/backend/);
+    expect(validateConfig({ ...appServer, backend: "app-server" }).backend).toBe("app-server");
+    expect(validateConfig({ version: 1, backend: "antigravity" }).backend).toBe("antigravity");
+  });
+
+  it("maps paths.antigravity and validates it like the other executable paths", () => {
+    expect(validateConfig({ ...appServer, paths: { ...appServer.paths, antigravity: "/usr/local/bin/agy" } }).paths?.antigravity).toBe("/usr/local/bin/agy");
+    expect(validateConfig({ ...appServer, paths: { ...appServer.paths, antigravity: "agy" } }).paths?.antigravity).toBe("agy");
+    for (const value of ["bin/agy", "./x", "../x", "~/x", ""]) {
+      expect(() => validateConfig({ ...appServer, paths: { ...appServer.paths, antigravity: value } }), value).toThrow(/antigravity/);
+    }
   });
 
   it("maps paths.app_server and validates it like the other executable paths", () => {

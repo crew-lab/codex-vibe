@@ -95,7 +95,7 @@ type StartResult = {
   result?: Record<string, unknown>;
 };
 
-const BACKEND_KIND: BackendKind = "app-server";
+const DEFAULT_BACKEND_KIND: BackendKind = "app-server";
 const START_ENVELOPE_RESERVE_CHARS = 1500;
 const STATUS_RESULT_RESERVE_CHARS = 100;
 const MAX_META_BYTES = 1_048_576;
@@ -162,6 +162,10 @@ export class RunManager {
     this.recoveryWorkerWindowMs = options.recoveryWorkerWindowMs ?? RECOVERY_WORKER_WINDOW_MS;
     this.runRoot = path.join(path.resolve(dataDir), "runs");
     for (const backend of backends) this.backends.set(backend.kind, backend);
+  }
+
+  private get activeBackendKind(): BackendKind {
+    return this.config.backend ?? DEFAULT_BACKEND_KIND;
   }
 
   async initialize(): Promise<void> {
@@ -292,7 +296,7 @@ export class RunManager {
       };
       const record: RunRecord = {
         schemaVersion: SCHEMA_VERSION, supervisorVersion: APP_VERSION, runId: id,
-        backend: BACKEND_KIND, mode, state: "starting", sourceWorkspace: source,
+        backend: this.activeBackendKind, mode, state: "starting", sourceWorkspace: source,
         workerWorkspace, createdAt: now, updatedAt: now,
         taskSha256: createHash("sha256").update(task).digest("hex"), policyRevision: policy.revision, admittedRoot: admitted.root, limits
       };
@@ -307,7 +311,7 @@ export class RunManager {
       runtime.starting.catch((error: unknown) => this.reportBackground(runtime, "launch", error));
       return {
         supervisor_version: runtime.record.supervisorVersion ?? null, run_id: id, policy_revision: policy.revision,
-        state: runtime.record.state, backend: BACKEND_KIND, mode,
+        state: runtime.record.state, backend: runtime.record.backend, mode,
         source_workspace: source, worker_workspace: workerWorkspace, created_at: now,
         next_action: this.nextAction(runtime.record, runtime.record.state),
         ...(mode === "edit" ? { base_ref: options.baseRef ?? "HEAD", ...(checkedBase ? { base_commit: checkedBase } : {}) } : {})
@@ -381,7 +385,7 @@ export class RunManager {
   }
 
   private async runtimeCheck(): Promise<RuntimeCheck | { status: "not_reported" }> {
-    const backend = this.backends.get(BACKEND_KIND);
+    const backend = this.backends.get(this.activeBackendKind);
     if (!backend?.runtimeCheck) return { status: "not_reported" };
     return backend.runtimeCheck();
   }
@@ -410,9 +414,12 @@ export class RunManager {
     const busy = this.activeSlots >= 1;
     if (busy) blockers.push(supervisorError("VSUP_LIMIT_EXCEEDED", "One run is already active for this supervisor."));
     const runtime = await this.runtimeCheck().catch((error: unknown) => { block(error); return { status: "not_reported" as const }; });
-    if ("executable_found" in runtime && !runtime.executable_found) blockers.push(supervisorError("VSUP_VIBE_NOT_FOUND", `The configured Vibe executable ${runtime.executable} was not found.`));
+    if ("executable_found" in runtime && !runtime.executable_found) {
+      const isAntigravity = this.activeBackendKind === "antigravity";
+      blockers.push(supervisorError(isAntigravity ? "VSUP_ANTIGRAVITY_NOT_FOUND" : "VSUP_VIBE_NOT_FOUND", `The configured ${isAntigravity ? "Antigravity" : "Vibe"} executable ${runtime.executable} was not found.`));
+    }
     const workspaceEligible = blockers.length === 0 && policy !== undefined && workspace !== null;
-    const preparation = await this.backends.get(BACKEND_KIND)?.preparationCheck?.();
+    const preparation = await this.backends.get(this.activeBackendKind)?.preparationCheck?.();
     if (input.expected_candidate && preparation?.candidate_sha256 !== input.expected_candidate) blockers.push(supervisorError("VSUP_INVALID_STATE", "Connected candidate differs from expected_candidate."));
     if (preparation && preparation.status !== "passed") blockers.push(supervisorError("VSUP_INVALID_STATE", "Matching candidate conformance is required before dispatch.", { preparation }));
     const eligible = blockers.length === 0 && policy !== undefined && workspace !== null;
@@ -913,6 +920,8 @@ export class RunManager {
   private async loadDefaultBackends(): Promise<void> {
     const { AppServerBackend } = await import("../backends/app-server.js");
     this.backends.set("app-server", new AppServerBackend(this.config));
+    const { AntigravityBackend } = await import("../backends/antigravity.js");
+    this.backends.set("antigravity", new AntigravityBackend(this.config));
   }
 
   private async launch(runtime: Runtime): Promise<void> {
@@ -930,8 +939,9 @@ export class RunManager {
         await this.persist(runtime);
       }
       if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
-      const backend = this.backends.get(BACKEND_KIND);
-      if (!backend) throw codedError("VSUP_BACKEND_CRASHED", `The ${BACKEND_KIND} backend is unavailable.`);
+      const backendKind = runtime.record.backend;
+      const backend = this.backends.get(backendKind);
+      if (!backend) throw codedError("VSUP_BACKEND_CRASHED", `The ${backendKind} backend is unavailable.`);
       runtime.backend = backend;
       await snapshotTask;
       if (snapshotTask) await this.persist(runtime);

@@ -30,7 +30,10 @@
       "format": "uuid"
     },
     "backend": {
-      "const": "app-server"
+      "enum": [
+        "app-server",
+        "antigravity"
+      ]
     },
     "mode": {
       "enum": [

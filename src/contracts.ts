@@ -5,7 +5,7 @@ import type { AcceptanceContract, Assessment, AssessmentInput, Verification } fr
 
 export const SCHEMA_VERSION = 1 as const;
 
-export const BACKEND_KINDS = ["app-server"] as const;
+export const BACKEND_KINDS = ["app-server", "antigravity"] as const;
 export type BackendKind = typeof BACKEND_KINDS[number];
 
 export function isBackendKind(value: unknown): value is BackendKind {
@@ -17,7 +17,7 @@ export type RunState =
   | "cancelled" | "closing" | "closed";
 export type RunExecutionState = Extract<RunState, "completed" | "failed" | "cancelled">;
 export type EventSeverity = "debug" | "info" | "warning" | "error";
-export type EventSource = "supervisor" | "vibe";
+export type EventSource = "supervisor" | "vibe" | "antigravity";
 
 export interface RunLimits {
   timeoutSeconds: number;
@@ -86,6 +86,7 @@ export interface SupervisorError {
 export type SupervisorErrorCode =
   | "VSUP_CONFIG_INVALID" | "VSUP_VIBE_NOT_FOUND"
   | "VSUP_VIBE_VERSION_UNSUPPORTED"
+  | "VSUP_ANTIGRAVITY_NOT_FOUND" | "VSUP_ANTIGRAVITY_EXEC_FAILED"
   | "VSUP_AUTH_REQUIRED" | "VSUP_WORKSPACE_INVALID"
   | "VSUP_WORKTREE_CREATE_FAILED" | "VSUP_GIT_REQUIRED"
   | "VSUP_BACKEND_CRASHED" | "VSUP_TIMEOUT"
@@ -144,6 +145,7 @@ export interface SupervisorEvent {
 
 export interface SupervisorConfig {
   version: 1;
+  backend?: BackendKind;
   allowedWorkspaceRoots: string[];
   retention: { days: number };
   limits: {
@@ -159,7 +161,7 @@ export interface SupervisorConfig {
     maxTokens?: number;
     maxCostUsd?: number;
   };
-  paths?: { vibe?: string; appServer?: string; vibePinManifest?: string };
+  paths?: { vibe?: string; appServer?: string; vibePinManifest?: string; antigravity?: string };
 }
 
 export interface StartRunInput {
@@ -244,6 +246,8 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_CONFIG_INVALID: "Correct the reported config.toml field and try again.",
   VSUP_VIBE_NOT_FOUND: "Install Vibe or set paths.vibe to its executable; the vibe-app-server executable must sit next to it or be set as paths.app_server.",
   VSUP_VIBE_VERSION_UNSUPPORTED: `Install exactly the supported Vibe version (for example \`uv tool install mistral-vibe==${SUPPORTED_VIBE}\`) or set paths.vibe to its executable; for a pin-manifest failure (details.reason) check paths.vibe_pin_manifest and write the manifest on this machine with \`vibe-supervisor pin-manifest\`.`,
+  VSUP_ANTIGRAVITY_NOT_FOUND: "Install Antigravity CLI (agy) or set paths.antigravity to its executable.",
+  VSUP_ANTIGRAVITY_EXEC_FAILED: "Inspect Antigravity diagnostics and start a new run.",
   VSUP_AUTH_REQUIRED: "Sign in to Vibe or configure its supported authentication.",
   VSUP_WORKSPACE_INVALID: "Provide an existing workspace directory under an allowed_workspace_roots entry (the git repository root for an edit, without project .vibe, unsafe .agents paths or glob characters), and existing context files inside it; a real .agents directory is supported without inheriting its content. Add the workspace to the selected config with `node dist/cli.js allow --config <selected-config> <workspace>` (or the equivalent installed executable path). The connected server rereads that file before every readiness check and start, so no restart is needed; confirm with vibe_status in workspace mode.",
   VSUP_WORKTREE_CREATE_FAILED: "Check the repository state and worktree path, then retry.",

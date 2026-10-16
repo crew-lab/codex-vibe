@@ -65,6 +65,15 @@ export function formatDoctorCheck(check: DoctorCheck): string {
   return `${check.status === 'unverified' ? 'UNVERIFIED' : check.ok ? 'PASS' : 'CHECK'} ${check.name}: ${check.message}${check.version ? ` (${check.version})` : ''}${check.stderr_tail ? `\n  Diagnostic detail: ${check.stderr_tail}` : ''}`;
 }
 
+async function antigravityCheck(config: SupervisorConfig, injected: SupervisorBackend | undefined): Promise<DoctorCheck> {
+  const backend = injected ?? new (await import('../backends/antigravity.js')).AntigravityBackend(config);
+  const capabilities = await backend.probe();
+  if (capabilities.available) {
+    return { name: 'antigravity', ok: true, status: 'ok', ...(capabilities.version ? { version: capabilities.version } : {}), message: 'Antigravity CLI (agy) is available.' };
+  }
+  return { name: 'antigravity', ok: false, message: `Antigravity CLI (agy) could not be probed: ${capabilities.details?.error ?? 'not found'}` };
+}
+
 async function appServerCheck(config: SupervisorConfig, injected: SupervisorBackend | undefined): Promise<DoctorCheck> {
   const backend = injected ?? new (await import('../backends/app-server.js')).AppServerBackend(config);
   const capabilities = await backend.probe();
@@ -92,8 +101,13 @@ export async function runDoctor(config: SupervisorConfig, provenance?: { configP
       try { checks.push({ name: 'macos', ok: true, version: await probe('/usr/bin/sw_vers', ['-productVersion'], tmpRoot), message: 'macOS version detected.' }); }
       catch { checks.push({ name: 'macos', ok: false, message: 'macOS version could not be detected with sw_vers.' }); }
     }
-    try { checks.push(await appServerCheck(config, dependencies.backend)); }
-    catch { checks.push({ name: 'vibe', ok: false, message: 'The vibe-app-server pin check could not be completed.' }); }
+    if (config.backend === 'antigravity') {
+      try { checks.push(await antigravityCheck(config, dependencies.backend)); }
+      catch { checks.push({ name: 'antigravity', ok: false, message: 'The Antigravity CLI probe could not be completed.' }); }
+    } else {
+      try { checks.push(await appServerCheck(config, dependencies.backend)); }
+      catch { checks.push({ name: 'vibe', ok: false, message: 'The vibe-app-server pin check could not be completed.' }); }
+    }
     const codex = findExecutable('codex').path;
     if (codex) {
       try { const version = await probe(codex, ['--version'], tmpRoot); checks.push({ name: 'codex', ok: true, version, message: 'Codex CLI is available.' }); }
@@ -127,11 +141,12 @@ export async function runDoctor(config: SupervisorConfig, provenance?: { configP
   checks.push({ name: 'codex-registration', ok: true, status: 'unverified', message: 'Codex desktop visibility is not verified by doctor; run `vibe-supervisor setup` and restart Codex after reviewing its changes.' });
   try { await import('@modelcontextprotocol/server'); checks.push({ name: 'mcp-server', ok: true, message: 'The MCP SDK dependency is installed.' }); }
   catch { checks.push({ name: 'mcp-server', ok: false, message: 'The MCP SDK dependency is unavailable.' }); }
-  const requiredFailure = checks.some((check) => !check.ok && ['node', 'git', 'vibe', 'workspace-roots', 'data-directory', 'mcp-server'].includes(check.name));
+  const backendCheckName = config.backend === 'antigravity' ? 'antigravity' : 'vibe';
+  const requiredFailure = checks.some((check) => !check.ok && ['node', 'git', backendCheckName, 'workspace-roots', 'data-directory', 'mcp-server'].includes(check.name));
   const selectedPath = provenance?.configPath ?? path.join(dataDir, 'config.toml');
   const vibeVersion = checks.find((check) => check.name === 'vibe')?.version;
   return { ok: !requiredFailure, generatedAt: new Date().toISOString(), provenance: {
-    backend: 'app-server',
+    backend: config.backend ?? 'app-server',
     executable: process.execPath,
     application_entrypoint: fileURLToPath(new URL('../cli.js', import.meta.url)),
     runtime_module: fileURLToPath(import.meta.url),
