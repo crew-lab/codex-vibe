@@ -1,0 +1,7 @@
+{
+  "complete": true,
+  "sequence_gaps": 0,
+  "counts": {
+    "tool_call:read_file:executed": 2
+  }
+}

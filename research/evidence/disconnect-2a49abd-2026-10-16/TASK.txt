@@ -1,0 +1,4 @@
+This is a separate synthetic disconnect-lifecycle task, not a repair of the previous edit.
+Read CONTRACT.md and src/limit.mjs first. Create exactly two new files: src/disconnect-comparison.mjs and tests/disconnect-comparison.test.mjs.
+Export classify(value, limit), returning 'below' when value < limit, 'equal' when value === limit and 'above' otherwise for finite numeric inputs. Also export comparisonRows(pairs), returning an array of objects containing value, limit and classification, preserving input order and not mutating input pairs.
+Use node:test and node:assert/strict to cover below/equal/above, negative values, fractions, an empty pair list, pair ordering and input nonmutation. Do not modify any existing file or create scratch files. No shell, network, test execution or retry. Finish with a concise changed-file inventory.

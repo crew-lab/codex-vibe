@@ -143,6 +143,17 @@
       "target_evidence": "none",
       "transfers_to_candidate": false,
       "note": "Packaged from 0101f28 plus a test-race fix and a packaging fix, without the workflow features. Its src/ is identical to the 2.0.0 runtime whose first no-inference target check failed on the null harnessSelectionSource and saw startup connections (ADR 0005)."
+    },
+    {
+      "label": "reporting repair target disconnect",
+      "source_commit": "2a49abdb0fda49aada8ea4724361d64c46664c92",
+      "archive_sha256": "133e77bdf20fc1cc839d3f0e5bfcdc644aa5ec09e4eb02558fb43cd1b8d191a8",
+      "candidate_distribution_sha256": "1c3c135862e2fe888428a2bf67fc6cd02fe9852259a494e7d624e2a3e96a45c0",
+      "runtime": "macOS arm64, Node 20.19.0, Vibe 2.26.1",
+      "recorded_on": "2026-10-16",
+      "evidence_packet": "research/evidence/disconnect-2a49abd-2026-10-16/REPORT.md",
+      "transfers_to_candidate": false,
+      "note": "Disconnect PASS on this exact target-built archive. The global packaging_time_snapshot identifies another archive and is preserved; this does not promote that snapshot or accept the failed hosted review/edit."
     }
   ],
   "verified": [
@@ -228,6 +239,15 @@
       "status": "PASSED_LOCALLY",
       "evidence_required": "vibe-supervisor validation prepare on a representative project with a populated pnpm store: exact Node and manager pins, frozen lockfile, dependencies inside the owned copies, hooks, lifecycle scripts and fetches off, explicit blockers for unsupported profiles, source preserved and cleanup refusal shown.",
       "evidence": "2026-10-15, preparing machine (macOS arm64), Node v20.19.0 from nvm, pnpm 9.15.4 installed into that Node: vibe-supervisor validation prepare on a public fixture (two registry dependencies, exact packageManager pin, pnpm-lock.yaml v9) with a pnpm store populated beforehand. Prepared with dependencies installed inside both owned copies and no link resolving outside the validation root; the manifest records Node v20.19.0, pnpm 9.15.4, the base commit, the patch and lockfile hashes. Lifecycle scripts stayed off: with a preinstall exiting 97 and a postinstall exiting 99 the preparation still succeeded. The source checkout stayed clean at its base. Cleanup removed an untouched workspace and retained a changed one (also after a git checkout restore, which rewrites the copy's index). Unsupported profiles (file:, link:, workspace:, git dependencies, requiresBuild, hasInstallScript) are blocked by unit tests. The first run found a defect: the lockfile check matched excludeLinksFromLockfile, present in every pnpm 9 lockfile, so every populated pnpm project was blocked; fixed with regression tests before this pass."
+    },
+    {
+      "name": "reporting-repair-target-mcp-client-disconnect-hosted",
+      "status": "VERIFIED",
+      "build": "2a49abdb0fda49aada8ea4724361d64c46664c92",
+      "archive_sha256": "133e77bdf20fc1cc839d3f0e5bfcdc644aa5ec09e4eb02558fb43cd1b8d191a8",
+      "candidate_distribution_sha256": "1c3c135862e2fe888428a2bf67fc6cd02fe9852259a494e7d624e2a3e96a45c0",
+      "evidence": "research/evidence/disconnect-2a49abd-2026-10-16/REPORT.md",
+      "result": "PASS on this build only: active official-client disconnect, server/worker groups gone, lock absent, saved failed without replay, private directories removed, source unchanged and native close removed worktree."
     }
   ],
   "unverified": [
@@ -294,7 +314,7 @@
       "name": "mcp-client-disconnect-hosted",
       "status": "UNVERIFIED",
       "evidence_required": "One real client disconnect during a running hosted run on the 2.0 engine, through the official client: the server exits, the worker process group is gone, the owner lock is released, the run is failed and never relaunched, the private directories are deleted, and an edit worktree is kept until vibe_close cleanup.",
-      "result": "PENDING: not run. On 2026-10-16 the owner authorized the one remaining hosted start for this gate only, on the installed 2.0.1 candidate, following the disconnect procedure in docs/target-acceptance.md; stop at the first failure.",
+      "result": "Exact reporting-repair target source 2a49abd/archive 133e77bd passed; per-build record only. No automatic transfer to source 44dc6f8/archive 7978719c or new 2.0.2 bytes; any proposed carry-over remains an owner decision.",
       "build": "2.0.1 corrected archive",
       "carry_over": "Its evidence belongs to 2.0.1: the authorized start runs on the installed 2.0.1 candidate. Proposed basis for 2.0.2 once it passes, owner to confirm: the disconnect, owner-lock, reaper and cleanup paths are unchanged, and restart recovery only also records execution_state failed, which the recovery tests cover. 2.0.2 then needs no hosted disconnect of its own. If it fails, the fix is a new candidate and neither archive's gate closes."
     },
@@ -343,8 +363,8 @@
   "delivery_requirements": {
     "source_ci": "There is no GitHub CI and the workflow scope is skipped; npm run verify:release passes locally on the release commit.",
     "stable_promotion": "Every gate above, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required. A release publishes the bytes the target tested. v2.0.1 is the tested archive 7978719c from 44dc6f8, published as a pre-release; it becomes the latest release once the disconnect and the clean-account installation are recorded. 2.0.2 is published only from its own target-built archive after its own packaging, identity, no-inference conformance and readiness checks; no receipt or result of 2.0.1, the workflow candidate, the 2.0.0 draft archive, the reference package or the rejected packet transfers, and a gate is carried over only where its carry_over note says so and the owner confirms. Only the latest release is supported.",
-    "hosted_allowance_remaining": 1,
-    "hosted_allowance_note": "Three hosted starts were authorized for the 2.0.1 sitting. The review used one (recorded on main); the edit used a second (reported only on an unmerged target branch). On 2026-10-16 the owner authorized the last one for the MCP-client disconnect only, on the installed 2.0.1 candidate. 2.0.2 has no hosted allowance.",
+    "hosted_allowance_remaining": 0,
+    "hosted_allowance_note": "All three original starts are consumed: review rejected on correctness, edit rejected by its frozen contract, and distinct disconnect PASS on source 2a49abd/archive 133e77bd. No retries or further hosted starts are authorized. 2.0.2 preparation is no-inference only; any proposed carry-over remains explicitly build-bound and subject to owner confirmation.",
     "candidate_minimum_target_checks": "For 2.0.2, no hosted start: package:rc from git on the target under Node 20.19.0, the archive and kit identity check, install side by side and pin-manifest and doctor, one prepare check, installed SDK readiness, then the registration switch and native readiness with expected_candidate, rollback kept. Optional, with a new owner allowance: one hosted review for execution-provenance-on-hosted-run."
   },
   "updated_at": "2026-10-16",
