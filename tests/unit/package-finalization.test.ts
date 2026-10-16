@@ -35,7 +35,7 @@ ${retainSbom ? "process.stdout.write('prepare retained the SBOM\\n');" : "await 
 
 async function pack(root: string, releaseDir: string, cache: string) {
   await mkdir(releaseDir, { recursive: true, mode: 0o700 });
-  await exec('npm', ['--cache', cache, '--offline', 'pack', '--ignore-scripts', '--pack-destination', releaseDir], {
+  await exec('npm', ['--cache', cache, '--offline', 'pack', '--pack-destination', releaseDir], {
     cwd: root, env: { ...process.env, npm_config_cache: cache, npm_config_offline: 'true' }, maxBuffer: 2_000_000
   });
   return path.join(releaseDir, 'vibe-supervisor-2.0.1.tgz');

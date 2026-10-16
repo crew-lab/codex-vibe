@@ -18,10 +18,14 @@ max_mcp_result_chars = 8000
 # max_tokens = 2000000
 # max_cost_usd = 5.0
 
+# Optional execution backend: "app-server" (default, Mistral Vibe) or "antigravity" (Google Antigravity CLI).
+# backend = "app-server"
+
 [paths]
-# Required: the manifest written on the machine that runs Vibe by
+# Required for app-server backend: the manifest written on the machine that runs Vibe by
 # `vibe-supervisor pin-manifest`.
 vibe_pin_manifest = "/absolute/path/to/vibe-pin-manifest.json"
 # Optional: use an absolute executable path or a bare command name resolved via PATH.
 # vibe = "/absolute/path/to/vibe"
 # app_server = "/absolute/path/to/vibe-app-server"
+# antigravity = "/absolute/path/to/agy"

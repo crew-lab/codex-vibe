@@ -2,7 +2,7 @@ import path from "node:path";
 import { homedir } from "node:os";
 import { z } from "zod";
 import { assertWorkspaceRootScope } from "../security/paths.js";
-import type { SupervisorConfig } from "../contracts.js";
+import { BACKEND_KINDS, type SupervisorConfig } from "../contracts.js";
 import { MAX_TURNS_LIMIT } from "../mcp/schemas.js";
 
 const pathString = z.string().min(1).max(4096);
@@ -11,6 +11,7 @@ const executableString = pathString.refine((value) => path.isAbsolute(value) || 
 const absolutePathString = pathString.refine((value) => path.isAbsolute(value), "must be an absolute path");
 const baseSchema = z.object({
   version: z.literal(1),
+  backend: z.enum(BACKEND_KINDS).optional(),
   allowed_workspace_roots: z.array(rootString).max(100).default([]),
   retention: z.object({
     days: z.number().int().min(0).max(3650).default(7)
@@ -31,12 +32,13 @@ const baseSchema = z.object({
   paths: z.object({
     vibe: executableString.optional(),
     app_server: executableString.optional(),
-    vibe_pin_manifest: absolutePathString.optional()
+    vibe_pin_manifest: absolutePathString.optional(),
+    antigravity: executableString.optional()
   }).strict().optional()
 }).strict();
 
 const strictSchema = baseSchema.superRefine((value, context) => {
-  if (value.paths?.vibe_pin_manifest === undefined) {
+  if (value.backend !== "antigravity" && value.paths?.vibe_pin_manifest === undefined) {
     context.addIssue({
       code: "custom",
       path: ["paths", "vibe_pin_manifest"],
@@ -57,6 +59,7 @@ export function validateConfig(input: unknown, home = process.env.HOME ?? proces
   }
   return {
     version: parsed.version,
+    ...(parsed.backend === undefined ? {} : { backend: parsed.backend }),
     allowedWorkspaceRoots: parsed.allowed_workspace_roots,
     retention: { days: parsed.retention.days },
     limits: {
@@ -75,7 +78,8 @@ export function validateConfig(input: unknown, home = process.env.HOME ?? proces
     paths: parsed.paths ? {
       ...(parsed.paths.vibe === undefined ? {} : { vibe: parsed.paths.vibe }),
       ...(parsed.paths.app_server === undefined ? {} : { appServer: parsed.paths.app_server }),
-      ...(parsed.paths.vibe_pin_manifest === undefined ? {} : { vibePinManifest: parsed.paths.vibe_pin_manifest })
+      ...(parsed.paths.vibe_pin_manifest === undefined ? {} : { vibePinManifest: parsed.paths.vibe_pin_manifest }),
+      ...(parsed.paths.antigravity === undefined ? {} : { antigravity: parsed.paths.antigravity })
     } : {}
   };
 }

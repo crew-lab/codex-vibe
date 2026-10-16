@@ -14,9 +14,10 @@ describe('persisted creator version', () => {
   it.each([null, 12, '', 'unknown', '0.9.0\n', '0.9.0-' + 'a'.repeat(129)])('rejects invalid persisted version %s', value => {
     expect(() => runFromWire({ ...runToWire(record), supervisor_version: value })).toThrow('Invalid persisted supervisor version');
   });
-  it('serializes only the app-server backend and refuses records of any other backend', () => {
+  it('serializes supported backends and refuses records of unknown backends', () => {
     const wire = runToWire(record);
     expect(wire.backend).toBe('app-server');
+    expect(runFromWire({ ...wire, backend: 'antigravity' }).backend).toBe('antigravity');
     expect(() => runFromWire({ ...wire, backend: 'acp' })).toThrow('Invalid persisted run record');
   });
 });
