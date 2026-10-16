@@ -67,6 +67,7 @@ export interface PinIdentity {
 }
 
 export const MAX_APPROVAL_LEDGER_RECORDS = 4096;
+export const MAX_RUN_EXCLUDED_GLOBS = 100;
 
 export interface ApprovalLedgerEntry {
   callbackId: string;
@@ -153,7 +154,7 @@ export interface RunRecord {
   assessments?: Assessment[];
   policyRevision?: string;
   admittedRoot?: string;
-  excludedGlobs?: string[];
+  exclusions?: ExclusionScope[];
   workspaceSnapshotSha256?: string;
   process?: ProcessRecord;
   pin?: PinIdentity;
@@ -208,8 +209,13 @@ export interface StartRunInput {
   runDirectory: string;
   baseRef?: string;
   contextFiles?: string[];
-  excludedGlobs: string[];
+  exclusions: ExclusionScope[];
   limits: RunLimits;
+}
+
+export interface ExclusionScope {
+  root: string;
+  globs: string[];
 }
 
 export interface BackendCapabilities {

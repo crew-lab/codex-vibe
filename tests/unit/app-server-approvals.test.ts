@@ -319,6 +319,33 @@ describe('excluded globs', () => {
     expect(Date.now() - started).toBeLessThan(1000);
   });
 
+  it('matches many * in one segment in linear time, case-insensitively', () => {
+    const glob = '*a*a*a*a*a*a*a*b';
+    const segment = 'a'.repeat(255);
+    const started = performance.now();
+    expect(createExcludedMatcher([glob])([segment])).toBe(false);
+    expect(createExcludedMatcher([glob])(['src', segment])).toBe(false);
+    expect(createExcludedMatcher([`x/${glob}`])(['x', segment])).toBe(false);
+    expect(performance.now() - started).toBeLessThan(100);
+    expect(createExcludedMatcher([glob])([`${'A'.repeat(254)}B`])).toBe(true);
+    expect(createExcludedMatcher(['*.TFVARS'])(['prod.tfvars'])).toBe(true);
+    expect(createExcludedMatcher(['a*b*c'])(['abc'])).toBe(true);
+    expect(createExcludedMatcher(['a*b*c'])(['acb'])).toBe(false);
+    expect(createExcludedMatcher(['ab*ba'])(['aba'])).toBe(false);
+    expect(createExcludedMatcher(['ab*ba'])(['abba'])).toBe(true);
+  });
+
+  it('anchors globs at the allowed root, so a workspace below the root matches the root-relative path', async () => {
+    const anchored = [{ prefix: ['project'], globs: ['project/fixtures/**', '*/dumps/*.sql', 'project'] }];
+    expect(excludedRelativePath('fixtures/a.json', [{ prefix: ['project'], globs: ['project/fixtures/**'] }])).toBe(true);
+    expect(excludedRelativePath('dumps/full.sql', [{ prefix: ['project'], globs: ['*/dumps/*.sql'] }])).toBe(true);
+    expect(excludedRelativePath('fixtures/a.json', ['project/fixtures/**'])).toBe(false);
+    expect(excludedRelativePath('src/index.ts', [{ prefix: ['other'], globs: ['project/**'] }])).toBe(false);
+    expect(excludedRelativePath('src/index.ts', anchored)).toBe(true);
+    expect(await judgeWorkspacePath(workspace, 'fixtures/a.json', [{ prefix: ['project'], globs: ['project/fixtures/**'] }])).toEqual({ allowed: false, reason: 'path_excluded' });
+    expect(await judgeWorkspacePath(workspace, 'src/index.ts', [{ prefix: ['project'], globs: ['project/fixtures/**'] }])).toMatchObject({ allowed: true });
+  });
+
   it('judges a path_excluded for a basename glob at depth, an anchored glob and **, for existing and new files', async () => {
     const judge = async (raw: string) => {
       const judgement = await judgeWorkspacePath(workspace, raw, excluded);
@@ -407,6 +434,21 @@ describe('ApprovalHandler session and effect binding', () => {
     expect((await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-1', relatedEntryId: 'e1' }))).decision).toBe('approve');
     expect(await handler.decide(request(read, { filePath: 'src/other.ts' }, { callbackId: 'cb-2', relatedEntryId: 'e1' }))).toEqual({ decision: 'deny', reason: 'duplicate_callback' });
     expect(handler.ledger.forEffect('e1')?.callbackId).toBe('cb-1');
+  });
+
+  it('records every duplicate callback as a denied ledger entry, bounded by the same cap', async () => {
+    const handler = new ApprovalHandler({ mode: 'review', workspace, ledger: new ApprovalLedger(3) });
+    expect((await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-1', relatedEntryId: 'e1' }))).decision).toBe('approve');
+    expect(await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-1', relatedEntryId: 'e1' }))).toEqual({ decision: 'deny', reason: 'duplicate_callback' });
+    expect(await handler.decide(request(read, { filePath: 'src/other.ts' }, { callbackId: 'cb-2', relatedEntryId: 'e1' }))).toEqual({ decision: 'deny', reason: 'duplicate_callback' });
+    expect(handler.ledger.all().map((entry) => [entry.callbackId, entry.decision, entry.reason])).toEqual([
+      ['cb-1', 'approve', null], ['cb-1', 'deny', 'duplicate_callback'], ['cb-2', 'deny', 'duplicate_callback']
+    ]);
+    expect(handler.ledger.truncated).toBe(false);
+    expect(handler.ledger.forEffect('e1')?.decision).toBe('approve');
+    expect(await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-1', relatedEntryId: 'e1' }))).toEqual({ decision: 'deny', reason: 'duplicate_callback' });
+    expect(handler.ledger.size).toBe(3);
+    expect(handler.ledger.truncated).toBe(true);
   });
 
   it('denies everything after it was revoked, including an approval that was still being evaluated', async () => {

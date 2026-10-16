@@ -5,7 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { open, readFile, readdir, realpath, rename, rm, lstat } from "node:fs/promises";
 import path from "node:path";
 import type {
-  ApprovalLedgerSnapshot, BackendCallbacks, BackendKind, BackendRunHandle, BackendStateUpdate,
+  ApprovalLedgerSnapshot, BackendCallbacks, BackendKind, ExclusionScope, BackendRunHandle, BackendStateUpdate,
   ReviewStartToolInput, EditStartToolInput, StatusToolInput,
   ResultToolInput, WaitOptions, CloseToolInput, RunLimits, RunMode, RunRecord, RunState, SupervisorBackend,
   ReviewIntegrity, RuntimeCheck, SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent
@@ -18,7 +18,8 @@ import { readNdjsonRecovering } from "../persistence/ndjson.js";
 import { EventLog } from "../persistence/event-log.js";
 import { asStorageError, storageErrorDetails } from "../persistence/storage-error.js";
 import { describeFailure, reportBackgroundFailure, writeDiagnostic } from "../diagnostics/background.js";
-import { WorkspacePathError, createPrivateDir, expandHome, resolveAdmittedWorkspace, resolveCanonicalRoot, resolveCanonicalWorkspaceRoot, resolveContextFile, isPathWithinRoot } from "../security/paths.js";
+import { WorkspacePathError, createPrivateDir, expandHome, resolveAdmittedWorkspace, resolveCanonicalRoot, resolveContextFile, isPathWithinRoot } from "../security/paths.js";
+import { excludedWithinWorkspace, exclusionScopesForWorkspace } from "./exclusions.js";
 import { redactSecrets } from "../security/redaction.js";
 import { assertNotSupervisorChild } from "../security/environment.js";
 import { createDetachedWorktree, exportDirtySnapshot, GitOperationError, removeVerifiedWorktree, resolveBaseCommit, resolveGitRoot } from "../git/worktree.js";
@@ -296,12 +297,11 @@ export class RunManager {
         ...(this.config.limits.maxCostUsd === undefined ? {} : { maxCostUsd: this.config.limits.maxCostUsd }),
         maxModelCalls: turnBackstop(options.maxTurns)
       };
-      const excludedGlobs = await withDeadline(excludedGlobsForRoot(policy.config, admitted.root), preparationDeadline - Date.now(), "Exclusion lookup exceeded its preparation deadline.");
       const record: RunRecord = {
         schemaVersion: SCHEMA_VERSION, supervisorVersion: APP_VERSION, runId: id,
         backend: BACKEND_KIND, mode, state: "starting", sourceWorkspace: source,
         workerWorkspace, createdAt: now, updatedAt: now,
-        taskSha256: createHash("sha256").update(task).digest("hex"), policyRevision: policy.revision, admittedRoot: admitted.root, excludedGlobs, limits
+        taskSha256: createHash("sha256").update(task).digest("hex"), policyRevision: policy.revision, admittedRoot: admitted.root, exclusions: admitted.exclusions, limits
       };
       if (options.acceptanceContract) { record.acceptanceContract = options.acceptanceContract; record.verification = { status: "pending", contract_sha256: contractDigest(options.acceptanceContract), checks: [] }; }
       runtime = this.makeRuntime(record, path.join(this.runRoot, id), task, options.contextFiles ?? []);
@@ -343,7 +343,7 @@ export class RunManager {
     return policy;
   }
 
-  private async validateAdmission(mode: RunMode, cwd: string, contextFiles: readonly string[], policy: CurrentPolicy, deadline: number): Promise<{ workspace: string; root: string }> {
+  private async validateAdmission(mode: RunMode, cwd: string, contextFiles: readonly string[], policy: CurrentPolicy, deadline: number): Promise<{ workspace: string; root: string; exclusions: ExclusionScope[] }> {
     let admitted: { workspace: string; root: string };
     try { admitted = await withDeadline(resolveAdmittedWorkspace(cwd, policy.config.allowedWorkspaceRoots), deadline - Date.now(), "Workspace validation exceeded its preparation deadline."); }
     catch (error) {
@@ -355,11 +355,17 @@ export class RunManager {
       throw codedError("VSUP_WORKSPACE_INVALID", `The allowed root ${lost.root} that contains this workspace is unavailable (${lost.reason}); restore the directory or correct allowed_workspace_roots in the selected config.`, { unavailable_root: lost.root });
     }
     const source = admitted.workspace;
-    for (const file of contextFiles) await withDeadline(resolveContextFile(source, file), deadline - Date.now(), "Context validation exceeded its preparation deadline.");
+    const exclusions = await withDeadline(exclusionScopesForWorkspace(policy.config, source), deadline - Date.now(), "Exclusion lookup exceeded its preparation deadline.");
+    for (const file of contextFiles) {
+      const resolved = await withDeadline(resolveContextFile(source, file), deadline - Date.now(), "Context validation exceeded its preparation deadline.");
+      if (excludedWithinWorkspace(exclusions, source, [resolved, path.resolve(source, file)])) {
+        throw codedError("VSUP_WORKSPACE_INVALID", `context_files entry ${file} matches excluded_globs of an allowed root that contains this workspace; remove it from context_files, because an excluded file never reaches the worker.`, { context_file: file });
+      }
+    }
     if (mode === "edit") await withDeadline(assertEditAtRepositoryRoot(source), deadline - Date.now(), "Git workspace validation exceeded its preparation deadline.");
     assertSimpleGlobRoot(source);
     await withDeadline(assertNoProjectVibeExtensions(source), deadline - Date.now(), "Project extension validation exceeded its preparation deadline.");
-    return admitted;
+    return { ...admitted, exclusions };
   }
 
   private async editBaseCommit(source: string, baseRef: string, deadline: number): Promise<string> {
@@ -949,7 +955,7 @@ export class RunManager {
         runId: runtime.record.runId, mode: runtime.record.mode, task: runtime.task,
         cwd: runtime.record.sourceWorkspace, workerWorkspace, runDirectory: runtime.directory,
         ...(baseRef ? { baseRef } : {}), ...(contextFiles.length ? { contextFiles } : {}),
-        excludedGlobs: runtime.record.excludedGlobs ?? [],
+        exclusions: runtime.record.exclusions ?? [],
         limits
       };
       if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
@@ -1643,14 +1649,6 @@ function supervisorErrorOf(error: unknown): SupervisorError | undefined {
 function parseInput<T>(schema: { parse(value: unknown): T }, value: unknown): T {
   try { return schema.parse(value); }
   catch (error) { throw codedError("VSUP_INVALID_ARGUMENT", error instanceof Error ? error.message : "Invalid tool input."); }
-}
-
-async function excludedGlobsForRoot(config: SupervisorConfig, admittedRoot: string): Promise<string[]> {
-  const entries = Object.entries(config.excludedGlobs ?? {});
-  if (!entries.length) return [];
-  const canonical = await Promise.all(entries.map(([root]) => resolveCanonicalWorkspaceRoot(root).catch(() => null)));
-  const merged = entries.filter((_entry, index) => canonical[index] === admittedRoot).flatMap(([, globs]) => globs);
-  return [...new Set(merged)];
 }
 
 async function withDeadline<T>(operation: Promise<T>, milliseconds: number, message: string): Promise<T> {

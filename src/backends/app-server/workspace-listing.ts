@@ -1,5 +1,5 @@
 import { GitOperationError, preparationGit } from '../../git/worktree.js';
-import { createExcludedMatcher, restrictedRelativePath } from './approvals.js';
+import { createExcludedMatcher, restrictedRelativePath, type ExclusionSpec } from './approvals.js';
 
 export interface ListingLimits {
   maxFiles: number;
@@ -44,7 +44,7 @@ function classify(error: unknown): ListingUnavailable {
   }
 }
 
-export function eligibleListingPaths(output: Buffer, excluded: readonly string[] = []): string[] {
+export function eligibleListingPaths(output: Buffer, excluded: readonly ExclusionSpec[] = []): string[] {
   const isExcluded = createExcludedMatcher(excluded);
   const seen = new Set<string>();
   for (const path of output.toString('utf8').split('\0')) {
@@ -76,7 +76,7 @@ export function formatListing(paths: readonly string[], limits: Pick<ListingLimi
   return { text: [HEADING, ...lines, ...closing].join('\n'), included: lines.length, eligible: paths.length, truncated, unavailable: null };
 }
 
-export async function buildWorkspaceListing(workspace: string, overrides: Partial<ListingLimits> = {}, excluded: readonly string[] = []): Promise<WorkspaceListing> {
+export async function buildWorkspaceListing(workspace: string, overrides: Partial<ListingLimits> = {}, excluded: readonly ExclusionSpec[] = []): Promise<WorkspaceListing> {
   const limits = { ...DEFAULT_LISTING_LIMITS, ...overrides };
   let output: Buffer;
   try {

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, realpath, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +7,7 @@ import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunIn
 import { MAX_APPROVAL_LEDGER_RECORDS } from "../../src/contracts.js";
 import { approvalsToWire, runFromWire, runToWire } from "../../src/core/serialization.js";
 import { RunManager } from "../../src/core/run-manager.js";
+import { exclusionScopesForWorkspace } from "../../src/core/exclusions.js";
 import { TEST_CONFIG } from "./support/test-config.js";
 
 const RUN_ID = "3c9e6a51-2f4d-4b8e-9a17-5d6c7b8a9f01";
@@ -45,7 +46,7 @@ function recordWith21Fields(): Record<string, unknown> {
   const base = recordWrittenBy201();
   return {
     ...base,
-    excluded_globs: ["*.tfvars", "fixtures/private/**"],
+    excluded_globs: [{ root: "/work", globs: ["*.tfvars", "fixtures/private/**"] }, { root: "/work/project", globs: ["dumps/*.sql"] }],
     pin: { vibe_version: "2.26.1", manifest_sha256: HASH, record_sha256: OTHER_HASH },
     limits: { ...(base.limits as object), max_tokens: 200000, max_cost_usd: 0.5, max_model_calls: 17 },
     usage: { ...(base.usage as object), tool_calls: { executed: 7, denied_by_handler: 1, denied_by_policy: 0 } }
@@ -63,8 +64,15 @@ describe("run record fields added in 2.1", () => {
     expect(record.limits).toEqual({ timeoutSeconds: 180, maxTurns: 12, maxEventBytes: 52428800, maxTranscriptBytes: 10485760, maxArtifactBytes: 104857600 });
     expect(record.usage?.toolCalls).toBeUndefined();
     expect(record.pin).toBeUndefined();
-    expect(record.excludedGlobs).toBeUndefined();
+    expect(record.exclusions).toBeUndefined();
     expect(JSON.stringify(runToWire(record))).toBe(JSON.stringify(written));
+  });
+
+  it("loads a flat exclusion list written before anchoring as globs under the admitted root", () => {
+    const record = runFromWire({ ...recordWrittenBy201(), excluded_globs: ["*.tfvars"] });
+    expect(record.exclusions).toEqual([{ root: "/work", globs: ["*.tfvars"] }]);
+    expect(runFromWire({ ...recordWrittenBy201(), excluded_globs: [] }).exclusions).toEqual([]);
+    expect(runToWire(record).excluded_globs).toEqual([{ root: "/work", globs: ["*.tfvars"] }]);
   });
 
   it("round-trips the ceilings, tool-call counts, exclusions and pin identity", () => {
@@ -73,7 +81,7 @@ describe("run record fields added in 2.1", () => {
     expect(record.limits).toMatchObject({ maxTokens: 200000, maxCostUsd: 0.5, maxModelCalls: 17 });
     expect(record.usage?.toolCalls).toEqual({ executed: 7, deniedByHandler: 1, deniedByPolicy: 0 });
     expect(record.usage?.modelCalls).toBeNull();
-    expect(record.excludedGlobs).toEqual(["*.tfvars", "fixtures/private/**"]);
+    expect(record.exclusions).toEqual([{ root: "/work", globs: ["*.tfvars", "fixtures/private/**"] }, { root: "/work/project", globs: ["dumps/*.sql"] }]);
     expect(record.pin).toEqual({ vibeVersion: "2.26.1", manifestSha256: HASH, recordSha256: OTHER_HASH });
     const again = runToWire(record);
     expect(again).toEqual(wire);
@@ -98,6 +106,11 @@ describe("run record fields added in 2.1", () => {
     expect(() => runFromWire({ ...base, excluded_globs: "*.tfvars" })).toThrow(TypeError);
     expect(() => runFromWire({ ...base, excluded_globs: [""] })).toThrow(TypeError);
     expect(() => runFromWire({ ...base, excluded_globs: Array(101).fill("*.sql") })).toThrow(TypeError);
+    expect(() => runFromWire({ ...base, excluded_globs: [{ root: "work", globs: ["*.sql"] }] })).toThrow(TypeError);
+    expect(() => runFromWire({ ...base, excluded_globs: [{ root: "/work", globs: [] }] })).toThrow(TypeError);
+    expect(() => runFromWire({ ...base, excluded_globs: [{ root: "/work", globs: ["*.sql"], extra: true }] })).toThrow(TypeError);
+    expect(() => runFromWire({ ...base, excluded_globs: [{ root: "/work", globs: ["a"] }, { root: "/work", globs: ["b"] }] })).toThrow(TypeError);
+    expect(() => runFromWire({ ...base, excluded_globs: [{ root: "/a", globs: Array(60).fill("x") }, { root: "/b", globs: Array(41).fill("y") }] })).toThrow(TypeError);
     const usage = { ...(base.usage as object), tool_calls: { executed: 1, denied_by_handler: -1, denied_by_policy: 0 } };
     expect(runFromWire({ ...base, usage }).usage?.toolCalls).toBeUndefined();
   });
@@ -157,7 +170,7 @@ describe("run manager records the 2.1 contract fields", () => {
     try {
       const started = await manager.reviewStart({ task: "review", cwd: source, max_turns: 12 });
       await waitFor(async () => (await manager.status({ run_id: started.run_id })).state === "running");
-      expect(backend.input?.excludedGlobs).toEqual(["*.tfvars", "dumps/*.sql"]);
+      expect(backend.input?.exclusions).toEqual([{ root: source, globs: ["*.tfvars", "dumps/*.sql"] }]);
       expect(backend.input?.limits).toMatchObject({ maxTurns: 12, maxTokens: 200000, maxCostUsd: 0.5, maxModelCalls: 17 });
       const pin = { vibeVersion: "2.26.1", manifestSha256: HASH, recordSha256: OTHER_HASH };
       await backend.callbacks?.onState("running", { pin });
@@ -170,7 +183,7 @@ describe("run manager records the 2.1 contract fields", () => {
       const directory = join(data, "runs", started.run_id);
       const meta = JSON.parse(await readFile(join(directory, "meta.json"), "utf8")) as Record<string, unknown>;
       expect(meta.limits).toEqual({ timeout_seconds: TEST_CONFIG.limits.reviewTimeoutSeconds, max_turns: 12, max_event_bytes: TEST_CONFIG.limits.maxEventBytes, max_transcript_bytes: TEST_CONFIG.limits.maxTranscriptBytes, max_artifact_bytes: TEST_CONFIG.limits.maxArtifactBytes, max_tokens: 200000, max_cost_usd: 0.5, max_model_calls: 17 });
-      expect(meta.excluded_globs).toEqual(["*.tfvars", "dumps/*.sql"]);
+      expect(meta.excluded_globs).toEqual([{ root: source, globs: ["*.tfvars", "dumps/*.sql"] }]);
       expect(meta.pin).toEqual({ vibe_version: "2.26.1", manifest_sha256: HASH, record_sha256: OTHER_HASH });
       expect(meta.usage).toEqual({ tokens_used: 10, tool_calls: { executed: 1, denied_by_handler: 1, denied_by_policy: 0 } });
       const ledgerText = await readFile(join(directory, "artifacts", "approvals.json"), "utf8");
@@ -183,6 +196,80 @@ describe("run manager records the 2.1 contract fields", () => {
     } finally { await manager.shutdown(); }
   });
 
+  async function nestedRoots(): Promise<{ outer: string; source: string; data: string }> {
+    const parent = await mkdtemp(join(await realpath(tmpdir()), "vsup-nested-")); roots.push(parent);
+    const outer = join(parent, "outer"); const source = join(outer, "project"); const data = join(parent, "data");
+    await mkdir(join(source, "secrets"), { recursive: true }); await mkdir(join(source, "dumps"));
+    await writeFile(join(source, "secrets", "a.txt"), "x"); await writeFile(join(source, "dumps", "full.sql"), "x"); await writeFile(join(source, "notes.md"), "x");
+    return { outer, source, data };
+  }
+
+  async function startError(manager: RunManager, input: { task: string; cwd: string; context_files?: string[] }): Promise<{ code?: string; message?: string }> {
+    try { await manager.reviewStart(input); }
+    catch (error) { return error as { code?: string; message?: string }; }
+    throw new Error("expected the start to be refused");
+  }
+
+  it("applies the exclusions of every allowed root that contains the workspace, not only the nearest", async () => {
+    const { outer, source, data } = await nestedRoots();
+    const backend = new RecordingBackend();
+    const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [outer, source], excludedGlobs: { [outer]: ["project/secrets/**", "*.tfvars"], [source]: ["dumps/*.sql"] } };
+    const manager = new RunManager(config, data, [backend]);
+    try {
+      const started = await manager.reviewStart({ task: "review", cwd: source });
+      await waitFor(async () => (await manager.status({ run_id: started.run_id })).state === "running");
+      expect(backend.input?.exclusions).toEqual([{ root: outer, globs: ["project/secrets/**", "*.tfvars"] }, { root: source, globs: ["dumps/*.sql"] }]);
+      const meta = JSON.parse(await readFile(join(data, "runs", started.run_id, "meta.json"), "utf8")) as Record<string, unknown>;
+      expect(meta.admitted_root).toBe(source);
+      expect(meta.excluded_globs).toEqual([{ root: outer, globs: ["project/secrets/**", "*.tfvars"] }, { root: source, globs: ["dumps/*.sql"] }]);
+    } finally { await manager.shutdown(); }
+  });
+
+  it("refuses a context file that matches an exclusion of any containing root, anchored at that root", async () => {
+    const { outer, source, data } = await nestedRoots();
+    const backend = new RecordingBackend();
+    const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [outer, source], excludedGlobs: { [outer]: ["project/secrets/**"], [source]: ["dumps/*.sql"] } };
+    const manager = new RunManager(config, data, [backend]);
+    try {
+      for (const file of ["secrets/a.txt", "dumps/full.sql", join(source, "secrets", "a.txt")]) {
+        const error = await startError(manager, { task: "review", cwd: source, context_files: [file] });
+        expect(error.code, file).toBe("VSUP_WORKSPACE_INVALID");
+        expect(error.message, file).toContain("excluded_globs");
+      }
+      expect(backend.input).toBeUndefined();
+      const started = await manager.reviewStart({ task: "review", cwd: source, context_files: ["notes.md"] });
+      expect(started.state).toBeDefined();
+    } finally { await manager.shutdown(); }
+  });
+
+  it("refuses a start whose containing roots contribute more exclusions than a run record holds", async () => {
+    const { outer, source, data } = await nestedRoots();
+    const backend = new RecordingBackend();
+    const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [outer, source], excludedGlobs: { [outer]: Array.from({ length: 60 }, (_, index) => `outer-${index}.txt`), [source]: Array.from({ length: 41 }, (_, index) => `inner-${index}.txt`) } };
+    const manager = new RunManager(config, data, [backend]);
+    try {
+      const error = await startError(manager, { task: "review", cwd: source });
+      expect(error.code).toBe("VSUP_CONFIG_INVALID");
+      expect(error.message).toContain("101 excluded_globs");
+      expect(backend.input).toBeUndefined();
+    } finally { await manager.shutdown(); }
+  });
+
+  it("fails closed when a root with exclusions cannot be canonicalized instead of dropping its globs", async () => {
+    const { outer, source, data } = await nestedRoots();
+    const alias = join(outer, "..", "alias"); await symlink(outer, alias);
+    const backend = new RecordingBackend();
+    const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [source], excludedGlobs: { [alias]: ["project/secrets/**"] } };
+    const manager = new RunManager(config, data, [backend]);
+    try {
+      const error = await startError(manager, { task: "review", cwd: source });
+      expect(error.code).toBe("VSUP_CONFIG_INVALID");
+      expect(error.message).toContain(alias);
+      expect(backend.input).toBeUndefined();
+    } finally { await manager.shutdown(); }
+    await expect(exclusionScopesForWorkspace({ ...config, excludedGlobs: { [join(outer, "..", "gone")]: ["x"] } }, source)).resolves.toEqual([]);
+  });
+
   it("records an empty exclusion list and no ledger when neither is provided", async () => {
     const parent = await mkdtemp(join(await realpath(tmpdir()), "vsup-fields-")); roots.push(parent);
     const source = join(parent, "source"); const data = join(parent, "data");
@@ -192,7 +279,7 @@ describe("run manager records the 2.1 contract fields", () => {
     try {
       const started = await manager.reviewStart({ task: "review", cwd: source });
       await waitFor(async () => (await manager.status({ run_id: started.run_id })).state === "running");
-      expect(backend.input?.excludedGlobs).toEqual([]);
+      expect(backend.input?.exclusions).toEqual([]);
       expect(backend.input?.limits.maxTokens).toBeUndefined();
       expect(backend.input?.limits.maxCostUsd).toBeUndefined();
       await backend.callbacks?.onState("completed", { result: { summary: "Done" } });

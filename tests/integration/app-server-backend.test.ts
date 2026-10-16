@@ -11,6 +11,7 @@ import { ResolvedCredential, type CredentialResolution } from '../../src/backend
 import { PinCheckError } from '../../src/backends/app-server/pin.js';
 import { CLIENT_ENTRYPOINT } from '../../src/backends/app-server/protocol.js';
 import { PROFILE_TOOLS, TOOL_PERMISSION, workspaceDenylist } from '../../src/backends/app-server/session-config.js';
+import { denylistAnchors } from '../../src/security/globs.js';
 import { SUPPORTED_VIBE } from '../../src/backends/app-server/supported-vibe.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, PinIdentity, RunLimits, RunMode, RunState, StartRunInput, SupervisorConfig, SupervisorError } from '../../src/contracts.js';
@@ -64,6 +65,7 @@ interface HarnessOptions {
   gitRepository?: boolean;
   excludedGlobs?: string[];
   effectiveExcludedGlobs?: string[];
+  anchorAtParent?: boolean;
 }
 
 class Harness {
@@ -97,7 +99,9 @@ class Harness {
     if (harness.gitRepository) execFileSync('git', ['init', '-q'], { cwd: this.workspace, stdio: 'ignore' });
     const scenarioFile = path.join(this.base, 'scenario.json');
     const document = typeof scenario === 'string' ? JSON.parse(readFileSync(path.join(scenarioDirectory, `${scenario}.json`), 'utf8')) as Json : scenario;
-    const effectiveDenylist = workspaceDenylist(this.workspace, harness.effectiveExcludedGlobs ?? harness.excludedGlobs ?? []);
+    const exclusionRoot = harness.anchorAtParent ? this.base : this.workspace;
+    const effectiveGlobs = harness.effectiveExcludedGlobs ?? harness.excludedGlobs ?? [];
+    const effectiveDenylist = workspaceDenylist(this.workspace, effectiveGlobs.length > 0 ? denylistAnchors([{ root: exclusionRoot, globs: effectiveGlobs }], this.workspace, this.workspace) : []);
     const profileTools = Object.fromEntries(PROFILE_TOOLS[harness.mode ?? 'review'].map((tool) => [tool, { permission: TOOL_PERMISSION, denylist: effectiveDenylist }]));
     const effective = { ...(document.effectiveConfig as Json | undefined) };
     writeFileSync(scenarioFile, JSON.stringify({ ...document, effectiveConfig: { ...effective, tools: { ...profileTools, ...(effective.tools as Json | undefined) } } }));
@@ -125,7 +129,7 @@ class Harness {
       workerWorkspace: this.workspace,
       runDirectory: this.runDirectory,
       ...(harness.contextFiles ? { contextFiles: harness.contextFiles } : {}),
-      excludedGlobs: harness.excludedGlobs ?? [],
+      exclusions: harness.excludedGlobs ? [{ root: exclusionRoot, globs: harness.excludedGlobs }] : [],
       limits: { timeoutSeconds: 20, maxTurns: 20, maxEventBytes: 50_000_000, maxTranscriptBytes: 10_000_000, maxArtifactBytes: 10_000_000, ...harness.limits }
     };
     harnesses.push(this);
@@ -1343,6 +1347,23 @@ describe('app-server backend: per-workspace exclusions', () => {
     harness.expectCleanedUp();
   });
 
+  it('anchors the globs at the allowed root above the workspace in the handler, the listing and the denylist', async () => {
+    const anchored = ['workspace/fixtures/private/**', 'workspace/deploy/*.tfvars'];
+    const harness = new Harness('excluded-read', { excludedGlobs: anchored, anchorAtParent: true, workspaceFiles, gitRepository: true });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(harness.eventsOfType('tool_denied').map((event) => [event.data.reason, event.data.path])).toEqual([
+      ['path_excluded', `${harness.workspace}/fixtures/private/customers.json`],
+      ['path_excluded', `${harness.workspace}/deploy/prod.tfvars`]
+    ]);
+    const prompt = ((harness.frames('turn/start')[0]?.params as Json).message as Array<{ text: string }>)[0]?.text ?? '';
+    expect(prompt).toContain('- deploy/main.tf\n- fixtures/public/sample.json\n- src/index.ts\n');
+    expect(prompt).not.toContain('customers.json');
+    const written = workspaceDenylist(harness.workspace, denylistAnchors([{ root: harness.base, globs: anchored }], harness.workspace, harness.workspace));
+    expect(written).toContain(`${harness.base}/workspace/fixtures/private/**`);
+  });
+
   it('approves the same reads when the root has no exclusions', async () => {
     const harness = new Harness('excluded-read', { workspaceFiles });
     const terminal = await harness.run();
@@ -1412,6 +1433,19 @@ describe('app-server backend: pin identity and approval ledger', () => {
     expect(approvals?.records.map((record) => record.relatedEntryId)).toEqual([...executed, ...denied]);
     expect(harness.states.slice(0, -1).some((item) => item.update?.approvals !== undefined)).toBe(false);
   });
+
+  it('applies the credential sentinel to the ledger it hands over, as it does to events', async () => {
+    const scenario = { name: 'ledger-secret', steps: [
+      { op: 'call', tool: 'file_system.read_file', mode: 'approval', input: { filePath: `\${cwd}/src/${SECRET}.ts`, offset: null, limit: 2000 } },
+      { op: 'say', text: 'Done.' }
+    ] };
+    const harness = new Harness(scenario);
+    const terminal = await harness.run();
+
+    expect(terminal.update?.approvals?.records).toHaveLength(1);
+    expect(JSON.stringify(terminal.update?.approvals)).not.toContain(SECRET);
+    expect(terminal.update?.approvals?.records[0]?.path).toContain('[REDACTED]');
+  });
 });
 
 describe('app-server backend through the run manager: pin, ledger and export', () => {
@@ -1462,10 +1496,18 @@ describe('app-server backend through the run manager: pin, ledger and export', (
 
     const output = path.join(base, 'bundle');
     await exportReport({ directory, output });
-    const exported = JSON.parse(readFileSync(path.join(output, 'approvals.json'), 'utf8')) as { records: Json[] };
+    const exportedBytes = readFileSync(path.join(output, 'approvals.json'));
+    const exported = JSON.parse(exportedBytes.toString('utf8')) as { records: Json[] };
     expect(exported.records.map((record) => record.decision)).toEqual(['approve', 'approve', 'deny']);
+    expect(exported.records.map((record) => record.path)).toEqual(['src/index.ts', 'src/index.ts', '<outside-workspace>']);
+    expect(exportedBytes.toString('utf8')).not.toContain(base);
+    expect(exportedBytes.toString('utf8')).not.toContain('/etc/passwd');
     const report = JSON.parse(readFileSync(path.join(output, 'report.json'), 'utf8')) as Json;
-    expect(report.approvals).toMatchObject({ file: 'approvals.json', records: 3, truncated: false });
+    expect(report.approvals).toMatchObject({ file: 'approvals.json', records: 3, truncated: false, exported_sha256: createHash('sha256').update(exportedBytes).digest('hex') });
+    expect((report.approvals as Json).source_sha256).toBe(createHash('sha256').update(readFileSync(path.join(directory, 'artifacts', 'approvals.json'))).digest('hex'));
     expect(report.pin).toEqual(meta.pin);
+
+    rmSync(path.join(directory, 'artifacts', 'approvals.json'));
+    await expect(exportReport({ directory, output: path.join(base, 'bundle-without-ledger') })).rejects.toThrow('approval ledger listed in the run artifacts is missing');
   }, 90_000);
 });

@@ -380,12 +380,14 @@ async function findUnlisted(located: LocatedEnvironment, listed: ReadonlySet<str
   return extra.sort();
 }
 
-export async function loadPinManifest(file: string, limits?: Partial<PinLimits>): Promise<PinManifest> {
+export async function readPinManifestBytes(file: string, limits?: Partial<PinLimits>): Promise<Buffer> {
   const { maxManifestBytes } = resolveLimits(limits);
-  let data: Buffer;
-  try { data = await readBounded(await realpath(file), maxManifestBytes); }
+  try { return await readBounded(await realpath(file), maxManifestBytes); }
   catch { throw new PinCheckError('manifest-unreadable', 'The pin manifest cannot be read as a bounded regular file.'); }
-  return parsePinManifest(data.toString('utf8'));
+}
+
+export async function loadPinManifest(file: string, limits?: Partial<PinLimits>): Promise<PinManifest> {
+  return parsePinManifest((await readPinManifestBytes(file, limits)).toString('utf8'));
 }
 
 export function parsePinManifest(text: string): PinManifest {

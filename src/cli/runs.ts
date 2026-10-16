@@ -63,17 +63,6 @@ export async function resolveDataDir(configPath: string | undefined): Promise<{ 
   return { dataDir: resolved.dataDir, config: resolved.config };
 }
 
-export async function enumerateRunDirectories(dataDir: string): Promise<string[]> {
-  if (!await lstat(dataDir).then(() => true, (error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return false; throw error; })) return [];
-  const root = await realpath(dataDir);
-  const info = await lstat(root);
-  if (!info.isDirectory() || foreignOwner(info.uid)) throw invalidState(`The supervisor data root ${dataDir} is not a directory owned by the current user; inspect it manually.`);
-  const homes = [root, ...await sessionHomes(path.join(root, 'mcp-sessions'))];
-  const directories: string[] = [];
-  for (const home of homes) directories.push(...await runDirectoriesIn(path.join(home, 'runs')));
-  return directories;
-}
-
 export async function readRunJson(file: string): Promise<unknown> {
   const directory = await lstat(path.dirname(file));
   if (directory.isSymbolicLink() || !directory.isDirectory()) throw new Error('Unsafe run record directory.');
@@ -85,6 +74,31 @@ export async function readRunJson(file: string): Promise<unknown> {
   } finally { await handle.close(); }
 }
 
+export async function enumerateRunDirectories(dataDir: string): Promise<string[]> {
+  if (!await lstat(dataDir).then(() => true, (error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return false; throw error; })) return [];
+  const root = await realpath(dataDir);
+  const info = await lstat(root);
+  if (!info.isDirectory() || foreignOwner(info.uid)) throw invalidState(`The supervisor data root ${dataDir} is not a directory owned by the current user; inspect it manually.`);
+  const directories = [...await runDirectoriesIn(path.join(root, 'runs'))];
+  for (const home of await sessionHomes(path.join(root, 'mcp-sessions'))) {
+    try { directories.push(...await runDirectoriesIn(path.join(home, 'runs'))); }
+    catch (error) { warnSkipped(home, error); }
+  }
+  return directories;
+}
+
+export async function locateListedRun(dataDir: string, runId: string): Promise<string> {
+  const matches = (await enumerateRunDirectories(dataDir)).filter((directory) => path.basename(directory).toLowerCase() === runId.toLowerCase());
+  if (matches.length === 0) throw Object.assign(new Error(`Run ${runId} was not found in the data root or its isolated sessions.`), supervisorError('VSUP_NOT_FOUND', `Run ${runId} was not found in the data root or its isolated sessions.`));
+  if (matches.length > 1) throw invalidState(`Run ${runId} appears in more than one store; inspect the data root manually.`);
+  return matches[0] as string;
+}
+
+function warnSkipped(home: string, error: unknown): void {
+  const reason = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`Skipped the isolated session ${home}: ${reason}\n`);
+}
+
 async function sessionHomes(sessions: string): Promise<string[]> {
   if (!await privateDirectory(sessions, 'session root')) return [];
   const entries = await readdir(sessions);
@@ -92,7 +106,8 @@ async function sessionHomes(sessions: string): Promise<string[]> {
   const homes: string[] = [];
   for (const name of entries.filter((entry) => SESSION_NAME.test(entry)).sort()) {
     const home = path.join(sessions, name);
-    if (await privateDirectory(home, 'session directory')) homes.push(home);
+    try { if (await privateDirectory(home, 'session directory')) homes.push(home); }
+    catch (error) { warnSkipped(home, error); }
   }
   return homes;
 }
@@ -151,7 +166,7 @@ async function showRun(invocation: RunsInvocation): Promise<void> {
   const id = invocation.positional[1] ?? '';
   if (!validRunId(id)) fail('runs show requires a valid run UUID.', 2);
   const { dataDir } = await resolveDataDir(invocation.configPath);
-  const directory = path.join(dataDir, 'runs', id);
+  const directory = await locateListedRun(dataDir, id);
   const [record, result] = await Promise.all([
     readRunJson(path.join(directory, 'meta.json')),
     readRunJson(path.join(directory, 'result.json')).catch(() => undefined),
@@ -164,7 +179,8 @@ async function tailRun(invocation: RunsInvocation): Promise<void> {
   const id = invocation.positional[1] ?? '';
   if (!validRunId(id)) fail('runs tail requires a valid run UUID.', 2);
   const { dataDir, config } = await resolveDataDir(invocation.configPath);
-  const events = await readNdjsonRecovering(path.join(dataDir, 'runs', id, 'events.ndjson'), { maxBytes: config.limits.maxEventBytes });
+  const directory = await locateListedRun(dataDir, id);
+  const events = await readNdjsonRecovering(path.join(directory, 'events.ndjson'), { maxBytes: config.limits.maxEventBytes });
   print(events.slice(-20));
 }
 
