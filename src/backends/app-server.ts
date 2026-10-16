@@ -2,7 +2,7 @@ import { modelObservationSchema } from "../reporting/telemetry.js";
 import { checkPreparation, type PreparationStatus } from "../preparation/evidence.js";
 import { createHash } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
-import { access, open, realpath, rm } from 'node:fs/promises';
+import { access, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   ApprovalLedgerEntry, ApprovalLedgerSnapshot, BackendCallbacks, BackendCapabilities, BackendKind, BackendRunHandle, BackendStartResult, EventSeverity,
@@ -15,6 +15,7 @@ import { spawnManaged, type ManagedProcess } from '../process/managed.js';
 import { ReaperStartError, startReaper, type ReaperHandle, type ReaperOptions } from '../process/reaper.js';
 import { buildChildEnvironment } from '../security/environment.js';
 import { WorkspacePathError } from '../security/paths.js';
+import { denylistAnchors, workspaceAnchors } from '../security/globs.js';
 import { assertNoProjectVibeExtensions } from '../security/workspace-guard.js';
 import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { APP_VERSION } from '../version.js';
@@ -26,7 +27,7 @@ import {
   type JsonObject, type NotificationHandler
 } from './app-server/jsonrpc.js';
 import { mapOutcome, type RunOutcome, type SupervisorCondition } from './app-server/outcome.js';
-import { DEFAULT_PIN_LIMITS, PinCheckError, locateEnvironment, parsePinManifest, verifyPinnedInstall } from './app-server/pin.js';
+import { DEFAULT_PIN_LIMITS, PinCheckError, locateEnvironment, parsePinManifest, readPinManifestBytes, verifyPinnedInstall } from './app-server/pin.js';
 import {
   MAX_PAGE_LIMIT, ProtocolParseError, buildCallbackResult, buildConfigEffectiveRead, buildConfigRead, buildInitialize,
   buildInitialized, buildRuntimeRead, buildSessionHistoryList, buildSessionRead, buildSessionReadyWait, buildSessionStart,
@@ -225,23 +226,6 @@ function reportedPin(value: unknown): PinIdentity | undefined {
   return { vibeVersion, manifestSha256, recordSha256 };
 }
 
-async function readManifestBytes(file: string): Promise<Buffer> {
-  const unreadable = (): PinCheckError => new PinCheckError('manifest-unreadable', 'The pin manifest cannot be read as a bounded regular file.');
-  let handle;
-  try { handle = await open(await realpath(file), fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0)); }
-  catch { throw unreadable(); }
-  try {
-    const info = await handle.stat();
-    if (!info.isFile() || info.size > DEFAULT_PIN_LIMITS.maxManifestBytes) throw unreadable();
-    const data = await handle.readFile();
-    if (data.length > DEFAULT_PIN_LIMITS.maxManifestBytes) throw unreadable();
-    return data;
-  } catch (error) {
-    if (error instanceof PinCheckError) throw error;
-    throw unreadable();
-  } finally { await handle.close(); }
-}
-
 type TurnEnd = 'turn' | 'forced';
 
 class AppServerRun {
@@ -298,7 +282,6 @@ class AppServerRun {
   private hurriedFlag = false;
   private stderrTail = '';
   private lastUsageEmit = 0;
-  private ledgerOverflowed = false;
 
   constructor(parts: RunParts) {
     this.preparation = parts.preparation;
@@ -319,7 +302,7 @@ class AppServerRun {
     this.handler = new ApprovalHandler({
       mode: parts.input.mode,
       workspace: parts.input.workerWorkspace,
-      excludedGlobs: parts.input.excludedGlobs,
+      excludedGlobs: workspaceAnchors(parts.input.exclusions, parts.input.cwd),
       currentSessionId: () => this.sessionId,
       ...(parts.options.approvals?.deadlineMs === undefined ? {} : { deadlineMs: parts.options.approvals.deadlineMs }),
       ...(parts.options.approvals?.evaluate === undefined ? {} : { evaluate: parts.options.approvals.evaluate })
@@ -548,7 +531,6 @@ class AppServerRun {
   private async answer(pending: PendingApproval): Promise<void> {
     try {
       const verdict = await pending.verdict;
-      if (verdict.reason === 'ledger_full') this.ledgerOverflowed = true;
       await this.rpc(buildCallbackResult(this.sessionId, pending.callbackId, verdict.decision), (value) => parseAcceptedResult(value, 'callback/result result'), this.timing.requestTimeoutMs);
     } catch (error) {
       if (error instanceof JsonRpcServerError && BENIGN_SERVER_ERRORS.has(error.code)) return;
@@ -834,8 +816,8 @@ class AppServerRun {
 
   private approvalSnapshot(): ApprovalLedgerSnapshot {
     const all = this.handler.ledger.all();
-    const records = all.slice(0, MAX_APPROVAL_LEDGER_RECORDS).map(ledgerEntry);
-    return { records, truncated: this.ledgerOverflowed || all.length > records.length };
+    const records = all.slice(0, MAX_APPROVAL_LEDGER_RECORDS).map((record) => sanitizeForPersistence(ledgerEntry(record), this.secrets) as ApprovalLedgerEntry);
+    return { records, truncated: this.handler.ledger.truncated || all.length > records.length };
   }
 
   private unfinishedEffects(audit: HistoryAudit | null): EventFatal | null {
@@ -1034,7 +1016,7 @@ export class AppServerBackend implements SupervisorBackend {
     const manifestPath = pin?.manifestPath ?? this.config.paths?.vibePinManifest;
     if (manifestPath) {
       await locateEnvironment(executable);
-      const bytes = await readManifestBytes(manifestPath);
+      const bytes = await readPinManifestBytes(manifestPath, DEFAULT_PIN_LIMITS);
       const manifest = parsePinManifest(bytes.toString('utf8'));
       const pinned = await verifyPinnedInstall({ executable, manifest });
       return {
@@ -1085,10 +1067,12 @@ export class AppServerBackend implements SupervisorBackend {
       throw supervisorError('VSUP_AUTH_REQUIRED', 'No Mistral credential was found for the Vibe app-server.', { credential_status: resolution.status, ...(resolution.detail ? { detail: resolution.detail } : {}) });
     }
     let plan: SessionConfigPlan;
+    let anchors: ReturnType<typeof workspaceAnchors>;
     try {
-      plan = buildSessionConfig({ mode: input.mode, workspace: input.workerWorkspace, runDirectory: input.runDirectory, maxTurns: input.limits.maxTurns, excludedGlobs: input.excludedGlobs });
+      anchors = workspaceAnchors(input.exclusions, input.cwd);
+      plan = buildSessionConfig({ mode: input.mode, workspace: input.workerWorkspace, runDirectory: input.runDirectory, maxTurns: input.limits.maxTurns, excludedGlobs: denylistAnchors(input.exclusions, input.cwd, input.workerWorkspace) });
     } catch (error) { throw toSupervisorError(error, []); }
-    const listing = await buildWorkspaceListing(input.workerWorkspace, this.options.listing, input.excludedGlobs);
+    const listing = await buildWorkspaceListing(input.workerWorkspace, this.options.listing, anchors);
     const run = new AppServerRun({
       input, callbacks, preparation, options: this.runOptions, timing: this.timing, executable: verified.executable, pin: verified.pin, plan, listing,
       credential: resolution.credential, expectedVersion: this.options.expectedServerVersion ?? SUPPORTED_VIBE

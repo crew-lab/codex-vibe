@@ -253,6 +253,13 @@ describe("excluded_globs", () => {
     expect(validateConfig({ ...base, allowed_workspace_roots: [project] })).not.toHaveProperty("excludedGlobs");
   });
 
+  it("rejects the same root listed twice, written alike or differently, so its exclusions cannot split", () => {
+    expect(() => validateConfig({ ...base, allowed_workspace_roots: [project, project] }, "/home-of/me")).toThrow(/lists the same root twice/);
+    expect(() => validateConfig({ ...base, allowed_workspace_roots: [project, `${project}/`] }, "/home-of/me")).toThrow(/lists the same root twice/);
+    expect(() => validateConfig({ ...base, allowed_workspace_roots: ["~/code", "/home-of/me/code"], excluded_globs: { "~/code": ["a"], "/home-of/me/code": ["b"] } }, "/home-of/me")).toThrow(/lists the same root twice/);
+    expect(validateConfig({ ...base, allowed_workspace_roots: [project, other] }, "/home-of/me").allowedWorkspaceRoots).toEqual([project, other]);
+  });
+
   it("accepts the documented syntax", () => {
     const globs = ["*.tfvars", "fixtures/private/**", "dumps/*.sql", "**/secret.json", "a/**/b", "x@1+2=3,4_5-6.7", "**", "*", "a/**", ".hidden", "v1.2/*.yaml", "A".repeat(256)];
     expect(validateConfig(withExclusions({ [project]: globs })).excludedGlobs?.[project]).toEqual(globs);

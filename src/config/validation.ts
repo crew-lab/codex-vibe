@@ -90,9 +90,14 @@ export interface ValidateConfigOptions {
 
 export function validateConfig(input: unknown, home = process.env.HOME ?? process.env.USERPROFILE ?? homedir(), options: ValidateConfigOptions = {}): SupervisorConfig {
   const parsed = (options.requirePinManifest === false ? baseSchema : strictSchema).parse(input);
+  const expandedRoots = new Map<string, string>();
   for (const root of parsed.allowed_workspace_roots) {
-    try { assertWorkspaceRootScope(root, home); }
+    let expanded: string;
+    try { expanded = assertWorkspaceRootScope(root, home); }
     catch (error) { throw new Error(`allowed_workspace_roots contains an unsafe root: ${(error as Error).message}`); }
+    const earlier = expandedRoots.get(expanded);
+    if (earlier !== undefined) throw new Error(`allowed_workspace_roots lists the same root twice (${JSON.stringify(earlier)} and ${JSON.stringify(root)}); keep one entry and merge its excluded_globs.`);
+    expandedRoots.set(expanded, root);
   }
   const excludedGlobs = normalizeExcludedGlobs(parsed.excluded_globs);
   return {

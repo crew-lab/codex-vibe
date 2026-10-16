@@ -2,8 +2,8 @@ import { preparationStatusSchema } from "../preparation/evidence.js";
 import { z } from "zod";
 import { modelObservationsSchema } from "../reporting/telemetry.js";
 import { acceptanceContractSchema, verificationSchema, parseAssessments } from "../acceptance/schema.js";
-import { MAX_APPROVAL_LEDGER_RECORDS, REMEDIATION, isBackendKind } from "../contracts.js";
-import type { ApprovalLedgerSnapshot, PinIdentity, RunLimits, RunRecord, SupervisorErrorCode, SupervisorEvent, ToolCallCounts, UsageState } from "../contracts.js";
+import { MAX_APPROVAL_LEDGER_RECORDS, MAX_RUN_EXCLUDED_GLOBS, REMEDIATION, isBackendKind } from "../contracts.js";
+import type { ApprovalLedgerSnapshot, ExclusionScope, PinIdentity, RunLimits, RunRecord, SupervisorErrorCode, SupervisorEvent, ToolCallCounts, UsageState } from "../contracts.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -84,7 +84,7 @@ export function runToWire(run: RunRecord): JsonObject {
     ...(run.assessments ? { assessments: run.assessments } : {}),
     ...(run.policyRevision ? { policy_revision: run.policyRevision } : {}),
     ...(run.admittedRoot ? { admitted_root: run.admittedRoot } : {}),
-    ...(run.excludedGlobs ? { excluded_globs: run.excludedGlobs } : {}),
+    ...(run.exclusions ? { excluded_globs: run.exclusions.map((scope) => ({ root: scope.root, globs: [...scope.globs] })) } : {}),
     ...(run.workspaceSnapshotSha256 ? { workspace_snapshot_sha256: run.workspaceSnapshotSha256 } : {}),
     ...(run.process ? { process: run.process } : {}),
     ...(run.pin ? { pin: pinToWire(run.pin) } : {}),
@@ -150,7 +150,7 @@ export function runFromWire(value: unknown): RunRecord {
     if (value.admitted_root.length > 4096 || !value.admitted_root.startsWith("/")) throw new TypeError("Invalid persisted admitted root");
     run.admittedRoot = value.admitted_root;
   }
-  if (value.excluded_globs !== undefined) run.excludedGlobs = excludedGlobsFromWire(value.excluded_globs);
+  if (value.excluded_globs !== undefined) run.exclusions = exclusionsFromWire(value.excluded_globs, run.admittedRoot ?? run.sourceWorkspace);
   if (value.pin !== undefined) run.pin = pinFromWire(value.pin);
   if (typeof value.workspace_snapshot_sha256 === "string") {
     if (!/^[a-f0-9]{64}$/i.test(value.workspace_snapshot_sha256)) throw new TypeError("Invalid persisted workspace snapshot digest");
@@ -181,8 +181,8 @@ export function runFromWire(value: unknown): RunRecord {
 
 const INTEGER_LIMIT_FIELDS = ["timeoutSeconds", "maxTurns", "maxEventBytes", "maxTranscriptBytes", "maxArtifactBytes"] as const;
 export const MAX_COST_CEILING_USD = 1_000_000;
-const MAX_RECORDED_EXCLUDED_GLOBS = 100;
 const MAX_EXCLUDED_GLOB_CHARS = 256;
+const MAX_RECORDED_ROOT_CHARS = 4096;
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 const VERSION_TEXT = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
@@ -210,9 +210,23 @@ function costCeiling(value: unknown): number {
   return value;
 }
 
-function excludedGlobsFromWire(value: unknown): string[] {
-  if (!Array.isArray(value) || value.length > MAX_RECORDED_EXCLUDED_GLOBS || !value.every((glob): glob is string => typeof glob === "string" && glob.length > 0 && glob.length <= MAX_EXCLUDED_GLOB_CHARS)) throw new TypeError("Invalid persisted excluded globs");
-  return [...value];
+function recordedGlobs(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length <= MAX_RUN_EXCLUDED_GLOBS && value.every((glob) => typeof glob === "string" && glob.length > 0 && glob.length <= MAX_EXCLUDED_GLOB_CHARS);
+}
+
+function exclusionsFromWire(value: unknown, legacyRoot: string): ExclusionScope[] {
+  const invalid = (): TypeError => new TypeError("Invalid persisted excluded globs");
+  if (!Array.isArray(value)) throw invalid();
+  if (value.every((item) => typeof item === "string")) {
+    if (!recordedGlobs(value)) throw invalid();
+    return value.length === 0 ? [] : [{ root: legacyRoot, globs: [...value] }];
+  }
+  const scopes = value.map((item): ExclusionScope => {
+    if (!isObject(item) || typeof item.root !== "string" || item.root.length > MAX_RECORDED_ROOT_CHARS || !item.root.startsWith("/") || !recordedGlobs(item.globs) || item.globs.length === 0 || Object.keys(item).some((key) => key !== "root" && key !== "globs")) throw invalid();
+    return { root: item.root, globs: [...item.globs] };
+  });
+  if (scopes.reduce((total, scope) => total + scope.globs.length, 0) > MAX_RUN_EXCLUDED_GLOBS || new Set(scopes.map((scope) => scope.root)).size !== scopes.length) throw invalid();
+  return scopes;
 }
 
 function pinFromWire(value: unknown): PinIdentity {

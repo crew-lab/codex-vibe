@@ -47,6 +47,12 @@ describe('excluded globs in the listing', () => {
     expect(eligibleListingPaths(buffer(...paths))).toEqual([...paths].sort());
   });
 
+  it('matches globs anchored at an allowed root above the workspace against the root-relative path', () => {
+    const anchored = [{ prefix: ['project'], globs: ['project/fixtures/private/**', 'project/dumps/*.sql'] }];
+    expect(eligibleListingPaths(buffer(...paths), anchored)).toEqual(['a.ts', 'dumps/nested/full.sql', 'fixtures/public/b.json', 'infra/prod.tfvars', 'prod.tfvars', 'src/index.ts']);
+    expect(eligibleListingPaths(buffer(...paths), [{ prefix: ['other'], globs: ['project/fixtures/private/**'] }])).toEqual([...paths].sort());
+  });
+
   it('does not count excluded files as eligible or include them in the text', async () => {
     const root = repository({ 'src/index.ts': 'a', 'prod.tfvars': 'secret', 'infra/prod.tfvars': 'secret', 'fixtures/private/a.json': 'real data', 'README.md': 'd' });
     const listing = await buildWorkspaceListing(root, {}, ['*.tfvars', 'fixtures/private/**']);

@@ -113,16 +113,48 @@ describe('CLI runs list across isolated sessions', () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it('refuses a session directory that resolves through a link', async () => {
+  it('skips a session directory that resolves through a link with a warning and lists the rest', async () => {
     const { data, config } = await dataRoot();
+    await savedRun(data, rootRun);
     const sessions = path.join(data, 'mcp-sessions');
     await mkdir(sessions, { mode: 0o700 });
     const elsewhere = await tempDir();
     await savedRun(elsewhere, sessionRun);
     await symlink(elsewhere, path.join(sessions, 'session-Zz99Yy'));
     await runCli(['runs', '--config', config, 'list']);
-    expect(errors.join('')).toMatch(/VSUP_INVALID_STATE: An unsafe session directory was found/);
+    expect((JSON.parse(output.join('')) as Array<{ run_id: string }>).map((row) => row.run_id)).toEqual([rootRun]);
+    expect(errors.join('')).toMatch(/Skipped the isolated session .*session-Zz99Yy: An unsafe session directory was found/);
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('still refuses the listing when the data root itself is unsafe', async () => {
+    const { data, config } = await dataRoot();
+    const elsewhere = await tempDir();
+    await mkdir(path.join(elsewhere, 'runs'), { mode: 0o700 });
+    await symlink(path.join(elsewhere, 'runs'), path.join(data, 'runs'));
+    await runCli(['runs', '--config', config, 'list']);
+    expect(output.join('')).toBe('');
+    expect(errors.join('')).toMatch(/VSUP_INVALID_STATE: An unsafe run directory was found/);
     expect(process.exitCode).toBe(1);
+  });
+
+  it('shows and tails a run saved in an isolated session, as list finds it', async () => {
+    const { data, config } = await dataRoot();
+    await mkdir(path.join(data, 'mcp-sessions'), { mode: 0o700 });
+    const home = path.join(data, 'mcp-sessions', 'session-Ab12Cd');
+    await savedRun(home, sessionRun);
+    const event = { schema_version: 1, seq: 1, timestamp: '2026-10-01T10:00:00.000Z', run_id: sessionRun, backend: 'app-server', source: 'supervisor', type: 'state', severity: 'info', data: { state: 'running' } };
+    await writeFile(path.join(home, 'runs', sessionRun, 'events.ndjson'), `${JSON.stringify(event)}\n`, { mode: 0o600 });
+    await runCli(['runs', '--config', config, 'show', sessionRun]);
+    expect((JSON.parse(output.join('')) as { record: { run_id: string } }).record.run_id).toBe(sessionRun);
+    output.length = 0;
+    await runCli(['runs', '--config', config, 'tail', sessionRun]);
+    expect((JSON.parse(output.join('')) as Array<{ seq: number }>).map((item) => item.seq)).toEqual([1]);
+    expect(process.exitCode).toBeUndefined();
+    output.length = 0;
+    await runCli(['runs', '--config', config, 'show', rootRun]);
+    expect(output.join('')).toBe('');
+    expect(errors.join('')).toContain(`Run ${rootRun} was not found`);
   });
 
   it('rejects an unknown runs subcommand with the usage line', async () => {
