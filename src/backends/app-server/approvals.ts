@@ -36,6 +36,7 @@ export type DenyReason =
   | 'path_outside_workspace'
   | 'path_reserved'
   | 'path_secret'
+  | 'path_excluded'
   | 'path_symlink'
   | 'decision_deadline'
   | 'duplicate_callback'
@@ -143,7 +144,53 @@ function restrictedSegment(segments: readonly string[]): 'path_reserved' | 'path
 }
 
 export function restrictedRelativePath(relative: string): 'path_reserved' | 'path_secret' | null {
-  return restrictedSegment(relative.split(/[\\/]+/).filter((segment) => segment !== ''));
+  return restrictedSegment(relativeSegments(relative));
+}
+
+function relativeSegments(relative: string): string[] {
+  return relative.split(/[\\/]+/).filter((segment) => segment !== '');
+}
+
+const GLOBSTAR = '**';
+
+interface CompiledGlob {
+  segments: ReadonlyArray<RegExp | typeof GLOBSTAR>;
+  anywhere: boolean;
+}
+
+function compileGlob(glob: string): CompiledGlob {
+  const parts = glob.split('/');
+  return { segments: parts.map((part) => (part === GLOBSTAR ? GLOBSTAR : patternToExpression(part))), anywhere: parts.length === 1 };
+}
+
+function matchesAnchored(glob: readonly (RegExp | typeof GLOBSTAR)[], parts: readonly string[]): boolean {
+  const memo = new Map<number, boolean>();
+  const walk = (globIndex: number, partIndex: number): boolean => {
+    const key = globIndex * (parts.length + 1) + partIndex;
+    const known = memo.get(key);
+    if (known !== undefined) return known;
+    let result: boolean;
+    if (globIndex === glob.length) result = partIndex === parts.length;
+    else if (glob[globIndex] === GLOBSTAR) result = walk(globIndex + 1, partIndex) || (partIndex < parts.length && walk(globIndex, partIndex + 1));
+    else result = partIndex < parts.length && (glob[globIndex] as RegExp).test(parts[partIndex] as string) && walk(globIndex + 1, partIndex + 1);
+    memo.set(key, result);
+    return result;
+  };
+  return walk(0, 0);
+}
+
+export type ExcludedMatcher = (segments: readonly string[]) => boolean;
+
+export function createExcludedMatcher(globs: readonly string[]): ExcludedMatcher {
+  const compiled = globs.map(compileGlob);
+  if (compiled.length === 0) return () => false;
+  return (segments) => compiled.some((glob) => (glob.anywhere
+    ? segments.some((segment) => matchesAnchored(glob.segments, [segment]))
+    : matchesAnchored(glob.segments, segments)));
+}
+
+export function excludedRelativePath(relative: string, globs: readonly string[]): boolean {
+  return createExcludedMatcher(globs)(relativeSegments(relative));
 }
 
 function isMissing(error: unknown): boolean {
@@ -184,9 +231,9 @@ async function locate(absolute: string): Promise<Located> {
 
 export type PathJudgement =
   | { allowed: true; resolved: string; relative: string }
-  | { allowed: false; reason: 'path_invalid' | 'path_unresolvable' | 'path_outside_workspace' | 'path_reserved' | 'path_secret' | 'path_symlink' };
+  | { allowed: false; reason: 'path_invalid' | 'path_unresolvable' | 'path_outside_workspace' | 'path_reserved' | 'path_secret' | 'path_excluded' | 'path_symlink' };
 
-export async function judgeWorkspacePath(workspace: string, rawPath: string): Promise<PathJudgement> {
+export async function judgeWorkspacePath(workspace: string, rawPath: string, excluded: readonly string[] = []): Promise<PathJudgement> {
   if (!path.isAbsolute(workspace)) return { allowed: false, reason: 'path_invalid' };
   if (rawPath.length === 0 || rawPath.length > MAX_PATH_CHARS || rawPath.includes('\0') || rawPath.startsWith('~')) return { allowed: false, reason: 'path_invalid' };
   let root: string;
@@ -205,10 +252,12 @@ export async function judgeWorkspacePath(workspace: string, rawPath: string): Pr
   const lexicalSegments = lexical === '' || lexical.startsWith('..') || path.isAbsolute(lexical) ? [] : lexical.split(path.sep);
   const restricted = restrictedSegment([...relative.split(path.sep), ...lexicalSegments]);
   if (restricted) return { allowed: false, reason: restricted };
+  const isExcluded = createExcludedMatcher(excluded);
+  if (isExcluded(relative.split(path.sep)) || isExcluded(lexicalSegments)) return { allowed: false, reason: 'path_excluded' };
   return { allowed: true, resolved: located.resolved, relative };
 }
 
-export async function evaluateApproval(options: { mode: RunMode; workspace: string }, request: ApprovalRequest): Promise<ApprovalVerdict> {
+export async function evaluateApproval(options: { mode: RunMode; workspace: string; excludedGlobs?: readonly string[] }, request: ApprovalRequest): Promise<ApprovalVerdict> {
   const deny = (reason: DenyReason): ApprovalVerdict => ({ decision: 'deny', reason });
   if (request.detailKind !== 'approval') return deny('unsupported_callback');
   const effect = request.effect;
@@ -217,7 +266,7 @@ export async function evaluateApproval(options: { mode: RunMode; workspace: stri
   if (effect.kind !== EFFECT_KIND_BY_TOOL[effect.toolName]) return deny('effect_kind_mismatch');
   const filePath = effectFilePath(effect.input);
   if (filePath === null) return deny('missing_file_path');
-  const judgement = await judgeWorkspacePath(options.workspace, filePath);
+  const judgement = await judgeWorkspacePath(options.workspace, filePath, options.excludedGlobs ?? []);
   return judgement.allowed ? { decision: 'approve', reason: null } : deny(judgement.reason);
 }
 
@@ -276,6 +325,7 @@ export class ApprovalLedger {
 export interface ApprovalHandlerOptions {
   mode: RunMode;
   workspace: string;
+  excludedGlobs?: readonly string[];
   deadlineMs?: number;
   ledger?: ApprovalLedger;
   currentSessionId?: () => string;

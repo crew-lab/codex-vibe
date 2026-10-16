@@ -1,0 +1,14 @@
+{
+  "name": "usage-tool-counts",
+  "baselineStats": { "modelCalls": 2, "sessionPromptTokens": 2000, "sessionCompletionTokens": 500, "sessionCachedTokens": 100, "inputPricePerMillion": 0.4, "outputPricePerMillion": 2, "cachedInputPricePerMillion": 0.04 },
+  "steps": [
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts", "offset": null, "limit": 2000 } },
+    { "op": "stats", "stats": { "modelCalls": 4, "sessionPromptTokens": 4000, "sessionCompletionTokens": 800, "sessionCachedTokens": 600, "toolCallsAgreed": 9, "toolCallsSucceeded": 9 } },
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts", "offset": 0, "limit": 1000 } },
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts", "offset": 0, "limit": 500 } },
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "/etc/passwd", "offset": null, "limit": 2000 } },
+    { "op": "call", "tool": "file_system.write_file", "mode": "never", "input": { "filePath": "${cwd}/src/leak.ts", "content": "oops\n" } },
+    { "op": "stats", "stats": { "modelCalls": 7, "sessionPromptTokens": 8000, "sessionCompletionTokens": 1500, "sessionCachedTokens": 1100, "toolCallsAgreed": 9, "toolCallsSucceeded": 9 } },
+    { "op": "say", "text": "Three reads ran and two calls were refused." }
+  ]
+}

@@ -1,5 +1,5 @@
 import { GitOperationError, preparationGit } from '../../git/worktree.js';
-import { restrictedRelativePath } from './approvals.js';
+import { createExcludedMatcher, restrictedRelativePath } from './approvals.js';
 
 export interface ListingLimits {
   maxFiles: number;
@@ -44,12 +44,14 @@ function classify(error: unknown): ListingUnavailable {
   }
 }
 
-export function eligibleListingPaths(output: Buffer): string[] {
+export function eligibleListingPaths(output: Buffer, excluded: readonly string[] = []): string[] {
+  const isExcluded = createExcludedMatcher(excluded);
   const seen = new Set<string>();
   for (const path of output.toString('utf8').split('\0')) {
     if (path.length === 0 || path.startsWith('/') || UNSAFE_CODE_POINTS(path)) continue;
     if (path.split('/').some((segment) => segment === '..' || segment === '.')) continue;
     if (restrictedRelativePath(path) !== null) continue;
+    if (isExcluded(path.split('/'))) continue;
     seen.add(path);
   }
   return [...seen].sort();
@@ -74,7 +76,7 @@ export function formatListing(paths: readonly string[], limits: Pick<ListingLimi
   return { text: [HEADING, ...lines, ...closing].join('\n'), included: lines.length, eligible: paths.length, truncated, unavailable: null };
 }
 
-export async function buildWorkspaceListing(workspace: string, overrides: Partial<ListingLimits> = {}): Promise<WorkspaceListing> {
+export async function buildWorkspaceListing(workspace: string, overrides: Partial<ListingLimits> = {}, excluded: readonly string[] = []): Promise<WorkspaceListing> {
   const limits = { ...DEFAULT_LISTING_LIMITS, ...overrides };
   let output: Buffer;
   try {
@@ -82,5 +84,5 @@ export async function buildWorkspaceListing(workspace: string, overrides: Partia
   } catch (error) {
     return unavailable(classify(error));
   }
-  return formatListing(eligibleListingPaths(output), limits);
+  return formatListing(eligibleListingPaths(output, excluded), limits);
 }

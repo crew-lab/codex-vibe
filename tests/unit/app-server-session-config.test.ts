@@ -224,3 +224,57 @@ describe('read-back expectation', () => {
     expect(plan.expectation.settings.find((setting) => setting.path.join('.') === 'enabled_agents')).toEqual({ path: ['enabled_agents'], value: ['supervisor-edit'], match: 'equal' });
   });
 });
+
+describe('excluded globs in the denylist', () => {
+  const fixed = workspaceDenylist(workspace);
+
+  it('returns the fixed list unchanged when nothing is excluded', () => {
+    expect(workspaceDenylist(workspace, [])).toEqual(fixed);
+    expect(fixed.length).toBeGreaterThan(0);
+  });
+
+  it('appends the anchored entry, plus the any-depth entry for a one-segment glob, after the fixed entries in order', () => {
+    const merged = workspaceDenylist(workspace, ['*.tfvars', 'fixtures/private/**', 'dumps/*.sql', 'secrets']);
+    expect(merged.slice(0, fixed.length)).toEqual(fixed);
+    expect(merged.slice(fixed.length)).toEqual([
+      '/srv/work/space/*.tfvars', '/srv/work/space/**/*.tfvars',
+      '/srv/work/space/fixtures/private/**',
+      '/srv/work/space/dumps/*.sql',
+      '/srv/work/space/secrets', '/srv/work/space/**/secrets'
+    ]);
+  });
+
+  it('keeps every fixed entry whatever is excluded, and denies the excluded files', () => {
+    const merged = workspaceDenylist(workspace, ['**']);
+    for (const entry of fixed) expect(merged).toContain(entry);
+    const denylist = workspaceDenylist(workspace, ['*.tfvars', 'fixtures/private/**', 'dumps/*.sql']);
+    for (const file of ['/srv/work/space/prod.tfvars', '/srv/work/space/infra/prod.tfvars', '/srv/work/space/fixtures/private/a/b.json', '/srv/work/space/dumps/full.sql']) expect(denied(denylist, file), file).toBe(true);
+    for (const file of ['/srv/work/space/fixtures/public/a.json', '/srv/work/space/src/prod.tfvars.md', '/srv/work/space/src/index.ts']) expect(denied(denylist, file), file).toBe(false);
+  });
+
+  it('refuses a glob that would not stay inside the workspace', () => {
+    for (const glob of ['/etc/passwd', '../outside', 'a/../b', '~/x', '', '!keep', 'a?b', 'a[b]', '{a,b}', 'a//b', 'a/']) {
+      expect(() => workspaceDenylist(workspace, [glob]), glob).toThrow(TypeError);
+    }
+  });
+
+  it('puts the same merged list in the profile of every tool and in the read-back expectation', () => {
+    const excluded = ['*.tfvars', 'fixtures/private/**'];
+    const merged = workspaceDenylist(workspace, excluded);
+    for (const mode of ['review', 'edit'] as const) {
+      const plan = buildSessionConfig({ mode, workspace, runDirectory, maxTurns: 5, excludedGlobs: excluded });
+      const parsed = parse(plan.profile.content) as { tools: Record<string, { denylist: string[] }> };
+      expect(Object.keys(parsed.tools)).toEqual([...PROFILE_TOOLS[mode]]);
+      for (const tool of PROFILE_TOOLS[mode]) {
+        expect(parsed.tools[tool]?.denylist).toEqual(merged);
+        expect(plan.profile.document.tools[tool]?.denylist).toEqual(merged);
+        expect(plan.expectation.toolPolicies[tool]).toEqual({ permission: 'ask', denylist: merged });
+      }
+    }
+  });
+
+  it('leaves the plan identical to the one without exclusions when the list is empty or absent', () => {
+    const plain = buildSessionConfig({ mode: 'review', workspace, runDirectory, maxTurns: 5 });
+    expect(buildSessionConfig({ mode: 'review', workspace, runDirectory, maxTurns: 5, excludedGlobs: [] })).toEqual(plain);
+  });
+});
