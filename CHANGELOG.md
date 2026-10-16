@@ -4,6 +4,8 @@
 
 Unreleased; on main since 2026-10-15. It combines the one-version cleanup with the coordinator workflow built in parallel on the 2.0 line. The five MCP tools, the one active slot, the detached edit worktrees and the no-replay rule are unchanged. No target gate of 2.0.0 or of an earlier build transfers to this one; `docs/acceptance.json` records which gates its own target sitting closed and which stay open.
 
+Known limit (owner decision 2026-10-16): Worker answer quality is not guaranteed and is not a supervisor gate. On the target, the hosted review ran with read-only integrity and verified cleanup but its answer was wrong, and the hosted edit was reported rejected by its acceptance contract; the supervisor's isolation, permissions, events and cleanup were observed working in both. Verify every result independently: the acceptance contract, the export and your own checks decide, never the worker's summary.
+
 Fixes from the target sitting:
 
 - Fixed: the preparation kit could name different bytes than the archive it shipped with. npm runs `prepare` during `npm pack` even with `--ignore-scripts`, which rebuilt `dist` without its SBOM, and packaging hashed the candidate only after regenerating the external SBOM. `package:rc` now captures the candidate identity right after packing, installs the exact archive offline with lifecycle scripts off into a temporary private prefix, and announces success only when the installed identity, version and conformance-script hash match the kit and every kit checksum verifies; the delivery `SHA256SUMS` now lists the kit files, and the temporary installation is removed on success or failure ([preparation](docs/preparation.md)).
