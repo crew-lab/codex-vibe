@@ -96,7 +96,7 @@ export async function exportReport(options: { directory: string; output: string;
     models: { observations: record.modelObservations ?? [], provider: null, underlying_model: null, unavailable_reason: "Runtime-reported session model, model name and alias are recorded when exposed; provider and underlying weights remain unverified." },
     durations_ms: { inference: null, finalization: null, preparation: elapsed(record.createdAt, record.launchedAt), startup: elapsed(record.launchedAt, record.startedAt), execution_and_finalization: elapsed(record.startedAt, record.finishedAt), total: elapsed(record.createdAt, record.finishedAt) },
     usage: record.usage ?? null, limits: record.limits, warnings: record.result?.warnings ?? [], error: record.error ?? null,
-    cleanup: record.cleanup ?? { worktree: 'unknown', reason: 'Legacy or unsettled cleanup evidence not recorded' }, external_validation: external
+    cleanup: record.cleanup ?? { worktree: 'unknown', reason: 'Cleanup evidence was not recorded or the run has not settled' }, external_validation: external
   }) as Record<string, unknown>;
   const files: Record<string, Buffer> = {
     'report.json': Buffer.from(JSON.stringify(report, null, 2) + '\n'),

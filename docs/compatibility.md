@@ -12,7 +12,7 @@ Before each spawn the supervisor locates the Python environment from the `vibe-a
 
 ## Wire facts the client relies on
 
-Read from the source at the Vibe tag, commit `4ae5c5955da8e761318916bdb1a7f46f0b50c7d0`; the files and their hashes are in [Source basis](#source-basis). The no-inference check of the workflow candidate on a running server confirmed the handshake and configuration read-back subset below; hosted permission and event behavior were not observed, and the [unverified gates](#unverified-gates) say which parts the target must still confirm. A source-read fact is not an observed gate.
+Read from the source at the Vibe tag, commit `4ae5c5955da8e761318916bdb1a7f46f0b50c7d0`; the files and their hashes are in [Source basis](#source-basis). The no-inference checks of the workflow candidate and of the corrected 2.0.1 archive on a running server confirmed the handshake and configuration read-back subset below. One hosted review on the corrected archive then observed approved `read_file` calls through the handler, `runtime/updated` and `session/updated` as ignored notification methods, and no handoff or turn retry; it did not exercise a nested write, a denied write or an edit on main's evidence. The [unverified gates](#unverified-gates) say which parts the target must still confirm. A source-read fact is not an observed gate.
 
 - **Framing and handshake.** One compact JSON object per line. `initialize` carries `clientInfo` with the entrypoint value set by `CLIENT_ENTRYPOINT` in `src/backends/app-server/protocol.ts` and `capabilities.callbackKinds = ["approval"]`; without that declaration the server crashes on its first approval. The result's `serverInfo.version` is checked against the pin, then the client sends `initialized`. The server sends error codes as strings (`unauthorized`, `invalid_params`, `not_initialized`, and others); `unauthorized` maps to `VSUP_AUTH_REQUIRED`.
 - **Strictness.** The server's models forbid unknown fields and require `params`, camelCase. The client sends exactly what it builds and tolerates unknown fields on read, but requires the fields it depends on.
@@ -100,6 +100,7 @@ Supervisor `diagnostic` events carry a `reason`, and some failures carry the sam
 | `session_handoff` | event, warning | Vibe compacted or cleared the session and replaced its id; the supervisor followed the new one and added a result warning. |
 | `turn_retrying` | event, warning | Vibe is retrying the turn after a transient error. Recorded only. |
 | `ignored_notifications` | event, info | Counts of unknown notification methods (with `unknown_methods`), stale events and notifications for another session, ignored by design. |
+| `reasoning_observation` | event, info | Recorded once when the turn concludes: `streamed_entries` (structured reasoning entries dropped on receipt), `history_entries` (those found by the final history audit, null without one) and `history_audited` (the audit completed without a fatal error). The two counts can overlap and are not summed. Counts only; zero means none observed, not that no reasoning was generated. |
 | `reaper_fired` | event, warning | The reaper ended the worker, because the supervisor disappeared or the deadline plus margin passed. |
 | `private_state_retained` | event, warning | The private Vibe directories could not be fully deleted and remain in the run directory; the result carries a warning. |
 | `file_listing_unavailable` | event, warning | The bounded workspace file listing was left out of the review prompt; `detail` names why. The run continues without it. |
@@ -127,7 +128,17 @@ The declared Node floor is 20.19.0. Release acceptance compares major, minor, an
 
 ## Candidate acceptance
 
-This build, 2.0.1, integrates the one-version cleanup with the coordinator workflow. It has been exercised against the scripted fake server only, and every gate below is open for it until its own target sitting. See [machine-readable gates](acceptance.json) and the [target acceptance procedure](target-acceptance.md).
+This build, 2.0.1, integrates the one-version cleanup with the coordinator workflow. Its target sitting ran on the **corrected archive**: source `44dc6f815c1b80ac75c0ce2613373e38ed2421c8`, archive SHA-256 `7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e`, candidate identity `8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4`, packaged and installed on the target (macOS arm64, Node 20.19.0, npm 10.8.2, Vibe 2.26.1). The packet built before it, from `8b288b8`, was rejected at archive inspection because its kit named bytes that were not in the archive. The sanitized records are under `research/evidence/` (source only, never shipped); see [machine-readable gates](acceptance.json) and the [target acceptance procedure](target-acceptance.md). Main has since changed the runtime (execution outcome, start time and reasoning counts), so a build of current main is a new candidate and none of this evidence transfers to it.
+
+| Check on the corrected archive | Observed result and boundary |
+|---|---|
+| Package and kit identity | PASS: the archive, the kit's candidate and the installed package match, verified by `package:rc`'s offline lifecycle-disabled installation and by a separate one; delivery and kit checksums pass. |
+| Release verification on Node 20.19.0 | PASS inside `package:rc`: 89 files, 1,296 tests, lint, strict types, build, acceptance, secret scan, SBOM and the offline installed-package smoke. |
+| No-inference conformance | PASS once with the matched kit: 783-file pin reviewed, `doctor` passed, pin hashing 149 to 166 ms; zero read-back mismatches for both profiles, thinking off, the bundled skills with their provenance; no subject network request with a validated observer; clean shutdown. Two informational `runtime/updated` findings. |
+| Installed and native readiness | PASS through the official SDK, then on 2026-10-16 on the native desktop connection after a reconnect: expected candidate, preparation passed, eligible, free slot, exactly five tools. |
+| Hosted review | Completed `end_turn` with read-only integrity, two approved `read_file` calls, no unapproved effect and verified cleanup; **rejected** by the coordinator because the final answer reversed both negative-number cases. The nested-write probe was not exercised (the worker called a member that does not exist). The export showed execution `unknown`, the reporting defect since fixed in source. |
+| Hosted edit | Reported only on an unmerged target branch, on source `2a49abd`: completed `end_turn` and **rejected** by its frozen acceptance contract (wrong `node:assert` import, no `node:test`). No evidence packet is on main. |
+| Disconnect | Not run; the owner authorized the last hosted start for it on 2026-10-16. |
 
 An earlier build of the same workflow, the **workflow candidate**, was observed on the target on 2026-10-15: source `91afad4a9b6c598d2486c5d22e902f32972e4cac`, frozen archive SHA-256 `d1fd22ec04e50048c052cdf013b4d235b525dffc2efb11596dd29f8253003f6a`, installed distribution identity `a3600f7632ea42a221d342734dd1b6cb17deaaf072211693a728e31c0437b053`. The sanitized records are the evidence packet at commit 2e920d3 (source only, never shipped), summarized in `acceptance.json` under `evidence_builds` and the `workflow-candidate-*` entries. That evidence belongs to that archive; the integrated build's bytes differ, so none of it closes a gate here. It does show what to expect when the same checks are rerun.
 
@@ -140,22 +151,30 @@ An earlier build of the same workflow, the **workflow candidate**, was observed 
 | Installed readiness and drift | PASS through the official SDK over stdio: the matching candidate eligible with preparation passed, a deliberately wrong `expected_candidate` rejected. The intended desktop connection was not tested. |
 | Validation helper | PASS for independent copies, source preservation, cleanup refusal after a change, and a real npm dependency-free offline fixture with lifecycle scripts off. Populated pnpm dependency graphs are not demonstrated. |
 
+## Verified gates
+
+Recorded in `acceptance.json` for the corrected 2.0.1 archive (candidate `8b1b7dd556ea985e`) and for no other bytes, except the pnpm validation, which ran on the preparing machine and needs no archive.
+
+| Gate | Result |
+|---|---|
+| Package and kit identity | PASS 2026-10-15: archive, kit candidate, installed identity, version and conformance script match; delivery and kit checksums verify. |
+| Target no-inference conformance check | PASS 2026-10-15, once, with the matched kit: reviewed 783-file pin and `doctor`, hashing cost recorded, zero read-back mismatches, no subject request with a validated observer, clean shutdown. |
+| Native readiness | PASS 2026-10-16 on the native desktop connection with `expected_candidate`: preparation passed, eligible, free slot, no blockers, exactly five tools. |
+| Exact Node 20.19.0 floor | PASS 2026-10-15 for the frozen source `44dc6f8` (89 files, 1,296 tests). Later source is not covered. |
+| Populated pnpm validation | PASSED_LOCALLY 2026-10-15 on a public fixture with pnpm 9.15.4; no hosted run needed. |
+
 ## Unverified gates
 
-All of these stay unverified for this build until evidence is recorded here and in `acceptance.json`.
+These stay unverified until their evidence is recorded here and in `acceptance.json`.
 
-| Gate | What it settles |
-|---|---|
-| Target no-inference conformance check | With the installed Vibe 2.26.1, this build's preparation kit and no provider: the manifest generated and verified on the target (and the per-run hashing cost), `serverInfo.version`, the handshake, `session/start`, and the complete read-back, with no turn. The workflow candidate passed it; this build has not run it. |
-| Native readiness | On the intended Codex desktop connection: `server_version` and candidate identity of the frozen archive under test, preparation passed, eligible, no blockers, free slot. Installed SDK readiness does not close it. |
-| One hosted review and one hosted edit | Each with a readiness receipt, the edit with an acceptance contract and verified independently in a disposable copy, both closed with verified cleanup and exported. Needs a new owner allowance; stop on first failure. |
-| MCP client disconnect | One observed disconnect during a running hosted run: worker group gone, owner lock released, run failed and never replayed, private directories deleted, edit worktree kept until close. |
-| `permission = "ask"` visible in effective configuration | That `config/effective/read` shows `tools.<name>.permission` and the denylist for each profile tool, and that an in-workspace `read_file` reaches the approval handler. The workflow candidate's read-back showed the configuration half; the handler half needs a hosted run. |
-| Thinking off | That turning thinking off stops the model from generating reasoning. The read-back confirms the setting, not the effect. |
-| Experiments fetch off | Attributable evidence that `experiments.enable = false` stops Vibe's experiments request. The proxy matrix alone cannot attribute a request to experiments. |
-| Nested `run_typescript` shape and gating | That a `write_file` or `edit` called from inside `run_typescript` arrives as the same `file_system.*` effect and reaches deny. From Vibe's Rust tests and code reading only; the hosted-review probe in the [target acceptance procedure](target-acceptance.md) (step 6) must show a nested write refused. |
-| Exact Node 20.19.0 floor | Full release verification of this build's frozen source on exactly the declared minimum. The pass on the 2.0.0 source does not transfer. |
-| Populated pnpm validation | `validation prepare` on a representative project with a populated pnpm store, with explicit blockers for unsupported profiles. |
+| Gate | What it settles | Status |
+|---|---|---|
+| One hosted review and one hosted edit | Each with a readiness receipt, the edit with an acceptance contract and verified independently in a disposable copy, both closed with verified cleanup and exported. Stop on first failure. | Rejected 2026-10-16: the review on answer quality (both negative cases reversed); the edit, reported only on an unmerged target branch, on its contract. Supervisor isolation, permissions, events and cleanup were observed working. A new attempt needs a new allowance. |
+| MCP client disconnect | One observed disconnect during a running hosted run: worker group gone, owner lock released, run failed and never replayed, private directories deleted, edit worktree kept until close. | Pending: the owner authorized the last hosted start for it on 2026-10-16. |
+| `permission = "ask"` visible in effective configuration | That `config/effective/read` shows `tools.<name>.permission` and the denylist for each profile tool, and that an in-workspace `read_file` reaches the approval handler. | Both halves observed on the corrected candidate (its preparation check, then two approved reads in the hosted review); not moved until the coordinator reads the per-tool fields in the sanitized conformance report, which is not in the repository. |
+| Thinking off | That turning thinking off stops the model from generating reasoning. The read-back confirms the setting, not the effect. | Unverified: the hosted review's word-count watcher cannot attribute anything to reasoning; the structured `reasoning_observation` counts are in source after the frozen archive. |
+| Experiments fetch off | Attributable evidence that `experiments.enable = false` stops Vibe's experiments request. The proxy matrix alone cannot attribute a request to experiments. | Unverified: again no subject request on the corrected candidate; attribution still host-only. |
+| Nested `run_typescript` shape and gating | That a `write_file` or `edit` called from inside `run_typescript` arrives as the same `file_system.*` effect and reaches deny. From Vibe's Rust tests and code reading only; the hosted-review probe in the [target acceptance procedure](target-acceptance.md) (step 6) must show a nested write refused. | NOT EXERCISED 2026-10-16: the worker called `writeFile`, which does not exist, and no denied nested write was recorded. The probe now names `write_file`. |
 
 Also open: a clean macOS account installation of the frozen archive. macOS Apple silicon is the supported platform. Linux and Windows code paths may exist, but 2.0 makes no support claim for them, and Intel and other MCP clients have no acceptance. Codex plugin packaging is not offered.
 

@@ -104,7 +104,6 @@ export interface RunRecord {
   backend: BackendKind;
   mode: RunMode;
   state: RunState;
-  /** Actual terminal execution outcome; absent on legacy closed records with no recorded outcome. */
   executionState?: RunExecutionState;
   sourceWorkspace: string;
   workerWorkspace: string;

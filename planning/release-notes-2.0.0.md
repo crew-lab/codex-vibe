@@ -86,7 +86,7 @@ Verified on the target machine (macOS Apple silicon, Vibe 2.26.1), on this archi
 | No-inference conformance check: pin manifest generated and verified, version, handshake, session start, the complete read-back, no turn | [FILL: result, date, pin hashing cost] |
 | `permission = "ask"` visible in the effective configuration and reaching the approval handler | [FILL: result] |
 | Experiments request off | [FILL: verdict] |
-| Thinking off stops reasoning generation | [FILL: watcher result] |
+| Thinking off stops reasoning generation | [FILL: reasoning_observation counts and audit coverage, or unverified] |
 | Native readiness on the Codex desktop connection, `server_version` 2.0.0 | [FILL: result] |
 | One hosted review and one hosted edit, the edit verified independently, both closed with verified cleanup | [FILL: run outcomes, stop reasons, independent checks, usage as reported] |
 | A write attempted from inside `run_typescript` arrives as a file-system effect and is denied | [FILL: result or NOT EXERCISED] |

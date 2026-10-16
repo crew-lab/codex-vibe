@@ -93,7 +93,7 @@ The MCP interface is stdio with strict schemas and exactly five tools. It has no
 
 ## Verification limits
 
-Local fixtures, doctor, pin and preparation checks do not prove hosted inference or authenticated behavior. The workflow candidate's no-inference conformance check observed the effective `ask` permission and denylist configuration on the installed Vibe, as recorded in compatibility; that observation belongs to its archive, and it did not prove hosted handler enforcement, nested `run_typescript` gating, thinking generation effects, native Codex behavior or clean-account installation. The gates are listed in [compatibility](compatibility.md#unverified-gates) and stay unverified until their evidence is recorded there. Historical evidence is version-bound and kept in the source repository, not in the package.
+Local fixtures, doctor, pin and preparation checks do not prove hosted inference or authenticated behavior. The workflow candidate's no-inference conformance check observed the effective `ask` permission and denylist configuration on the installed Vibe, as recorded in compatibility; that observation belongs to its archive. On the corrected 2.0.1 archive the conformance check and native readiness passed, and one hosted review completed with approved reads, read-only integrity and verified cleanup; the review was rejected on answer quality, and nested `run_typescript` gating, thinking generation effects, the client disconnect and clean-account installation remain unproven. The gates are listed in [compatibility](compatibility.md#unverified-gates) and stay unverified until their evidence is recorded there. Historical evidence is version-bound and kept in the source repository, not in the package.
 
 ## Development dependency advisories
 

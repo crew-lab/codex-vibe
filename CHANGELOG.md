@@ -2,7 +2,14 @@
 
 ## 2.0.1 — one version; acceptance, preparation and validation
 
-Unreleased; on main since 2026-10-15. It combines the one-version cleanup with the coordinator workflow built in parallel on the 2.0 line. The five MCP tools, the one active slot, the detached edit worktrees and the no-replay rule are unchanged. No target gate of 2.0.0 or of an earlier build transfers to this one; its gates are open in `docs/acceptance.json` until its own target sitting.
+Unreleased; on main since 2026-10-15. It combines the one-version cleanup with the coordinator workflow built in parallel on the 2.0 line. The five MCP tools, the one active slot, the detached edit worktrees and the no-replay rule are unchanged. No target gate of 2.0.0 or of an earlier build transfers to this one; `docs/acceptance.json` records which gates its own target sitting closed and which stay open.
+
+Fixes from the target sitting:
+
+- Fixed: the preparation kit could name different bytes than the archive it shipped with. npm runs `prepare` during `npm pack` even with `--ignore-scripts`, which rebuilt `dist` without its SBOM, and packaging hashed the candidate only after regenerating the external SBOM. `package:rc` now captures the candidate identity right after packing, installs the exact archive offline with lifecycle scripts off into a temporary private prefix, and announces success only when the installed identity, version and conformance-script hash match the kit and every kit checksum verifies; the delivery `SHA256SUMS` now lists the kit files, and the temporary installation is removed on success or failure ([preparation](docs/preparation.md)).
+- Fixed: closing a run lost its outcome, so an exported report showed `execution.state` `unknown` and no start time for a review that had completed. The run record now keeps `execution_state` (`completed`, `failed` or `cancelled`) beside the close state, records `started_at` when the run is first observed running, and restart recovery sets both to failed; a record written without the field still reports `unknown`.
+- Changed: a count-only `reasoning_observation` diagnostic at the end of each turn records the structured reasoning entries dropped from the stream (`streamed_entries`) and from the audited history (`history_entries`), and whether that audit completed (`history_audited`); `runs export --include events` keeps the three fields. It replaces scanning private files for a word, which cannot attribute anything to generated reasoning. No content is kept.
+- The nested-write probe in the [target acceptance procedure](docs/target-acceptance.md) names `tools.file_system.write_file` with `path` and `content`, as Vibe 2.26.1's source defines it, and asks for labeled review rows instead of an unlabeled sequence ([hosted continuation](docs/hosted-continuation.md)).
 
 One version:
 

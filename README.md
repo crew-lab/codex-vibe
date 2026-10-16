@@ -8,7 +8,7 @@ This is `vibe-supervisor` `2.0.1`. It has one engine: the supervisor is a client
 
 Around the five tools sit the coordinator's workflow pieces: an optional frozen [acceptance contract](docs/workflow-acceptance.md) checked against the exact exported patch, an append-only assessment on close, sanitized `runs verify` and `runs export` reports, a [version-matched preparation check](docs/preparation.md) that ordinary dispatch requires, and [owned validation copies](docs/validation-workspace.md) for the coordinator's own checks. Workspace eligibility and preparation are reported separately.
 
-This build's target acceptance gates are open in the [acceptance record](docs/acceptance.json). An earlier build of the same workflow passed the no-inference conformance check against the installed Vibe 2.26.1 and an installed readiness check; that evidence belongs to its own archive, and native desktop, hosted, Node floor and clean-account gates remain open. See [compatibility](docs/compatibility.md) for the exact evidence boundary.
+2.0.1 is unreleased. Its frozen archive passed the package and kit identity check, release verification on Node 20.19.0, the no-inference conformance check against the installed Vibe 2.26.1 and native desktop readiness on the target machine. Its one hosted review completed with read-only integrity and clean cleanup but was rejected because the worker's answer was wrong; the hosted review and edit, disconnect, nested-write, thinking and clean-account gates remain open. The [acceptance record](docs/acceptance.json) and [compatibility](docs/compatibility.md) give the exact evidence boundary, and evidence never transfers to a different archive.
 
 ## Requirements
 

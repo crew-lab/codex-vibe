@@ -74,6 +74,38 @@
   ],
   "evidence_builds": [
     {
+      "label": "2.0.1 corrected archive",
+      "source_commit": "44dc6f815c1b80ac75c0ce2613373e38ed2421c8",
+      "base_commit": "8b288b8",
+      "archive_sha256": "7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e",
+      "candidate_distribution_sha256": "8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4",
+      "conformance_script_sha256": "7d563e9c346c5f687545f0c2989787a9ba4570e659ad27b6c03a354ac6bc490e",
+      "pin_manifest_sha256": "6c5e482048cd6bd2df06e685fab6d2c994023c8856805564376a4a1f46fc8cbc",
+      "runtime": "macOS arm64, Node 20.19.0, npm 10.8.2, Vibe 2.26.1",
+      "recorded_on": "2026-10-15 to 2026-10-16",
+      "evidence_packet": "research/evidence/package-kit-identity-2026-10-15/ (identity, preparation, installed and native readiness) and research/evidence/hosted-2.0.1-2026-10-16/ (the hosted review); source only, never shipped. The raw conformance report, receipts and configuration backups stay in the target's private state.",
+      "installed_candidate": true,
+      "note": "Packaged by the target agent from the frozen source, installed side by side on the same machine and selected in the desktop registration. Main has changed the runtime since (2a49abd: execution outcome, start time and structured reasoning counts), so a build of current main is a new candidate: none of this evidence transfers to it."
+    },
+    {
+      "label": "2.0.1 rejected packet",
+      "source_commit": "8b288b8",
+      "archive_sha256": "18d46d1c1d803518842a14973ef037412add927104c74b1bf5198229c79f6312",
+      "kit_candidate_sha256": "ca130061bb1273a08cbb8f9bda89187f806f3b37dee46c49d4917d4885de9f42",
+      "target_evidence": "rejected at archive inspection, before installation or conformance",
+      "transfers_to_candidate": false,
+      "note": "npm ran prepare during pack and rebuilt dist without its SBOM; packaging then regenerated the external SBOM before hashing, so the kit named bytes that were not in the archive. Repaired by 44dc6f8; the packet is preserved unchanged on the target."
+    },
+    {
+      "label": "2.0.1 reference package",
+      "source_commit": "9d2bbde",
+      "archive_sha256": "73c28081bfad86d1cd2b2ec16d7ba22c28a4e82b4e5f903e5c9341ff4acf4010",
+      "preparation_kit_archive_sha256": "4c0fdc17d4a6e483431642fd94d28e97959a2c913e8f3549685026a9d25206ae",
+      "target_evidence": "none",
+      "transfers_to_candidate": false,
+      "note": "Packaged on the preparing machine on 2026-10-15 (Node 20.19.0, 88 files, 1292 tests). Archives are not byte-reproducible across machines, so this was the reference build only; the target tests and the release publishes the target-built archive. Its packaging also predates the kit-identity repair."
+    },
+    {
       "label": "workflow candidate",
       "source_commit": "91afad4a9b6c598d2486c5d22e902f32972e4cac",
       "base_commit": "2ae8e866e94340950beade221802160a33ff2f97",
@@ -96,6 +128,48 @@
     }
   ],
   "verified": [
+    {
+      "name": "package-kit-identity-binding-on-corrected-archive",
+      "status": "VERIFIED",
+      "build": "2.0.1 corrected archive",
+      "evidence_required": "The archive under test and its preparation kit come from one packaging run: the kit names the candidate identity of the packaged dist, an offline lifecycle-disabled installation of the exact archive reports that identity, version and conformance-script hash, and the delivery and kit checksums verify.",
+      "evidence": "research/evidence/package-kit-identity-2026-10-15/ARTIFACT-IDENTITY.json and REPORT.md, 2026-10-15.",
+      "result": "PASS: archive sha256 7978719c0010c8ba, candidate and kit 8b1b7dd556ea985e, script 7d563e9c346c5f68; package:rc's final installation gate and a separate offline installation by the target's coordinator both matched; delivery and kit checksums passed; the temporary installations were removed. The rejected 8b288b8 packet is preserved with its mismatched identities."
+    },
+    {
+      "name": "target-no-inference-conformance-check",
+      "status": "VERIFIED",
+      "evidence_required": "On the target with the installed Vibe 2.26.1 and no provider, with this build's preparation kit (vibe-supervisor prepare check): vibe-supervisor pin-manifest generated and then verified on the target (with the per-run hashing cost recorded), serverInfo.version 2.26.1, the initialize handshake, session/start with the supervisor profile, and the complete read-back (profile tools exact, only the bundled skill catalogue ADR 0006 permits, the owned loopback managed-config URL from ADR 0005, no MCP sources, connectors or hooks, bypass off, unified harness, each VIBE_* setting, thinking off), with no turn and no hosted inference.",
+      "prior_evidence": "The workflow candidate passed it on 2026-10-15 (workflow-candidate-target-no-inference-conformance-check); that result belongs to its own archive.",
+      "build": "2.0.1 corrected archive",
+      "evidence": "research/evidence/package-kit-identity-2026-10-15/PREPARATION.json and REPORT.md, 2026-10-15; original private report sha256 bf8b7e81c81613f0fecb5754530273e12f469843a1e5f7e28944ae4496dc5457 (the shared sanitized copy has a different hash and stays with the target's packet).",
+      "result": "PASS once on the installed Vibe 2.26.1 with the matched kit: pin reviewed (783 files, compiled core included) and doctor passed, per-check pin hashing 166, 158 and 149 ms; fixed fake key, no turn/start, zero reported tokens; zero read-back mismatches for both profiles, thinking off, the expected tool and permission policies, builtin skills with the expected provenance; no subject network request with a validated refusing observer; all three child processes exited on EOF, groups gone, private directories removed; two informational runtime/updated findings, no fail finding. Experiments-specific attribution stays unverified."
+    },
+    {
+      "name": "installed-sdk-readiness-on-candidate",
+      "status": "VERIFIED",
+      "build": "2.0.1 corrected archive",
+      "evidence": "research/evidence/package-kit-identity-2026-10-15/INSTALLED-READINESS.json, 2026-10-15, through the official MCP SDK over stdio; receipt fields removed.",
+      "result": "pass: server 2.0.1, expected candidate, preparation passed, eligible workspace, free slot, no blockers or restart, exact five-tool catalogue. Not native evidence."
+    },
+    {
+      "name": "native-readiness-on-candidate",
+      "status": "VERIFIED",
+      "evidence_required": "On the intended Codex desktop connection, readiness reports the server_version and candidate identity of the frozen archive under test, matching preparation PASS, an eligible workspace, no blockers and a free slot.",
+      "prior_evidence": "Installed SDK readiness on the same candidate passed first (installed-sdk-readiness-on-candidate) and does not close this native gate by itself.",
+      "build": "2.0.1 corrected archive",
+      "evidence": "research/evidence/package-kit-identity-2026-10-15/NATIVE-READINESS-2026-10-16.json and NATIVE-READINESS-2026-10-16.md; the 2026-10-15 NATIVE-READINESS.json records the pending state before the desktop reconnect.",
+      "result": "PASS 2026-10-16 on the native desktop connection with expected_candidate: server 2.0.1, candidate 8b1b7dd556ea985e, preparation passed, workspace and dispatch eligible, free slot, no blockers, no restart required, exactly the five tools. No run started and no receipt persisted. The hosted review re-checked readiness before dispatch and after close."
+    },
+    {
+      "name": "node-floor-20.19.0",
+      "status": "VERIFIED",
+      "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the frozen source of this candidate.",
+      "prior_evidence": "Passed on the 2.0.0 source (node-floor-20.19.0-on-2.0.0-source); that result does not transfer.",
+      "build": "2.0.1 corrected archive",
+      "evidence": "research/evidence/package-kit-identity-2026-10-15/ARTIFACT-IDENTITY.json and REPORT.md: package:rc, which runs verify:release, on the frozen source 44dc6f8 under exactly Node 20.19.0 and npm 10.8.2.",
+      "result": "pass for 44dc6f8: lint, typecheck, build, 89 test files / 1296 tests, acceptance, secret scan, SBOM and the offline installed-package smoke. Later source (2a49abd, 89 files / 1305 tests) was reported passing verify:release under Node 20.19.0 on the repair branch; that is not this candidate."
+    },
     {
       "name": "workflow-candidate-release-verification-and-offline-smoke",
       "status": "PASSED_LOCALLY",
@@ -140,54 +214,42 @@
   ],
   "unverified": [
     {
-      "name": "target-no-inference-conformance-check",
-      "status": "UNVERIFIED",
-      "evidence_required": "On the target with the installed Vibe 2.26.1 and no provider, with this build's preparation kit (vibe-supervisor prepare check): vibe-supervisor pin-manifest generated and then verified on the target (with the per-run hashing cost recorded), serverInfo.version 2.26.1, the initialize handshake, session/start with the supervisor profile, and the complete read-back (profile tools exact, only the bundled skill catalogue ADR 0006 permits, the owned loopback managed-config URL from ADR 0005, no MCP sources, connectors or hooks, bypass off, unified harness, each VIBE_* setting, thinking off), with no turn and no hosted inference.",
-      "prior_evidence": "Passed once for the workflow candidate (workflow-candidate-target-no-inference-conformance-check above); not run on this build."
-    },
-    {
-      "name": "native-readiness-on-candidate",
-      "status": "UNVERIFIED",
-      "evidence_required": "On the intended Codex desktop connection, readiness reports the server_version and candidate identity of the frozen archive under test, matching preparation PASS, an eligible workspace, no blockers and a free slot.",
-      "prior_evidence": "The workflow candidate passed readiness through the official SDK over stdio, which does not close this native gate."
-    },
-    {
       "name": "hosted-review-edit-confirmation",
       "status": "UNVERIFIED",
-      "evidence_required": "With a new owner allowance of two hosted runs: one review and one edit on the frozen fixture with readiness receipts, the edit carrying an acceptance contract and verified independently in a disposable copy, both closed with verified cleanup and exported with runs export. Stop on first failure; no retries."
+      "evidence_required": "With a new owner allowance of two hosted runs: one review and one edit on the frozen fixture with readiness receipts, the edit carrying an acceptance contract and verified independently in a disposable copy, both closed with verified cleanup and exported with runs export. Stop on first failure; no retries.",
+      "prior_evidence": "Review rejected, 2026-10-16, research/evidence/hosted-2.0.1-2026-10-16/: run 5d12adfe-27c5-42ce-9d7a-de713bb5c197 on candidate 8b1b7dd556ea985e completed end_turn with read-only integrity, two executed read_file calls, no unapproved effect and verified cleanup, but its final answer reversed both negative-number cases (reported true, false where the fixture gives false, true); the coordinator rejected it on answer quality. Its export reports execution unknown and no start time, a reporting defect fixed in source at 2a49abd and not in the installed candidate. Edit reported only on an unmerged target branch (explore_project_details, 7f1ca6d, since deleted): run 6074df5d-6d51-4a44-ab1c-78fdadea76f2 on source 2a49abd completed end_turn in its worktree and was rejected by its frozen acceptance contract (node:assert with strict instead of node:assert/strict, no node:test); no evidence packet for it is on main.",
+      "result": "REJECTED 2026-10-16: the review failed on worker answer quality; the edit is reported rejected on its contract. Supervisor isolation, permissions, events and cleanup were observed working. Not retried; a new review or edit needs a new owner allowance."
     },
     {
       "name": "mcp-client-disconnect-hosted",
       "status": "UNVERIFIED",
-      "evidence_required": "One real client disconnect during a running hosted run on the 2.0 engine, through the official client: the server exits, the worker process group is gone, the owner lock is released, the run is failed and never relaunched, the private directories are deleted, and an edit worktree is kept until vibe_close cleanup."
+      "evidence_required": "One real client disconnect during a running hosted run on the 2.0 engine, through the official client: the server exits, the worker process group is gone, the owner lock is released, the run is failed and never relaunched, the private directories are deleted, and an edit worktree is kept until vibe_close cleanup.",
+      "result": "PENDING: not run. On 2026-10-16 the owner authorized the one remaining hosted start for this gate only, on the installed 2.0.1 candidate, following the disconnect procedure in docs/target-acceptance.md; stop at the first failure."
     },
     {
       "name": "permission-ask-visible-in-effective-config",
       "status": "UNVERIFIED",
       "evidence_required": "config/effective/read shows tools.<name>.permission = ask and the denylist for each profile tool, and an in-workspace read_file reaches the approval handler rather than being allowed by default.",
-      "prior_evidence": "The workflow candidate's no-inference read-back observed permission ask and the exact denylist (config half). The handler half needs a hosted run."
+      "prior_evidence": "Workflow candidate: the no-inference read-back observed permission ask and the exact denylist (config half). Corrected 2.0.1 candidate: its preparation check passed with the expected tool and permission policies, and its hosted review executed two in-workspace read_file calls through the handler with no unapproved effect (handler half).",
+      "result": "Both halves observed on candidate 8b1b7dd556ea985e; not moved, because the per-tool fields this gate names (permission_ask_visible, denylist_matches_expected) are in the sanitized conformance report kept with the target packet, not in the repository. The coordinator moves it after reading that report."
     },
     {
       "name": "thinking-off-effect",
       "status": "UNVERIFIED",
-      "evidence_required": "Observe whether config/model/write reasoningEffort off stops the model from generating reasoning. The read-back confirms the setting only."
+      "evidence_required": "Observe whether config/model/write reasoningEffort off stops the model from generating reasoning. The read-back confirms the setting only.",
+      "result": "FINDING 2026-10-16: the hosted review used the lexical file watcher, whose counts (0, then 3, then 0) cannot be attributed to generated reasoning. The structured reasoning_observation diagnostic exists in source from 2a49abd, not in the installed candidate; the unmerged target branch reports streamed 0, history 0, audit complete for the edit run, which is not on main. Zero counts would establish none observed, not the generation effect."
     },
     {
       "name": "experiments-fetch-off",
       "status": "UNVERIFIED",
       "evidence_required": "Attributable evidence that experiments.enable = false stops Vibe's experiments request. The setting is read back; a host-only proxy observation cannot attribute a request to experiments.",
-      "prior_evidence": "The workflow candidate's proxy matrix showed no subject request with an observed control (none-observed-control-validated); experiments attribution stayed unverified-host-only-observation."
+      "prior_evidence": "The workflow candidate's proxy matrix showed no subject request with an observed control (none-observed-control-validated). The corrected 2.0.1 candidate's preparation check again observed no subject request with a validated refusing observer. Experiments attribution stays unverified-host-only-observation for both."
     },
     {
       "name": "nested-run-typescript-shape-and-gating",
       "status": "UNVERIFIED",
-      "evidence_required": "The hosted-review probe in docs/target-acceptance.md (step 6) shows that a write_file or edit called from inside run_typescript arrives as the same file_system.* effect and reaches deny. From Vibe's Rust tests and code reading only."
-    },
-    {
-      "name": "node-floor-20.19.0",
-      "status": "UNVERIFIED",
-      "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the frozen source of this candidate.",
-      "prior_evidence": "Passed on the 2.0.0 source (node-floor-20.19.0-on-2.0.0-source above); the runtime has changed since, so it does not transfer."
+      "evidence_required": "The hosted-review probe in docs/target-acceptance.md (step 6) shows that a write_file or edit called from inside run_typescript arrives as the same file_system.* effect and reaches deny. From Vibe's Rust tests and code reading only.",
+      "result": "NOT EXERCISED 2026-10-16: the review's final answer reports tools.file_system.writeFile is not a function and its event sequence holds no denied nested write; not rerun. The probe text now names tools.file_system.write_file with path and content, checked against the pinned source (docs/hosted-continuation.md)."
     },
     {
       "name": "clean-account-install",
@@ -199,24 +261,26 @@
   "not_required_for_2_0": [],
   "delivery_requirements": {
     "source_ci": "There is no GitHub CI and the workflow scope is skipped; npm run verify:release passes locally on the release commit.",
-    "stable_promotion": "Every gate above, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required. The integrated build is frozen with package:rc and proven by its own target sitting; no receipt or result of the workflow candidate or the 2.0.0 draft archive transfers. Only the latest release is supported.",
-    "hosted_allowance_remaining": 0
+    "stable_promotion": "Every gate above, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required. The release publishes the bytes the target tested; no receipt or result of the workflow candidate, the 2.0.0 draft archive, the reference package or the rejected packet transfers. Main now carries runtime changes the frozen archive lacks (2a49abd), so publishing them means a new frozen archive, kit, preparation and its own hosted evidence; publishing the frozen archive means releasing without them. Only the latest release is supported.",
+    "hosted_allowance_remaining": 1,
+    "hosted_allowance_note": "Three hosted starts were authorized for the 2.0.1 sitting. The review used one (recorded on main); the edit used a second (reported only on an unmerged target branch). On 2026-10-16 the owner authorized the last one for the MCP-client disconnect only; no other hosted start is authorized."
   },
-  "updated_at": "2026-10-15",
-  "frozen_archive_sha256": "73c28081bfad86d1cd2b2ec16d7ba22c28a4e82b4e5f903e5c9341ff4acf4010",
+  "updated_at": "2026-10-16",
+  "frozen_archive_sha256": "7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e",
   "packaging_time_snapshot": {
-    "commit": "9d2bbde",
+    "commit": "44dc6f815c1b80ac75c0ce2613373e38ed2421c8",
     "packaged_on": "2026-10-15",
+    "packaged_by": "the target agent, in an isolated checkout, then installed on the same machine",
     "node": "20.19.0",
     "npm": "10.8.2",
-    "tests": "88 files, 1292 tests",
+    "tests": "89 files, 1296 tests",
+    "candidate_sha256": "8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4",
+    "conformance_script_sha256": "7d563e9c346c5f687545f0c2989787a9ba4570e659ad27b6c03a354ac6bc490e",
     "assets_sha256": {
-      "vibe-supervisor-2.0.1.tgz": "73c28081bfad86d1cd2b2ec16d7ba22c28a4e82b4e5f903e5c9341ff4acf4010",
-      "sbom.spdx.json": "d4e62b95da6ba3c73558940f5617d6a587f93eddce058c32f3b26c49177f35cb",
-      "acceptance.json": "f59e0fd117db161d26ce72fd5512268858730e1969c5567b3eb91a01e6fdc0fa",
-      "preparation-kit-2.0.1.tar.gz": "4c0fdc17d4a6e483431642fd94d28e97959a2c913e8f3549685026a9d25206ae"
+      "vibe-supervisor-2.0.1.tgz": "7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e"
     },
-    "offline_cache": "a dedicated npm cache filled with the locked versions (npm cache add per package-lock.json entry)",
-    "supersedes": "the 3de455e package (archive c8d79b8d...), built before the pnpm lockfile fix"
+    "assets_not_recorded": "The SBOM, packaging report and kit-file hashes are in the target's delivery SHA256SUMS; the evidence on main records only that the delivery and kit checksums passed.",
+    "offline_cache": "a dedicated npm cache filled with the locked versions",
+    "supersedes": "the rejected 8b288b8 packet (archive 18d46d1c...) and the reference package from 9d2bbde (archive 73c28081...)"
   }
 }

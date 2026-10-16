@@ -49,6 +49,13 @@
         "closed"
       ]
     },
+    "execution_state": {
+      "enum": [
+        "completed",
+        "failed",
+        "cancelled"
+      ]
+    },
     "source_workspace": {
       "type": "string"
     },
