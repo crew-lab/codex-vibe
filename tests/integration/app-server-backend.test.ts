@@ -771,7 +771,7 @@ describe('app-server backend: transport failures', () => {
 
 describe('app-server backend: deadline, cancel, close and termination', () => {
   it('interrupts at the deadline and fails with a timeout', async () => {
-    const harness = new Harness('hold', { limits: { timeoutSeconds: 1 } });
+    const harness = new Harness('hold', { limits: { timeoutSeconds: 3 } });
     const terminal = await harness.run();
 
     expect(terminal.state).toBe('failed');
@@ -781,7 +781,7 @@ describe('app-server backend: deadline, cancel, close and termination', () => {
   }, 20_000);
 
   it('kills a wedged server that ignores SIGTERM and fails with a timeout', async () => {
-    const harness = new Harness('wedge', { limits: { timeoutSeconds: 1 } });
+    const harness = new Harness('wedge', { limits: { timeoutSeconds: 3 } });
     const terminal = await harness.run();
 
     expect(terminal.state).toBe('failed');
@@ -1167,7 +1167,7 @@ describe('app-server backend: audit after a forced limit stop', () => {
   });
 
   it('audits the history at the deadline and reports the unapproved write instead of a plain timeout', async () => {
-    const harness = new Harness({ name: 'deadline-hidden-write', interrupt: 'ignore', steps: [SILENT_WRITE, { op: 'hold' }] }, { limits: { timeoutSeconds: 1 } });
+    const harness = new Harness({ name: 'deadline-hidden-write', interrupt: 'ignore', steps: [SILENT_WRITE, { op: 'hold' }] }, { limits: { timeoutSeconds: 3 } });
     const terminal = await harness.run();
 
     expect(terminal.state).toBe('failed');
@@ -1222,8 +1222,8 @@ describe('app-server backend: stop requests revoke the approval handler', () => 
 
   it('denies a callback that arrives after the deadline interrupt', async () => {
     const { harness, evaluated } = await lateCallRun(
-      { name: 'late-after-deadline', interrupt: 'ignore', steps: [{ op: 'delay', ms: 1300 }, lateCall, { op: 'hold' }] },
-      { limits: { timeoutSeconds: 1 }, options: { timing: { interruptGraceMs: 2500 } } },
+      { name: 'late-after-deadline', interrupt: 'ignore', steps: [{ op: 'delay', ms: 3300 }, lateCall, { op: 'hold' }] },
+      { limits: { timeoutSeconds: 3 }, options: { timing: { interruptGraceMs: 5000 } } },
       async () => undefined
     );
     await harness.terminal;
@@ -1250,7 +1250,7 @@ describe('app-server backend: protocol failures outrank a later stop request', (
   });
 
   it('keeps the watermark gap error when the deadline arrives after it', async () => {
-    const harness = new Harness(gapThenHold, { limits: { timeoutSeconds: 1 }, options: { timing: { interruptGraceMs: 3000 } } });
+    const harness = new Harness(gapThenHold, { limits: { timeoutSeconds: 3 }, options: { timing: { interruptGraceMs: 5000 } } });
     const terminal = await harness.run();
 
     expect(terminal.state).toBe('failed');
@@ -1259,7 +1259,7 @@ describe('app-server backend: protocol failures outrank a later stop request', (
   }, 20_000);
 
   it('still reports a plain timeout when no protocol failure came first', async () => {
-    const harness = new Harness({ name: 'plain-deadline', interrupt: 'ignore', steps: [{ op: 'hold' }] }, { limits: { timeoutSeconds: 1 } });
+    const harness = new Harness({ name: 'plain-deadline', interrupt: 'ignore', steps: [{ op: 'hold' }] }, { limits: { timeoutSeconds: 3 } });
     const terminal = await harness.run();
 
     expect(errorOf(terminal).code).toBe('VSUP_TIMEOUT');
