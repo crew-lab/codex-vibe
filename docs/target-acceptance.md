@@ -2,7 +2,7 @@
 
 The procedure that proves a build of the supervisor against one Vibe release on the machine that runs Vibe. Use it for the supported Vibe release and again, as a new candidate, for every later one ([compatibility](compatibility.md#source-basis) says what revalidating a release involves). The gates it fills are the entries in [acceptance.json](acceptance.json); each moves from `unverified` to `verified` only with its evidence recorded. The agent on the target machine follows the steps in order and stops at the first failure.
 
-Vibe is never installed, run or tested anywhere else. The target agent records evidence and changes no code; a defect goes back to the preparing machine as a new candidate.
+Vibe is never installed, run or tested anywhere else. The target agent records evidence. It may fix a defect it finds on a branch from main pushed for review, never on main and never in the archive under test; the fix is a new candidate, earlier evidence does not transfer, and the sitting restarts on the rebuilt archive.
 
 ## Authorizations
 

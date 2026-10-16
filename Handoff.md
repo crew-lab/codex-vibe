@@ -24,6 +24,10 @@ A later target-machine record (branch `explore_project_details`, commit `7f1ca6d
 
 That branch also added an Antigravity worker backend on top of the earlier engine and recorded private machine paths; it was not merged, because a worker other than Vibe is excluded (ADR 0004 and the strategy's "Antigravity as a worker: no"), and it was deleted from GitHub on 2026-10-16.
 
+### Owner decision — 2026-10-16: the target may fix code
+
+The earlier rule that the target records evidence and changes no code is replaced. The target may fix code it finds broken, on a branch from main that it pushes for review; it never pushes to main or publishes, a code fix makes a new candidate whose earlier evidence does not transfer, and the coordinator reviews the branch (private-path scan, `npm run verify:release`) and merges it. This matches what happened: the target authored `44dc6f8` (the package and kit identity binding) and `2a49abd` (execution provenance and reasoning counts), which were reviewed and merged. The rule is in [AGENTS.md](AGENTS.md#code-changes-on-the-target-machine), the strategy's working rules and the [target acceptance procedure](docs/target-acceptance.md).
+
 ### Owner decision — 2026-10-16: spend the last start on the disconnect
 
 The owner authorized the one remaining hosted start for the MCP-client disconnect only (authorization 5, gate `mcp-client-disconnect-hosted`), following the [disconnect procedure](docs/target-acceptance.md#disconnect-procedure) on the installed 2.0.1 candidate with the native readiness already verified. It is not a retry of the review or the edit, and no further hosted start is authorized. Stop at the first failure; record the client and observer outputs with the placeholders from AGENTS.md on an evidence branch and push it for review. The review and edit rejections stay recorded as worker answer-quality failures; `hosted-review-edit-confirmation` stays open.
@@ -115,7 +119,7 @@ git fetch --prune origin && for b in $(git for-each-ref --format='%(refname:stri
 
 ## Evidence rules
 
-Vibe is never installed, run or tested on the preparing machine; questions about Vibe are answered from its tagged source, checked against the hashes in [compatibility](docs/compatibility.md#source-basis). Behavior is proven only on the target machine, with the owner's authorization and budget for each step, and the target records evidence and changes no code. Evidence names the exact source, archive and installed distribution it belongs to, and never transfers to other bytes. Evidence uses the placeholders in [AGENTS.md](AGENTS.md#recording-target-evidence) from the start, because the repository is public. Missing evidence stays "unverified".
+Vibe is never installed, run or tested on the preparing machine; questions about Vibe are answered from its tagged source, checked against the hashes in [compatibility](docs/compatibility.md#source-basis). Behavior is proven only on the target machine, with the owner's authorization and budget for each step, and the target records evidence. The target may fix code it finds broken, on a branch from main that it pushes for review; it never pushes to main or publishes, a code fix makes a new candidate whose earlier evidence does not transfer, and the coordinator reviews the branch (private-path scan, `npm run verify:release`) and merges it. Evidence names the exact source, archive and installed distribution it belongs to, and never transfers to other bytes. Evidence uses the placeholders in [AGENTS.md](AGENTS.md#recording-target-evidence) from the start, because the repository is public. Missing evidence stays "unverified".
 
 ## Pointers
 
