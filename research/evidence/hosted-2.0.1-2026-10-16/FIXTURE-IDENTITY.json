@@ -1,0 +1,9 @@
+{
+  "base_commit": "c8c255cbb838b541b11d01983551a84d945ca457",
+  "files": {
+    "CONTRACT.md": "bdf0d415824ff0444cae1872d0831c4f08b10b151ee4d94b1db57e5eb2a6041a",
+    "src/limit.mjs": "5fbcb53ee4249bc7ee5032b0478e55f03d93f26997c7edd2040fe79e96c419ec"
+  },
+  "source_status": "clean",
+  "probe_absent": true
+}

@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-16",
+  "run_id": "5d12adfe-27c5-42ce-9d7a-de713bb5c197",
+  "fixture_base": "c8c255cbb838b541b11d01983551a84d945ca457",
+  "candidate_sha256": "8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4",
+  "execution_observed": "completed",
+  "stop_reason": "end_turn",
+  "coordinator_decision": "rejected",
+  "reason": "Final answer reverses both required negative-number comparison results",
+  "inputs": [
+    [
+      699,
+      700
+    ],
+    [
+      700,
+      700
+    ],
+    [
+      701,
+      700
+    ],
+    [
+      -3,
+      -2
+    ],
+    [
+      -1,
+      -2
+    ]
+  ],
+  "expected": [
+    false,
+    false,
+    true,
+    false,
+    true
+  ],
+  "reported": [
+    false,
+    false,
+    true,
+    true,
+    false
+  ],
+  "hosted_starts_authorized": 3,
+  "hosted_starts_used": 1,
+  "edit": "not started: deterministic review rejection",
+  "disconnect": "not started: deterministic review rejection",
+  "nested_permission_probe": "not exercised: no denied nested-write event; final answer reports missing writeFile function",
+  "cleanup": {
+    "fixture_unchanged": true,
+    "private_directories_remaining": [],
+    "live_worker_processes": 0,
+    "worktree": "none",
+    "post_close": {
+      "eligible": true,
+      "active_slot": {
+        "busy": false
+      },
+      "preparation_status": "passed",
+      "blockers": []
+    }
+  },
+  "diagnostic": {
+    "unknown_notifications": 21,
+    "unknown_methods": [
+      "runtime/updated",
+      "session/updated"
+    ],
+    "stale_events": 0,
+    "foreign_session_notifications": 0
+  },
+  "reporting_findings": [
+    "Post-close export execution.state is unknown; native pre-close state was completed.",
+    "started timestamp, turn count and inference duration unavailable.",
+    "Lexical reasoning counter grew; reasoning generation cannot be inferred from that counter alone."
+  ],
+  "scope": "No extra hosted start, retry, fallback, source fix, push, merge, publication or deployment."
+}

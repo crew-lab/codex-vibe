@@ -1,0 +1,8 @@
+{
+  "samples": 42,
+  "initial_matches": 0,
+  "max_matches": 3,
+  "final_matches": 0,
+  "max_files_scanned": 21,
+  "verdict": "unverified; lexical count growth is not attributable to generated reasoning"
+}

@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "run_id": "5d12adfe-27c5-42ce-9d7a-de713bb5c197",
+  "supervisor_version": "2.0.1",
+  "mode": "review",
+  "execution": {
+    "state": "unknown",
+    "stop_reason": "end_turn"
+  },
+  "verification": {
+    "status": "not_requested",
+    "check_count": 0,
+    "failed_checks": []
+  },
+  "assessment": "unassessed",
+  "assessments": [],
+  "provenance": {
+    "task_sha256": "08298ef2e3c823f2c2821cf3e0f3d438c04971c4083bc2f6078b9cbf1ebf4b9e",
+    "base_commit": null,
+    "patch_sha256": null,
+    "contract_sha256": null,
+    "policy_revision": "43d2746689f78029a342af1752e9f56b2092f9d09495050e16feee8d4562a000"
+  },
+  "timestamps": {
+    "created": "2026-10-16T08:25:30.065Z",
+    "launched": "2026-10-16T08:25:30.076Z",
+    "started": null,
+    "finished": "2026-10-16T08:25:35.833Z"
+  },
+  "preparation": {
+    "status": "passed",
+    "candidate_sha256": "8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4",
+    "version": "2.0.1",
+    "reason": "Version-matched no-inference evidence; hosted acceptance remains separate"
+  },
+  "models": {
+    "observations": [
+      {
+        "observed_at": "2026-10-16T08:25:31.706Z",
+        "source": "runtime/read",
+        "session_model": null,
+        "alias": "mistral-medium-3.5",
+        "thinking": "off",
+        "reported_name": "mistral-vibe-cli-latest",
+        "prices_per_million": {
+          "input": 1.5,
+          "output": 7.5,
+          "cached_input": 0.15
+        }
+      }
+    ],
+    "provider": null,
+    "underlying_model": null,
+    "unavailable_reason": "Runtime-reported session model, model name and alias are recorded when exposed; provider and underlying weights remain unverified."
+  },
+  "durations_ms": {
+    "inference": null,
+    "finalization": null,
+    "preparation": 11,
+    "startup": null,
+    "execution_and_finalization": null,
+    "total": 5768
+  },
+  "usage": {
+    "tokensUsed": 14442,
+    "contextSize": 209715,
+    "cost": {
+      "amount": 0.022023,
+      "currency": "USD",
+      "authoritative": false
+    },
+    "promptTokens": 14382,
+    "completionTokens": 60,
+    "cachedTokens": 0,
+    "modelCalls": 3,
+    "costSource": "runtime-stats-prices"
+  },
+  "limits": {
+    "timeoutSeconds": 180,
+    "maxTurns": 12,
+    "maxEventBytes": 52428800,
+    "maxTranscriptBytes": 10485760,
+    "maxArtifactBytes": 104857600
+  },
+  "warnings": [],
+  "error": null,
+  "cleanup": {
+    "worktree": "none",
+    "checked_at": "2026-10-16T08:26:12.373Z"
+  },
+  "external_validation": null
+}
