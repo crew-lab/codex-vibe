@@ -167,6 +167,10 @@ Recorded in `acceptance.json` as the `v2.0.1-archive-*` entries for the correcte
 
 On 2026-10-16, exact target source `2a49abd`, archive SHA-256 `133e77bdf20fc1cc839d3f0e5bfcdc644aa5ec09e4eb02558fb43cd1b8d191a8` and candidate `1c3c135862e2fe888428a2bf67fc6cd02fe9852259a494e7d624e2a3e96a45c0` passed the real hosted disconnect procedure under Node 20.19.0/Vibe 2.26.1 on macOS arm64. The official client closed while running; observer evidence shows released lock and worker groups after exit; reconnect read failed without replay; private directories were removed; the source stayed unchanged; native close removed the clean worktree after a separate live owner released its lock. Bound evidence is source-only: `research/evidence/disconnect-2a49abd-2026-10-16/REPORT.md`. This is a per-build verified entry in acceptance.json; the existing global packaging snapshot names different bytes and is not promoted by this evidence. Review/edit acceptance remains failed/unverified and no hosted allowance remains.
 
+## Frozen 2.0.2 target preparation
+
+Source 347bf79, archive SHA-256 `84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09`, candidate `eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1`: full packaging/Node floor (89 files/1,305 tests), mandatory and separate installed-archive identity verification, pin/doctor, one matched no-inference check and installed SDK readiness PASS on 2026-10-16. The native gate remains pending reconnect. No hosted start or automatic carry-over is claimed. The source-only record is `research/evidence/release-2.0.2-347bf79-2026-10-16/REPORT.md`; acceptance.json names the exact frozen archive.
+
 ## Unverified gates
 
 These stay unverified until their evidence is recorded here and in `acceptance.json`. The first two rows are the 2.0.2 archive's own checks; the rest were observed, or left open, on the 2.0.1 archive.
