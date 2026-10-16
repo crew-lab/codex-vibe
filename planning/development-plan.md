@@ -10,8 +10,8 @@ Revised 2026-10-16 after the target sitting; the hosted results are in [research
 
 | Item | State |
 |---|---|
-| Main | 2.0.1 with the one-version cleanup, the integrated workflow line (`6c645e3`), the target's packaging repair (`44dc6f8`) and reporting repair (`2a49abd`). No `docs/history/`, `docs/reviews/`, ADR 0003 or `v1-*` files; `tests/unit/no-legacy-references.test.ts` guards it. `npm run verify:release`: 89 files, 1,305 tests |
-| Frozen archive | Packaged on the target from `44dc6f8` under Node 20.19.0: archive `7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e`, candidate and kit identity `8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4`. The first target packet (`8b288b8`) was rejected because its kit named bytes the archive did not hold; the preparing machine's `9d2bbde` package is the reference build only. Main's runtime has changed since (`2a49abd`), so a build of main is a new candidate |
+| Main | 2.0.2, unreleased and not packaged: the one-version cleanup, the integrated workflow line (`6c645e3`), the target's packaging repair (`44dc6f8`) and reporting repair (`2a49abd`). No `docs/history/`, `docs/reviews/`, ADR 0003 or `v1-*` files; `tests/unit/no-legacy-references.test.ts` guards it. `npm run verify:release`: 89 files, 1,305 tests |
+| 2.0.1 archive | The bytes v2.0.1 publishes, as a pre-release. Packaged on the target from `44dc6f8` under Node 20.19.0: archive `7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e`, candidate and kit identity `8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4`. The first target packet (`8b288b8`) was rejected because its kit named bytes the archive did not hold; the preparing machine's `9d2bbde` package is the reference build only. Main's runtime has changed since (`2a49abd`), so a build of main is a new candidate, 2.0.2 |
 | Installations | The frozen archive is installed side by side on the target and selected in the desktop registration with the persistent Node 20.19.0; rollback backups kept |
 | Gates | `VERIFIED` for the frozen archive: package and kit identity, Node 20.19.0 floor, no-inference conformance, installed and native readiness. Rejected: the hosted review (answer quality) and, reported only on an unmerged branch, the hosted edit (its contract). Open: the disconnect (authorized, next), `permission = "ask"` (both halves observed, per-tool report not in the repository), thinking effect, experiments attribution, nested gating (NOT EXERCISED), clean-account installation |
 | Hosted allowance | Three starts authorized for the sitting; two used; the last is authorized for the disconnect only |
@@ -51,12 +51,16 @@ Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily co
 | 7 | Next: the MCP-client disconnect with the last authorized start, on the installed archive; evidence branch pushed | Target agent | Given 2026-10-16 (authorization 5) |
 | 8 | Review and merge the disconnect evidence branch | Coordinator | Yes to the merge and `make push` |
 | 9 | Clean-account installation of the frozen archive | You | **Do it, with the packet in 4.6** |
-| 10 | Decide worker answer quality against another bounded hosted allowance: spend one on the review and edit gate, or publish with it open and the rejections stated as a limit. Decide the bytes too: the tested frozen archive without `2a49abd`, or a new frozen build of main, which needs its own preparation, readiness and hosted evidence | You | **Both decisions** |
+| 10 | Done 2026-10-16: worker answer quality is a documented limit; the tested archive from `44dc6f8` is published as v2.0.1 and main's later changes are 2.0.2 | — | — |
 | 11 | Repo readiness: rename, description, topics | Coordinator prepares | **Decide the rename; run two `gh` commands** |
-| 12 | Publish v2.0.1 as a draft, verify, then publish | Coordinator prepares | **Run `gh release create`, then `gh release edit`** |
-| 13 | 2.1 merges to main | Agents, Coordinator | Scope reading for Antigravity; the wheel download |
+| 12 | Publish v2.0.1 as a pre-release from the target-held tested assets, with the commands in the Handoff; mark it latest once steps 7 to 9 are recorded | You | **Run `gh release create` on the target Mac** |
+| 13 | Package 2.0.2 on the target from git at the merged main commit (`package:rc` under Node 20.19.0, which also closes its Node floor) | Target agent | Authorization for the task-scoped packaging and installation, as for 2.0.1 |
+| 14 | 2.0.2 identity check, side-by-side install, pin and `doctor`, one `prepare check`, installed SDK readiness, registration switch with rollback and native readiness; evidence branch reviewed and merged | Target agent, then Coordinator | Yes to the merge and `make push` |
+| 15 | Confirm the proposed carry-over in `docs/acceptance.json` and decide the optional hosted review for the reporting fix | You | **One decision; a new allowance only if you want the review** |
+| 16 | Publish v2.0.2 from its checked target-held assets with [release-notes-2.0.2.md](release-notes-2.0.2.md) | You | **Run `gh release create`** |
+| 17 | 2.1 merges to main | Agents, Coordinator | Scope reading for Antigravity; the wheel download |
 
-Open decisions that do not block the release are in section 4.12. Steps 7 and 9 can overlap; step 11 can happen any time before the first outreach post.
+Open decisions that do not block the release are in section 4.12. Steps 7 and 9 can overlap; step 11 can happen any time before the first outreach post. Steps 13 to 16 follow the v2.0.1 publish and need no hosted start; the disconnect (step 7) runs on the installed 2.0.1 archive, so the registration moves to 2.0.2 only after it is recorded.
 
 ## 4. 2.0.1 to published
 

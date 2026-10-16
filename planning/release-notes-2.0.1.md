@@ -80,7 +80,7 @@ Keep your previous prefix and the configuration backup until 2.0.1 works for you
 | Clean-account installation | Open |
 | `permission = "ask"` read-back of per-tool fields; thinking-off effect; experiments fetch attribution; nested `run_typescript` gating | Open or not exercised |
 
-The machine-readable record is `docs/acceptance.json` at the tag.
+The target evidence was recorded after this archive was built, so `docs/acceptance.json` at the tag and the `acceptance.json` asset show the packaging-time state, with the target gates open. The machine-readable record of the results above is `docs/acceptance.json` on `main`, under `evidence_builds` and the `v2.0.1-archive-*` gates for archive `7978719c…`.
 
 ## Limits
 

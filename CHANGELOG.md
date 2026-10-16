@@ -1,17 +1,29 @@
 # Changelog
 
+## 2.0.2 — run reporting after the 2.0.1 sitting
+
+Unreleased; the source on main. Everything after `44dc6f8`, the commit 2.0.1's tested archive was built from. The runtime changes are reporting only: launch, the pin, the session configuration and read-back, the approval handler, the event validator, cleanup, packaging and the conformance script are unchanged from 2.0.1, and restart recovery only also records the failed outcome; it still launches, resumes and replays nothing. No target gate of 2.0.1 transfers to this archive; `docs/acceptance.json` records, gate by gate, which 2.0.1 evidence is a reasonable basis and what 2.0.2 still needs.
+
+- Fixed: closing a run lost its outcome, so an exported report showed `execution.state` `unknown` and no start time for a review that had completed. The run record now keeps `execution_state` (`completed`, `failed` or `cancelled`) beside the close state, records `started_at` when the run is first observed running, and restart recovery sets both to failed; a record written without the field still reports `unknown`. The run schema lists `execution_state`.
+- Changed: a count-only `reasoning_observation` diagnostic at the end of each turn records the structured reasoning entries dropped from the stream (`streamed_entries`) and from the audited history (`history_entries`), and whether that audit completed (`history_audited`); `runs export --include events` keeps the three fields. It replaces scanning private files for a word, which cannot attribute anything to generated reasoning. No content is kept.
+- Changed: an export without recorded cleanup evidence says the evidence was not recorded or the run has not settled.
+
+Documentation:
+
+- The nested-write probe in the [target acceptance procedure](docs/target-acceptance.md) names `tools.file_system.write_file` with `path` and `content`, as Vibe 2.26.1's source defines it, and asks for labeled review rows instead of an unlabeled sequence ([hosted continuation](docs/hosted-continuation.md)). The thinking-off gate reads the structured counts instead of the word-count watcher.
+- Worker answer quality is stated as a limit in the README, [security](docs/security.md#what-is-not-isolated) and [compatibility](docs/compatibility.md): the supervisor reports what the worker did, not whether its answer is right.
+- The target machine may fix code it finds broken on a branch pushed for review; the fix is a new candidate whose earlier evidence does not transfer.
+- The recorded target evidence of 2.0.1 is in `docs/acceptance.json` and [compatibility](docs/compatibility.md#candidate-acceptance).
+
 ## 2.0.1 — one version; acceptance, preparation and validation
 
-Unreleased; on main since 2026-10-15. It combines the one-version cleanup with the coordinator workflow built in parallel on the 2.0 line. The five MCP tools, the one active slot, the detached edit worktrees and the no-replay rule are unchanged. No target gate of 2.0.0 or of an earlier build transfers to this one; `docs/acceptance.json` records which gates its own target sitting closed and which stay open.
+Release: the tested archive from `44dc6f8` (SHA-256 `7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e`), published as a pre-release by the owner. On main since 2026-10-15. It combines the one-version cleanup with the coordinator workflow built in parallel on the 2.0 line. The five MCP tools, the one active slot, the detached edit worktrees and the no-replay rule are unchanged. No target gate of 2.0.0 or of an earlier build transfers to this one; `docs/acceptance.json` records which gates its own target sitting closed and which stay open.
 
 Known limit (owner decision 2026-10-16): Worker answer quality is not guaranteed and is not a supervisor gate. On the target, the hosted review ran with read-only integrity and verified cleanup but its answer was wrong, and the hosted edit was reported rejected by its acceptance contract; the supervisor's isolation, permissions, events and cleanup were observed working in both. Verify every result independently: the acceptance contract, the export and your own checks decide, never the worker's summary.
 
 Fixes from the target sitting:
 
 - Fixed: the preparation kit could name different bytes than the archive it shipped with. npm runs `prepare` during `npm pack` even with `--ignore-scripts`, which rebuilt `dist` without its SBOM, and packaging hashed the candidate only after regenerating the external SBOM. `package:rc` now captures the candidate identity right after packing, installs the exact archive offline with lifecycle scripts off into a temporary private prefix, and announces success only when the installed identity, version and conformance-script hash match the kit and every kit checksum verifies; the delivery `SHA256SUMS` now lists the kit files, and the temporary installation is removed on success or failure ([preparation](docs/preparation.md)).
-- Fixed: closing a run lost its outcome, so an exported report showed `execution.state` `unknown` and no start time for a review that had completed. The run record now keeps `execution_state` (`completed`, `failed` or `cancelled`) beside the close state, records `started_at` when the run is first observed running, and restart recovery sets both to failed; a record written without the field still reports `unknown`.
-- Changed: a count-only `reasoning_observation` diagnostic at the end of each turn records the structured reasoning entries dropped from the stream (`streamed_entries`) and from the audited history (`history_entries`), and whether that audit completed (`history_audited`); `runs export --include events` keeps the three fields. It replaces scanning private files for a word, which cannot attribute anything to generated reasoning. No content is kept.
-- The nested-write probe in the [target acceptance procedure](docs/target-acceptance.md) names `tools.file_system.write_file` with `path` and `content`, as Vibe 2.26.1's source defines it, and asks for labeled review rows instead of an unlabeled sequence ([hosted continuation](docs/hosted-continuation.md)).
 
 One version:
 
