@@ -20,3 +20,9 @@ The output parent must already be canonical, owner-private and writable. Destina
 Validation manifests use schema_version 1, the exported patch_sha256 and unique validations with id/status (`passed`, `failed`, `incomplete`), optional evidence_sha256 and reference. Treat exports containing project patches as private project material.
 
 Runtime observations record the reported session model, alias and thinking setting at startup and each verified handoff. Reports leave provider and underlying weights unknown. Usage preserves prompt/completion/cache tokens and model calls when available, with non-authoritative cost from runtime snapshot prices. Model calls are distinct from tool calls and Supervisor turn limits. Phase durations use saved timestamps and remain null when missing or inconsistent; execution includes finalization because the current lifecycle does not separately timestamp inference completion. Legacy records do not invent missing observations.
+
+## Execution lifecycle and reasoning observations
+
+Closing a run is a resource lifecycle action. Reports preserve the recorded execution outcome separately from closed status and retain actual start/finish timestamps; missing legacy evidence remains unknown. Coordinator rejection of a completed answer is a separate assessment and must not relabel execution as failed. Inference-only duration is not estimated from total wall time.
+
+The `reasoning_observation` diagnostic contains only structured-entry counts: `streamed_entries`, `history_entries` (or null) and `history_audited`. Export with `--include events` to retain those fields. Content is discarded, and existing reasoning/secret filtering remains unchanged. Stream/history counts overlap and must not be summed. A count of zero means none observed, not proof that no provider reasoning was generated. Private-file word searches are not a measurement of reasoning generation.

@@ -81,6 +81,9 @@ describe('one-shot restart behavior', () => {
       const status = await manager.status({ run_id: record.runId });
       expect(status).toMatchObject({ state: 'failed', error: { code: 'VSUP_BACKEND_CRASHED' } });
       expect((status.error as { message: string }).message).toContain('not resumed or replayed');
+      const recovered = JSON.parse(await readFile(path.join(directory, 'meta.json'), 'utf8')) as { execution_state?: string; started_at?: string };
+      expect(recovered.execution_state).toBe('failed');
+      expect(recovered.started_at).toBeUndefined();
       expect(backend.starts).toBe(0);
       expect(backend.cancels).toEqual([]);
       expect(backend.closes).toEqual([]);

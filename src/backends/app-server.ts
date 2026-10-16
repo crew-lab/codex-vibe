@@ -760,7 +760,7 @@ class AppServerRun {
       if (final.truncated || bounded.truncated) this.warnings.push('The final assistant message was truncated to the configured limit.');
       else if (!final.complete) this.warnings.push('The final assistant message was not marked complete.');
     }
-    this.emitCounters();
+    this.emitCounters(audit);
     try { await this.cleanup(); }
     catch (error) {
       reportBackgroundFailure('app-server-cleanup', error);
@@ -848,8 +848,14 @@ class AppServerRun {
     return { ...error, details };
   }
 
-  private emitCounters(): void {
+  private emitCounters(audit: HistoryAudit | null): void {
     const { counters } = this.processor;
+    this.emit('diagnostic', 'info', {
+      reason: 'reasoning_observation',
+      streamed_entries: counters.reasoningDropped,
+      history_entries: audit?.reasoningDropped ?? null,
+      history_audited: audit !== null && audit.fatal === null
+    }, 'supervisor');
     if (counters.unknownNotifications === 0 && counters.staleEvents === 0 && counters.foreignSessionNotifications === 0) return;
     this.emit('diagnostic', 'info', {
       reason: 'ignored_notifications',

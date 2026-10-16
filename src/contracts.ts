@@ -15,6 +15,7 @@ export type RunMode = "review" | "edit";
 export type RunState =
   | "starting" | "running" | "completed" | "failed"
   | "cancelled" | "closing" | "closed";
+export type RunExecutionState = Extract<RunState, "completed" | "failed" | "cancelled">;
 export type EventSeverity = "debug" | "info" | "warning" | "error";
 export type EventSource = "supervisor" | "vibe";
 
@@ -103,6 +104,8 @@ export interface RunRecord {
   backend: BackendKind;
   mode: RunMode;
   state: RunState;
+  /** Actual terminal execution outcome; absent on legacy closed records with no recorded outcome. */
+  executionState?: RunExecutionState;
   sourceWorkspace: string;
   workerWorkspace: string;
   worktree?: WorktreeRecord;
