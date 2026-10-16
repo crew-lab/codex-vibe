@@ -1,0 +1,35 @@
+[
+  {
+    "seq": 1,
+    "timestamp": "2026-10-16T08:25:33.464Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 2,
+    "timestamp": "2026-10-16T08:25:33.466Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 3,
+    "timestamp": "2026-10-16T08:25:35.640Z",
+    "type": "message",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown"
+  },
+  {
+    "seq": 4,
+    "timestamp": "2026-10-16T08:25:35.640Z",
+    "type": "diagnostic",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown",
+    "reason": "ignored_notifications"
+  }
+]

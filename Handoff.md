@@ -14,6 +14,10 @@ Side-by-side installation, reviewed 783-file Vibe pin and doctor passed. Exactly
 
 The native desktop connection now reports Supervisor 2.0.1 and the expected candidate `8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4`. Preparation PASS, workspace/dispatch eligible, free slot, no blockers, no restart required and the exact five-tool connected catalog were verified without starting a run. This supersedes the earlier pending-native status below and in the frozen evidence; those historical records remain intact. [Native readiness addendum](research/evidence/package-kit-identity-2026-10-15/NATIVE-READINESS-2026-10-16.md). Zero hosted starts; hosted and clean-account gates remain open.
 
+### Hosted acceptance stopped — 2026-10-16
+
+One of three authorized hosted starts was used. The review completed/end_turn with read-only integrity, two executed reads and cleanup verified, but the actual final answer reversed both required negative-number cases. Independent fixture execution confirmed the error. Coordinator rejected the review; edit and disconnect were not started, and no retry/fallback occurred. Nested permission probe was NOT EXERCISED (a reported missing function is not a denied-write event). Reasoning lexical counts grew but cannot establish generated reasoning. The post-close report exports execution as unknown despite native completed; that reporting finding is preserved separately. Hosted gates remain unverified. [Hosted evidence and stop report](research/evidence/hosted-2.0.1-2026-10-16/REPORT.md). Runtime-reported usage: 14,442 tokens, three model calls, USD 0.022023 estimated; underlying model and turn count unavailable. The native slot is free; no worker process or private runtime directory remains.
+
 ## Release identity
 
 - **Source.** `vibe-supervisor` 2.0.1, unpublished. The workflow integration is on main at `6c645e3`; this repair starts from main `8b288b8` on `codex/package-kit-identity`. Version remains 2.0.1 in both package manifests; Vibe remains pinned to 2.26.1. The source, distributed archive, installed candidate and connected desktop server are distinct identities and need their own evidence.
