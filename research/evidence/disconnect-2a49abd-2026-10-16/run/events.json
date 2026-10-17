@@ -1,0 +1,18 @@
+[
+  {
+    "seq": 1,
+    "timestamp": "2026-10-16T17:23:34.556Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 2,
+    "timestamp": "2026-10-16T17:23:34.560Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  }
+]

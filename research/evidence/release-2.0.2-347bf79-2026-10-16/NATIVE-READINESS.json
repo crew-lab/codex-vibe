@@ -1,0 +1,21 @@
+{
+  "server_version": "2.0.1",
+  "expected_candidate": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1",
+  "candidate": {
+    "version": "2.0.1",
+    "sha256": "1c3c135862e2fe888428a2bf67fc6cd02fe9852259a494e7d624e2a3e96a45c0"
+  },
+  "preparation_status": "passed",
+  "eligible": false,
+  "workspace_eligible": true,
+  "active_slot": {
+    "busy": false
+  },
+  "blockers": [
+    {
+      "code": "VSUP_INVALID_STATE",
+      "message": "Connected candidate differs from expected_candidate."
+    }
+  ],
+  "native_readiness": "pending desktop reconnect"
+}
