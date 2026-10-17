@@ -2,21 +2,43 @@
 
 ## 2.1.0 — unreleased
 
-On branch `claude/2.1-wave-1`, pending review; the package version is still 2.0.2 and no 2.1 archive exists. This entry covers items 1, 2, 3 and 6 of the [2.1 plan](planning/development-plan.md#6-21-observable-and-measurable); the other items are not built here. Every new record field is optional, so a 2.0 record still loads, and a 2.0 supervisor reading a 2.1 record ignores what it does not know. None of this has run against a real Vibe: its hosted gates are listed in `docs/acceptance.json` as unverified. `scripts/v2-conformance-check.mjs` and the schemas changed, so 2.1 ships its own candidate identity and kit.
+Unreleased; source on main. Line 2.1 introduces the Google Antigravity execution backend (`agy 1.4.0`), full auditability via tool-call accounting and approval ledgers, root-anchored exclusion globs, daily cost budgets, SARIF v2.1.0 static analysis exports, and cross-session inspection. All record fields remain backwards-compatible (2.0 records load cleanly, and 2.0 supervisors ignore unknown fields). Pre-releases v2.0.1 and v2.0.2 are published on GitHub.
 
-- Added: tool-call counts and the ceilings in every run record. `usage.tool_calls` holds `executed`, `denied_by_handler` and `denied_by_policy`, the supervisor's own audited outcomes (not Vibe's tool statistics). `limits` saves `max_tokens` and `max_cost_usd` when configured and `max_model_calls`, the supervisor's model-call backstop (`max_turns` plus 5). Run and result schemas list the fields; loading a record validates the integer limits and the decimal cost ceiling separately.
-- Added: `excluded_globs` per allowed root, a table keyed by an `allowed_workspace_roots` entry as written (up to 100 globs of 256 characters and 16 segments; `*` within a segment, `**` as a whole segment). Exclusions only narrow access: they are merged into the profile denylist after the fixed entries, denied again by the approval handler (reason `path_excluded`), dropped from the review's file listing, read back before the first turn and saved in the run record. They are live, like the allowlist: a change updates the policy revision and needs no restart. A glob such as `secrets` names the directory itself in Vibe's denylist while the handler denies everything beneath it; write `secrets/**` for contents. `scripts/v2-conformance-check.mjs` takes a repeatable `--excluded-glob`.
-- Added: `vibe-supervisor runs usefulness [--since YYYY-MM-DD] [--json]`, a table of decided edit runs and their acceptance rate from bound assessments. Reviews are counted as not assessable; a missing data root reports zero runs.
-- Added: the run's approval ledger is saved as `artifacts/approvals.json` (at most 4,096 records, with a `truncated` flag) and `runs export` includes it, checked against the saved digest; the run record and the report carry the `pin` identity (Vibe version, manifest SHA-256 and `RECORD` SHA-256).
-- Exclusions are anchored at the allowed root they are configured under, and every allowed root that contains the workspace contributes its globs, so adding a nested root never removes a parent's exclusions. A start is refused when a root with exclusions cannot be canonicalized, when the containing roots contribute more than 100 globs, or when a `context_files` entry matches an exclusion; the same root listed twice is rejected. Matching takes linear time.
-- The approval ledger records duplicate callbacks as denied entries and is credential-redacted on disk; the exported copy makes in-workspace paths relative, replaces every other path with `<outside-workspace>`, and `report.json` carries both `source_sha256` and `exported_sha256`. A ledger listed in the record but missing on disk fails the export.
-- `runs show` and `runs tail` find runs in isolated sessions like `runs list`, which skips an unsafe session directory with a warning.
-- Changed: `runs list` also lists runs stored under at most 128 isolated sessions, where the default isolated registration keeps them; it used to read only the data root's `runs/`. More than 128 session directories is refused with `VSUP_INVALID_STATE`.
-- Fixed (test only): the reaper's deadline is fixed before startup begins, so its test now gives startup room under parallel load.
+### Execution backends & Google Antigravity ([ADR 0008](docs/adr/0008-antigravity-execution-backend.md))
+
+- Added: Google Antigravity execution backend (`backend = "antigravity"`, `paths.antigravity`), supporting the `agy 1.4.0` CLI alongside the default `vibe-app-server` engine.
+- Added: Pre-seeded per-run CLI configuration (`$HOME/.gemini/antigravity-cli/settings.json`) with `toolPermission = "strict"`, `enableTerminalSandbox = true`, `allowNonWorkspaceAccess = false`, unified permission syntax, and refusal of shell, commands, web, browser, and MCP.
+- Added: Deterministic supervisor-owned `PreToolUse` hook (`pre-tool-hook.mjs` + `hooks.json`) enforcing mode profiles and workspace path containment (`judgeWorkspacePath`), and outputting an audited `ApprovalLedgerEntry` ledger (`hook-ledger.jsonl`).
+- Added: Zero-inference preparation check for Antigravity (`vibe-supervisor prepare check`) validating settings and hooks, running zero-inference slash command read-backs (`/config`, `/hooks`, `/permissions`, `/skills` through a refusing loopback proxy), executing 6 synthetic hook checks, and issuing a preparation receipt bound to the `agy` binary SHA-256 digest.
+- Added: Untrusted workspace extensions guard (`assertNoProjectAntigravityExtensions`) rejecting projects with `.gemini`, `.agents/hooks.json`, `.agents/mcp_config.json`, or `.agents/plugins`.
+
+### Access control & exclusions
+
+- Added: `excluded_globs` configured per allowed workspace root, anchored at root, evaluated in linear time, dropped from review listings, merged into worker denylists, verified in read-backs, and enforced by approval handlers (`path_excluded`).
+- Added: Protection against nested roots removing parent exclusions, invalid canonicalization, or exceeding the 100-glob limit.
+
+### Observation, ceilings & accounting
+
+- Added: Audited tool-call counts in every run record and event stream (`usage.tool_calls` holding `executed`, `denied_by_handler`, and `denied_by_policy`).
+- Added: Limits enforcement in run records (`limits.max_tokens`, `limits.max_cost_usd`, and `limits.max_model_calls` backstop).
+- Added: Daily cost ledger (`daily_cost_ledger.json`) and per-root spending limits (`budgets.<root>.max_cost_usd_per_day`), enforcing 24-hour rolling ceilings across standard and isolated session runs and surfacing budget blockers in `vibe_status`.
+- Added: `vibe-supervisor runs usage [--since <YYYY-MM-DD>] [--root <path>] [--json]` CLI command.
+
+### Verification, auditing & standardized exports
+
+- Added: Run approval ledger saved as `artifacts/approvals.json` (up to 4,096 entries) and included in `runs export`, with sanitization of out-of-workspace paths to `<outside-workspace>` and digest verification (`source_sha256`, `exported_sha256`).
+- Added: SARIF v2.1.0 export (`vibe-supervisor runs sarif <run-id> --out <file>` and `--sarif` for `runs export/verify`), converting tool denials, policy violations, and contract check failures into standard SARIF static analysis findings.
+- Added: `vibe-supervisor runs usefulness [--since YYYY-MM-DD] [--json]` calculating decided edit run acceptance rates.
+- Added: Multi-session run enumeration (`runs list`, `runs show`, `runs tail` scanning up to 128 isolated session directories).
+
+### Releases
+
+- Documented: Pre-release `v2.0.1` published at `44dc6f8` with tested archive `7978719c…`.
+- Documented: Pre-release `v2.0.2` published at `b275b1b` with tested archive `84bff941…`.
 
 ## 2.0.2 — run reporting after the 2.0.1 sitting
 
-Unreleased; the source on main. Everything after `44dc6f8`, the commit 2.0.1's tested archive was built from. The runtime changes are reporting only: launch, the pin, the session configuration and read-back, the approval handler, the event validator, cleanup, packaging and the conformance script are unchanged from 2.0.1, and restart recovery only also records the failed outcome; it still launches, resumes and replays nothing. No target gate of 2.0.1 transfers to this archive; `docs/acceptance.json` records, gate by gate, which 2.0.1 evidence is a reasonable basis and what 2.0.2 still needs.
+Release: the tested archive from `b275b1b` (SHA-256 `84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09`), published as a pre-release by the owner. Everything after `44dc6f8`, the commit 2.0.1's tested archive was built from. The runtime changes are reporting only: launch, the pin, the session configuration and read-back, the approval handler, the event validator, cleanup, packaging and the conformance script are unchanged from 2.0.1, and restart recovery only also records the failed outcome; it still launches, resumes and replays nothing. No target gate of 2.0.1 transfers to this archive; `docs/acceptance.json` records, gate by gate, which 2.0.1 evidence is a reasonable basis and what 2.0.2 still needs.
 
 - Fixed: closing a run lost its outcome, so an exported report showed `execution.state` `unknown` and no start time for a review that had completed. The run record now keeps `execution_state` (`completed`, `failed` or `cancelled`) beside the close state, records `started_at` when the run is first observed running, and restart recovery sets both to failed; a record written without the field still reports `unknown`. The run schema lists `execution_state`.
 - Changed: a count-only `reasoning_observation` diagnostic at the end of each turn records the structured reasoning entries dropped from the stream (`streamed_entries`) and from the audited history (`history_entries`), and whether that audit completed (`history_audited`); `runs export --include events` keeps the three fields. It replaces scanning private files for a word, which cannot attribute anything to generated reasoning. No content is kept.
