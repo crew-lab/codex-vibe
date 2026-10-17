@@ -10,9 +10,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const SCRIPT_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const REPOSITORY = path.resolve(SCRIPT_DIRECTORY, '..');
-const USAGE = 'Usage: node scripts/v2-conformance-check.mjs --manifest <path> [--executable <path>] [--config <path>] [--dist <dir>] [--output <path>] [--mode review|edit] [--placeholder-key] [--observe-network] [--settle-ms <n>] [--pin-runs <n>] [--request-timeout-ms <n>] [--run-timeout-ms <n>]';
+const USAGE = 'Usage: node scripts/v2-conformance-check.mjs --manifest <path> [--executable <path>] [--config <path>] [--dist <dir>] [--output <path>] [--mode review|edit] [--placeholder-key] [--observe-network] [--settle-ms <n>] [--pin-runs <n>] [--request-timeout-ms <n>] [--run-timeout-ms <n>] [--excluded-glob <glob>]...';
 const VALUE_OPTIONS = ['--manifest', '--executable', '--config', '--dist', '--output', '--mode', '--settle-ms', '--pin-runs', '--request-timeout-ms', '--run-timeout-ms'];
+const REPEATABLE_OPTIONS = ['--excluded-glob'];
 const FLAG_OPTIONS = ['--placeholder-key', '--observe-network'];
+const MAX_EXCLUDED_GLOBS = 100;
 const PLACEHOLDER_KEY = 'vsup-conformance-placeholder-not-a-credential';
 const MAX_TURNS = 20;
 const EXIT_WAIT_MS = 5000;
@@ -41,9 +43,15 @@ class StageError extends Error {
 function parseArguments(args) {
   const values = new Map();
   const flags = new Set();
+  const excludedGlobs = [];
   for (let index = 0; index < args.length; index++) {
     const key = args[index];
-    if (FLAG_OPTIONS.includes(key)) {
+    if (REPEATABLE_OPTIONS.includes(key)) {
+      const value = args[++index];
+      if (value === undefined || value.startsWith('--')) throw new UsageError(`${key} requires a value.`);
+      if (!excludedGlobs.includes(value)) excludedGlobs.push(value);
+      if (excludedGlobs.length > MAX_EXCLUDED_GLOBS) throw new UsageError(`${key} may be supplied at most ${MAX_EXCLUDED_GLOBS} times.`);
+    } else if (FLAG_OPTIONS.includes(key)) {
       if (flags.has(key)) throw new UsageError(`${key} may be supplied once.`);
       flags.add(key);
     } else if (VALUE_OPTIONS.includes(key)) {
@@ -73,6 +81,7 @@ function parseArguments(args) {
     dist: absolute('--dist') ?? path.join(REPOSITORY, 'dist'),
     output: absolute('--output'),
     modes: mode === undefined ? ['review', 'edit'] : [mode],
+    excludedGlobs,
     placeholderKey: flags.has('--placeholder-key'),
     observeNetwork: flags.has('--observe-network'),
     settleMs: integer('--settle-ms', flags.has('--observe-network') ? 3000 : 0, 0, 60_000),
@@ -231,6 +240,13 @@ async function main(argv) {
   const dist = await loadDist(options.dist);
   const { pin, protocol, readback, sessionConfig, jsonrpc, managed, reaper, environment, failure, supported, appServer } = dist;
   const pinned = supported.SUPPORTED_VIBE;
+  if (options.excludedGlobs.length > 0) {
+    const validation = await import(pathToFileURL(path.join(options.dist, 'config/validation.js')).href);
+    for (const glob of options.excludedGlobs) {
+      const problem = validation.excludedGlobProblem(glob);
+      if (problem !== null) throw new UsageError(`--excluded-glob ${JSON.stringify(glob)} ${problem}.`);
+    }
+  }
 
   let config = { paths: {} };
   if (options.config) {
@@ -258,7 +274,7 @@ async function main(argv) {
     platform: `${process.platform}-${process.arch}`,
     inference: { turn_start_sent: false, note: 'The check never sends turn/start, so no model request is made by the supervisor or the app-server.' },
     credential_mode: options.placeholderKey ? 'placeholder' : 'none',
-    options: { modes: options.modes, observe_network: options.observeNetwork, settle_ms: options.settleMs, pin_runs: options.pinRuns },
+    options: { modes: options.modes, observe_network: options.observeNetwork, settle_ms: options.settleMs, pin_runs: options.pinRuns, excluded_globs: options.excludedGlobs },
     pin: null,
     runs: [],
     network_observation: null,
@@ -345,7 +361,7 @@ async function main(argv) {
       server_requests: [], server_warnings: [], stats_after: null, stderr: { bytes: 0, tail: '' }, shutdown: null, blocked: null
     };
     const note = (id, severity, message, details) => addFinding(id, severity, message, label, details);
-    const plan = sessionConfig.buildSessionConfig({ mode, workspace, runDirectory, maxTurns: MAX_TURNS });
+    const plan = sessionConfig.buildSessionConfig({ mode, workspace, runDirectory, maxTurns: MAX_TURNS, excludedGlobs: options.excludedGlobs });
     await sessionConfig.writeSessionFiles(plan);
     const childEnvironment = { ...environment.buildChildEnvironment(process.env), ...plan.environment };
     delete childEnvironment.MISTRAL_API_KEY;

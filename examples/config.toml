@@ -1,6 +1,13 @@
 version = 1
 allowed_workspace_roots = []
 
+# Optional: workspace-relative globs that no run under a root may read or write,
+# added to the fixed reserved and secret patterns. Each key must equal an entry of
+# allowed_workspace_roots as written. One segment (`*.tfvars`) matches at any depth;
+# several segments (`fixtures/private/**`) are anchored at the workspace root.
+# [excluded_globs]
+# "~/src/project" = ["*.tfvars", "fixtures/private/**", "dumps/*.sql"]
+
 [retention]
 days = 7
 

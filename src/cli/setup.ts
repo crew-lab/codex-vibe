@@ -133,7 +133,7 @@ export async function planWorkspaceConfig(canonical: string, options: { resolveE
     await validateWorkspaceRootsAtUse(config.allowedWorkspaceRoots);
     if (config.paths?.vibePinManifest === undefined) notes.push(MISSING_PIN_MANIFEST_NOTE);
   }
-  catch (error) { throw configInvalid(`Invalid supervisor configuration at ${file}; no changes were made: ${(error as Error).message} Supported fields are version, allowed_workspace_roots, retention, limits (including max_tokens and max_cost_usd), and paths (vibe, app_server, vibe_pin_manifest). Remove unsupported fields instead of relying on them.`); }
+  catch (error) { throw configInvalid(`Invalid supervisor configuration at ${file}; no changes were made: ${(error as Error).message} Supported fields are version, allowed_workspace_roots, excluded_globs, retention, limits (including max_tokens and max_cost_usd), and paths (vibe, app_server, vibe_pin_manifest). Remove unsupported fields instead of relying on them.`); }
   const changed = created || added || pathsChanged;
   return { file, created, added, canonical, notes, changed, ...(changed ? { text: stringify(document) } : {}) };
 }

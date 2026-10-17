@@ -38,6 +38,38 @@ describe('eligibleListingPaths', () => {
   });
 });
 
+describe('excluded globs in the listing', () => {
+  const paths = ['a.ts', 'infra/prod.tfvars', 'prod.tfvars', 'fixtures/private/a.json', 'fixtures/public/b.json', 'dumps/full.sql', 'dumps/nested/full.sql', 'src/index.ts'];
+
+  it('drops excluded paths and leaves look-alikes', () => {
+    expect(eligibleListingPaths(buffer(...paths), ['*.tfvars', 'fixtures/private/**', 'dumps/*.sql'])).toEqual(['a.ts', 'dumps/nested/full.sql', 'fixtures/public/b.json', 'src/index.ts']);
+    expect(eligibleListingPaths(buffer(...paths), [])).toEqual([...paths].sort());
+    expect(eligibleListingPaths(buffer(...paths))).toEqual([...paths].sort());
+  });
+
+  it('matches globs anchored at an allowed root above the workspace against the root-relative path', () => {
+    const anchored = [{ prefix: ['project'], globs: ['project/fixtures/private/**', 'project/dumps/*.sql'] }];
+    expect(eligibleListingPaths(buffer(...paths), anchored)).toEqual(['a.ts', 'dumps/nested/full.sql', 'fixtures/public/b.json', 'infra/prod.tfvars', 'prod.tfvars', 'src/index.ts']);
+    expect(eligibleListingPaths(buffer(...paths), [{ prefix: ['other'], globs: ['project/fixtures/private/**'] }])).toEqual([...paths].sort());
+  });
+
+  it('does not count excluded files as eligible or include them in the text', async () => {
+    const root = repository({ 'src/index.ts': 'a', 'prod.tfvars': 'secret', 'infra/prod.tfvars': 'secret', 'fixtures/private/a.json': 'real data', 'README.md': 'd' });
+    const listing = await buildWorkspaceListing(root, {}, ['*.tfvars', 'fixtures/private/**']);
+    expect(listing.text?.split('\n')).toEqual(['Workspace files (paths relative to the workspace root):', '- README.md', '- src/index.ts']);
+    expect(listing).toMatchObject({ included: 2, eligible: 2, truncated: false });
+    expect(listing.text).not.toContain('tfvars');
+    expect(listing.text).not.toContain('fixtures');
+    const unfiltered = await buildWorkspaceListing(root);
+    expect(unfiltered).toMatchObject({ included: 5, eligible: 5 });
+  });
+
+  it('reports no listing when every file is excluded', async () => {
+    const root = repository({ 'a.tfvars': 'x' });
+    expect(await buildWorkspaceListing(root, {}, ['*.tfvars'])).toEqual({ text: null, included: 0, eligible: 0, truncated: false, unavailable: null });
+  });
+});
+
 describe('formatListing', () => {
   const limits = { maxFiles: 3, maxBytes: 10_000 };
 

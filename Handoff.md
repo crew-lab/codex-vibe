@@ -98,6 +98,17 @@ Two parallel remote branches have advanced alongside `origin/explore_project_det
 - **`origin/claude/2.1-wave-1` (`0d7119a`, 2026-10-16)**:
   - Implemented 2.1 Wave 0–3 and cold-review fixes for items 1 (`usage.tool_calls`, `max_tokens`/`max_cost_usd`/`max_model_calls`, cross-session `runs list/show/tail`), 2 (`runs usefulness`), 3 (`excluded_globs` per allowed root), and 6 (`approvals.json` ledger + `pin` in `runs export`).
 
+### 2.1 in progress — 2026-10-16 / 2026-10-17
+
+Plan items 1, 2, 3 and 6 are implemented on branch `claude/2.1-wave-1` and merged into `origin/explore_project_details`, pending cold review and the coordinator's `verify:release`; nothing is merged to main, the package version is still 2.0.2 and no 2.1 archive exists. Design: [planning/2.1-designs.md](planning/2.1-designs.md), with the delivered shapes in [reference](docs/reference.md), [workflow acceptance](docs/workflow-acceptance.md) and the [changelog](CHANGELOG.md).
+
+- Wave 0, `404b801`: contracts for usage counts and ceilings, `excluded_globs`, the approval ledger, the pin identity and the `runs` subcommand table; new `src/cli/runs.ts` (the bounded enumerator over the data root and at most 128 isolated sessions, so `runs list` spans them).
+- Wave 1, `f6c852e`: tool-call counts in run records, per-workspace exclusions (validation, fingerprint, session configuration, handler, listing, schema, example), `runs usefulness`, and the ledger and pin in exports.
+- Wave 2, `e4c1608`: exclusions, the pin identity and the ledger wired into the backend; `runs usefulness` reports zero runs without a data directory; `--excluded-glob` on the conformance script.
+- Reaper test: the reaper's deadline is fixed before startup begins, so the test of the reaper killing a wedged group (`tests/integration/app-server-backend.test.ts`) gave the run no room to start under parallel load. It now takes the startup allowance into the reaper margin. Test only; no runtime change.
+
+Not done: items 4, 5, 7, 8 and 9 of the plan. Four hosted observations are open as `UNVERIFIED` gates in `docs/acceptance.json` (`hosted-usage-recorded`, `hosted-excluded-glob-readback-and-denial`, `hosted-run-exported`, `hosted-close-acceptance-recorded`); they ride one hosted review and one hosted edit on a 2.1 archive, which needs a new owner allowance. The conformance script and schemas changed, so 2.1 ships its own candidate identity and kit.
+
 ### Antigravity execution backend integrated and hardened (Phase 1) — 2026-10-17
 
 Per user instruction, Google Antigravity execution backend support has been integrated onto the version 2.0.2 baseline on `origin/explore_project_details` and hardened against `agy 1.3.1` (`src/backends/antigravity.ts`, `src/security/workspace-guard.ts`, `src/core/run-manager.ts`, `src/config/config.ts`, `src/config/policy.ts`):

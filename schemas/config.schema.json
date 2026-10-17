@@ -14,6 +14,21 @@
       "items": { "type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^(/|~$|~/)" },
       "default": []
     },
+    "excluded_globs": {
+      "type": "object",
+      "description": "Per allowed root, workspace-relative globs that no run may read or write. Each key must equal an entry of allowed_workspace_roots as written.",
+      "propertyNames": { "minLength": 1, "maxLength": 4096 },
+      "additionalProperties": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^(?!\\.{1,2}(?:/|$))(?:\\*\\*|(?:[A-Za-z0-9._@+=,-]|\\*(?!\\*))+)(?:/(?!\\.{1,2}(?:/|$))(?:\\*\\*|(?:[A-Za-z0-9._@+=,-]|\\*(?!\\*))+)){0,15}$"
+        }
+      }
+    },
     "retention": {
       "type": "object",
       "additionalProperties": false,

@@ -15,6 +15,7 @@ import {
   writeSessionFiles
 } from '../../src/backends/app-server/session-config.js';
 import { WorkspacePathError } from '../../src/security/paths.js';
+import { denylistAnchors } from '../../src/security/globs.js';
 
 const workspace = '/srv/work/space';
 const runDirectory = '/srv/runs/run-0001';
@@ -222,5 +223,101 @@ describe('read-back expectation', () => {
     expect(plan.expectation.settings.find((setting) => setting.path.join('.') === 'disabled_skills')).toEqual({ path: ['disabled_skills'], value: ['*'], match: 'includes' });
     expect(plan.expectation.settings.find((setting) => setting.path.join('.') === 'default_agent')).toEqual({ path: ['default_agent'], value: 'supervisor-edit', match: 'equal' });
     expect(plan.expectation.settings.find((setting) => setting.path.join('.') === 'enabled_agents')).toEqual({ path: ['enabled_agents'], value: ['supervisor-edit'], match: 'equal' });
+  });
+});
+
+describe('excluded globs in the denylist', () => {
+  const fixed = workspaceDenylist(workspace);
+
+  it('returns the fixed list unchanged when nothing is excluded', () => {
+    expect(workspaceDenylist(workspace, [])).toEqual(fixed);
+    expect(fixed.length).toBeGreaterThan(0);
+  });
+
+  it('appends the anchored entry, plus the any-depth entry for a one-segment glob, after the fixed entries in order', () => {
+    const merged = workspaceDenylist(workspace, ['*.tfvars', 'fixtures/private/**', 'dumps/*.sql', 'secrets']);
+    expect(merged.slice(0, fixed.length)).toEqual(fixed);
+    expect(merged.slice(fixed.length)).toEqual([
+      '/srv/work/space/*.tfvars', '/srv/work/space/**/*.tfvars',
+      '/srv/work/space/fixtures/private/**',
+      '/srv/work/space/dumps/*.sql',
+      '/srv/work/space/secrets', '/srv/work/space/**/secrets'
+    ]);
+  });
+
+  it('keeps every fixed entry whatever is excluded, and denies the excluded files', () => {
+    const merged = workspaceDenylist(workspace, ['**']);
+    for (const entry of fixed) expect(merged).toContain(entry);
+    const denylist = workspaceDenylist(workspace, ['*.tfvars', 'fixtures/private/**', 'dumps/*.sql']);
+    for (const file of ['/srv/work/space/prod.tfvars', '/srv/work/space/infra/prod.tfvars', '/srv/work/space/fixtures/private/a/b.json', '/srv/work/space/dumps/full.sql']) expect(denied(denylist, file), file).toBe(true);
+    for (const file of ['/srv/work/space/fixtures/public/a.json', '/srv/work/space/src/prod.tfvars.md', '/srv/work/space/src/index.ts']) expect(denied(denylist, file), file).toBe(false);
+  });
+
+  it('refuses a glob that would not stay inside the workspace', () => {
+    for (const glob of ['/etc/passwd', '../outside', 'a/../b', '~/x', '', '!keep', 'a?b', 'a[b]', '{a,b}', 'a//b', 'a/']) {
+      expect(() => workspaceDenylist(workspace, [glob]), glob).toThrow(TypeError);
+    }
+  });
+
+  it('puts the same merged list in the profile of every tool and in the read-back expectation', () => {
+    const excluded = ['*.tfvars', 'fixtures/private/**'];
+    const merged = workspaceDenylist(workspace, excluded);
+    for (const mode of ['review', 'edit'] as const) {
+      const plan = buildSessionConfig({ mode, workspace, runDirectory, maxTurns: 5, excludedGlobs: excluded });
+      const parsed = parse(plan.profile.content) as { tools: Record<string, { denylist: string[] }> };
+      expect(Object.keys(parsed.tools)).toEqual([...PROFILE_TOOLS[mode]]);
+      for (const tool of PROFILE_TOOLS[mode]) {
+        expect(parsed.tools[tool]?.denylist).toEqual(merged);
+        expect(plan.profile.document.tools[tool]?.denylist).toEqual(merged);
+        expect(plan.expectation.toolPolicies[tool]).toEqual({ permission: 'ask', denylist: merged });
+      }
+    }
+  });
+
+  it('leaves the plan identical to the one without exclusions when the list is empty or absent', () => {
+    const plain = buildSessionConfig({ mode: 'review', workspace, runDirectory, maxTurns: 5 });
+    expect(buildSessionConfig({ mode: 'review', workspace, runDirectory, maxTurns: 5, excludedGlobs: [] })).toEqual(plain);
+  });
+});
+
+describe('exclusions anchored at their allowed root in the denylist', () => {
+  const root = '/srv/work';
+  const scopes = [{ root, globs: ['space/fixtures/private/**', '*/dumps/*.sql', '*.tfvars', 'other/**'] }];
+  const fixed = workspaceDenylist(workspace);
+
+  it('writes a review entry under the configured root, so a workspace below it is covered by root-relative globs', () => {
+    const merged = workspaceDenylist(workspace, denylistAnchors(scopes, workspace, workspace));
+    expect(merged.slice(fixed.length)).toEqual([
+      '/srv/work/space/fixtures/private/**', '/srv/work/*/dumps/*.sql', '/srv/work/*.tfvars', '/srv/work/**/*.tfvars', '/srv/work/other/**'
+    ]);
+    for (const file of ['/srv/work/space/fixtures/private/a.json', '/srv/work/space/dumps/full.sql', '/srv/work/space/deep/prod.tfvars']) expect(denied(merged, file), file).toBe(true);
+    expect(denied(merged, '/srv/work/space/src/index.ts')).toBe(false);
+  });
+
+  it('rebases an edit entry on the detached worktree after the root-to-source prefix', () => {
+    const worktree = '/srv/data/worktrees/run-1';
+    const merged = workspaceDenylist(worktree, denylistAnchors(scopes, workspace, worktree));
+    expect(merged.slice(workspaceDenylist(worktree).length)).toEqual([
+      `${worktree}/fixtures/private/**`, `${worktree}/dumps/*.sql`, `${worktree}/*.tfvars`, `${worktree}/**/*.tfvars`
+    ]);
+    for (const file of [`${worktree}/fixtures/private/a.json`, `${worktree}/dumps/full.sql`, `${worktree}/x/prod.tfvars`]) expect(denied(merged, file), file).toBe(true);
+    for (const file of [`${worktree}/src/index.ts`, `${worktree}/other/a.ts`, '/srv/work/space/dumps/full.sql']) expect(denied(merged, file), file).toBe(false);
+  });
+
+  it('denies the whole worktree when a glob covers the source workspace itself', () => {
+    const worktree = '/srv/data/worktrees/run-2';
+    const merged = workspaceDenylist(worktree, denylistAnchors([{ root, globs: ['space/**', 'space'] }], workspace, worktree));
+    expect(merged.slice(workspaceDenylist(worktree).length)).toEqual([`${worktree}/**`]);
+  });
+
+  it('reads back the anchored entries it wrote', () => {
+    const worktree = '/srv/data/worktrees/run-3';
+    const excludedGlobs = denylistAnchors(scopes, workspace, worktree);
+    const plan = buildSessionConfig({ mode: 'edit', workspace: worktree, runDirectory, maxTurns: 5, excludedGlobs });
+    for (const tool of PROFILE_TOOLS.edit) expect(plan.expectation.toolPolicies[tool]?.denylist).toEqual(workspaceDenylist(worktree, excludedGlobs));
+  });
+
+  it('refuses a source workspace outside the exclusion root', () => {
+    expect(() => denylistAnchors([{ root: '/srv/elsewhere', globs: ['x'] }], workspace, workspace)).toThrow(RangeError);
   });
 });

@@ -5,7 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { open, readFile, readdir, realpath, rename, rm, lstat } from "node:fs/promises";
 import path from "node:path";
 import type {
-  BackendCallbacks, BackendKind, BackendRunHandle,
+  ApprovalLedgerSnapshot, BackendCallbacks, BackendKind, ExclusionScope, BackendRunHandle, BackendStateUpdate,
   ReviewStartToolInput, EditStartToolInput, StatusToolInput,
   ResultToolInput, WaitOptions, CloseToolInput, RunLimits, RunMode, RunRecord, RunState, SupervisorBackend,
   ReviewIntegrity, RuntimeCheck, SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent
@@ -19,6 +19,7 @@ import { EventLog } from "../persistence/event-log.js";
 import { asStorageError, storageErrorDetails } from "../persistence/storage-error.js";
 import { describeFailure, reportBackgroundFailure, writeDiagnostic } from "../diagnostics/background.js";
 import { WorkspacePathError, createPrivateDir, expandHome, resolveAdmittedWorkspace, resolveCanonicalRoot, resolveContextFile, isPathWithinRoot } from "../security/paths.js";
+import { excludedWithinWorkspace, exclusionScopesForWorkspace } from "./exclusions.js";
 import { redactSecrets } from "../security/redaction.js";
 import { assertNotSupervisorChild } from "../security/environment.js";
 import { createDetachedWorktree, exportDirtySnapshot, GitOperationError, removeVerifiedWorktree, resolveBaseCommit, resolveGitRoot } from "../git/worktree.js";
@@ -28,7 +29,8 @@ import { ReadinessReceipts, receiptMismatch, receiptRejected } from "./readiness
 import type { OpenedReceipt } from "./readiness-receipt.js";
 import { assertNoProjectAntigravityExtensions, assertNoProjectVibeExtensions, assertSimpleGlobRoot } from "../security/workspace-guard.js";
 import { PRIVATE_DIRECTORY_NAMES } from "../backends/app-server/session-config.js";
-import { usageDetailsToWire, eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire } from "./serialization.js";
+import { turnBackstop } from "../backends/app-server/usage.js";
+import { approvalsToWire, eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire, usageToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
 import { changedSinceSnapshot, parseManifest, serializeManifest, snapshotWorkspace } from "./workspace-snapshot.js";
 import type { ManifestEntry } from "./workspace-snapshot.js";
@@ -66,6 +68,7 @@ interface Runtime {
   lastActivity?: { at: number; kind: string };
   transcriptOverflow: boolean;
   requestedOutcome?: RequestedOutcome;
+  approvals?: ApprovalLedgerSnapshot;
   storageDegraded?: { code: string; directory: string };
   storageHealed?: { meta: boolean; event: boolean };
   reportedEventFailures?: Set<string>;
@@ -101,6 +104,7 @@ const STATUS_RESULT_RESERVE_CHARS = 100;
 const MAX_META_BYTES = 1_048_576;
 const MAX_MANIFEST_BYTES = 192 * 1024 * 1024;
 const LAUNCH_MANIFEST_FILE = "launch-manifest.json";
+const APPROVALS_FILE = "approvals.json";
 const MAX_INLINE_TRANSCRIPT = 32_768;
 const COMPACT_TRANSCRIPT_CHARS = 4000;
 const COMPACT_PATCH_BYTES = 4000;
@@ -292,13 +296,16 @@ export class RunManager {
         timeoutSeconds: options.timeoutSeconds, maxTurns: options.maxTurns,
         maxEventBytes: this.config.limits.maxEventBytes,
         maxTranscriptBytes: this.config.limits.maxTranscriptBytes,
-        maxArtifactBytes: this.config.limits.maxArtifactBytes
+        maxArtifactBytes: this.config.limits.maxArtifactBytes,
+        ...(this.config.limits.maxTokens === undefined ? {} : { maxTokens: this.config.limits.maxTokens }),
+        ...(this.config.limits.maxCostUsd === undefined ? {} : { maxCostUsd: this.config.limits.maxCostUsd }),
+        maxModelCalls: turnBackstop(options.maxTurns)
       };
       const record: RunRecord = {
         schemaVersion: SCHEMA_VERSION, supervisorVersion: APP_VERSION, runId: id,
         backend: this.activeBackendKind, mode, state: "starting", sourceWorkspace: source,
         workerWorkspace, createdAt: now, updatedAt: now,
-        taskSha256: createHash("sha256").update(task).digest("hex"), policyRevision: policy.revision, admittedRoot: admitted.root, limits
+        taskSha256: createHash("sha256").update(task).digest("hex"), policyRevision: policy.revision, admittedRoot: admitted.root, exclusions: admitted.exclusions, limits
       };
       if (options.acceptanceContract) { record.acceptanceContract = options.acceptanceContract; record.verification = { status: "pending", contract_sha256: contractDigest(options.acceptanceContract), checks: [] }; }
       runtime = this.makeRuntime(record, path.join(this.runRoot, id), task, options.contextFiles ?? []);
@@ -340,7 +347,7 @@ export class RunManager {
     return policy;
   }
 
-  private async validateAdmission(mode: RunMode, cwd: string, contextFiles: readonly string[], policy: CurrentPolicy, deadline: number): Promise<{ workspace: string; root: string }> {
+  private async validateAdmission(mode: RunMode, cwd: string, contextFiles: readonly string[], policy: CurrentPolicy, deadline: number): Promise<{ workspace: string; root: string; exclusions: ExclusionScope[] }> {
     let admitted: { workspace: string; root: string };
     try { admitted = await withDeadline(resolveAdmittedWorkspace(cwd, policy.config.allowedWorkspaceRoots), deadline - Date.now(), "Workspace validation exceeded its preparation deadline."); }
     catch (error) {
@@ -352,14 +359,20 @@ export class RunManager {
       throw codedError("VSUP_WORKSPACE_INVALID", `The allowed root ${lost.root} that contains this workspace is unavailable (${lost.reason}); restore the directory or correct allowed_workspace_roots in the selected config.`, { unavailable_root: lost.root });
     }
     const source = admitted.workspace;
-    for (const file of contextFiles) await withDeadline(resolveContextFile(source, file), deadline - Date.now(), "Context validation exceeded its preparation deadline.");
+    const exclusions = await withDeadline(exclusionScopesForWorkspace(policy.config, source), deadline - Date.now(), "Exclusion lookup exceeded its preparation deadline.");
+    for (const file of contextFiles) {
+      const resolved = await withDeadline(resolveContextFile(source, file), deadline - Date.now(), "Context validation exceeded its preparation deadline.");
+      if (excludedWithinWorkspace(exclusions, source, [resolved, path.resolve(source, file)])) {
+        throw codedError("VSUP_WORKSPACE_INVALID", `context_files entry ${file} matches excluded_globs of an allowed root that contains this workspace; remove it from context_files, because an excluded file never reaches the worker.`, { context_file: file });
+      }
+    }
     if (mode === "edit") await withDeadline(assertEditAtRepositoryRoot(source), deadline - Date.now(), "Git workspace validation exceeded its preparation deadline.");
     assertSimpleGlobRoot(source);
     await withDeadline(assertNoProjectVibeExtensions(source), deadline - Date.now(), "Project extension validation exceeded its preparation deadline.");
     if ((policy.config.backend ?? this.activeBackendKind) === "antigravity") {
       await withDeadline(assertNoProjectAntigravityExtensions(source), deadline - Date.now(), "Project extension validation exceeded its preparation deadline.");
     }
-    return admitted;
+    return { ...admitted, exclusions };
   }
 
   private async editBaseCommit(source: string, baseRef: string, deadline: number): Promise<string> {
@@ -955,6 +968,7 @@ export class RunManager {
         runId: runtime.record.runId, mode: runtime.record.mode, task: runtime.task,
         cwd: runtime.record.sourceWorkspace, workerWorkspace, runDirectory: runtime.directory,
         ...(baseRef ? { baseRef } : {}), ...(contextFiles.length ? { contextFiles } : {}),
+        exclusions: runtime.record.exclusions ?? [],
         limits
       };
       if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
@@ -1085,18 +1099,21 @@ export class RunManager {
     return true;
   }
 
-  private async applyBackendState(runtime: Runtime, state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "modelObservations" | "preparation">>): Promise<void> {
+  private async applyBackendState(runtime: Runtime, state: RunState, update?: BackendStateUpdate): Promise<void> {
     if (isTerminal(runtime.record.state) || runtime.record.state === "closing") return;
-    const outcome = this.reportedOutcome(runtime, state, update?.error);
+    const { approvals, ...recordUpdate } = update ?? {};
+    if (approvals) runtime.approvals = approvals;
+    const outcome = this.reportedOutcome(runtime, state, recordUpdate.error);
     if (outcome && runtime.record.state === "completed") { await this.settle(runtime, outcome); return; }
-    if (update?.preparation) runtime.record.preparation = update.preparation;
-    if (update?.modelObservations) runtime.record.modelObservations = update.modelObservations;
-    if (update?.usage) runtime.record.usage = update.usage;
-    if (update?.result) runtime.record.result = update.result;
-    if (update?.process) runtime.record.process = update.process;
+    if (recordUpdate.preparation) runtime.record.preparation = recordUpdate.preparation;
+    if (recordUpdate.modelObservations) runtime.record.modelObservations = recordUpdate.modelObservations;
+    if (recordUpdate.usage) runtime.record.usage = recordUpdate.usage;
+    if (recordUpdate.result) runtime.record.result = recordUpdate.result;
+    if (recordUpdate.process) runtime.record.process = recordUpdate.process;
+    if (recordUpdate.pin) runtime.record.pin = recordUpdate.pin;
     if (outcome) { await this.settle(runtime, outcome); return; }
     await this.setState(runtime, state, {
-      ...update,
+      ...recordUpdate,
       ...(state === "running" && !runtime.record.startedAt ? { startedAt: new Date().toISOString() } : {})
     });
   }
@@ -1297,6 +1314,11 @@ export class RunManager {
     }
     artifacts.push(await describeArtifact("transcript.md", path.join(runtime.directory, "transcript.md"), "text/markdown"));
     if (!runtime.logUnavailable) artifacts.push(await describeArtifact("events.ndjson", path.join(runtime.directory, "events.ndjson"), "application/x-ndjson"));
+    if (runtime.approvals) {
+      const approvalsPath = path.join(artifactDir, APPROVALS_FILE);
+      await this.atomicWriteText(approvalsPath, JSON.stringify(sanitizeForPersistence(approvalsToWire(runtime.record.runId, runtime.approvals)), null, 2) + "\n");
+      artifacts.push(await describeArtifact(APPROVALS_FILE, approvalsPath, "application/json"));
+    }
     const artifactBytes = artifacts.reduce((sum, artifact) => sum + artifact.bytes, 0);
     if (artifactBytes > runtime.record.limits.maxArtifactBytes) throw codedError("VSUP_OUTPUT_LIMIT", "Run artifacts exceeded the configured byte limit.");
     const stopReason = runtime.record.result?.stopReason;
@@ -1684,10 +1706,6 @@ function normalizeError(error: unknown): SupervisorError {
 
 function artifactToWire(artifact: NonNullable<RunRecord["result"]>["artifacts"] extends (infer A)[] | undefined ? A : never): Record<string, unknown> {
   return { name: artifact.name, path: artifact.path, sha256: artifact.sha256, bytes: artifact.bytes, media_type: artifact.mediaType };
-}
-
-function usageToWire(usage: NonNullable<RunRecord["usage"]>): Record<string, unknown> {
-  return { ...usageDetailsToWire(usage), ...(usage.tokensUsed === undefined ? {} : { tokens_used: usage.tokensUsed }), ...(usage.contextSize === undefined ? {} : { context_size: usage.contextSize }), ...(usage.cost ? { cost: { amount: usage.cost.amount, currency: usage.cost.currency, authoritative: false } } : {}) };
 }
 
 async function describeArtifact(name: string, file: string, mediaType: string): Promise<NonNullable<RunRecord["result"]>["artifacts"] extends (infer A)[] | undefined ? A : never> {

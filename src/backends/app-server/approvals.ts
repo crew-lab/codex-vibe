@@ -2,9 +2,12 @@ import { createHash } from 'node:crypto';
 import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { RunMode } from '../../contracts.js';
+import { compileSegment, createExcludedMatcher, relativeSegments, type ExclusionSpec } from '../../security/globs.js';
 import { isPathWithinRoot } from '../../security/paths.js';
 import type { JsonObject } from './jsonrpc.js';
 import { EFFECT_PATH_FIELD, callbackAcknowledgement, effectFilePath, parseCallbackCall, type ApprovalDecisionType, type ApprovalRequest } from './protocol.js';
+
+export { createExcludedMatcher, excludedRelativePath, type ExcludedMatcher, type ExclusionAnchor, type ExclusionSpec } from '../../security/globs.js';
 
 export const REVIEW_TOOLS: readonly string[] = ['file_system.read_file'];
 export const EDIT_TOOLS: readonly string[] = ['file_system.read_file', 'file_system.write_file', 'file_system.search_replace'];
@@ -36,6 +39,7 @@ export type DenyReason =
   | 'path_outside_workspace'
   | 'path_reserved'
   | 'path_secret'
+  | 'path_excluded'
   | 'path_symlink'
   | 'decision_deadline'
   | 'duplicate_callback'
@@ -128,22 +132,18 @@ export function isWriteTool(tool: string): boolean {
   return WRITE_TOOLS.includes(tool);
 }
 
-function patternToExpression(pattern: string): RegExp {
-  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*');
-  return new RegExp(`^${escaped}$`, 'i');
-}
-
-const SENSITIVE_EXPRESSIONS = SENSITIVE_FILE_PATTERNS.map(patternToExpression);
+const SENSITIVE_MATCHERS = SENSITIVE_FILE_PATTERNS.map(compileSegment);
 const RESERVED_NAMES = new Set([...RESERVED_DIRECTORIES, ...RESERVED_FILES].map((name) => name.toLowerCase()));
 
 function restrictedSegment(segments: readonly string[]): 'path_reserved' | 'path_secret' | null {
-  for (const segment of segments) if (RESERVED_NAMES.has(segment.toLowerCase())) return 'path_reserved';
-  for (const segment of segments) if (SENSITIVE_EXPRESSIONS.some((expression) => expression.test(segment))) return 'path_secret';
+  const lowered = segments.map((segment) => segment.toLowerCase());
+  for (const segment of lowered) if (RESERVED_NAMES.has(segment)) return 'path_reserved';
+  for (const segment of lowered) if (SENSITIVE_MATCHERS.some((matches) => matches(segment))) return 'path_secret';
   return null;
 }
 
 export function restrictedRelativePath(relative: string): 'path_reserved' | 'path_secret' | null {
-  return restrictedSegment(relative.split(/[\\/]+/).filter((segment) => segment !== ''));
+  return restrictedSegment(relativeSegments(relative));
 }
 
 function isMissing(error: unknown): boolean {
@@ -184,9 +184,9 @@ async function locate(absolute: string): Promise<Located> {
 
 export type PathJudgement =
   | { allowed: true; resolved: string; relative: string }
-  | { allowed: false; reason: 'path_invalid' | 'path_unresolvable' | 'path_outside_workspace' | 'path_reserved' | 'path_secret' | 'path_symlink' };
+  | { allowed: false; reason: 'path_invalid' | 'path_unresolvable' | 'path_outside_workspace' | 'path_reserved' | 'path_secret' | 'path_excluded' | 'path_symlink' };
 
-export async function judgeWorkspacePath(workspace: string, rawPath: string): Promise<PathJudgement> {
+export async function judgeWorkspacePath(workspace: string, rawPath: string, excluded: readonly ExclusionSpec[] = []): Promise<PathJudgement> {
   if (!path.isAbsolute(workspace)) return { allowed: false, reason: 'path_invalid' };
   if (rawPath.length === 0 || rawPath.length > MAX_PATH_CHARS || rawPath.includes('\0') || rawPath.startsWith('~')) return { allowed: false, reason: 'path_invalid' };
   let root: string;
@@ -205,10 +205,12 @@ export async function judgeWorkspacePath(workspace: string, rawPath: string): Pr
   const lexicalSegments = lexical === '' || lexical.startsWith('..') || path.isAbsolute(lexical) ? [] : lexical.split(path.sep);
   const restricted = restrictedSegment([...relative.split(path.sep), ...lexicalSegments]);
   if (restricted) return { allowed: false, reason: restricted };
+  const isExcluded = createExcludedMatcher(excluded);
+  if (isExcluded(relative.split(path.sep)) || (lexicalSegments.length > 0 && isExcluded(lexicalSegments))) return { allowed: false, reason: 'path_excluded' };
   return { allowed: true, resolved: located.resolved, relative };
 }
 
-export async function evaluateApproval(options: { mode: RunMode; workspace: string }, request: ApprovalRequest): Promise<ApprovalVerdict> {
+export async function evaluateApproval(options: { mode: RunMode; workspace: string; excludedGlobs?: readonly ExclusionSpec[] }, request: ApprovalRequest): Promise<ApprovalVerdict> {
   const deny = (reason: DenyReason): ApprovalVerdict => ({ decision: 'deny', reason });
   if (request.detailKind !== 'approval') return deny('unsupported_callback');
   const effect = request.effect;
@@ -217,23 +219,31 @@ export async function evaluateApproval(options: { mode: RunMode; workspace: stri
   if (effect.kind !== EFFECT_KIND_BY_TOOL[effect.toolName]) return deny('effect_kind_mismatch');
   const filePath = effectFilePath(effect.input);
   if (filePath === null) return deny('missing_file_path');
-  const judgement = await judgeWorkspacePath(options.workspace, filePath);
+  const judgement = await judgeWorkspacePath(options.workspace, filePath, options.excludedGlobs ?? []);
   return judgement.allowed ? { decision: 'approve', reason: null } : deny(judgement.reason);
 }
 
+export type LedgerOutcome = 'recorded' | 'duplicate' | 'full';
+
 export class ApprovalLedger {
+  private readonly entries: ApprovalRecord[] = [];
   private readonly byCallback = new Map<string, ApprovalRecord>();
   private readonly byEffect = new Map<string, ApprovalRecord>();
   private readonly pending = new Set<string>();
+  private overflowed = false;
 
   constructor(private readonly maxRecords = DEFAULT_MAX_LEDGER_RECORDS) {}
 
   get size(): number {
-    return this.byCallback.size;
+    return this.entries.length;
   }
 
   get pendingCallbacks(): number {
     return this.pending.size;
+  }
+
+  get truncated(): boolean {
+    return this.overflowed;
   }
 
   has(callbackId: string): boolean {
@@ -241,7 +251,11 @@ export class ApprovalLedger {
   }
 
   isFull(): boolean {
-    return this.byCallback.size >= this.maxRecords;
+    return this.entries.length >= this.maxRecords;
+  }
+
+  noteOverflow(): void {
+    this.overflowed = true;
   }
 
   open(callbackId: string): void {
@@ -252,12 +266,29 @@ export class ApprovalLedger {
     this.pending.delete(callbackId);
   }
 
-  record(record: ApprovalRecord): boolean {
-    if (this.isFull() || this.byCallback.has(record.callbackId)) return false;
-    if (record.relatedEntryId !== null && this.byEffect.has(record.relatedEntryId)) return false;
+  admit(record: ApprovalRecord): LedgerOutcome {
+    if (this.byCallback.has(record.callbackId)) return 'duplicate';
+    if (record.relatedEntryId !== null && this.byEffect.has(record.relatedEntryId)) return 'duplicate';
+    if (this.isFull()) {
+      this.overflowed = true;
+      return 'full';
+    }
+    this.entries.push(record);
     this.byCallback.set(record.callbackId, record);
     if (record.relatedEntryId !== null) this.byEffect.set(record.relatedEntryId, record);
-    return true;
+    return 'recorded';
+  }
+
+  record(record: ApprovalRecord): boolean {
+    return this.admit(record) === 'recorded';
+  }
+
+  recordDuplicate(record: ApprovalRecord): void {
+    if (this.isFull()) {
+      this.overflowed = true;
+      return;
+    }
+    this.entries.push({ ...record, decision: 'deny', reason: 'duplicate_callback' });
   }
 
   forCallback(callbackId: string): ApprovalRecord | undefined {
@@ -269,13 +300,14 @@ export class ApprovalLedger {
   }
 
   all(): ApprovalRecord[] {
-    return [...this.byCallback.values()];
+    return [...this.entries];
   }
 }
 
 export interface ApprovalHandlerOptions {
   mode: RunMode;
   workspace: string;
+  excludedGlobs?: readonly ExclusionSpec[];
   deadlineMs?: number;
   ledger?: ApprovalLedger;
   currentSessionId?: () => string;
@@ -346,13 +378,9 @@ export class ApprovalHandler {
     return verdict;
   }
 
-  async decide(request: ApprovalRequest, context: ApprovalContext = { sessionId: null, turnId: null }): Promise<ApprovalVerdict> {
-    if (this.ledger.has(request.callbackId)) return { decision: 'deny', reason: 'duplicate_callback' };
-    if (this.ledger.isFull()) return { decision: 'deny', reason: 'ledger_full' };
-    const expectedSession = this.currentSessionId?.() ?? null;
-    const verdict = await this.judge(request, context, expectedSession);
+  private entryFor(request: ApprovalRequest, context: ApprovalContext, expectedSession: string | null, verdict: ApprovalVerdict): ApprovalRecord {
     const filePath = request.effect ? effectFilePath(request.effect.input) : null;
-    const recorded = this.ledger.record({
+    return {
       callbackId: request.callbackId,
       relatedEntryId: request.relatedEntryId,
       sessionId: context.sessionId ?? expectedSession,
@@ -362,9 +390,27 @@ export class ApprovalHandler {
       fingerprint: request.effect ? inputFingerprint(request.effect.toolName, request.effect.input) : null,
       decision: verdict.decision,
       reason: verdict.reason
-    });
-    if (recorded) return verdict;
-    return { decision: 'deny', reason: 'duplicate_callback' };
+    };
+  }
+
+  async decide(request: ApprovalRequest, context: ApprovalContext = { sessionId: null, turnId: null }): Promise<ApprovalVerdict> {
+    const duplicate: ApprovalVerdict = { decision: 'deny', reason: 'duplicate_callback' };
+    if (this.ledger.has(request.callbackId)) {
+      this.ledger.recordDuplicate(this.entryFor(request, context, this.currentSessionId?.() ?? null, duplicate));
+      return duplicate;
+    }
+    if (this.ledger.isFull()) {
+      this.ledger.noteOverflow();
+      return { decision: 'deny', reason: 'ledger_full' };
+    }
+    const expectedSession = this.currentSessionId?.() ?? null;
+    const verdict = await this.judge(request, context, expectedSession);
+    const entry = this.entryFor(request, context, expectedSession, verdict);
+    const outcome = this.ledger.admit(entry);
+    if (outcome === 'recorded') return verdict;
+    if (outcome === 'full') return { decision: 'deny', reason: 'ledger_full' };
+    this.ledger.recordDuplicate(entry);
+    return duplicate;
   }
 
   begin(params: JsonObject): PendingApproval {

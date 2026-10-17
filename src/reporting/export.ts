@@ -2,9 +2,11 @@ import { elapsed } from './telemetry.js';
 import { lstat, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { RunRecord } from '../contracts.js';
-import { runFromWire } from '../core/serialization.js';
+import { MAX_APPROVAL_LEDGER_RECORDS } from '../contracts.js';
+import { pinToWire, runFromWire } from '../core/serialization.js';
 import { sanitizeForPersistence } from '../persistence/atomic.js';
 import { environmentSecrets, patchContainsCredential } from '../security/redaction.js';
 import { contractDigest, digest, validationSchema, verificationSummary } from '../acceptance/schema.js';
@@ -12,6 +14,12 @@ import { verifySaved } from '../acceptance/verify.js';
 import { assertOwnedDirectory, readOwnedFile } from './private-files.js';
 
 const uuid = z.string().uuid({ version: 'v4' });
+const ledgerText = z.string().max(4096).nullable();
+const approvalLedgerSchema = z.object({
+  schema_version: z.literal(1), run_id: uuid, truncated: z.boolean(),
+  records: z.array(z.object({ callback_id: z.string().min(1).max(4096), related_entry_id: ledgerText, turn_id: ledgerText, tool: ledgerText, path: ledgerText, fingerprint: ledgerText, decision: z.enum(['approve', 'deny']), reason: ledgerText }).strict()).max(MAX_APPROVAL_LEDGER_RECORDS)
+}).strict();
+const MAX_LEDGER_BYTES = 16 * 1024 * 1024;
 const validationManifest = z.object({ schema_version: z.literal(1), patch_sha256: z.string().regex(/^[a-f0-9]{64}$/), validations: z.array(validationSchema).max(100) }).strict();
 export function publicValue(value: unknown): unknown {
   const walk=(input:unknown):unknown=>{
@@ -44,6 +52,50 @@ export async function locateSavedRun(dataDir: string, runId: string): Promise<st
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   if (candidates.length !== 1) throw new Error(candidates.length ? 'Ambiguous saved run' : 'Run not found');
   return candidates[0]!;
+}
+
+export const OUTSIDE_WORKSPACE = '<outside-workspace>';
+
+function workspaceRelative(candidate: string, workspaces: readonly string[]): string | undefined {
+  for (const workspace of workspaces) {
+    const relative = path.relative(workspace, path.resolve(candidate));
+    if (relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) return relative.split(path.sep).join('/');
+  }
+  return undefined;
+}
+
+export function exportedLedgerPath(raw: string | null, workspaces: readonly string[]): string | null {
+  if (raw === null) return null;
+  let candidate = raw;
+  if (/^file:/i.test(candidate)) {
+    try { candidate = fileURLToPath(candidate); } catch { return OUTSIDE_WORKSPACE; }
+  }
+  if (candidate.includes('\0') || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(candidate) || candidate.startsWith('~') || candidate.startsWith('\\')) return OUTSIDE_WORKSPACE;
+  if (path.isAbsolute(candidate)) return workspaceRelative(candidate, workspaces) ?? OUTSIDE_WORKSPACE;
+  const segments = candidate.split(/[\\/]+/).filter((segment) => segment !== '' && segment !== '.');
+  if (segments.length === 0 || segments.includes('..')) return OUTSIDE_WORKSPACE;
+  return segments.join('/');
+}
+
+function exportedLedger(ledger: z.infer<typeof approvalLedgerSchema>, record: RunRecord): z.infer<typeof approvalLedgerSchema> {
+  const workspaces = [...new Set([record.workerWorkspace, record.worktree?.path, record.sourceWorkspace].filter((value): value is string => typeof value === 'string' && path.isAbsolute(value)))];
+  return { ...ledger, records: ledger.records.map((entry) => ({ ...entry, path: exportedLedgerPath(entry.path, workspaces) })) };
+}
+
+async function approvalLedger(directory: string, record: RunRecord): Promise<{ ledger: z.infer<typeof approvalLedgerSchema>; sha256: string } | undefined> {
+  const file = path.join(directory, 'artifacts', 'approvals.json');
+  const listed = record.result?.artifacts?.find((item) => item.name === 'approvals.json');
+  try { await lstat(file); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    if (listed) throw new Error('The approval ledger listed in the run artifacts is missing');
+    return undefined;
+  }
+  const bytes = await readOwnedFile(file, MAX_LEDGER_BYTES);
+  if (!listed || listed.sha256 !== digest(bytes)) throw new Error('Approval ledger does not match the saved artifact digest');
+  const ledger = approvalLedgerSchema.parse(JSON.parse(bytes.toString('utf8')));
+  if (ledger.run_id !== record.runId) throw new Error('Approval ledger belongs to another run');
+  return { ledger, sha256: digest(bytes) };
 }
 
 async function diagnosticProjection(directory: string, record: RunRecord): Promise<{ events: unknown[]; counts: Record<string, number>; complete: boolean; gaps: number }> {
@@ -79,6 +131,8 @@ export async function exportReport(options: { directory: string; output: string;
   const verification = await verifySaved(options.directory, record.acceptanceContract, record.limits.maxArtifactBytes);
   const patchArtifact = record.result?.artifacts?.find((item) => item.name === 'diff.patch');
   const diagnostics = await diagnosticProjection(options.directory, record);
+  const approvals = await approvalLedger(options.directory, record);
+  const exportedApprovals = approvals ? Buffer.from(JSON.stringify(publicValue(exportedLedger(approvals.ledger, record)), null, 2) + '\n') : undefined;
   let external: unknown = null;
   if (options.validationFile) {
     const manifest = validationManifest.parse(JSON.parse((await readOwnedFile(options.validationFile, 256 * 1024)).toString('utf8')));
@@ -95,6 +149,8 @@ export async function exportReport(options: { directory: string; output: string;
     preparation: record.preparation ?? {status:"unknown"},
     models: { observations: record.modelObservations ?? [], provider: null, underlying_model: null, unavailable_reason: "Runtime-reported session model, model name and alias are recorded when exposed; provider and underlying weights remain unverified." },
     durations_ms: { inference: null, finalization: null, preparation: elapsed(record.createdAt, record.launchedAt), startup: elapsed(record.launchedAt, record.startedAt), execution_and_finalization: elapsed(record.startedAt, record.finishedAt), total: elapsed(record.createdAt, record.finishedAt) },
+    ...(record.pin ? { pin: pinToWire(record.pin) } : {}),
+    ...(approvals && exportedApprovals ? { approvals: { file: 'approvals.json', source_sha256: approvals.sha256, exported_sha256: digest(exportedApprovals), records: approvals.ledger.records.length, truncated: approvals.ledger.truncated } } : {}),
     usage: record.usage ?? null, limits: record.limits, warnings: record.result?.warnings ?? [], error: record.error ?? null,
     cleanup: record.cleanup ?? { worktree: 'unknown', reason: 'Cleanup evidence was not recorded or the run has not settled' }, external_validation: external
   }) as Record<string, unknown>;
@@ -104,6 +160,7 @@ export async function exportReport(options: { directory: string; output: string;
     'diagnostics.json': Buffer.from(JSON.stringify(publicValue({ complete: diagnostics.complete, sequence_gaps: diagnostics.gaps, counts: diagnostics.counts }), null, 2) + '\n')
   };
   files['REPORT.md'] = Buffer.from(`# Vibe run ${record.runId}\n\nExecution: ${String((report.execution as Record<string, unknown>).state)} / ${record.result?.stopReason ?? 'unknown'}.\nAutomated verification: ${verification.status}. Coordinator assessment: ${String(report.assessment)}.\n\nSee report.json, checks.json and diagnostics.json. External validations are coordinator-reported. Missing metrics remain unknown. This bundle does not claim hosted or release acceptance.\n`);
+  if (exportedApprovals) files['approvals.json'] = exportedApprovals;
   if (options.include?.includes('patch')) {
     if (!patchArtifact || path.resolve(patchArtifact.path) !== path.join(options.directory, 'artifacts', 'diff.patch')) throw new Error('No trusted patch artifact');
     const patch = await readOwnedFile(patchArtifact.path, record.limits.maxArtifactBytes);

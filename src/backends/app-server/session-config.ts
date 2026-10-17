@@ -2,6 +2,8 @@ import path from 'node:path';
 import { stringify } from 'smol-toml';
 import type { RunMode } from '../../contracts.js';
 import { WorkspacePathError, createPrivateDir, createPrivateFile } from '../../security/paths.js';
+import { excludedGlobProblem } from '../../config/validation.js';
+import { anchoredDenylistPatterns, type DenylistAnchor } from '../../security/globs.js';
 import { buildConfigModelWrite, type SessionAgentConfigInput } from './protocol.js';
 import { THINKING_OFF, type ReadbackExpectation, type SettingExpectation, type ToolPolicyExpectation } from './readback.js';
 
@@ -63,6 +65,7 @@ export interface SessionConfigInput {
   workspace: string;
   runDirectory: string;
   maxTurns: number;
+  excludedGlobs?: readonly DenylistExclusion[];
 }
 
 export interface AgentProfileDocument {
@@ -91,14 +94,32 @@ export function assertGlobSafeRoot(root: string): void {
   if (/[*?[\]]/.test(root)) throw new WorkspacePathError(`Workspace path contains glob characters (* ? [ ]) and cannot be safely encoded for Vibe: ${root}`);
 }
 
-export function workspaceDenylist(workspace: string): string[] {
+export type DenylistExclusion = string | DenylistAnchor;
+
+function denylistAnchor(root: string, exclusion: DenylistExclusion): DenylistAnchor {
+  if (typeof exclusion === 'string') return { base: root, prefix: [], globs: [exclusion] };
+  const base = requireAbsolute(exclusion.base, 'exclusion base');
+  assertGlobSafeRoot(base);
+  return { base, prefix: exclusion.prefix, globs: exclusion.globs };
+}
+
+export function workspaceDenylist(workspace: string, excluded: readonly DenylistExclusion[] = []): string[] {
   const root = requireAbsolute(workspace, 'workspace');
   assertGlobSafeRoot(root);
+  const excludedEntries = [...new Set(excluded.flatMap((exclusion) => {
+    const anchor = denylistAnchor(root, exclusion);
+    for (const glob of anchor.globs) {
+      const problem = excludedGlobProblem(glob);
+      if (problem !== null) throw new TypeError(`excluded glob ${JSON.stringify(glob)} ${problem}`);
+    }
+    return anchoredDenylistPatterns(anchor);
+  }))];
   return [
     ...RESERVED_DIRECTORIES.flatMap((name) => [`${root}/${name}`, `${root}/${name}/**`, `${root}/**/${name}`, `${root}/**/${name}/**`]),
     ...RESERVED_FILES.flatMap((name) => [`${root}/${name}`, `${root}/**/${name}`]),
     ...SECRET_FILE_PATTERNS.map((pattern) => `${root}/${pattern}`),
-    ...SECRET_FILE_PATTERNS.map((pattern) => `${root}/**/${pattern}`)
+    ...SECRET_FILE_PATTERNS.map((pattern) => `${root}/**/${pattern}`),
+    ...excludedEntries
   ];
 }
 
@@ -138,7 +159,7 @@ export function buildSessionConfig(input: SessionConfigInput): SessionConfigPlan
   if (input.mode !== 'review' && input.mode !== 'edit') throw new TypeError('mode must be review or edit');
   if (!Number.isInteger(input.maxTurns) || input.maxTurns < 1) throw new RangeError('maxTurns must be a positive integer');
   const workspace = requireAbsolute(input.workspace, 'workspace');
-  const denylist = workspaceDenylist(workspace);
+  const denylist = workspaceDenylist(workspace, input.excludedGlobs ?? []);
   const directories = sessionDirectories(input.runDirectory);
   const tools = PROFILE_TOOLS[input.mode];
   const agent = AGENT_NAMES[input.mode];

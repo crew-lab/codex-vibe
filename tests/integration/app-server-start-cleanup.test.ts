@@ -102,6 +102,7 @@ async function setup(scenario: Record<string, unknown>) {
     cwd: workspace,
     workerWorkspace: workspace,
     runDirectory,
+    exclusions: [],
     limits: { timeoutSeconds: 20, maxTurns: 20, maxEventBytes: 50_000_000, maxTranscriptBytes: 10_000_000, maxArtifactBytes: 10_000_000 }
   };
   return { base, fake, backend, callbacks, input, spawnedHandles, states };
