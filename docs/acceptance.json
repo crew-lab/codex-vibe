@@ -376,7 +376,8 @@
       "status": "REQUIRED_NOT_RUN",
       "evidence_required": "Before stable promotion, complete the documented fresh macOS Apple silicon account installation on the frozen, reviewable artifact, recording installation, registration, rollback, and cleanup.",
       "decision": "The owner performs it with a prepared packet; evidence from another archive is not carried over.",
-      "carry_over": "Installation, registration and rollback are unchanged since 44dc6f8. Proposed, owner to confirm: run it once on the archive that is promoted to stable. If 2.0.2 is published before 2.0.1 leaves pre-release, run it on the 2.0.2 archive instead of on 7978719c; otherwise run it on 7978719c for 2.0.1 as planned and rerun it for 2.0.2 before its stable promotion."
+      "carry_over": "Installation, registration and rollback are unchanged since 44dc6f8. Proposed, owner to confirm: run it once on the archive that is promoted to stable. If 2.0.2 is published before 2.0.1 leaves pre-release, run it on the 2.0.2 archive instead of on 7978719c; otherwise run it on 7978719c for 2.0.1 as planned and rerun it for 2.0.2 before its stable promotion.",
+      "result": "PENDING 2026-10-17: owner reports no separate clean standard macOS account available. Current-account private-prefix checks do not satisfy this gate. Checklist: docs/clean-account-checklist.md."
     }
   ],
   "not_required_for_2_0": [],
@@ -387,7 +388,7 @@
     "hosted_allowance_note": "All three original starts are consumed: review rejected on correctness, edit rejected by its frozen contract, and distinct disconnect PASS on source 2a49abd/archive 133e77bd. No retries or further hosted starts are authorized. 2.0.2 preparation is no-inference only; any proposed carry-over remains explicitly build-bound and subject to owner confirmation.",
     "candidate_minimum_target_checks": "For 2.0.2, no hosted start: package:rc from git on the target under Node 20.19.0, the archive and kit identity check, install side by side and pin-manifest and doctor, one prepare check, installed SDK readiness, then the registration switch and native readiness with expected_candidate, rollback kept. Optional, with a new owner allowance: one hosted review for execution-provenance-on-hosted-run."
   },
-  "updated_at": "2026-10-16",
+  "updated_at": "2026-10-17",
   "frozen_archive_sha256": "84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09",
   "packaging_time_snapshot": {
     "commit": "347bf79",
