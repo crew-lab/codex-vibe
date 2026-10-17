@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import http from 'node:http';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { digest } from '../acceptance/schema.js';
@@ -51,6 +53,110 @@ export interface AntigravityPreparationReport {
   findings: Array<{ level: 'info' | 'fail'; code: string; message: string }>;
 }
 
+interface ProxyAttempt {
+  run: string;
+  method: string;
+  host: string;
+  port: number | null;
+}
+
+interface PreparationRefusingProxy {
+  port: number;
+  attempts: ProxyAttempt[];
+  setRun(run: string): void;
+  runControl(): Promise<boolean>;
+  close(): Promise<void>;
+}
+
+async function startPreparationRefusingProxy(): Promise<PreparationRefusingProxy> {
+  const attempts: ProxyAttempt[] = [];
+  const sockets = new Set<net.Socket>();
+  let currentRun = 'unassigned';
+
+  const hostOf = (raw: string): string => {
+    const host = String(raw).toLowerCase();
+    return /^[a-z0-9.-]{1,253}$/.test(host) ? host : 'invalid-host';
+  };
+
+  const describe = (line: string): { method: string; host: string; port: number | null } => {
+    const parts = line.split(/\s+/);
+    const method = (parts[0] ?? '').slice(0, 16).toUpperCase();
+    const target = parts[1] ?? '';
+    if (method === 'CONNECT') {
+      const match = /^(.*):(\d{1,5})$/.exec(target);
+      return { method, host: hostOf(match ? match[1]! : target), port: match ? Number(match[2]) : null };
+    }
+    try {
+      const url = new URL(target);
+      return { method, host: hostOf(url.hostname), port: url.port ? Number(url.port) : url.protocol === 'https:' ? 443 : 80 };
+    } catch {
+      return { method, host: 'unparsed', port: null };
+    }
+  };
+
+  const server = net.createServer((socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+    socket.on('error', () => undefined);
+    let buffered = '';
+    let answered = false;
+    socket.on('data', (chunk) => {
+      if (answered) return;
+      buffered += chunk.toString('latin1');
+      const newline = buffered.indexOf('\n');
+      if (newline < 0 && buffered.length < 4096) return;
+      answered = true;
+      if (attempts.length < 100) {
+        attempts.push({ run: currentRun, ...describe(buffered.slice(0, newline < 0 ? 4096 : newline).trim()) });
+      }
+      socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+    });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve());
+  });
+
+  const address = server.address() as net.AddressInfo;
+  const port = address.port;
+
+  const runControl = async (): Promise<boolean> => {
+    currentRun = 'control';
+    return new Promise<boolean>((resolve) => {
+      const req = http.request(
+        {
+          host: '127.0.0.1',
+          port,
+          method: 'GET',
+          path: 'http://control.antigravity.local/test',
+          headers: { Host: 'control.antigravity.local' },
+          timeout: 2000
+        },
+        (res) => {
+          res.resume();
+          const recorded = attempts.some((a) => a.run === 'control');
+          resolve(res.statusCode === 403 && recorded);
+        }
+      );
+      req.on('error', () => resolve(false));
+      req.on('timeout', () => { req.destroy(); resolve(false); });
+      req.end();
+    });
+  };
+
+  return {
+    port,
+    attempts,
+    setRun(run: string) { currentRun = run; },
+    runControl,
+    async close() {
+      for (const s of sockets) s.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  };
+}
+
 async function runHookStdinCheck(
   hookScriptPath: string,
   payload: Record<string, unknown>
@@ -87,7 +193,8 @@ async function runCliSlashCommandReadback(
   slashCommand: string,
   cwd: string,
   childHome: string,
-  childTmp: string
+  childTmp: string,
+  proxyPort: number
 ): Promise<{ code: number; parsed: Record<string, unknown> | null }> {
   return new Promise((resolve) => {
     const child = spawn(
@@ -101,8 +208,12 @@ async function runCliSlashCommandReadback(
           HOME: childHome,
           TMPDIR: childTmp,
           GEMINI_API_KEY: 'vibe-supervisor-no-inference-key',
-          HTTPS_PROXY: 'http://127.0.0.1:1',
-          HTTP_PROXY: 'http://127.0.0.1:1',
+          HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
+          HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
+          ALL_PROXY: `http://127.0.0.1:${proxyPort}`,
+          https_proxy: `http://127.0.0.1:${proxyPort}`,
+          http_proxy: `http://127.0.0.1:${proxyPort}`,
+          all_proxy: `http://127.0.0.1:${proxyPort}`,
           AGY_CLI_OSC7501: 'off',
           NO_COLOR: '1'
         },
@@ -193,6 +304,7 @@ export async function runAntigravityPreparationCheck(
 
   const tempRoot = await realpath(await mkdtemp(path.join(os.tmpdir(), 'vsup-agy-prep-')));
   let totalTokensObserved = 0;
+  let usageObservedCount = 0;
 
   const profileResults: Record<'review' | 'edit', AntigravityProfilePrepareResult> = {
     review: {
@@ -210,6 +322,16 @@ export async function runAntigravityPreparationCheck(
       ledger_entries: 0
     }
   };
+
+  const proxy = await startPreparationRefusingProxy();
+  const controlPassed = await proxy.runControl();
+  if (!controlPassed) {
+    findings.push({
+      level: 'fail',
+      code: 'proxy_control_failed',
+      message: 'Positive control through local refusing proxy did not succeed.'
+    });
+  }
 
   try {
     const workspace = path.join(tempRoot, 'workspace');
@@ -246,6 +368,7 @@ export async function runAntigravityPreparationCheck(
         allowNonWorkspaceAccess?: boolean;
         permissions?: { allow?: string[]; deny?: string[] };
       };
+
       const allowList = settings.permissions?.allow ?? [];
       const denyList = settings.permissions?.deny ?? [];
       const hasValidReviewAllow = allowList.includes(`read_file(${workspace})`) && allowList.includes(`read_file(${workspace}/**)`);
@@ -288,52 +411,100 @@ export async function runAntigravityPreparationCheck(
 
       // Run zero-inference CLI read-back if the binary is available and matches version
       if (resolved.resolvedPath && resolved.version === SUPPORTED_ANTIGRAVITY_VERSION) {
-        const configReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/config', workspace, childHome, childTmp);
-        const hooksReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/hooks', workspace, childHome, childTmp);
-        const permsReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/permissions', workspace, childHome, childTmp);
-        const skillsReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/skills', workspace, childHome, childTmp);
+        proxy.setRun(`subject-${mode}`);
+        const configReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/config', workspace, childHome, childTmp, proxy.port);
+        const hooksReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/hooks', workspace, childHome, childTmp, proxy.port);
+        const permsReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/permissions', workspace, childHome, childTmp, proxy.port);
+        const skillsReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/skills', workspace, childHome, childTmp, proxy.port);
+        const agentsReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/agents', workspace, childHome, childTmp, proxy.port);
 
-        if (configReadback.code === 0 && configReadback.parsed && configReadback.parsed.command) {
+        const readbacks = [
+          { cmd: '/config', rb: configReadback },
+          { cmd: '/hooks', rb: hooksReadback },
+          { cmd: '/permissions', rb: permsReadback },
+          { cmd: '/skills', rb: skillsReadback },
+          { cmd: '/agents', rb: agentsReadback }
+        ];
+
+        let readbackSuccess = true;
+        for (const item of readbacks) {
+          if (item.rb.code !== 0 || !item.rb.parsed) {
+            readbackSuccess = false;
+            findings.push({
+              level: 'fail',
+              code: `${mode}_cli_readback_${item.cmd.slice(1)}_failed`,
+              message: `Antigravity CLI zero-inference command ${item.cmd} for ${mode} exited with code ${item.rb.code}${!item.rb.parsed ? ' and produced invalid JSON' : ''}.`
+            });
+          }
+        }
+
+        if (readbackSuccess) {
           try {
-            const cfgCmd = configReadback.parsed.command as { data?: { config?: Record<string, unknown> } };
-            const hooksCmd = hooksReadback.parsed?.command as { data?: { hooks?: Array<{ name?: string; enabled?: boolean }> } } | undefined;
-            const permsCmd = permsReadback.parsed?.command as { data?: { permissions?: Array<{ scope?: string; allow?: unknown[]; deny?: unknown[] }> } } | undefined;
-            const skillsCmd = skillsReadback.parsed?.command as { data?: { skills?: unknown[] } } | undefined;
+            const cfgCmd = configReadback.parsed!.command as { data?: { config?: Record<string, unknown> } } | undefined;
+            const hooksCmd = hooksReadback.parsed!.command as {
+              data?: {
+                hooks?: Array<{
+                  name?: string;
+                  enabled?: boolean;
+                  events?: Array<{ event?: string; matcher?: string }>;
+                }>;
+              };
+            } | undefined;
+            const permsCmd = permsReadback.parsed!.command as { data?: { permissions?: Array<{ scope?: string; allow?: unknown[]; deny?: unknown[] }> } } | undefined;
+            const skillsCmd = skillsReadback.parsed!.command as { data?: { skills?: unknown[] } } | undefined;
+            const agentsCmd = agentsReadback.parsed!.command as { data?: { agents?: unknown[] } } | undefined;
 
-            const innerConfig = cfgCmd.data?.config ?? {};
+            const innerConfig = cfgCmd?.data?.config ?? {};
             const innerHooks = hooksCmd?.data?.hooks ?? [];
             const globalPerms = permsCmd?.data?.permissions?.find((p) => p.scope === 'global');
             const innerSkills = skillsCmd?.data?.skills;
+            const innerAgents = agentsCmd?.data?.agents;
 
-            for (const rb of [configReadback, hooksReadback, permsReadback, skillsReadback]) {
-              const usage = rb.parsed?.usage as { total_tokens?: number } | undefined;
-              if (typeof usage?.total_tokens === 'number') totalTokensObserved += usage.total_tokens;
+            for (const { rb } of readbacks) {
+              const cmdData = (rb.parsed?.command as { data?: { usage?: { total_tokens?: number } } } | undefined)?.data;
+              const usage = (rb.parsed?.usage ?? cmdData?.usage) as { total_tokens?: number } | undefined;
+              if (usage && typeof usage.total_tokens === 'number') {
+                totalTokensObserved += usage.total_tokens;
+                usageObservedCount += 1;
+              }
             }
 
             const configMatches =
               innerConfig.toolPermission === 'strict' &&
               innerConfig.enableTerminalSandbox === true &&
               innerConfig.allowNonWorkspaceAccess === false;
+
+            const gateHook = innerHooks.find((h) => h.name === 'supervisor-policy-gate');
             const hooksMatches = Boolean(
               innerHooks.length === 1 &&
-              innerHooks[0]?.name === 'supervisor-policy-gate' &&
-              innerHooks[0]?.enabled === true
+              gateHook &&
+              gateHook.enabled === true &&
+              Array.isArray(gateHook.events) &&
+              gateHook.events.some((e) => e.event === 'PreToolUse' && e.matcher === '*')
             );
-            const permsMatches = Boolean(
-              globalPerms &&
-              Array.isArray(globalPerms.allow) &&
-              globalPerms.allow.length === allowList.length &&
-              Array.isArray(globalPerms.deny) &&
-              globalPerms.deny.length === denyList.length
-            );
-            const skillsEmpty = Boolean(Array.isArray(innerSkills) && innerSkills.length === 0);
 
-            profileResults[mode].cli_readback_passed = configMatches && hooksMatches && permsMatches && skillsEmpty;
+            const normSort = (arr: unknown[]): string[] =>
+              arr.filter((x): x is string => typeof x === 'string').map((s) => s.trim()).sort();
+            const actualAllow = normSort(globalPerms?.allow ?? []);
+            const expectedAllow = normSort([...allowList]);
+            const actualDeny = normSort(globalPerms?.deny ?? []);
+            const expectedDeny = normSort([...denyList]);
+
+            const allowMatches = actualAllow.length === expectedAllow.length && actualAllow.every((val, idx) => val === expectedAllow[idx]);
+            const denyMatches = actualDeny.length === expectedDeny.length && actualDeny.every((val, idx) => val === expectedDeny[idx]);
+            const permsMatches = Boolean(globalPerms && allowMatches && denyMatches);
+
+            const skillsEmpty = Boolean(Array.isArray(innerSkills) && innerSkills.length === 0);
+            const agentsEmpty = Boolean(!innerAgents || (Array.isArray(innerAgents) && innerAgents.length === 0));
+
+            profileResults[mode].cli_readback_passed =
+              configMatches && hooksMatches && permsMatches && skillsEmpty && agentsEmpty;
+
             if (!profileResults[mode].cli_readback_passed) {
               findings.push({
                 level: 'fail',
                 code: `${mode}_cli_readback_mismatch`,
-                message: `Antigravity CLI zero-inference read-back for ${mode} mode did not match expected policy (config=${String(configMatches)}, hooks=${String(hooksMatches)}, perms=${String(permsMatches)}, skills=${String(skillsEmpty)}).`
+                message: `Antigravity CLI zero-inference read-back for ${mode} mode did not match expected policy (config=${String(configMatches)}, hooks=${String(hooksMatches)}, perms=${String(permsMatches)}, skills=${String(skillsEmpty)}, agents=${String(agentsEmpty)}).`
               });
             }
           } catch (error) {
@@ -342,11 +513,18 @@ export async function runAntigravityPreparationCheck(
               code: `${mode}_cli_readback_parse_failed`,
               message: `Failed to parse Antigravity CLI read-back JSON for ${mode}: ${String(error)}`
             });
+            profileResults[mode].cli_readback_passed = false;
           }
         } else {
-          // Support lightweight mock scripts in unit tests that do not implement /config JSON read-back
-          profileResults[mode].cli_readback_passed = true;
+          profileResults[mode].cli_readback_passed = false;
         }
+      } else {
+        profileResults[mode].cli_readback_passed = false;
+        findings.push({
+          level: 'fail',
+          code: `${mode}_cli_unavailable`,
+          message: `Antigravity CLI executable is unavailable or version does not match ${SUPPORTED_ANTIGRAVITY_VERSION}.`
+        });
       }
 
       // Run 6 synthetic PreToolUse checks against pre-tool-hook.mjs
@@ -424,7 +602,31 @@ export async function runAntigravityPreparationCheck(
         allSyntheticPassed && ledger.approvals.records.length === syntheticCases.length;
     }
   } finally {
-    await rm(tempRoot, { recursive: true, force: true });
+    await proxy.close().catch(() => undefined);
+    await rm(tempRoot, { recursive: true, force: true }).catch(() => undefined);
+  }
+
+  const subjectAttempts = proxy.attempts.filter((a) => !a.run.startsWith('control'));
+  let networkVerdict: 'none-observed-control-validated' | 'failed';
+  if (!controlPassed) {
+    networkVerdict = 'failed';
+  } else if (subjectAttempts.length > 0) {
+    networkVerdict = 'failed';
+    findings.push({
+      level: 'fail',
+      code: 'network_requests_observed',
+      message: `Antigravity CLI attempted ${subjectAttempts.length} network requests during zero-inference check.`
+    });
+  } else {
+    networkVerdict = 'none-observed-control-validated';
+  }
+
+  if (usageObservedCount === 0) {
+    findings.push({
+      level: 'info',
+      code: 'usage_not_reported',
+      message: 'Antigravity CLI slash commands did not report usage statistics in command output.'
+    });
   }
 
   const allProfilesPassed = (['review', 'edit'] as const).every(
@@ -438,7 +640,7 @@ export async function runAntigravityPreparationCheck(
     Boolean(resolved.resolvedPath) &&
     resolved.version === SUPPORTED_ANTIGRAVITY_VERSION &&
     Boolean(resolved.sha256);
-  const noInferencePassed = totalTokensObserved === 0;
+  const noInferencePassed = totalTokensObserved === 0 && networkVerdict === 'none-observed-control-validated';
   const passed = executablePassed && allProfilesPassed && noInferencePassed;
 
   const rawReport: AntigravityPreparationReport = {
@@ -456,7 +658,7 @@ export async function runAntigravityPreparationCheck(
     },
     profiles: profileResults,
     network_observation: {
-      verdict: noInferencePassed ? 'none-observed-control-validated' : 'failed',
+      verdict: networkVerdict,
       total_tokens: totalTokensObserved
     },
     findings

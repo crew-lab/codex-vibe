@@ -1,14 +1,16 @@
 import { execSync } from 'node:child_process';
-import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AntigravityBackend,
   SUPPORTED_ANTIGRAVITY_VERSION,
   type AntigravityBackendOptions,
   type AntigravityHandle
 } from '../../src/backends/antigravity.js';
+import { evaluateAntigravityToolCall, readAntigravityHookLedger } from '../../src/backends/antigravity-hook.js';
+import * as reaperModule from '../../src/process/reaper.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import type { BackendCallbacks, StartRunInput, SupervisorError, UsageState } from '../../src/contracts.js';
@@ -175,6 +177,22 @@ fs.writeFileSync(${JSON.stringify(recordedArgsFile)}, JSON.stringify(args));
 const settingsPath = path.join(process.env.HOME, '.gemini', 'antigravity-cli', 'settings.json');
 if (fs.existsSync(settingsPath)) {
   fs.copyFileSync(settingsPath, ${JSON.stringify(recordedSettingsFile)});
+}
+const hooksJsonPath = path.join(process.env.HOME, '.gemini', 'config', 'hooks.json');
+if (fs.existsSync(hooksJsonPath)) {
+  const hooksConfig = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
+  const hookCommand = hooksConfig['supervisor-policy-gate']?.PreToolUse?.[0]?.hooks?.[0]?.command;
+  if (hookCommand) {
+    const { execSync } = require('node:child_process');
+    execSync(hookCommand, {
+      input: JSON.stringify({
+        toolCall: { name: 'view_file', args: { AbsolutePath: path.join(process.cwd(), 'sample.ts') } },
+        stepIdx: 1,
+        conversationId: 'conv-1'
+      }),
+      stdio: ['pipe', 'pipe', 'inherit']
+    });
+  }
 }
 console.log(JSON.stringify({
   event: 'init',
@@ -800,7 +818,7 @@ if (args[0] === '--version') {
 // Support zero-inference slash commands during runAntigravityPreparationCheck
 const promptIdx = args.indexOf('-p');
 const promptVal = promptIdx >= 0 ? args[promptIdx + 1] : '';
-if (promptVal === '/config' || promptVal === '/hooks' || promptVal === '/permissions' || promptVal === '/skills') {
+if (promptVal === '/config' || promptVal === '/hooks' || promptVal === '/permissions' || promptVal === '/skills' || promptVal === '/agents') {
   const settingsPath = path.join(process.env.HOME, '.gemini', 'antigravity-cli', 'settings.json');
   const settings = fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath, 'utf8')) : {};
   const hooksPath = path.join(process.env.HOME, '.gemini', 'config', 'hooks.json');
@@ -814,6 +832,8 @@ if (promptVal === '/config' || promptVal === '/hooks' || promptVal === '/permiss
     console.log(JSON.stringify({ status: 'SUCCESS', command: { name: 'permissions', data: { permissions: [{ scope: 'global', allow: perms.allow, deny: perms.deny }] } } }));
   } else if (promptVal === '/skills') {
     console.log(JSON.stringify({ status: 'SUCCESS', command: { name: 'skills', data: { skills: [] } } }));
+  } else if (promptVal === '/agents') {
+    console.log(JSON.stringify({ status: 'SUCCESS', command: { name: 'agents', data: { agents: [] } } }));
   }
   process.exit(0);
 }
@@ -907,16 +927,70 @@ process.exit(0);
     }
   });
 
-  it('executes runAntigravityPreparationCheck and runDoctor with zero model inference', async () => {
+  it('fails closed when slash commands exit nonzero (Finding 1 / exit-42 probe regression)', async () => {
+    const root = await makeRoot();
+    const dataDir = path.join(root, 'data');
+    await mkdir(dataDir, { recursive: true });
+
+    const script = path.join(root, 'mock-agy-exit42.sh');
+    await writeExecutable(script, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.4.0');
+  process.exit(0);
+}
+// Reproduce the exit-42 probe from independent review
+process.exit(42);
+`);
+
+    const config = {
+      ...DEFAULT_CONFIG,
+      backend: 'antigravity' as const,
+      allowedWorkspaceRoots: [root],
+      paths: { antigravity: script }
+    };
+
+    const prepOut = await runAntigravityPreparationCheck(config, { dataDir });
+    expect(prepOut.status).toBe('failed');
+    expect(prepOut.report.result).toBe('fail');
+    expect(prepOut.report.profiles.review.cli_readback_passed).toBe(false);
+    expect(prepOut.report.profiles.edit.cli_readback_passed).toBe(false);
+    expect(prepOut.report.findings.some((f) => f.code.includes('cli_readback'))).toBe(true);
+  });
+
+  it('executes runAntigravityPreparationCheck and runDoctor with zero model inference when slash commands succeed', async () => {
     const root = await makeRoot();
     const dataDir = path.join(root, 'data');
     await mkdir(dataDir, { recursive: true });
 
     const script = path.join(root, 'mock-agy.sh');
     await writeExecutable(script, `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
   console.log('1.4.0');
+  process.exit(0);
+}
+const promptIdx = args.indexOf('-p');
+const promptVal = promptIdx >= 0 ? args[promptIdx + 1] : '';
+if (promptVal === '/config' || promptVal === '/hooks' || promptVal === '/permissions' || promptVal === '/skills' || promptVal === '/agents') {
+  const settingsPath = path.join(process.env.HOME, '.gemini', 'antigravity-cli', 'settings.json');
+  const settings = fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath, 'utf8')) : {};
+  const hooksPath = path.join(process.env.HOME, '.gemini', 'config', 'hooks.json');
+  const hooks = fs.existsSync(hooksPath) ? JSON.parse(fs.readFileSync(hooksPath, 'utf8')) : {};
+  if (promptVal === '/config') {
+    console.log(JSON.stringify({ status: 'SUCCESS', command: { name: 'config', data: { config: settings } } }));
+  } else if (promptVal === '/hooks') {
+    console.log(JSON.stringify({ status: 'SUCCESS', command: { name: 'hooks', data: { hooks: Object.keys(hooks).map((name) => ({ name, enabled: true, events: [{ event: 'PreToolUse', matcher: '*', count: 1 }] })) } } }));
+  } else if (promptVal === '/permissions') {
+    const perms = settings.permissions || { allow: [], deny: [] };
+    console.log(JSON.stringify({ status: 'SUCCESS', command: { name: 'permissions', data: { permissions: [{ scope: 'global', allow: perms.allow, deny: perms.deny }] } } }));
+  } else if (promptVal === '/skills') {
+    console.log(JSON.stringify({ status: 'SUCCESS', command: { name: 'skills', data: { skills: [] } } }));
+  } else if (promptVal === '/agents') {
+    console.log(JSON.stringify({ status: 'SUCCESS', command: { name: 'agents', data: { agents: [] } } }));
+  }
   process.exit(0);
 }
 process.exit(1);
@@ -934,10 +1008,12 @@ process.exit(1);
     expect(prepOut.report.result).toBe('pass');
     expect(prepOut.report.profiles.review.settings_valid).toBe(true);
     expect(prepOut.report.profiles.review.hooks_valid).toBe(true);
+    expect(prepOut.report.profiles.review.cli_readback_passed).toBe(true);
     expect(prepOut.report.profiles.review.synthetic_checks_passed).toBe(true);
     expect(prepOut.report.profiles.review.ledger_entries).toBe(6);
     expect(prepOut.report.profiles.edit.settings_valid).toBe(true);
     expect(prepOut.report.profiles.edit.hooks_valid).toBe(true);
+    expect(prepOut.report.profiles.edit.cli_readback_passed).toBe(true);
     expect(prepOut.report.profiles.edit.synthetic_checks_passed).toBe(true);
     expect(prepOut.report.profiles.edit.ledger_entries).toBe(6);
     expect(prepOut.report.network_observation.verdict).toBe('none-observed-control-validated');
@@ -949,5 +1025,191 @@ process.exit(1);
     expect(agyCheck?.ok).toBe(true);
     expect(agyCheck?.version).toBe('1.4.0');
     expect(agyCheck?.message).toContain('sha256:');
+  });
+
+  it('fails launch and cleans up when reaper startup fails', async () => {
+    const root = await makeRoot();
+    const script = path.join(root, 'mock-agy.sh');
+    await writeExecutable(script, `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "1.4.0"; exit 0; fi
+sleep 10
+`);
+
+    const backend = new AntigravityBackend(
+      { ...DEFAULT_CONFIG, backend: 'antigravity', paths: { antigravity: script } },
+      passedPreparation
+    );
+
+    const spy = vi.spyOn(reaperModule, 'startReaper').mockRejectedValueOnce(new Error('Simulated reaper start failure'));
+    try {
+      await expect(
+        backend.start(
+          {
+            runId: '22222222-3333-4444-5555-666666666666',
+            runDirectory: path.join(root, 'run'),
+            mode: 'review',
+            task: 'test reaper failure',
+            cwd: root,
+            workerWorkspace: root,
+            exclusions: [],
+            limits: { timeoutSeconds: 10, maxTurns: 5, maxEventBytes: 1024, maxTranscriptBytes: 1024, maxArtifactBytes: 1024 }
+          },
+          { onEvent() {}, onState() {} }
+        )
+      ).rejects.toMatchObject({
+        code: 'VSUP_INTERNAL',
+        message: expect.stringContaining('Failed to start process reaper')
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('rejects execution when binary digest drifts before spawn', async () => {
+    const root = await makeRoot();
+    const script = path.join(root, 'tamper-agy.sh');
+    await writeExecutable(script, `#!/bin/sh
+echo "1.4.0"
+exit 0
+`);
+
+    const backend = new AntigravityBackend(
+      { ...DEFAULT_CONFIG, backend: 'antigravity', paths: { antigravity: script } },
+      passedPreparation
+    );
+
+    // Probe records the initial digest
+    await backend.probe();
+    // Tamper with binary content before start
+    await appendFile(script, '# tampered bytes\n');
+
+    await expect(
+      backend.start(
+        {
+          runId: '33333333-4444-5555-6666-777777777777',
+          runDirectory: path.join(root, 'run'),
+          mode: 'review',
+          task: 'test tamper check',
+          cwd: root,
+          workerWorkspace: root,
+          exclusions: [],
+          limits: { timeoutSeconds: 10, maxTurns: 5, maxEventBytes: 1024, maxTranscriptBytes: 1024, maxArtifactBytes: 1024 }
+        },
+        { onEvent() {}, onState() {} }
+      )
+    ).rejects.toMatchObject({
+      code: 'VSUP_ANTIGRAVITY_EXEC_FAILED',
+      message: expect.stringContaining('binary digest changed')
+    });
+  });
+
+  it('fails closed when process exits 0 without SUCCESS status in terminal envelope', async () => {
+    const root = await makeRoot();
+    const workspace = path.join(root, 'workspace');
+    await mkdir(workspace);
+    const script = path.join(root, 'mock-no-success.sh');
+    await writeExecutable(script, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.4.0');
+  process.exit(0);
+}
+// Exit 0 with non-SUCCESS terminal status
+console.log(JSON.stringify({ event: 'result', result: { status: 'UNKNOWN_STATUS', response: 'Completed without success' } }));
+process.exit(0);
+`);
+
+    const backend = new AntigravityBackend(
+      { ...DEFAULT_CONFIG, backend: 'antigravity', paths: { antigravity: script } },
+      passedPreparation
+    );
+
+    let finalState: string | undefined;
+    let finalError: unknown;
+    const callbacks: BackendCallbacks = {
+      onEvent() {},
+      onState(state, update) {
+        finalState = state;
+        if (update && 'error' in update) finalError = update.error;
+      }
+    };
+
+    const result = await backend.start(
+      {
+        runId: '44444444-5555-6666-7777-888888888888',
+        runDirectory: path.join(root, 'run'),
+        mode: 'review',
+        task: 'test absent success status',
+        cwd: workspace,
+        workerWorkspace: workspace,
+        exclusions: [],
+        limits: { timeoutSeconds: 10, maxTurns: 5, maxEventBytes: 1024, maxTranscriptBytes: 1024, maxArtifactBytes: 1024 }
+      },
+      callbacks
+    );
+
+    await (result.handle as AntigravityHandle).opaque.process.done;
+    await waitFor(() => finalState, (state) => state === 'failed');
+
+    expect(finalState).toBe('failed');
+    expect(finalError).toMatchObject({
+      code: 'VSUP_ANTIGRAVITY_EXEC_FAILED',
+      message: expect.stringContaining('without validated terminal SUCCESS status')
+    });
+  });
+
+  it('denies directory read and search at root when excludedAnchors exist', async () => {
+    const root = await makeRoot();
+    const workspace = path.join(root, 'workspace');
+    await mkdir(path.join(workspace, 'sub'), { recursive: true });
+    const excludedAnchors = [{ root: workspace, glob: 'sub/**' }];
+
+    const evalResult = await evaluateAntigravityToolCall(
+      {
+        mode: 'review',
+        workerWorkspace: workspace,
+        excludedAnchors
+      },
+      {
+        toolCall: {
+          name: 'list_dir',
+          args: { DirectoryPath: workspace }
+        },
+        stepIdx: 1
+      }
+    );
+
+    expect(evalResult.decision).toBe('deny');
+    expect(evalResult.reason).toBe('path_excluded');
+  });
+
+  it('fails closed when hook ledger has corrupted JSON lines', async () => {
+    const root = await makeRoot();
+    const home = path.join(root, 'home');
+    const cliDir = path.join(home, '.gemini', 'antigravity-cli');
+    await mkdir(cliDir, { recursive: true });
+    await writeFile(path.join(cliDir, 'hook-ledger.jsonl'), '{ malformed json line\n');
+
+    await expect(
+      readAntigravityHookLedger(home, [], 0)
+    ).rejects.toMatchObject({
+      code: 'VSUP_INTERNAL',
+      message: expect.stringContaining('Corrupted approval ledger entry')
+    });
+  });
+
+  it('fails closed when stream executed tool calls but hook ledger is missing audit records', async () => {
+    const root = await makeRoot();
+    const home = path.join(root, 'home');
+    const cliDir = path.join(home, '.gemini', 'antigravity-cli');
+    await mkdir(cliDir, { recursive: true });
+    await writeFile(path.join(cliDir, 'hook-ledger.jsonl'), '');
+
+    await expect(
+      readAntigravityHookLedger(home, [], 2)
+    ).rejects.toMatchObject({
+      code: 'VSUP_INTERNAL',
+      message: expect.stringContaining('Audit unavailable')
+    });
   });
 });

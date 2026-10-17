@@ -43,23 +43,23 @@ async function resolveAntigravityBinaryPath(cmd: string): Promise<string> {
 }
 
 export function receiptPath(config: SupervisorConfig, dataDirOverride?: string): string {
-  if (config.paths?.vibePinManifest && path.isAbsolute(config.paths.vibePinManifest)) {
-    return path.join(path.dirname(config.paths.vibePinManifest), 'preparation-receipt.json');
-  }
   if (config.backend === 'antigravity') {
     const dir = dataDirOverride ?? getDataDir();
     if (!path.isAbsolute(dir)) throw new Error('Absolute data directory required');
     return path.join(dir, 'preparation-receipt.json');
+  }
+  if (config.paths?.vibePinManifest && path.isAbsolute(config.paths.vibePinManifest)) {
+    return path.join(path.dirname(config.paths.vibePinManifest), 'preparation-receipt.json');
   }
   throw new Error('Absolute pin manifest required');
 }
 export async function preparationIdentity(config: SupervisorConfig, candidate?: string): Promise<string> {
   candidate ??= await candidateIdentity();
   const policy = { ...config, allowedWorkspaceRoots: [] };
-  if (config.backend === 'antigravity' && !config.paths?.vibePinManifest) {
+  if (config.backend === 'antigravity') {
     const resolvedBinary = await resolveAntigravityBinaryPath(config.paths?.antigravity ?? 'agy');
     const pinSha256 = digest(await readFile(resolvedBinary));
-    return digest(canonical({ candidate, pin_sha256: pinSha256, policy, platform: process.platform, arch: process.arch, node: process.version }));
+    return digest(canonical({ backend: 'antigravity', candidate, pin_sha256: pinSha256, policy, platform: process.platform, arch: process.arch, node: process.version }));
   }
   const pin = config.paths?.vibePinManifest;
   if (!pin) throw new Error('Pin manifest required');
