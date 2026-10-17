@@ -12,9 +12,10 @@ describe("MCP tool input schemas", () => {
 
   it("leaves turn and timeout limits to the configured defaults", () => {
     const review = toolSchemas.vibe_review_start.parse({ task: "Inspect", cwd: "/repo" });
-    expect(review).toMatchObject({ context_files: [] });
+    expect(review).toMatchObject({ context_files: [], output: "text" });
     expect(review.max_turns).toBeUndefined();
     expect(review.timeout_seconds).toBeUndefined();
+    expect(toolSchemas.vibe_review_start.parse({ task: "Inspect", cwd: "/repo", output: "findings" })).toMatchObject({ output: "findings" });
     const edit = toolSchemas.vibe_edit_start.parse({ task: "Change", cwd: "/repo" });
     expect(edit).toMatchObject({ base_ref: "HEAD" });
     expect(edit.max_turns).toBeUndefined();

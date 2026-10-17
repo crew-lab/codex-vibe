@@ -16,6 +16,7 @@ export const reviewStartSchema = z.object({
   task,
   cwd: workspace,
   context_files: z.array(z.string().min(1).max(4096)).max(50).default([]),
+  output: z.enum(["text", "findings"]).default("text"),
   max_turns: maxTurns,
   timeout_seconds: timeoutSeconds,
   wait_seconds: waitSeconds,

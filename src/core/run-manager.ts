@@ -8,7 +8,8 @@ import type {
   ApprovalLedgerSnapshot, BackendCallbacks, BackendKind, ExclusionScope, BackendRunHandle, BackendStateUpdate,
   ReviewStartToolInput, EditStartToolInput, StatusToolInput,
   ResultToolInput, WaitOptions, CloseToolInput, RunLimits, RunMode, RunRecord, RunState, SupervisorBackend,
-  ReviewIntegrity, RuntimeCheck, SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent
+  ReviewIntegrity, RuntimeCheck, SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent,
+  FindingsArtifact
 } from "../contracts.js";
 import { APP_VERSION } from "../version.js";
 import { SCHEMA_VERSION, supervisorError } from "../contracts.js";
@@ -33,7 +34,9 @@ import { turnBackstop } from "../backends/app-server/usage.js";
 import { approvalsToWire, eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire, usageToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
 import { changedSinceSnapshot, parseManifest, serializeManifest, snapshotWorkspace } from "./workspace-snapshot.js";
-import type { ManifestEntry } from "./workspace-snapshot.js";
+import type { ManifestEntry, WorkspaceSnapshot } from "./workspace-snapshot.js";
+import { extractFindingsJsonBlock, validateFindings } from "./findings.js";
+import { workspaceAnchors } from "../security/globs.js";
 import { acquireOwnerLock } from "./owner-lock.js";
 import type { OwnerLock } from "./owner-lock.js";
 
@@ -134,7 +137,15 @@ export interface RunManagerOptions {
   recoveryWorkerWindowMs?: number;
 }
 
-type StartOptions = { maxTurns: number; timeoutSeconds: number; contextFiles?: string[]; baseRef?: string; readinessReceipt?: string; acceptanceContract?: AcceptanceContract };
+type StartOptions = {
+  maxTurns: number;
+  timeoutSeconds: number;
+  contextFiles?: string[];
+  output?: "text" | "findings";
+  baseRef?: string;
+  readinessReceipt?: string;
+  acceptanceContract?: AcceptanceContract;
+};
 
 export class RunManager {
   private readonly runRoot: string;
@@ -222,7 +233,7 @@ export class RunManager {
     const input = parseInput(reviewStartSchema, value);
     const started = await this.start("review", input.task, input.cwd, {
       maxTurns: input.max_turns ?? this.config.limits.maxTurnsReview, timeoutSeconds: input.timeout_seconds ?? this.config.limits.reviewTimeoutSeconds,
-      contextFiles: input.context_files, ...(input.readiness_receipt === undefined ? {} : { readinessReceipt: input.readiness_receipt })
+      contextFiles: input.context_files, output: input.output, ...(input.readiness_receipt === undefined ? {} : { readinessReceipt: input.readiness_receipt })
     });
     return this.awaitStartOutcome(started, input.wait_seconds, wait?.signal);
   }
@@ -305,7 +316,8 @@ export class RunManager {
         schemaVersion: SCHEMA_VERSION, supervisorVersion: APP_VERSION, runId: id,
         backend: this.activeBackendKind, mode, state: "starting", sourceWorkspace: source,
         workerWorkspace, createdAt: now, updatedAt: now,
-        taskSha256: createHash("sha256").update(task).digest("hex"), policyRevision: policy.revision, admittedRoot: admitted.root, exclusions: admitted.exclusions, limits
+        taskSha256: createHash("sha256").update(task).digest("hex"), policyRevision: policy.revision, admittedRoot: admitted.root, exclusions: admitted.exclusions, limits,
+        ...(options.output ? { output: options.output } : {})
       };
       if (options.acceptanceContract) { record.acceptanceContract = options.acceptanceContract; record.verification = { status: "pending", contract_sha256: contractDigest(options.acceptanceContract), checks: [] }; }
       runtime = this.makeRuntime(record, path.join(this.runRoot, id), task, options.contextFiles ?? []);
@@ -982,6 +994,7 @@ export class RunManager {
         runId: runtime.record.runId, mode: runtime.record.mode, task: runtime.task,
         cwd: runtime.record.sourceWorkspace, workerWorkspace, runDirectory: runtime.directory,
         ...(baseRef ? { baseRef } : {}), ...(contextFiles.length ? { contextFiles } : {}),
+        ...(runtime.record.output ? { output: runtime.record.output } : {}),
         exclusions: runtime.record.exclusions ?? [],
         limits
       };
@@ -1299,7 +1312,8 @@ export class RunManager {
       artifacts: (result?.artifacts ?? []).map(artifactToWire), changed_files: result?.changedFiles ?? [],
       ...(record.error ? { error: record.error } : {}),
       ...(record.usage ? { usage: usageToWire(record.usage) } : {}), warnings: result?.warnings ?? [],
-      ...(result?.integrity ? { integrity: integrityToWire(result.integrity) } : {})
+      ...(result?.integrity ? { integrity: integrityToWire(result.integrity) } : {}),
+      ...(result?.findings ? { findings: result.findings } : {})
     };
   }
 
@@ -1334,6 +1348,32 @@ export class RunManager {
       await this.atomicWriteText(approvalsPath, JSON.stringify(sanitizeForPersistence(approvalsToWire(runtime.record.runId, runtime.approvals)), null, 2) + "\n");
       artifacts.push(await describeArtifact(APPROVALS_FILE, approvalsPath, "application/json"));
     }
+    let findingsSummary: FindingsArtifact["summary"] | undefined;
+    if (runtime.record.mode === "review" && runtime.record.output === "findings") {
+      if (runtime.sourceSnapshot && !runtime.sourceManifest) await this.loadLaunchManifest(runtime);
+      const snapshot: WorkspaceSnapshot | undefined = runtime.sourceSnapshot && runtime.sourceManifest
+        ? { sha256: runtime.sourceSnapshot, manifest: runtime.sourceManifest }
+        : undefined;
+      const extracted = extractFindingsJsonBlock(runtime.transcript)
+        ?? (runtime.record.result?.summary ? extractFindingsJsonBlock(runtime.record.result.summary) : null);
+      const findingsArtifact: FindingsArtifact = extracted === null
+        ? {
+            version: 1,
+            findings: [],
+            rejected: [{ raw: null, reason: "schema_invalid" }],
+            summary: { total: 0, errors: 0, warnings: 0, info: 0, hints: 0, rejected: 1 }
+          }
+        : await validateFindings({
+            rawFindings: extracted.findings,
+            workspace: runtime.record.sourceWorkspace,
+            snapshot,
+            excluded: workspaceAnchors(runtime.record.exclusions ?? [], runtime.record.sourceWorkspace)
+          });
+      const findingsPath = path.join(artifactDir, "findings.json");
+      await this.atomicWriteText(findingsPath, JSON.stringify(sanitizeForPersistence(findingsArtifact), null, 2) + "\n");
+      artifacts.push(await describeArtifact("findings.json", findingsPath, "application/json"));
+      findingsSummary = findingsArtifact.summary;
+    }
     const artifactBytes = artifacts.reduce((sum, artifact) => sum + artifact.bytes, 0);
     if (artifactBytes > runtime.record.limits.maxArtifactBytes) throw codedError("VSUP_OUTPUT_LIMIT", "Run artifacts exceeded the configured byte limit.");
     const stopReason = runtime.record.result?.stopReason;
@@ -1348,7 +1388,8 @@ export class RunManager {
       artifacts,
       changedFiles: patchInfo?.changedFiles ?? [],
       warnings: stopWarning ? [...carriedWarnings, stopWarning] : carriedWarnings,
-      ...(runtime.record.result?.integrity ? { integrity: runtime.record.result.integrity } : {})
+      ...(runtime.record.result?.integrity ? { integrity: runtime.record.result.integrity } : {}),
+      ...(findingsSummary ? { findings: findingsSummary } : {})
     };
     if (runtime.record.acceptanceContract && !patchInfo) runtime.record.verification = { status: "incomplete", checks: [{ id: "$artifacts", status: "incomplete", reason: "patch-unavailable" }] };
     if (runtime.record.acceptanceContract && patchInfo && runtime.record.worktree) {

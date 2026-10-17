@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibe-supervisor.local/schemas/findings.schema.json",
+  "title": "Vibe Supervisor review findings artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "findings", "rejected", "summary"],
+  "properties": {
+    "version": { "const": 1 },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "ruleId", "message", "location", "severity"],
+        "properties": {
+          "id": { "type": "string" },
+          "ruleId": { "type": "string" },
+          "message": { "type": "string" },
+          "location": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "startLine"],
+            "properties": {
+              "path": { "type": "string" },
+              "startLine": { "type": "integer", "minimum": 1 },
+              "endLine": { "type": "integer", "minimum": 1 },
+              "startColumn": { "type": "integer", "minimum": 1 },
+              "endColumn": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "severity": { "enum": ["error", "warning", "info", "hint"] }
+        }
+      }
+    },
+    "rejected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["raw", "reason"],
+        "properties": {
+          "raw": {},
+          "reason": {
+            "enum": [
+              "file_not_found",
+              "line_out_of_bounds",
+              "path_reserved",
+              "path_secret",
+              "path_symlink",
+              "path_excluded",
+              "path_outside_workspace",
+              "schema_invalid"
+            ]
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "errors", "warnings", "info", "hints", "rejected"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "errors": { "type": "integer", "minimum": 0 },
+        "warnings": { "type": "integer", "minimum": 0 },
+        "info": { "type": "integer", "minimum": 0 },
+        "hints": { "type": "integer", "minimum": 0 },
+        "rejected": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
