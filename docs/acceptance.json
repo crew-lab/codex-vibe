@@ -296,18 +296,21 @@
       "candidate_distribution_sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1",
       "evidence": "research/evidence/release-2.0.2-347bf79-2026-10-16/REPORT.md",
       "result": "PASS through official SDK: expected 2.0.2 identity, preparation passed, eligible workspace, free slot, exact five tools; native remains separate."
-    }
-  ],
-  "unverified": [
+    },
     {
       "name": "native-readiness-on-candidate",
-      "status": "UNVERIFIED",
-      "build": "2.0.2",
+      "status": "VERIFIED",
+      "build": "347bf79",
       "evidence_required": "On the intended Codex desktop connection, readiness reports the server_version and candidate identity of the frozen archive under test, matching preparation PASS, an eligible workspace, no blockers and a free slot.",
       "prior_evidence": "v2.0.1-archive-native-readiness passed on 2026-10-16 on the native desktop connection.",
       "carry_over": "Not carried: rerun on the native desktop connection with expected_candidate set to the 2.0.2 candidate after the registration is switched (rollback kept). No inference.",
-      "result": "Pending desktop reconnect; native connection still has prior 2.0.1 bytes and correctly rejects expected 2.0.2 candidate eaa40320."
-    },
+      "result": "PASS on 2026-10-17 after desktop restart: both review and edit report exact 2.0.2 identity, matching preparation PASS, eligible workspace, free slot, no blockers or drift, no restart required; native catalog has exactly five tools. No hosted start.",
+      "archive_sha256": "84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09",
+      "candidate_distribution_sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1",
+      "evidence": "research/evidence/release-2.0.2-347bf79-2026-10-16/NATIVE-READINESS-AFTER-RESTART-2026-10-17.json"
+    }
+  ],
+  "unverified": [
     {
       "name": "execution-provenance-on-hosted-run",
       "status": "UNVERIFIED",
