@@ -167,14 +167,14 @@ The owner decided on 2026-10-17 to halt the exploratory feature run (deferred: w
 | 4 | Done 2026-10-15: `validation prepare` passed with a populated pnpm store on a public fixture (nvm Node 20.19.0, pnpm 9.15.4) | — | — |
 | 5 | Done 2026-10-15/16 on the target: 2.0.1 packaged from git (`44dc6f8`, archive `7978719c…`), installed side by side, pin and `doctor`, one `prepare check` PASS, SDK and native readiness PASS. Hosted: the review rejected on answer quality (one start); the edit rejected on its contract (a second start). Recorded in `docs/acceptance.json` | — | — |
 | 6 | Done 2026-10-16 on the target (`347bf79` on `origin/codex/package-kit-identity`): the MCP-client disconnect passed on the installed 2.0.1 candidate | Target agent | — |
-| 7 | Review and merge `origin/codex/package-kit-identity` (`6faee25`, carrying 2.0.1 disconnect PASS and 2.0.2 target readiness PASS) into main | Coordinator | Step 6 |
+| 7 | Done 2026-10-17: Reviewed and merged `origin/codex/package-kit-identity` (`6faee25`, carrying 2.0.1 disconnect PASS and 2.0.2 target readiness PASS) into main; followed by convergence of `explore_project_details` (`f64db99`) into main | Coordinator | Step 6 |
 | 8 | Clean-account installation of the frozen archive (`docs/clean-account-checklist.md`) | Owner | — |
 | 9 | Done 2026-10-16: the owner documented worker answer quality as a limit and chose to publish the tested archive from `44dc6f8` as v2.0.1; main's later changes are 2.0.2 | — | — |
 | 10 | Publish v2.0.1 as a pre-release from the tested assets with [planning/release-notes-2.0.1.md](planning/release-notes-2.0.1.md), per the commands in the owner decision above; `--latest` once steps 7 and 8 are recorded | Owner | — |
 | 11 | Done 2026-10-17 on `origin/explore_project_details`: Phases 1, 2 & 3 hardening, 2.1 unification and target conformance of `AntigravityBackend` (Phase 1 `agy` CLI flags & `settings.json`, Phase 2 `excluded_globs` & `PreToolUse` hook emitting `approvals.json`, Phase 3 `agy 1.4.0` revalidation, zero-inference `prepare check`, ADR 0008, target acceptance gates) | Agents | — |
 | 12 | Decide the repository rename (`codex-vibe` → `vibe-supervisor`) and read the Mistral and OpenAI brand pages | Owner | Before the article goes out |
 | 13 | Read the 2.0 article draft (`marketing/article/devto-2.0.md`) with its [editor notes](marketing/article/editor-notes.md) and [story sources](marketing/sources.md); update it for the workflow features and publish after the release with the AI-Assisted label and the `[UPDATE AT PUBLISH]` markers filled, in the marketing strategy's [order](marketing/strategy.md#6-next-actions-in-order) | Owner reads and publishes; agent fills the markers from the evidence | Step 10 |
-| 14 | Done 2026-10-17 on `explore_project_details`: Checker repaired, Wave 4 & 5 delivered and verified (`d9c3726`); target zero-inference conformance check verified on local `agy 1.4.0`, closing `antigravity-backend-no-inference-check` (`3bb58cb`). Proceeding to live operational review/edit delegation ("Working ASAP"). | Agents | Step G |
+| 14 | Done 2026-10-17: Checker repaired, Wave 4 & 5 delivered and verified (`d9c3726`); target zero-inference conformance check verified on local `agy 1.4.0`, closing `antigravity-backend-no-inference-check` (`3bb58cb`). Branch converged into main (`f64db99`) | Agents | Step G |
 
 **2.0.2.** Steps A to D were completed on the target and recorded on `origin/codex/package-kit-identity` (`1f906e8`, `a3c9631`, `6faee25`).
 
@@ -184,7 +184,7 @@ The owner decided on 2026-10-17 to halt the exploratory feature run (deferred: w
 | B | Done (`1f906e8`): Identity check of the 2.0.2 archive and kit, side-by-side install, `pin-manifest` and `doctor` PASS | Target agent | — |
 | C | Done (`1f906e8`): One `prepare check` (no-inference conformance) on the 2.0.2 candidate, then installed SDK readiness PASS | Target agent | — |
 | D | Done (`a3c9631`): Switched the desktop registration to 2.0.2 (rollback kept) and verified native readiness with `expected_candidate` after desktop restart | Target agent | — |
-| E | Review and merge `origin/codex/package-kit-identity` (`6faee25`) into main | Coordinator | D |
+| E | Done 2026-10-17: Reviewed and merged `origin/codex/package-kit-identity` (`6faee25`) into main | Coordinator | D |
 | F | Confirm the proposed carry-over in `docs/acceptance.json` (`6faee25`) and decide whether one hosted review shows the reporting fix on a real run (`execution-provenance-on-hosted-run`, optional) | Owner | E |
 | G | Publish v2.0.2 from the checked target-held assets with [planning/release-notes-2.0.2.md](planning/release-notes-2.0.2.md), tagged at `b275b1b` | Owner | F |
 
