@@ -26,7 +26,7 @@ import { fixedPolicy, readCurrentPolicy } from "../config/policy.js";
 import type { CurrentPolicy, PolicySource } from "../config/policy.js";
 import { ReadinessReceipts, receiptMismatch, receiptRejected } from "./readiness-receipt.js";
 import type { OpenedReceipt } from "./readiness-receipt.js";
-import { assertNoProjectVibeExtensions, assertSimpleGlobRoot } from "../security/workspace-guard.js";
+import { assertNoProjectAntigravityExtensions, assertNoProjectVibeExtensions, assertSimpleGlobRoot } from "../security/workspace-guard.js";
 import { PRIVATE_DIRECTORY_NAMES } from "../backends/app-server/session-config.js";
 import { usageDetailsToWire, eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
@@ -356,6 +356,9 @@ export class RunManager {
     if (mode === "edit") await withDeadline(assertEditAtRepositoryRoot(source), deadline - Date.now(), "Git workspace validation exceeded its preparation deadline.");
     assertSimpleGlobRoot(source);
     await withDeadline(assertNoProjectVibeExtensions(source), deadline - Date.now(), "Project extension validation exceeded its preparation deadline.");
+    if ((policy.config.backend ?? this.activeBackendKind) === "antigravity") {
+      await withDeadline(assertNoProjectAntigravityExtensions(source), deadline - Date.now(), "Project extension validation exceeded its preparation deadline.");
+    }
     return admitted;
   }
 
@@ -1000,7 +1003,7 @@ export class RunManager {
     return {
       onEvent: (event) => {
         if (this.stopping) return undefined;
-        if (event.source === "vibe") this.noteActivity(runtime, `vibe:${String(event.type).slice(0, 64)}`);
+        if (event.source === "vibe" || event.source === "antigravity") this.noteActivity(runtime, `${event.source}:${String(event.type).slice(0, 64)}`);
         return this.serial(runtime, async () => this.appendEvent(runtime, event)).catch((error: unknown) => this.noteEventFailure(runtime, error));
       },
       onActivity: (kind) => { this.noteActivity(runtime, kind); },
@@ -1194,7 +1197,7 @@ export class RunManager {
   }
 
   private async removeLeftoverPrivateState(runtime: Runtime, lastSeen: ReadonlyArray<string | undefined>): Promise<{ removed: boolean }> {
-    const names = Object.values(PRIVATE_DIRECTORY_NAMES);
+    const names = [...Object.values(PRIVATE_DIRECTORY_NAMES), "antigravity-home", "antigravity-tmp"];
     const present = await Promise.all(names.map((name) => lstat(path.join(runtime.directory, name)).then(() => true, () => false)));
     if (present.some(Boolean)) await this.awaitWorkerWindow(runtime.record, lastSeen);
     const results = await Promise.allSettled(names.map((name) => rm(path.join(runtime.directory, name), { recursive: true, force: true, maxRetries: 2 })));

@@ -237,14 +237,18 @@ describe("app-server keys", () => {
       validateConfig({ ...appServer, paths: { ...appServer.paths, app_server: "/opt/bin/vibe-app-server" } }),
       validateConfig({ ...appServer, paths: { vibe_pin_manifest: "/data/other.json" } }),
       validateConfig({ ...appServer, limits: { max_tokens: 10 } }),
-      validateConfig({ ...appServer, limits: { max_cost_usd: 1 } })
+      validateConfig({ ...appServer, limits: { max_cost_usd: 1 } }),
+      validateConfig({ ...appServer, backend: "antigravity" }),
+      validateConfig({ ...appServer, paths: { ...appServer.paths, antigravity: "/opt/bin/agy" } })
     ];
     for (const variant of variants) expect(configFingerprint(variant)).not.toBe(revision);
     expect(variants.map((variant) => bootBoundDrift(base, variant))).toEqual([
       ["paths.app_server"],
       ["paths.vibe_pin_manifest"],
       ["limits.max_tokens"],
-      ["limits.max_cost_usd"]
+      ["limits.max_cost_usd"],
+      ["backend"],
+      ["paths.antigravity"]
     ]);
     expect(bootBoundDrift(base, validateConfig(appServer))).toEqual([]);
   });

@@ -1,26 +1,25 @@
 # vibe-supervisor development plan
 
-One plan for everything from here: landing the integrated 2.0.1 on main, packaging and proving it on the target, publishing it as the first 2.x release, the 2.1 and 2.2 lines, the outreach that rides on them, and what never gets built. Written 2026-10-15 and revised the same day three times: after the owner merged the 2.0.1 cleanup ahead of the 2.0.0 release, after the parallel workflow line (`codex/workflow-acceptance-reporting` at `2e920d3`) was integrated, and after the integration reached main (`6c645e3`) and GitHub was reduced to `main`; revised again on 2026-10-16 after the target sitting. This plan supersedes both lines' earlier plans; they stay reachable at `881464c` and `2e920d3`. Not shipped.
+One plan for everything from here: landing the integrated 2.0.1 and 2.0.2 on main, packaging and proving them on the target, publishing them as the first 2.x releases, hardening and unifying the Antigravity execution backend, the 2.1 and 2.2 lines, the outreach that rides on them, and what never gets built. Written 2026-10-15 and revised on 2026-10-16 after the target sitting and on 2026-10-17 to reflect the 2.0.2 target evidence (`origin/codex/package-kit-identity`), the 2.1 Wave 0–3 implementation (`origin/claude/2.1-wave-1`), and the hardened Antigravity execution backend (`origin/explore_project_details`). Not shipped.
 
 The reasons behind it are in the [development strategy](../docs/development-strategy.md); the live status is in the [Handoff](../Handoff.md); the evidence behind each choice is in [marketing/strategy.md](../marketing/strategy.md), [marketing/interest.md](../marketing/interest.md), [research/features-2026-10-14.md](../research/features-2026-10-14.md) and [research/antigravity-2026-10-14.md](../research/antigravity-2026-10-14.md). Two companions hold the long parts: the [release notes template](release-notes-2.0.0.md) (written for 2.0.0, reused for 2.0.1) and the [2.1 design sketches](2.1-designs.md).
 
 ## 1. Where we are
 
-Revised 2026-10-16 after the target sitting; the hosted results are in [research/evidence/hosted-2.0.1-2026-10-16/](../research/evidence/hosted-2.0.1-2026-10-16/REPORT.md) and the packaging results in [research/evidence/package-kit-identity-2026-10-15/](../research/evidence/package-kit-identity-2026-10-15/REPORT.md).
+Revised 2026-10-17 after the 2.0.1 disconnect verification, the 2.0.2 target packaging and readiness, the 2.1 Wave 0–3 implementation, and Phase 1 of the Antigravity execution backend hardening; the hosted results are in [research/evidence/hosted-2.0.1-2026-10-16/](../research/evidence/hosted-2.0.1-2026-10-16/REPORT.md) and the packaging results in [research/evidence/package-kit-identity-2026-10-15/](../research/evidence/package-kit-identity-2026-10-15/REPORT.md).
 
 | Item | State |
 |---|---|
-| Main | 2.0.2, unreleased and not packaged: the one-version cleanup, the integrated workflow line (`6c645e3`), the target's packaging repair (`44dc6f8`) and reporting repair (`2a49abd`). No `docs/history/`, `docs/reviews/`, ADR 0003 or `v1-*` files; `tests/unit/no-legacy-references.test.ts` guards it. `npm run verify:release`: 89 files, 1,305 tests |
-| 2.0.1 archive | The bytes v2.0.1 publishes, as a pre-release. Packaged on the target from `44dc6f8` under Node 20.19.0: archive `7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e`, candidate and kit identity `8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4`. The first target packet (`8b288b8`) was rejected because its kit named bytes the archive did not hold; the preparing machine's `9d2bbde` package is the reference build only. Main's runtime has changed since (`2a49abd`), so a build of main is a new candidate, 2.0.2 |
-| Installations | The frozen archive is installed side by side on the target and selected in the desktop registration with the persistent Node 20.19.0; rollback backups kept |
-| Gates | `VERIFIED` for the frozen archive: package and kit identity, Node 20.19.0 floor, no-inference conformance, installed and native readiness. Rejected: the hosted review (answer quality) and, reported only on an unmerged branch, the hosted edit (its contract). Open: the disconnect (authorized, next), `permission = "ask"` (both halves observed, per-tool report not in the repository), thinking effect, experiments attribution, nested gating (NOT EXERCISED), clean-account installation |
-| Hosted allowance | Three starts authorized for the sitting; two used; the last is authorized for the disconnect only |
+| Main (`b275b1b`) | 2.0.2, unreleased: the one-version cleanup, the integrated workflow line (`6c645e3`), the target's packaging repair (`44dc6f8`) and reporting repair (`2a49abd`). No `docs/history/`, `docs/reviews/`, ADR 0003 or `v1-*` files; `tests/unit/no-legacy-references.test.ts` guards it. `npm run verify:release`: 89 files, 1,305 tests |
+| Target 2.0.2 (`origin/codex/package-kit-identity`, `6faee25`) | Records `VERIFIED` for 2.0.1 `mcp-client-disconnect-hosted` (`347bf79`); packages 2.0.2 on target under Node 20.19.0 (`1f906e8`: archive `84bff9411b63188051a8ca7c025d362ac5a0f08b532f37dc0e9a01b9ba0f4437`, candidate/kit `eaa4032009dc7db754471b0be3c5de57f4d1d067baef0999d6664cfdc179c202`), passes side-by-side install, pin, `doctor`, one `prepare check` PASS, and native desktop 2.0.2 readiness (`a3c9631`); adds carry-over assessment and `docs/clean-account-checklist.md` (`6faee25`) |
+| 2.1 Wave 0–3 (`origin/claude/2.1-wave-1`, `0d7119a`) | Implements 2.1 Wave 0–3 and cold-review fixes for items 1 (`usage.tool_calls`, ceilings, cross-session `runs list/show/tail`), 2 (`runs usefulness`), 3 (`excluded_globs`), and 6 (`approvals.json` ledger + `pin` in exports) |
+| Antigravity Backend (`origin/explore_project_details`) | `vibe-supervisor` 2.0.2 with hardened `AntigravityBackend` (`src/backends/antigravity.ts`, `agy 1.3.1` compatible): removes invalid `--cwd` and `--dangerously-skip-permissions`, enforces isolated `HOME`/`TMPDIR` with `$HOME/.gemini/antigravity-cli/settings.json` (`toolPermission: "strict"`, `enableTerminalSandbox: true`, `allowNonWorkspaceAccess: false`, mode-scoped `permissions.allow`/`deny`), passes `--disable-slash-commands`, `--sandbox`, and `--print-timeout`, blocks untrusted `.gemini`/`.agents` workspace extensions, wires watchdog activity and `boot_drift` detection, and parses structured `stream-json` envelope metadata (`status`, `usage`, `denied_actions`). `npm run verify:release`: 90 files, 1,315 tests |
+| 2.0.1 archive | Packaged on the target from `44dc6f8` under Node 20.19.0: archive `7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e`, candidate and kit identity `8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4` |
+| Hosted allowance | Three starts authorized for the 2.0.1 sitting; all three used (review, edit, disconnect) |
 | Target kit | `docs/target-acceptance.md` is the procedure; `package:rc` writes `preparation-kit-<version>/` beside the archive and installs the exact archive offline to prove the binding before it reports success |
-| Packaging cache | `/Users/r.senchuk/.npm`, the default npm cache on the preparing machine; its `_cacache` is populated (about 1.3 GB). Not an owner input |
-| Repository | GitHub holds `main` only; the target's unmerged `explore_project_details` branch, which added a worker other than Vibe, was deleted on 2026-10-16 |
 | Outreach | Drafts only: the dev.to article, the interest note's asks, the marketing calendar. Nothing posted |
 
-**Owner decision 2026-10-16:** worker answer quality is a documented limit; no further hosted allowance for the review and edit. v2.0.1 is published from the tested archive (`7978719c…`, tag at `44dc6f8`) as a pre-release while the disconnect and the clean-account installation are open; main's later changes go into 2.0.2. Notes: [release-notes-2.0.1.md](release-notes-2.0.1.md); the publish commands are in the Handoff.
+**Owner decision 2026-10-16:** worker answer quality is a documented limit; no further hosted allowance for the review and edit. v2.0.1 is published from the tested archive (`7978719c…`, tag at `44dc6f8`) as a pre-release while the clean-account installation is open; main's later changes go into 2.0.2. Notes: [release-notes-2.0.1.md](release-notes-2.0.1.md); the publish commands are in the Handoff.
 
 ## 2. Delivered
 
@@ -34,7 +33,10 @@ Revised 2026-10-16 after the target sitting; the hosted results are in [research
 | Workflow 3: validation and coordination | Owned validation copies with offline dependency preparation; the main-chat coordinator and the evidence-backed fallback in the skill | 1,260 tests in 87 files; no-inference conformance and installed SDK readiness on the target |
 | Integration | One line on main with both sets of work (`6c645e3`) | 88 files, 1,286 tests in `verify:release` on the pushed tree |
 | Package and kit binding | Identity captured right after `npm pack`; the exact archive installed offline and compared with the kit before success (`44dc6f8`) | 89 files, 1,296 tests in `package:rc` on the target under Node 20.19.0; the corrected archive's conformance and native readiness |
-| Execution provenance | The outcome kept through close as `execution_state`, `started_at` from the first running observation, the count-only `reasoning_observation` diagnostic (`2a49abd`) | 89 files, 1,305 tests; not in the frozen archive |
+| Execution provenance | The outcome kept through close as `execution_state`, `started_at` from the first running observation, the count-only `reasoning_observation` diagnostic (`2a49abd`) | 89 files, 1,305 tests |
+| 2.0.1 disconnect & 2.0.2 target readiness (`origin/codex/package-kit-identity`) | 2.0.1 `mcp-client-disconnect-hosted` PASS (`347bf79`); 2.0.2 target archive `84bff941…` and kit `eaa40320…` packaged, installed, conformance-checked, and native-readiness verified (`a3c9631`) | Recorded on `origin/codex/package-kit-identity` (`6faee25`) |
+| 2.1 Wave 0–3 (`origin/claude/2.1-wave-1`) | Items 1 (`usage.tool_calls`, ceilings, cross-session `runs list/show/tail`), 2 (`runs usefulness`), 3 (`excluded_globs`), and 6 (`approvals.json` ledger + `pin` in exports) | Recorded on `origin/claude/2.1-wave-1` (`0d7119a`) |
+| Antigravity Execution Backend Phase 1 (`origin/explore_project_details`) | `AntigravityBackend` (`src/backends/antigravity.ts`) hardened for `agy 1.3.1`: isolated `HOME`/`TMPDIR`, strict `$HOME/.gemini/antigravity-cli/settings.json` policy, `--sandbox`, `--disable-slash-commands`, `--print-timeout`, untrusted `.gemini`/`.agents` guard, watchdog activity, `boot_drift` tracking, and structured `stream-json` envelope metadata parsing | 90 files, 1,315 tests in `verify:release` on `origin/explore_project_details` |
 
 Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily cost ledger and the other items in section 6 remain separate from the per-run primitives above.
 
@@ -42,23 +44,23 @@ Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily co
 
 | # | Step | Who | Your touchpoint |
 |---|---|---|---|
-| 1 | Done: integration on main (`6c645e3`), pushed; GitHub reduced to `main` | — | — |
+| 1 | Done: integration on main (`6c645e3`), pushed | — | — |
 | 2 | Done: the owner deleted the v2.0.0 draft (2026-10-15) | — | — |
 | 3 | Done: the reference package from `9d2bbde` on the preparing machine | — | — |
 | 4 | Done: populated pnpm validation passed on a public fixture after fixing the lockfile check | — | — |
-| 5 | Done on the target: packaging from git (first packet rejected, corrected archive `7978719c…`), installation, pin, `doctor`, one `prepare check` PASS, SDK and native readiness PASS; recorded in `docs/acceptance.json` | — | — |
-| 6 | Done, rejected: the hosted review (answer quality); the hosted edit, reported on an unmerged branch (its contract). Neither retried | — | — |
-| 7 | Next: the MCP-client disconnect with the last authorized start, on the installed archive; evidence branch pushed | Target agent | Given 2026-10-16 (authorization 5) |
-| 8 | Review and merge the disconnect evidence branch | Coordinator | Yes to the merge and `make push` |
-| 9 | Clean-account installation of the frozen archive | You | **Do it, with the packet in 4.6** |
+| 5 | Done on the target: 2.0.1 packaging from git (`44dc6f8`, archive `7978719c…`), installation, pin, `doctor`, one `prepare check` PASS, SDK and native readiness PASS; recorded in `docs/acceptance.json` | — | — |
+| 6 | Done, rejected: the hosted review (answer quality); the hosted edit (its contract). Neither retried | — | — |
+| 7 | Done on the target (`347bf79` on `origin/codex/package-kit-identity`): the MCP-client disconnect passed on the installed 2.0.1 archive | Target agent | — |
+| 8 | Review and merge `origin/codex/package-kit-identity` (`6faee25`, carrying both 2.0.1 disconnect and 2.0.2 target readiness) | Coordinator | Yes to the merge and `make push` |
+| 9 | Clean-account installation of the frozen archive (`docs/clean-account-checklist.md`) | You | **Do it, with the packet in 4.6** |
 | 10 | Done 2026-10-16: worker answer quality is a documented limit; the tested archive from `44dc6f8` is published as v2.0.1 and main's later changes are 2.0.2 | — | — |
 | 11 | Repo readiness: rename, description, topics | Coordinator prepares | **Decide the rename; run two `gh` commands** |
-| 12 | Publish v2.0.1 as a pre-release from the target-held tested assets, with the commands in the Handoff; mark it latest once steps 7 to 9 are recorded | You | **Run `gh release create` on the target Mac** |
-| 13 | Package 2.0.2 on the target from git at the merged main commit (`package:rc` under Node 20.19.0, which also closes its Node floor) | Target agent | Authorization for the task-scoped packaging and installation, as for 2.0.1 |
-| 14 | 2.0.2 identity check, side-by-side install, pin and `doctor`, one `prepare check`, installed SDK readiness, registration switch with rollback and native readiness; evidence branch reviewed and merged | Target agent, then Coordinator | Yes to the merge and `make push` |
-| 15 | Confirm the proposed carry-over in `docs/acceptance.json` and decide the optional hosted review for the reporting fix | You | **One decision; a new allowance only if you want the review** |
+| 12 | Publish v2.0.1 as a pre-release from the target-held tested assets, with the commands in the Handoff; mark it latest once step 9 is recorded | You | **Run `gh release create` on the target Mac** |
+| 13 | Done on the target (`1f906e8` on `origin/codex/package-kit-identity`): 2.0.2 packaged (`84bff941…`, candidate `eaa40320…`) under Node 20.19.0 | Target agent | — |
+| 14 | Done on the target (`1f906e8` & `a3c9631` on `origin/codex/package-kit-identity`): 2.0.2 identity check, side-by-side install, pin and `doctor`, one `prepare check`, installed SDK readiness, registration switch with rollback and native readiness PASS | Target agent | — |
+| 15 | Confirm the proposed carry-over in `docs/acceptance.json` (`6faee25`) and decide the optional hosted review for the reporting fix | You | **One decision; a new allowance only if you want the review** |
 | 16 | Publish v2.0.2 from its checked target-held assets with [release-notes-2.0.2.md](release-notes-2.0.2.md) | You | **Run `gh release create`** |
-| 17 | 2.1 merges to main | Agents, Coordinator | Scope reading for Antigravity; the wheel download |
+| 17 | Phase 2 & 3 unification: merge `origin/claude/2.1-wave-1` and `origin/explore_project_details` after v2.0.2 is tagged | Agents, Coordinator | Scope reading for Antigravity; the wheel download |
 
 Open decisions that do not block the release are in section 4.12. Steps 7 and 9 can overlap; step 11 can happen any time before the first outreach post. Steps 13 to 16 follow the v2.0.1 publish and need no hosted start; the disconnect (step 7) runs on the installed 2.0.1 archive, so the registration moves to 2.0.2 only after it is recorded.
 
@@ -381,21 +383,56 @@ The `<site-project>` run showed why step 4 matters: Vibe's exact patch contained
 
 ## 6. 2.1: observable and measurable
 
-Ranked by demand evidence, fit with the boundaries and effort in the features research. Every item gets a fixture test; items that touch a run get one hosted observation. The design of each, with data shapes, files, tests, gate entries, size and dependencies, is in the [2.1 design sketches](2.1-designs.md); the status column says what 2.0.1 already delivers, so the sketch is narrowed to the rest. Work starts on branches now; nothing merges to main until v2.0.1 is tagged, so 2.0.1 stays what was tested.
+Ranked by demand evidence, fit with the boundaries and effort in the features research. Every item gets a fixture test; items that touch a run get one hosted observation. The design of each, with data shapes, files, tests, gate entries, size and dependencies, is in the [2.1 design sketches](2.1-designs.md); the status column says what 2.0.1 and `origin/claude/2.1-wave-1` (`0d7119a`) already deliver.
 
-| # | Item | Already in 2.0.1 | Remaining | Size | Gate | ADR |
+| # | Item | Status as of 2026-10-17 | Remaining | Size | Gate | ADR |
 |---|---|---|---|---|---|---|
-| 1 | Usage, ceilings and tool-call counts in every run record; `runs list` covers isolated sessions | Prompt, completion and cached tokens, model calls, cost source, model observations | Tool-call counts; `runs list` over `mcp-sessions/` (lookup exists for `runs verify` and `runs export`) | S | Fixture + the 2.1 hosted review | No |
-| 2 | Recorded decisions and `runs usefulness` | Append-only `assessment` on `vibe_close`, bound to hashes | `runs usefulness` printing the log rows from assessments; no second decision field | S | Fixture + the 2.1 hosted close | No |
-| 3 | `excluded_globs` per allowed root, merged into the profile denylist, the handler and the listing, read back | — | All | S | Fixture + the 2.1 hosted review | No |
-| 4 | Findings for reviews: `output: "findings"`, `findings.json`, `runs sarif` | — | All | M | Fixture + the 2.1 hosted review | No |
+| 1 | Usage, ceilings and tool-call counts in every run record; `runs list` covers isolated sessions | **Done on `origin/claude/2.1-wave-1` (`0d7119a`)**: `usage.tool_calls`, `max_tokens`/`max_cost_usd`/`max_model_calls`, cross-session `runs list/show/tail` | Unify with `AntigravityBackend` (`denied_actions`) and merge after 2.0.2 tag | S | Fixture + the 2.1 hosted review | No |
+| 2 | Recorded decisions and `runs usefulness` | **Done on `origin/claude/2.1-wave-1` (`0d7119a`)**: `runs usefulness [--config] [--since] [--json]` over assessments | Merge after 2.0.2 tag | S | Fixture + the 2.1 hosted close | No |
+| 3 | `excluded_globs` per allowed root, merged into the profile denylist, the handler and the listing, read back | **Done on `origin/claude/2.1-wave-1` (`0d7119a`)**: validation, session config, approvals (`path_excluded`), workspace listing, conformance `--excluded-glob` | Wire `excluded_globs` into `AntigravityBackend`'s `permissions.deny` and listing | S | Fixture + the 2.1 hosted review | No |
+| 4 | Findings for reviews: `output: "findings"`, `findings.json`, `runs sarif` | — | All (`src/core/findings.ts`, `src/cli/runs/sarif.ts`) | M | Fixture + the 2.1 hosted review | No |
 | 5 | Search sidecar for reviews | — | All | L | Fixture + its own hosted review; the nested-gating evidence first | Yes (0007) |
-| 6 | Audit bundles with the approval ledger | `runs export` bundle with hashes, optional patch and projected events | The approval ledger saved per run and added to the bundle | S | Fixture + one exported hosted run | No |
-| 7 | Vibe candidate script and the wheel-derived shipped manifest | The preparation kit (not a trust root) | All | M | Your yes to the wheel download; conformance check on the target | No |
+| 6 | Audit bundles with the approval ledger | **Done on `origin/claude/2.1-wave-1` (`0d7119a`)**: `approvals.json` saved per run (`truncated` boolean) and `pin` included in `runs export` | Emit `approvals.json` from `AntigravityBackend` in Phase 2 | S | Fixture + one exported hosted run | No |
+| 7 | Vibe candidate script and the wheel-derived shipped manifest | The preparation kit (not a trust root) | All (`scripts/vibe-candidate.mjs`, `shipped-manifest.ts`) | M | Your yes to the wheel download; conformance check on the target | No |
 | 8 | Antigravity as a verified MCP client: docs, client-neutral skill wording, four gates | — | All | S docs + target | Your scope reading; an account on the target; three hosted runs | No |
 | 9 | Per-language task templates in the skill | The coordinator, acceptance and preparation guidance | The templates | S | Review | No |
+| 10 | Antigravity execution backend hardening and 2.1 parity | **Phase 1 Done on `origin/explore_project_details`**: `agy 1.3.1` flag & permission hardening, private `HOME`/`TMPDIR` + `settings.json`, untrusted `.gemini`/`.agents` guard, watchdog & `boot_drift`, structured `stream-json` envelope parsing | Phase 2 (2.1 unification + `PreToolUse` hook) & Phase 3 (`prepare check` + ADR 0007/0008 + target gates) | M | Fixture + target acceptance | Yes (0008) |
 
-Order: wave 0 (contracts) first, then 1, 2, 3, 4, 6 and 7 in parallel, the backend wiring, then 5 and 8 after the 2.0.1 evidence. One 2.1 target sitting covers 1 to 4 and 6 with one review and one edit; 5 and 8 add their own runs. Section 9 has the graph and the waves. Any change to `scripts/v2-conformance-check.mjs`, `dist` or `schemas` changes the candidate identity, so 2.1 ships its own kit.
+### 6.1 Antigravity Execution Backend Hardening & 2.1 Unification Plan (Phases 1–3)
+
+#### Phase 1 — CLI Compatibility, Permission Hardening, and Lifecycle Alignment (Completed on `origin/explore_project_details`)
+
+1. **Fix `agy 1.3.1` CLI Invocation & Remove Permission Bypass (`src/backends/antigravity.ts`)**:
+   - Removed the non-existent `--cwd` flag (relying on `spawn(..., { cwd: input.workerWorkspace })` and `--add-dir <workerWorkspace>`) and removed `--dangerously-skip-permissions`.
+   - Added `--disable-slash-commands`, `--sandbox`, and `--print-timeout <timeoutSeconds>s`.
+2. **Per-Run Private `HOME`/`TMPDIR` and Strict `settings.json` Policy (`src/backends/antigravity.ts`, `src/core/run-manager.ts`)**:
+   - Created private per-run `antigravity-home` (`HOME`) and `antigravity-tmp` (`TMPDIR`) inside `input.runDir`, cleaned up automatically at run completion/close and by `removeLeftoverPrivateState()` on crash recovery.
+   - Wrote `$HOME/.gemini/antigravity-cli/settings.json` before spawning `agy` with `toolPermission: "strict"`, `enableTerminalSandbox: true`, `allowNonWorkspaceAccess: false`, mode-scoped `permissions.allow` (`read_file`, `view_file`, `list_dir`, `grep_search`, `find_by_name` for reviews; plus `write_file`, `edit_file`, `replace_file_content`, `multi_replace_file_content` for edits), and `permissions.deny` blocking `bash`, `run_command`, `web_fetch`, `web_search`, `browser`, `mcp`, and reserved/secret globs (`.git/**`, `.vibe/**`, `.gemini/**`, `.agents/**`, `.env*`, `*.pem`, `*.key`).
+3. **Reject Untrusted Project `.gemini` and `.agents` Extensions (`src/security/workspace-guard.ts`, `src/core/run-manager.ts`)**:
+   - Added `assertNoProjectAntigravityExtensions(root)` in `src/security/workspace-guard.ts` and wired it into `RunManager.validateAdmission()` when `backend === "antigravity"`, failing closed with `VSUP_POLICY_DENIED` if `.gemini`, `.agents/hooks.json`, `.agents/mcp_config.json`, or `.agents/plugins` exist.
+4. **Wire Watchdog Progress & Boot-Bound Policy Drift (`src/core/run-manager.ts`, `src/config/config.ts`, `src/config/policy.ts`)**:
+   - Updated `callbacks.onEvent` in `src/core/run-manager.ts` so `"antigravity"` events call `this.noteActivity(...)` alongside `"vibe"`.
+   - Added `backend` and `paths.antigravity` to `configFingerprint()` and `BOOT_BOUND_SETTINGS` so changing either surfaces `boot_drift` and `restart_required: true`.
+5. **Parse `stream-json` Envelope Metadata & Align Review Context (`src/backends/antigravity.ts`)**:
+   - Extracted `status` (`SUCCESS` / `ERROR` / `INVALID`), `usage` (`input_tokens`, `output_tokens`, `total_tokens`, `cost_usd`), `num_turns`, and `denied_actions` from the `stream-json` envelope; emitted `tool_denied` events for `denied_actions`, populated `UsageState`, and failed closed (`VSUP_ANTIGRAVITY_EXEC_FAILED`) when `status` is `'ERROR'` or `'INVALID'`.
+   - Included `buildWorkspaceListing(input.workerWorkspace)` in review prompts and implemented `preparationCheck()` returning `candidateIdentity()`.
+
+#### Phase 2 — Unification with 2.1 Wave 1–3 (`origin/claude/2.1-wave-1`) & Supervisor-Owned `PreToolUse` Hook
+
+1. **Rebase/Merge with `origin/codex/package-kit-identity` (`6faee25`) and `origin/claude/2.1-wave-1` (`0d7119a`)**:
+   - Integrate the 2.0.1 disconnect / 2.0.2 target readiness evidence and the 2.1 Wave 0–3 features onto a unified branch once v2.0.2 is tagged.
+2. **Propagate `excluded_globs` & `usage.tool_calls` to `AntigravityBackend`**:
+   - Pass `input.excludedGlobs` into `buildWorkspaceListing(input.workerWorkspace, input.excludedGlobs)` and append each excluded glob into `settings.json` `permissions.deny` for `read`, `edit`, and `write`.
+   - Map `AntigravityBackend`'s executed tool calls and `denied_actions` into 2.1's `usage.tool_calls` (`executed`, `deniedByHandler`, `deniedByPolicy`).
+3. **Deterministic `PreToolUse` Enforcement Hook & `approvals.json` Ledger**:
+   - Configure a supervisor-owned `PreToolUse` hook script inside `$HOME/.gemini/antigravity-cli/hooks.json` that invokes `judgeWorkspacePath(workspace, toolPath, excludedGlobs)` on every tool call before `agy` executes it, exiting with code `2` (blocking error) on out-of-workspace, reserved, secret, or excluded paths and writing a cryptographic `approvals.json` ledger compatible with `runs export`.
+
+#### Phase 3 — Antigravity Conformance Kit, ADR, and Target Acceptance Gates
+
+1. **Antigravity Preparation & Pin Check**:
+   - Extend `vibe-supervisor pin-manifest`, `doctor`, and `prepare check` to verify the `agy` binary version (`1.3.1`) and SHA-256 digest, validate the isolated `settings.json` and `PreToolUse` hook without inference, and write a backend-scoped preparation receipt.
+2. **ADR & Target Acceptance Gates**:
+   - Record the `AntigravityBackend` isolation architecture and its differences from `vibe-app-server` in an ADR (`docs/adr/0008-antigravity-execution-backend.md`) and add target acceptance gates (`antigravity-backend-no-inference-check`, `antigravity-backend-hosted-review-edit`) in `docs/acceptance.json` and `docs/compatibility.md`.
 
 ## 7. 2.2: wider, still one path
 
@@ -408,9 +445,9 @@ Order: wave 0 (contracts) first, then 1, 2, 3, 4, 6 and 7 in parallel, the backe
 
 ## 8. Later and never
 
-**Later, each behind its own trigger:** fixes from target evidence; the next Vibe release as a new candidate (revalidate wire facts, new manifest, conformance, one review, one edit; item 7's script does the first pass; if the cadence becomes unaffordable, the pin policy is revisited openly, never relaxed silently); MCP Tasks when a client declares it; size-capped inline images; a single repair turn and `turn/steer`, each only through an ADR; a CI mode after Linux and an ADR; Antigravity as a worker only if Google documents ACP permission semantics, per-process configuration isolation, checksummed binaries, API-key authentication and a permissions read-back; byte-reproducible archives (the SBOM's creation time and namespace are the first thing to fix); CI once the `workflow` scope exists, confirmed by its first real run.
+**Later, each behind its own trigger:** fixes from target evidence; the next Vibe release as a new candidate (revalidate wire facts, new manifest, conformance, one review, one edit; item 7's script does the first pass; if the cadence becomes unaffordable, the pin policy is revisited openly, never relaxed silently); MCP Tasks when a client declares it; size-capped inline images; a single repair turn and `turn/steer`, each only through an ADR; a CI mode after Linux and an ADR; byte-reproducible archives (the SBOM's creation time and namespace are the first thing to fix); CI once the `workflow` scope exists, confirmed by its first real run.
 
-**Never**, each rejected by a line in AGENTS.md rather than by lack of demand: resume, replay or queueing; interactive or elicitation-based approvals; more than one active run per instance; shell-based search; a worker other than Vibe; automatic patch application; a Vibe version range.
+**Never**, each rejected by a line in AGENTS.md rather than by lack of demand: resume, replay or queueing; interactive or elicitation-based approvals; more than one active run per instance; shell-based search; automatic patch application; a Vibe version range.
 
 ## 9. How the work runs
 
