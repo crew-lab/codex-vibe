@@ -77,9 +77,11 @@ export function configFingerprint(config: SupervisorConfig): string {
       ...(config.limits.maxTokens === undefined ? {} : { maxTokens: config.limits.maxTokens }),
       ...(config.limits.maxCostUsd === undefined ? {} : { maxCostUsd: config.limits.maxCostUsd })
     },
+    ...(config.backend ? { backend: config.backend } : {}),
     ...(config.paths?.vibe ? { vibePath: config.paths.vibe } : {}),
     ...(config.paths?.appServer ? { appServerPath: config.paths.appServer } : {}),
-    ...(config.paths?.vibePinManifest ? { pinManifestPath: config.paths.vibePinManifest } : {})
+    ...(config.paths?.vibePinManifest ? { pinManifestPath: config.paths.vibePinManifest } : {}),
+    ...(config.paths?.antigravity ? { antigravityPath: config.paths.antigravity } : {})
   };
   return createHash("sha256").update(JSON.stringify(semantic)).digest("hex");
 }

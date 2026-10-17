@@ -39,7 +39,9 @@ const BOOT_BOUND_SETTINGS: ReadonlyArray<readonly [string, (config: SupervisorCo
   ["limits.max_cost_usd", (config) => config.limits.maxCostUsd ?? null],
   ["paths.vibe", (config) => config.paths?.vibe ?? null],
   ["paths.app_server", (config) => config.paths?.appServer ?? null],
-  ["paths.vibe_pin_manifest", (config) => config.paths?.vibePinManifest ?? null]
+  ["paths.vibe_pin_manifest", (config) => config.paths?.vibePinManifest ?? null],
+  ["backend", (config) => config.backend ?? "app-server"],
+  ["paths.antigravity", (config) => config.paths?.antigravity ?? null]
 ];
 
 export function bootBoundDrift(boot: SupervisorConfig, current: SupervisorConfig): string[] {

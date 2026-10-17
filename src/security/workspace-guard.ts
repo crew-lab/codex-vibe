@@ -32,3 +32,17 @@ export async function assertNoProjectVibeExtensions(root: string): Promise<void>
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
 }
+
+export async function assertNoProjectAntigravityExtensions(root: string): Promise<void> {
+  const canonical = path.resolve(root);
+  for (const rel of ['.gemini', '.agents/hooks.json', '.agents/mcp_config.json', '.agents/plugins']) {
+    try {
+      const info = await lstat(path.join(canonical, rel));
+      if (info.isSymbolicLink() || info.isDirectory() || info.isFile()) {
+        throw new WorkspacePathError(`Workspace ${canonical} contains project Antigravity configuration at ${rel}; this profile cannot prove it inactive. Remove it or use a workspace without it.`);
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+  }
+}

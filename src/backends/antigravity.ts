@@ -1,18 +1,36 @@
 import { execFile } from 'node:child_process';
+import { rm, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import type {
   BackendCapabilities, BackendRunHandle, BackendStartResult,
-  StartRunInput, SupervisorBackend, BackendCallbacks, RuntimeCheck
+  StartRunInput, SupervisorBackend, BackendCallbacks, RuntimeCheck, UsageState
 } from '../contracts.js';
 import { supervisorError, type SupervisorConfig } from '../contracts.js';
+import { candidateIdentity, type PreparationStatus } from '../preparation/evidence.js';
 import { spawnManaged } from '../process/managed.js';
-import { assertNoProjectVibeExtensions } from '../security/workspace-guard.js';
+import { assertNoProjectAntigravityExtensions, assertNoProjectVibeExtensions } from '../security/workspace-guard.js';
 import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { buildChildEnvironment } from '../security/environment.js';
 import { createPrivateDir } from '../security/paths.js';
+import { APP_VERSION } from '../version.js';
+import { buildWorkspaceListing } from './app-server/workspace-listing.js';
 
 const execFileAsync = promisify(execFile);
+
+const REVIEW_ALLOWED_TOOLS = [
+  'view_file', 'read_file', 'list_dir', 'find_by_name', 'grep_search'
+] as const;
+
+const EDIT_ALLOWED_TOOLS = [
+  ...REVIEW_ALLOWED_TOOLS,
+  'write_to_file', 'write_file', 'replace_file_content', 'multi_replace_file_content', 'edit_file', 'edit'
+] as const;
+
+const DENIED_TOOLS = [
+  'run_command', 'bash', 'shell', 'read_url', 'read_url_content',
+  'search_web', 'read_browser_page', 'open_browser_url', 'mcp(*)'
+] as const;
 
 export interface AntigravityHandle extends BackendRunHandle {
   opaque: {
@@ -21,7 +39,15 @@ export interface AntigravityHandle extends BackendRunHandle {
     workerWorkspace: string;
     mode: 'review' | 'edit';
     latestSummary: string;
+    childHome: string;
+    childTmp: string;
   };
+}
+
+interface ParsedEnvelopeMeta {
+  status?: string;
+  usage?: UsageState;
+  deniedActions: Array<{ tool: string; reason: string; path?: string }>;
 }
 
 function executable(config: SupervisorConfig): string {
@@ -54,6 +80,7 @@ function extractTextFromStreamEntry(entry: unknown): string {
   if (!cleaned || typeof cleaned !== 'object') return '';
   const obj = cleaned as Record<string, unknown>;
   if (typeof obj.text === 'string') return obj.text;
+  if (typeof obj.response === 'string') return obj.response;
   if (typeof obj.content === 'string') return obj.content;
   if (typeof obj.message === 'string') return obj.message;
 
@@ -69,12 +96,76 @@ function extractTextFromStreamEntry(entry: unknown): string {
       if (!/^(reasoning|thought)/i.test(key)) visit(item);
     }
   };
-  visit(obj.content ?? obj.message ?? obj.chunks ?? obj.delta);
+  visit(obj.content ?? obj.message ?? obj.chunks ?? obj.delta ?? obj.response);
   return parts.join('');
 }
 
-function createStreamOutputParser(onText: (text: string) => Promise<void>, maxLineBytes: number) {
+function extractEnvelopeMeta(entry: unknown): ParsedEnvelopeMeta {
+  const meta: ParsedEnvelopeMeta = { deniedActions: [] };
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return meta;
+  const obj = entry as Record<string, unknown>;
+  if (typeof obj.status === 'string') meta.status = obj.status.toUpperCase();
+
+  const numTurns = typeof obj.num_turns === 'number' && Number.isFinite(obj.num_turns) && obj.num_turns >= 0
+    ? Math.trunc(obj.num_turns)
+    : undefined;
+  const rawUsage = obj.usage && typeof obj.usage === 'object' && !Array.isArray(obj.usage)
+    ? (obj.usage as Record<string, unknown>)
+    : undefined;
+
+  if (rawUsage || numTurns !== undefined) {
+    const intOrUndefined = (val: unknown): number | undefined =>
+      typeof val === 'number' && Number.isFinite(val) && val >= 0 ? Math.trunc(val) : undefined;
+    const promptTokens = intOrUndefined(rawUsage?.prompt_tokens ?? rawUsage?.input_tokens);
+    const completionTokens = intOrUndefined(rawUsage?.completion_tokens ?? rawUsage?.output_tokens);
+    const totalTokens = intOrUndefined(rawUsage?.total_tokens ?? rawUsage?.tokens_used)
+      ?? (promptTokens !== undefined && completionTokens !== undefined ? promptTokens + completionTokens : undefined);
+    const cachedTokens = intOrUndefined(rawUsage?.cached_tokens);
+    const usage: UsageState = {
+      ...(totalTokens !== undefined ? { tokensUsed: totalTokens } : {}),
+      ...(promptTokens !== undefined ? { promptTokens } : {}),
+      ...(completionTokens !== undefined ? { completionTokens } : {}),
+      ...(cachedTokens !== undefined ? { cachedTokens } : {}),
+      ...(numTurns !== undefined ? { modelCalls: numTurns } : {})
+    };
+    if (Object.keys(usage).length > 0) meta.usage = usage;
+  }
+
+  if (Array.isArray(obj.denied_actions)) {
+    for (const item of obj.denied_actions) {
+      if (typeof item === 'string' && item.trim()) {
+        meta.deniedActions.push({ tool: item.trim(), reason: 'denied_by_headless_policy' });
+      } else if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const record = item as Record<string, unknown>;
+        const tool = typeof record.tool === 'string' ? record.tool : typeof record.name === 'string' ? record.name : 'tool';
+        const reason = typeof record.reason === 'string' ? record.reason : 'denied_by_headless_policy';
+        const targetPath = typeof record.path === 'string' ? record.path : undefined;
+        meta.deniedActions.push({ tool, reason, ...(targetPath ? { path: targetPath } : {}) });
+      }
+    }
+  }
+  return meta;
+}
+
+function createStreamOutputParser(
+  onEntry: (payload: { text?: string; meta: ParsedEnvelopeMeta }) => Promise<void>,
+  maxLineBytes: number
+) {
   let pending = '';
+  const handleLine = async (line: string): Promise<void> => {
+    let entry: unknown;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      await onEntry({ text: line, meta: { deniedActions: [] } });
+      return;
+    }
+    const text = extractTextFromStreamEntry(entry);
+    const meta = extractEnvelopeMeta(entry);
+    if (text || meta.status || meta.usage || meta.deniedActions.length > 0) {
+      await onEntry({ ...(text ? { text } : {}), meta });
+    }
+  };
   return {
     async push(chunk: string): Promise<void> {
       pending += chunk;
@@ -87,31 +178,40 @@ function createStreamOutputParser(onText: (text: string) => Promise<void>, maxLi
         const line = pending.slice(0, newline).trim();
         pending = pending.slice(newline + 1);
         if (!line) continue;
-        let entry: unknown;
-        try {
-          entry = JSON.parse(line);
-        } catch {
-          // Fallback: If not valid JSON, treat raw text line as direct output
-          await onText(line);
-          continue;
-        }
-        const text = extractTextFromStreamEntry(entry);
-        if (text) await onText(text);
+        await handleLine(line);
       }
     },
     async flush(): Promise<void> {
       const remaining = pending.trim();
       pending = '';
       if (!remaining) return;
-      try {
-        const entry = JSON.parse(remaining);
-        const text = extractTextFromStreamEntry(entry);
-        if (text) await onText(text);
-      } catch {
-        await onText(remaining);
-      }
+      await handleLine(remaining);
     }
   };
+}
+
+async function writeIsolatedSettings(childHome: string, mode: 'review' | 'edit'): Promise<void> {
+  const geminiDir = path.join(childHome, '.gemini');
+  const cliDir = path.join(geminiDir, 'antigravity-cli');
+  await createPrivateDir(geminiDir);
+  await createPrivateDir(cliDir);
+  const settings = {
+    toolPermission: 'strict',
+    enableTerminalSandbox: true,
+    allowNonWorkspaceAccess: false,
+    permissions: {
+      allow: mode === 'review' ? [...REVIEW_ALLOWED_TOOLS] : [...EDIT_ALLOWED_TOOLS],
+      deny: [...DENIED_TOOLS]
+    }
+  };
+  await writeFile(path.join(cliDir, 'settings.json'), JSON.stringify(settings, null, 2) + '\n', { mode: 0o600 });
+}
+
+async function cleanupPrivateDirectories(childHome: string, childTmp: string): Promise<void> {
+  await Promise.allSettled([
+    rm(childHome, { recursive: true, force: true, maxRetries: 2 }),
+    rm(childTmp, { recursive: true, force: true, maxRetries: 2 })
+  ]);
 }
 
 export class AntigravityBackend implements SupervisorBackend {
@@ -158,6 +258,25 @@ export class AntigravityBackend implements SupervisorBackend {
     };
   }
 
+  async preparationCheck(): Promise<PreparationStatus> {
+    try {
+      const candidate = await candidateIdentity();
+      return {
+        status: 'passed',
+        candidate_sha256: candidate,
+        version: APP_VERSION,
+        reason: 'Antigravity CLI execution backend candidate identity verified; hosted acceptance remains separate'
+      };
+    } catch {
+      return {
+        status: 'missing',
+        candidate_sha256: null,
+        version: APP_VERSION,
+        reason: 'Candidate identity could not be computed'
+      };
+    }
+  }
+
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     const capabilities = await this.probe();
     if (!capabilities.available) {
@@ -166,35 +285,62 @@ export class AntigravityBackend implements SupervisorBackend {
 
     await assertNoProjectVibeExtensions(input.cwd);
     await assertNoProjectVibeExtensions(input.workerWorkspace);
+    await assertNoProjectAntigravityExtensions(input.cwd);
+    await assertNoProjectAntigravityExtensions(input.workerWorkspace);
 
     const childHome = path.join(input.runDirectory, 'antigravity-home');
+    const childTmp = path.join(input.runDirectory, 'antigravity-tmp');
     await createPrivateDir(childHome);
+    await createPrivateDir(childTmp);
+    await writeIsolatedSettings(childHome, input.mode);
 
     const childEnv = buildChildEnvironment(process.env, [
       'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'ANTIGRAVITY_API_KEY', 'ANTIGRAVITY_HOME'
     ]);
     childEnv.HOME = childHome;
+    childEnv.TMPDIR = childTmp;
 
     const mode = input.mode === 'review' ? 'plan' : 'accept-edits';
+    const listing = input.mode === 'review' ? await buildWorkspaceListing(input.workerWorkspace) : null;
     const contextPrefix = (input.contextFiles ?? []).map((file) => `Approved context path: ${file}`).join('\n');
-    const prompt = contextPrefix ? `${contextPrefix}\n\nTask:\n${input.task}` : input.task;
+    const prefixParts = [listing?.text ?? null, contextPrefix].filter((part): part is string => Boolean(part && part.length > 0));
+    const prompt = prefixParts.length > 0 ? `${prefixParts.join('\n\n')}\n\nTask:\n${input.task}` : input.task;
 
     const args = [
       '-p', prompt,
       '--mode', mode,
       '--output-format', 'stream-json',
-      '--cwd', input.workerWorkspace,
-      '--dangerously-skip-permissions',
+      '--disable-slash-commands',
+      '--sandbox',
+      '--print-timeout', `${input.limits.timeoutSeconds}s`
     ];
 
     let latestSummary = '';
+    let latestUsage: UsageState | undefined;
+    let envelopeStatus: string | undefined;
     let outputChain = Promise.resolve();
     let stderrChain = Promise.resolve();
 
-    const chunks = createStreamOutputParser(async (text) => {
-      const redacted = redactSecrets(text);
-      latestSummary = (latestSummary ? `${latestSummary}\n${redacted}` : redacted).slice(-input.limits.maxTranscriptBytes);
-      await callbacks.onEvent({ source: 'antigravity', type: 'message', severity: 'info', data: { text: `${redacted}\n` } });
+    const chunks = createStreamOutputParser(async ({ text, meta }) => {
+      if (meta.status) envelopeStatus = meta.status;
+      if (meta.usage) latestUsage = { ...latestUsage, ...meta.usage };
+      for (const denied of meta.deniedActions) {
+        await callbacks.onEvent({
+          source: 'antigravity',
+          type: 'tool_denied',
+          severity: 'warning',
+          data: {
+            tool: redactSecrets(denied.tool),
+            reason: redactSecrets(denied.reason),
+            ...(denied.path ? { path: redactSecrets(denied.path) } : {})
+          }
+        });
+      }
+      if (text) {
+        const redacted = redactSecrets(text);
+        latestSummary = (latestSummary ? `${latestSummary}\n${redacted}` : redacted).slice(-input.limits.maxTranscriptBytes);
+        await callbacks.onEvent({ source: 'antigravity', type: 'message', severity: 'info', data: { text: `${redacted}\n` } });
+      }
     }, input.limits.maxEventBytes);
 
     const stderrRedactor = new StreamingRedactor();
@@ -217,6 +363,7 @@ export class AntigravityBackend implements SupervisorBackend {
         }
       },
       onStdout: (chunk) => {
+        callbacks.onActivity?.('antigravity:stdout');
         outputChain = outputChain.then(() => chunks.push(chunk)).catch(async (error: unknown) => {
           if (!parserFailed) {
             parserFailed = true;
@@ -228,6 +375,7 @@ export class AntigravityBackend implements SupervisorBackend {
         });
       },
       onStderr: (chunk) => {
+        callbacks.onActivity?.('antigravity:stderr');
         const text = stderrRedactor.push(chunk);
         if (text) {
           stderrChain = stderrChain.then(() => callbacks.onEvent({
@@ -242,9 +390,12 @@ export class AntigravityBackend implements SupervisorBackend {
       done: false,
       workerWorkspace: input.workerWorkspace,
       mode: input.mode,
+      childHome,
+      childTmp,
       get latestSummary() { return latestSummary; }
     };
     const handle: AntigravityHandle = { runId: input.runId, backend: this.kind, opaque };
+    callbacks.onSpawn?.(handle);
     const processRecord = {
       ...(child.child.pid === undefined ? {} : { pid: child.child.pid }),
       executable: cmd,
@@ -255,8 +406,8 @@ export class AntigravityBackend implements SupervisorBackend {
 
     void child.done.then(async ({ code, signal }) => {
       opaque.done = true;
-      if (outputLimited || parserFailed) return;
-      if (code === 0) {
+      try {
+        if (outputLimited || parserFailed) return;
         await outputChain;
         await stderrChain;
         await chunks.flush();
@@ -266,16 +417,32 @@ export class AntigravityBackend implements SupervisorBackend {
             source: 'antigravity', type: 'diagnostic', severity: 'warning', data: { text: diagnosticTail }
           }));
         }
-        await callbacks.onState('completed', {
-          result: { stopReason: 'end_turn', summary: opaque.latestSummary || 'Antigravity run completed.' }
-        });
-      } else {
-        await callbacks.onState('failed', {
-          error: supervisorError('VSUP_BACKEND_CRASHED', `Antigravity exited with code ${code ?? 'null'}${signal ? ` (${signal})` : ''}`)
-        });
+        if (code === 0 && (envelopeStatus === 'ERROR' || envelopeStatus === 'INVALID')) {
+          await callbacks.onState('failed', {
+            ...(latestUsage ? { usage: latestUsage } : {}),
+            error: supervisorError('VSUP_ANTIGRAVITY_EXEC_FAILED', `Antigravity reported terminal envelope status ${envelopeStatus}.`)
+          });
+        } else if (code === 0 && (envelopeStatus === 'CANCELED' || envelopeStatus === 'INTERRUPTED')) {
+          await callbacks.onState('cancelled', {
+            ...(latestUsage ? { usage: latestUsage } : {})
+          });
+        } else if (code === 0) {
+          await callbacks.onState('completed', {
+            ...(latestUsage ? { usage: latestUsage } : {}),
+            result: { stopReason: 'end_turn', summary: opaque.latestSummary || 'Antigravity run completed.' }
+          });
+        } else {
+          await callbacks.onState('failed', {
+            ...(latestUsage ? { usage: latestUsage } : {}),
+            error: supervisorError('VSUP_BACKEND_CRASHED', `Antigravity exited with code ${code ?? 'null'}${signal ? ` (${signal})` : ''}`)
+          });
+        }
+      } finally {
+        await cleanupPrivateDirectories(childHome, childTmp);
       }
     }).catch(async (error: unknown) => {
       opaque.done = true;
+      await cleanupPrivateDirectories(childHome, childTmp);
       await callbacks.onState('failed', {
         error: supervisorError('VSUP_BACKEND_CRASHED', redactSecrets(String(error)))
       });
@@ -292,6 +459,7 @@ export class AntigravityBackend implements SupervisorBackend {
   async close(handle: BackendRunHandle): Promise<void> {
     const state = handle.opaque as AntigravityHandle['opaque'];
     if (!state.done) await state.process.terminate();
+    await cleanupPrivateDirectories(state.childHome, state.childTmp);
   }
 
   async terminateNow(handle: BackendRunHandle): Promise<void> {
