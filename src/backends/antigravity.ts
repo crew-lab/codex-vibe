@@ -15,21 +15,23 @@ import { buildChildEnvironment } from '../security/environment.js';
 import { createPrivateDir } from '../security/paths.js';
 import { APP_VERSION } from '../version.js';
 import { buildWorkspaceListing } from './app-server/workspace-listing.js';
+import { anchoredDenylistPatterns, denylistAnchors, workspaceAnchors, type DenylistAnchor } from '../security/globs.js';
+import {
+  EDIT_ALLOWED_TOOLS,
+  readAntigravityHookLedger,
+  REVIEW_ALLOWED_TOOLS,
+  writeAntigravityPreToolHook
+} from './antigravity-hook.js';
 
 const execFileAsync = promisify(execFile);
-
-const REVIEW_ALLOWED_TOOLS = [
-  'view_file', 'read_file', 'list_dir', 'find_by_name', 'grep_search'
-] as const;
-
-const EDIT_ALLOWED_TOOLS = [
-  ...REVIEW_ALLOWED_TOOLS,
-  'write_to_file', 'write_file', 'replace_file_content', 'multi_replace_file_content', 'edit_file', 'edit'
-] as const;
 
 const DENIED_TOOLS = [
   'run_command', 'bash', 'shell', 'read_url', 'read_url_content',
   'search_web', 'read_browser_page', 'open_browser_url', 'mcp(*)'
+] as const;
+
+const RESERVED_AND_SECRET_GLOBS = [
+  '.git/**', '.vibe/**', '.gemini/**', '.agents/**', '.env*', '*.pem', '*.key', '*.p12', '*.pfx'
 ] as const;
 
 export interface AntigravityHandle extends BackendRunHandle {
@@ -48,6 +50,9 @@ interface ParsedEnvelopeMeta {
   status?: string;
   usage?: UsageState;
   deniedActions: Array<{ tool: string; reason: string; path?: string }>;
+  numToolCalls?: number;
+  toolCalls?: unknown;
+  type?: string;
 }
 
 function executable(config: SupervisorConfig): string {
@@ -105,6 +110,14 @@ function extractEnvelopeMeta(entry: unknown): ParsedEnvelopeMeta {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return meta;
   const obj = entry as Record<string, unknown>;
   if (typeof obj.status === 'string') meta.status = obj.status.toUpperCase();
+  if (typeof obj.type === 'string') meta.type = obj.type;
+
+  if (typeof obj.num_tool_calls === 'number' && Number.isFinite(obj.num_tool_calls) && obj.num_tool_calls >= 0) {
+    meta.numToolCalls = Math.trunc(obj.num_tool_calls);
+  }
+  if (Array.isArray(obj.tool_calls) || (typeof obj.tool_calls === 'number' && Number.isFinite(obj.tool_calls) && obj.tool_calls >= 0)) {
+    meta.toolCalls = obj.tool_calls;
+  }
 
   const numTurns = typeof obj.num_turns === 'number' && Number.isFinite(obj.num_turns) && obj.num_turns >= 0
     ? Math.trunc(obj.num_turns)
@@ -162,7 +175,16 @@ function createStreamOutputParser(
     }
     const text = extractTextFromStreamEntry(entry);
     const meta = extractEnvelopeMeta(entry);
-    if (text || meta.status || meta.usage || meta.deniedActions.length > 0) {
+    if (
+      text ||
+      meta.status ||
+      meta.usage ||
+      meta.deniedActions.length > 0 ||
+      meta.numToolCalls !== undefined ||
+      meta.toolCalls !== undefined ||
+      meta.type === 'tool_use' ||
+      meta.type === 'tool_call'
+    ) {
       await onEntry({ ...(text ? { text } : {}), meta });
     }
   };
@@ -190,18 +212,37 @@ function createStreamOutputParser(
   };
 }
 
-async function writeIsolatedSettings(childHome: string, mode: 'review' | 'edit'): Promise<void> {
+async function writeIsolatedSettings(
+  childHome: string,
+  mode: 'review' | 'edit',
+  denylist: readonly DenylistAnchor[] = []
+): Promise<void> {
   const geminiDir = path.join(childHome, '.gemini');
   const cliDir = path.join(geminiDir, 'antigravity-cli');
   await createPrivateDir(geminiDir);
   await createPrivateDir(cliDir);
+
+  const relativeGlobs = denylist.flatMap((anchor) =>
+    anchor.globs.flatMap((glob) => {
+      const rel = anchor.prefix.length > 0 ? `${anchor.prefix.join('/')}/${glob}` : glob;
+      return rel.startsWith('**/') ? [rel] : [rel, `**/${rel}`];
+    })
+  );
+
+  const denyPatterns = [
+    ...DENIED_TOOLS,
+    ...RESERVED_AND_SECRET_GLOBS,
+    ...denylist.flatMap(anchoredDenylistPatterns),
+    ...relativeGlobs
+  ];
+
   const settings = {
     toolPermission: 'strict',
     enableTerminalSandbox: true,
     allowNonWorkspaceAccess: false,
     permissions: {
       allow: mode === 'review' ? [...REVIEW_ALLOWED_TOOLS] : [...EDIT_ALLOWED_TOOLS],
-      deny: [...DENIED_TOOLS]
+      deny: [...new Set(denyPatterns)]
     }
   };
   await writeFile(path.join(cliDir, 'settings.json'), JSON.stringify(settings, null, 2) + '\n', { mode: 0o600 });
@@ -292,7 +333,16 @@ export class AntigravityBackend implements SupervisorBackend {
     const childTmp = path.join(input.runDirectory, 'antigravity-tmp');
     await createPrivateDir(childHome);
     await createPrivateDir(childTmp);
-    await writeIsolatedSettings(childHome, input.mode);
+
+    const anchors = workspaceAnchors(input.exclusions ?? [], input.cwd);
+    const denylist = denylistAnchors(input.exclusions ?? [], input.cwd, input.workerWorkspace);
+
+    await writeIsolatedSettings(childHome, input.mode, denylist);
+    await writeAntigravityPreToolHook(childHome, {
+      mode: input.mode,
+      workerWorkspace: input.workerWorkspace,
+      excludedAnchors: anchors
+    });
 
     const childEnv = buildChildEnvironment(process.env, [
       'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'ANTIGRAVITY_API_KEY', 'ANTIGRAVITY_HOME'
@@ -301,7 +351,7 @@ export class AntigravityBackend implements SupervisorBackend {
     childEnv.TMPDIR = childTmp;
 
     const mode = input.mode === 'review' ? 'plan' : 'accept-edits';
-    const listing = input.mode === 'review' ? await buildWorkspaceListing(input.workerWorkspace) : null;
+    const listing = input.mode === 'review' ? await buildWorkspaceListing(input.workerWorkspace, {}, anchors) : null;
     const contextPrefix = (input.contextFiles ?? []).map((file) => `Approved context path: ${file}`).join('\n');
     const prefixParts = [listing?.text ?? null, contextPrefix].filter((part): part is string => Boolean(part && part.length > 0));
     const prompt = prefixParts.length > 0 ? `${prefixParts.join('\n\n')}\n\nTask:\n${input.task}` : input.task;
@@ -320,11 +370,27 @@ export class AntigravityBackend implements SupervisorBackend {
     let envelopeStatus: string | undefined;
     let outputChain = Promise.resolve();
     let stderrChain = Promise.resolve();
+    let streamExecutedCalls = 0;
+    let streamToolUseEvents = 0;
+    const allDeniedActions: Array<{ tool: string; reason: string; path?: string }> = [];
 
     const chunks = createStreamOutputParser(async ({ text, meta }) => {
       if (meta.status) envelopeStatus = meta.status;
       if (meta.usage) latestUsage = { ...latestUsage, ...meta.usage };
+      if (meta.numToolCalls !== undefined) {
+        streamExecutedCalls = Math.max(streamExecutedCalls, meta.numToolCalls);
+      }
+      if (Array.isArray(meta.toolCalls)) {
+        streamExecutedCalls = Math.max(streamExecutedCalls, meta.toolCalls.length);
+      } else if (typeof meta.toolCalls === 'number') {
+        streamExecutedCalls = Math.max(streamExecutedCalls, Math.trunc(meta.toolCalls));
+      }
+      if (meta.type === 'tool_use' || meta.type === 'tool_call') {
+        streamToolUseEvents += 1;
+        streamExecutedCalls = Math.max(streamExecutedCalls, streamToolUseEvents);
+      }
       for (const denied of meta.deniedActions) {
+        allDeniedActions.push(denied);
         await callbacks.onEvent({
           source: 'antigravity',
           type: 'tool_denied',
@@ -417,23 +483,61 @@ export class AntigravityBackend implements SupervisorBackend {
             source: 'antigravity', type: 'diagnostic', severity: 'warning', data: { text: diagnosticTail }
           }));
         }
+
+        const { approvals, toolCalls, hookEntries } = await readAntigravityHookLedger(
+          childHome,
+          allDeniedActions,
+          streamExecutedCalls
+        );
+
+        for (const entry of hookEntries) {
+          if (entry.decision === 'approve') {
+            await callbacks.onEvent({
+              source: 'antigravity',
+              type: 'tool_call',
+              severity: 'info',
+              data: {
+                tool: redactSecrets(entry.tool ?? 'tool'),
+                ...(entry.path ? { path: redactSecrets(entry.path) } : {})
+              }
+            });
+          } else {
+            await callbacks.onEvent({
+              source: 'antigravity',
+              type: 'tool_denied',
+              severity: 'warning',
+              data: {
+                tool: redactSecrets(entry.tool ?? 'tool'),
+                reason: redactSecrets(entry.reason ?? 'denied'),
+                ...(entry.path ? { path: redactSecrets(entry.path) } : {})
+              }
+            });
+          }
+        }
+
+        const finalUsage: UsageState = { ...(latestUsage ?? {}), toolCalls };
+
         if (code === 0 && (envelopeStatus === 'ERROR' || envelopeStatus === 'INVALID')) {
           await callbacks.onState('failed', {
-            ...(latestUsage ? { usage: latestUsage } : {}),
+            usage: finalUsage,
+            approvals,
             error: supervisorError('VSUP_ANTIGRAVITY_EXEC_FAILED', `Antigravity reported terminal envelope status ${envelopeStatus}.`)
           });
         } else if (code === 0 && (envelopeStatus === 'CANCELED' || envelopeStatus === 'INTERRUPTED')) {
           await callbacks.onState('cancelled', {
-            ...(latestUsage ? { usage: latestUsage } : {})
+            usage: finalUsage,
+            approvals
           });
         } else if (code === 0) {
           await callbacks.onState('completed', {
-            ...(latestUsage ? { usage: latestUsage } : {}),
+            usage: finalUsage,
+            approvals,
             result: { stopReason: 'end_turn', summary: opaque.latestSummary || 'Antigravity run completed.' }
           });
         } else {
           await callbacks.onState('failed', {
-            ...(latestUsage ? { usage: latestUsage } : {}),
+            usage: finalUsage,
+            approvals,
             error: supervisorError('VSUP_BACKEND_CRASHED', `Antigravity exited with code ${code ?? 'null'}${signal ? ` (${signal})` : ''}`)
           });
         }
@@ -442,10 +546,28 @@ export class AntigravityBackend implements SupervisorBackend {
       }
     }).catch(async (error: unknown) => {
       opaque.done = true;
-      await cleanupPrivateDirectories(childHome, childTmp);
-      await callbacks.onState('failed', {
-        error: supervisorError('VSUP_BACKEND_CRASHED', redactSecrets(String(error)))
-      });
+      try {
+        const { approvals, toolCalls } = await readAntigravityHookLedger(
+          childHome,
+          allDeniedActions,
+          streamExecutedCalls
+        ).catch(() => ({
+          approvals: { records: [], truncated: false },
+          toolCalls: { executed: streamExecutedCalls, deniedByHandler: 0, deniedByPolicy: allDeniedActions.length },
+          hookEntries: []
+        }));
+        await cleanupPrivateDirectories(childHome, childTmp);
+        await callbacks.onState('failed', {
+          usage: { ...(latestUsage ?? {}), toolCalls },
+          approvals,
+          error: supervisorError('VSUP_BACKEND_CRASHED', redactSecrets(String(error)))
+        });
+      } catch {
+        await cleanupPrivateDirectories(childHome, childTmp);
+        await callbacks.onState('failed', {
+          error: supervisorError('VSUP_BACKEND_CRASHED', redactSecrets(String(error)))
+        });
+      }
     });
 
     return { handle, initialState: 'running' as const, process: processRecord };

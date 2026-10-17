@@ -387,16 +387,16 @@ Ranked by demand evidence, fit with the boundaries and effort in the features re
 
 | # | Item | Status as of 2026-10-17 | Remaining | Size | Gate | ADR |
 |---|---|---|---|---|---|---|
-| 1 | Usage, ceilings and tool-call counts in every run record; `runs list` covers isolated sessions | **Done on `origin/claude/2.1-wave-1` (`0d7119a`)**: `usage.tool_calls`, `max_tokens`/`max_cost_usd`/`max_model_calls`, cross-session `runs list/show/tail` | Unify with `AntigravityBackend` (`denied_actions`) and merge after 2.0.2 tag | S | Fixture + the 2.1 hosted review | No |
+| 1 | Usage, ceilings and tool-call counts in every run record; `runs list` covers isolated sessions | **Done on `origin/claude/2.1-wave-1` (`0d7119a`) & `origin/explore_project_details`**: `usage.tool_calls` populated for both backends, `max_tokens`/`max_cost_usd`/`max_model_calls`, cross-session `runs list/show/tail` | Merge after 2.0.2 tag | S | Fixture + the 2.1 hosted review | No |
 | 2 | Recorded decisions and `runs usefulness` | **Done on `origin/claude/2.1-wave-1` (`0d7119a`)**: `runs usefulness [--config] [--since] [--json]` over assessments | Merge after 2.0.2 tag | S | Fixture + the 2.1 hosted close | No |
-| 3 | `excluded_globs` per allowed root, merged into the profile denylist, the handler and the listing, read back | **Done on `origin/claude/2.1-wave-1` (`0d7119a`)**: validation, session config, approvals (`path_excluded`), workspace listing, conformance `--excluded-glob` | Wire `excluded_globs` into `AntigravityBackend`'s `permissions.deny` and listing | S | Fixture + the 2.1 hosted review | No |
+| 3 | `excluded_globs` per allowed root, merged into the profile denylist, the handler and the listing, read back | **Done on `origin/claude/2.1-wave-1` (`0d7119a`) & `origin/explore_project_details`**: validation, session config, approvals (`path_excluded`), workspace listing, conformance `--excluded-glob`; wired into `AntigravityBackend` listing and `settings.json` `permissions.deny` | Merge after 2.0.2 tag | S | Fixture + the 2.1 hosted review | No |
 | 4 | Findings for reviews: `output: "findings"`, `findings.json`, `runs sarif` | — | All (`src/core/findings.ts`, `src/cli/runs/sarif.ts`) | M | Fixture + the 2.1 hosted review | No |
 | 5 | Search sidecar for reviews | — | All | L | Fixture + its own hosted review; the nested-gating evidence first | Yes (0007) |
-| 6 | Audit bundles with the approval ledger | **Done on `origin/claude/2.1-wave-1` (`0d7119a`)**: `approvals.json` saved per run (`truncated` boolean) and `pin` included in `runs export` | Emit `approvals.json` from `AntigravityBackend` in Phase 2 | S | Fixture + one exported hosted run | No |
+| 6 | Audit bundles with the approval ledger | **Done on `origin/claude/2.1-wave-1` (`0d7119a`) & `origin/explore_project_details`**: `approvals.json` saved per run (`truncated` boolean) and `pin` included in `runs export`; `approvals.json` ledger emitted for `AntigravityBackend` via `PreToolUse` hook | Merge after 2.0.2 tag | S | Fixture + one exported hosted run | No |
 | 7 | Vibe candidate script and the wheel-derived shipped manifest | The preparation kit (not a trust root) | All (`scripts/vibe-candidate.mjs`, `shipped-manifest.ts`) | M | Your yes to the wheel download; conformance check on the target | No |
 | 8 | Antigravity as a verified MCP client: docs, client-neutral skill wording, four gates | — | All | S docs + target | Your scope reading; an account on the target; three hosted runs | No |
 | 9 | Per-language task templates in the skill | The coordinator, acceptance and preparation guidance | The templates | S | Review | No |
-| 10 | Antigravity execution backend hardening and 2.1 parity | **Phase 1 Done on `origin/explore_project_details`**: `agy 1.3.1` flag & permission hardening, private `HOME`/`TMPDIR` + `settings.json`, untrusted `.gemini`/`.agents` guard, watchdog & `boot_drift`, structured `stream-json` envelope parsing | Phase 2 (2.1 unification + `PreToolUse` hook) & Phase 3 (`prepare check` + ADR 0007/0008 + target gates) | M | Fixture + target acceptance | Yes (0008) |
+| 10 | Antigravity execution backend hardening and 2.1 parity | **Phases 1 & 2 Done on `origin/explore_project_details`**: Phase 1 `agy 1.3.1` flag & permission hardening, private `HOME`/`TMPDIR` + `settings.json`, untrusted `.gemini`/`.agents` guard, watchdog & `boot_drift`, structured `stream-json` envelope parsing; Phase 2 `excluded_globs` wired into `AntigravityBackend` listing & `settings.json`, `usage.tool_calls` populated, supervisor-owned `PreToolUse` hook `pre-tool-hook.mjs` + `hooks.json` enforcing `judgeWorkspacePath` and emitting `approvals.json` | Phase 3 (`prepare check` extension, ADR 0008, target gates) | M | Fixture + target acceptance | Yes (0008) |
 
 **Status 2026-10-16 / 2026-10-17.** Items 1, 2, 3 and 6 are implemented on branch `claude/2.1-wave-1` (waves 0 to 2 in `404b801`, `f6c852e` and `e4c1608`, documented in wave 3), pending cold review, the coordinator's release verification and the hosted gates in `docs/acceptance.json` (`hosted-usage-recorded`, `hosted-excluded-glob-readback-and-denial`, `hosted-run-exported`, `hosted-close-acceptance-recorded`). Items 4, 5, 7, 8 and 9 are not built. Two designs changed in delivery: item 2 kept only `runs usefulness` on the existing assessments, and item 6 extended the existing report directory instead of adding a single-file bundle.
 
@@ -421,15 +421,15 @@ Order: wave 0 (contracts) first, then 1, 2, 3, 4, 6 and 7 in parallel, the backe
    - Extracted `status` (`SUCCESS` / `ERROR` / `INVALID`), `usage` (`input_tokens`, `output_tokens`, `total_tokens`, `cost_usd`), `num_turns`, and `denied_actions` from the `stream-json` envelope; emitted `tool_denied` events for `denied_actions`, populated `UsageState`, and failed closed (`VSUP_ANTIGRAVITY_EXEC_FAILED`) when `status` is `'ERROR'` or `'INVALID'`.
    - Included `buildWorkspaceListing(input.workerWorkspace)` in review prompts and implemented `preparationCheck()` returning `candidateIdentity()`.
 
-#### Phase 2 — Unification with 2.1 Wave 1–3 (`origin/claude/2.1-wave-1`) & Supervisor-Owned `PreToolUse` Hook
+#### Phase 2 — Unification with 2.1 Wave 1–3 (`origin/claude/2.1-wave-1`) & Supervisor-Owned `PreToolUse` Hook (Completed on `origin/explore_project_details`)
 
-1. **Rebase/Merge with `origin/codex/package-kit-identity` (`6faee25`) and `origin/claude/2.1-wave-1` (`0d7119a`)**:
-   - Integrate the 2.0.1 disconnect / 2.0.2 target readiness evidence and the 2.1 Wave 0–3 features onto a unified branch once v2.0.2 is tagged.
-2. **Propagate `excluded_globs` & `usage.tool_calls` to `AntigravityBackend`**:
-   - Pass `input.excludedGlobs` into `buildWorkspaceListing(input.workerWorkspace, input.excludedGlobs)` and append each excluded glob into `settings.json` `permissions.deny` for `read`, `edit`, and `write`.
-   - Map `AntigravityBackend`'s executed tool calls and `denied_actions` into 2.1's `usage.tool_calls` (`executed`, `deniedByHandler`, `deniedByPolicy`).
-3. **Deterministic `PreToolUse` Enforcement Hook & `approvals.json` Ledger**:
-   - Configure a supervisor-owned `PreToolUse` hook script inside `$HOME/.gemini/antigravity-cli/hooks.json` that invokes `judgeWorkspacePath(workspace, toolPath, excludedGlobs)` on every tool call before `agy` executes it, exiting with code `2` (blocking error) on out-of-workspace, reserved, secret, or excluded paths and writing a cryptographic `approvals.json` ledger compatible with `runs export`.
+1. **Merged `origin/codex/package-kit-identity` (`6faee25`) and `origin/claude/2.1-wave-1` (`0d7119a`)**:
+   - Integrated the 2.0.1 disconnect / 2.0.2 target readiness evidence and the 2.1 Wave 0–3 features onto `origin/explore_project_details`.
+2. **Propagate `excluded_globs` & `usage.tool_calls` to `AntigravityBackend` (`src/backends/antigravity.ts`)**:
+   - Passed `input.excludedGlobs` into `buildWorkspaceListing(input.workerWorkspace, input.excludedGlobs)` and appended each excluded glob into `settings.json` `permissions.deny` for `read`, `edit`, and `write`.
+   - Mapped `AntigravityBackend`'s executed tool calls and `denied_actions` into 2.1's `usage.tool_calls` (`executed`, `denied_by_handler`, `denied_by_policy`).
+3. **Deterministic `PreToolUse` Enforcement Hook & `approvals.json` Ledger (`src/backends/antigravity.ts`, `src/backends/antigravity/pre-tool-hook.mjs`)**:
+   - Configured a supervisor-owned `PreToolUse` hook script `pre-tool-hook.mjs` referenced in `$HOME/.gemini/antigravity-cli/hooks.json` that invokes `judgeWorkspacePath(workspace, toolPath, excludedGlobs)` on every tool call before `agy` executes it, exiting with code `2` (blocking error) on out-of-workspace, reserved, secret, or excluded paths and writing a cryptographic `approvals.json` ledger compatible with `runs export`.
 
 #### Phase 3 — Antigravity Conformance Kit, ADR, and Target Acceptance Gates
 

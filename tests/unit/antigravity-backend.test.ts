@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -6,6 +7,7 @@ import { AntigravityBackend, type AntigravityHandle } from '../../src/backends/a
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import type { BackendCallbacks, StartRunInput, SupervisorError, UsageState } from '../../src/contracts.js';
+import { exportReport, OUTSIDE_WORKSPACE } from '../../src/reporting/export.js';
 
 const canonicalTmp = await realpath(tmpdir());
 const roots: string[] = [];
@@ -166,7 +168,8 @@ process.exit(0);
       tokensUsed: 150,
       promptTokens: 120,
       completionTokens: 30,
-      modelCalls: 2
+      modelCalls: 2,
+      toolCalls: { executed: 0, deniedByHandler: 0, deniedByPolicy: 1 }
     });
 
     const deniedEvents = events.filter((e) => e.type === 'tool_denied');
@@ -386,6 +389,286 @@ process.exit(0);
     expect(result.backend).toBe('antigravity');
     expect(result.state).toBe('completed');
     expect(result.summary).toContain('All security checks verified.');
+
+    await manager.shutdown();
+  });
+
+  it('filters excluded files from review prompt workspace listing and populates settings.json permissions.deny', async () => {
+    const root = await makeRoot();
+    const workspace = path.join(root, 'workspace');
+    const runDir = path.join(root, 'run');
+    await mkdir(workspace);
+    await mkdir(runDir);
+
+    await writeFile(path.join(workspace, 'sample.ts'), 'export const x = 1;\n');
+    await writeFile(path.join(workspace, 'secret.txt'), 'SUPER_SECRET=123\n');
+    execSync('git init && git config user.name "Test" && git config user.email "test@example.com" && git add .', {
+      cwd: workspace,
+      stdio: 'ignore'
+    });
+
+    const script = path.join(root, 'mock-agy.sh');
+    const recordedArgsFile = path.join(root, 'recorded-args.json');
+    const recordedSettingsFile = path.join(root, 'recorded-settings.json');
+
+    await writeExecutable(script, `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('agy 1.3.1');
+  process.exit(0);
+}
+fs.writeFileSync(${JSON.stringify(recordedArgsFile)}, JSON.stringify(args));
+const settingsPath = path.join(process.env.HOME, '.gemini', 'antigravity-cli', 'settings.json');
+if (fs.existsSync(settingsPath)) {
+  fs.copyFileSync(settingsPath, ${JSON.stringify(recordedSettingsFile)});
+}
+console.log(JSON.stringify({ status: 'SUCCESS', response: 'ok' }));
+process.exit(0);
+`);
+
+    const backend = new AntigravityBackend({
+      ...DEFAULT_CONFIG,
+      backend: 'antigravity',
+      paths: { antigravity: script }
+    });
+
+    const callbacks: BackendCallbacks = {
+      onEvent() {},
+      onState() {}
+    };
+
+    const input: StartRunInput = {
+      runId: '55555555-6666-4777-8888-999999999999',
+      mode: 'review',
+      task: 'Review files with exclusions',
+      cwd: workspace,
+      workerWorkspace: workspace,
+      runDirectory: runDir,
+      exclusions: [{ root: workspace, globs: ['secret.txt'] }],
+      limits: { timeoutSeconds: 30, maxTurns: 5, maxEventBytes: 10240, maxTranscriptBytes: 10240, maxArtifactBytes: 10240 }
+    };
+
+    const result = await backend.start(input, callbacks);
+    await (result.handle as AntigravityHandle).opaque.process.done;
+
+    const recordedArgs = JSON.parse(await readFile(recordedArgsFile, 'utf8')) as string[];
+    const prompt = recordedArgs[1] ?? '';
+    expect(prompt).toContain('sample.ts');
+    expect(prompt).not.toContain('secret.txt');
+
+    const settings = JSON.parse(await readFile(recordedSettingsFile, 'utf8'));
+    expect(settings.permissions.deny).toContain('secret.txt');
+    expect(settings.permissions.deny).toContain(`${workspace}/secret.txt`);
+    expect(settings.permissions.deny).toContain('.git/**');
+    expect(settings.permissions.deny).toContain('.gemini/**');
+    expect(settings.permissions.deny).toContain('.env*');
+  });
+
+  it('pre-tool hook invoked via hooks.json approves valid reads and denies excluded, outside, reserved, and unprofiled tools', async () => {
+    const root = await makeRoot();
+    const workspace = path.join(root, 'workspace');
+    const runDir = path.join(root, 'run');
+    await mkdir(workspace);
+    await mkdir(runDir);
+
+    await writeFile(path.join(workspace, 'sample.ts'), 'export const a = 1;\n');
+    await writeFile(path.join(workspace, 'secret.txt'), 'secret data\n');
+    const hookResultsFile = path.join(root, 'hook-results.json');
+
+    const script = path.join(root, 'mock-agy.sh');
+    await writeExecutable(script, `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+const { execSync } = require('node:child_process');
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('agy 1.3.1');
+  process.exit(0);
+}
+const hooksJsonPath = path.join(process.env.HOME, '.gemini', 'antigravity-cli', 'hooks.json');
+const hooksConfig = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
+const hookCommand = hooksConfig['supervisor-policy-gate'].PreToolUse[0].hooks[0].command;
+
+const testCalls = [
+  { name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, 'sample.ts'))} } },
+  { name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, 'secret.txt'))} } },
+  { name: 'read_file', args: { path: '/outside/workspace/file.txt' } },
+  { name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, '.gemini', 'config.json'))} } },
+  { name: 'write_file', args: { path: ${JSON.stringify(path.join(workspace, 'sample.ts'))}, content: 'illegal' } }
+];
+
+const results = [];
+for (let i = 0; i < testCalls.length; i++) {
+  const call = testCalls[i];
+  const payload = JSON.stringify({
+    toolCall: { name: call.name, args: call.args },
+    stepIdx: i + 1,
+    conversationId: 'conv-123'
+  });
+  try {
+    const out = execSync(hookCommand, { input: payload, encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'] });
+    results.push(JSON.parse(out.trim()));
+  } catch (err) {
+    results.push({ error: String(err) });
+  }
+}
+fs.writeFileSync(${JSON.stringify(hookResultsFile)}, JSON.stringify(results, null, 2));
+console.log(JSON.stringify({ status: 'SUCCESS', response: 'Executed all hook test calls.' }));
+process.exit(0);
+`);
+
+    const backend = new AntigravityBackend({
+      ...DEFAULT_CONFIG,
+      backend: 'antigravity',
+      paths: { antigravity: script }
+    });
+
+    const events: Array<Parameters<BackendCallbacks['onEvent']>[0]> = [];
+    let finalState: string | undefined;
+    let finalUsage: UsageState | undefined;
+
+    const callbacks: BackendCallbacks = {
+      onEvent(e) { events.push(e); },
+      onState(state, update) {
+        finalState = state;
+        if (update?.usage) finalUsage = update.usage;
+      }
+    };
+
+    const input: StartRunInput = {
+      runId: '66666666-7777-4888-8999-000000000000',
+      mode: 'review',
+      task: 'Verify hook checks',
+      cwd: workspace,
+      workerWorkspace: workspace,
+      runDirectory: runDir,
+      exclusions: [{ root: workspace, globs: ['secret.txt'] }],
+      limits: { timeoutSeconds: 30, maxTurns: 5, maxEventBytes: 10240, maxTranscriptBytes: 10240, maxArtifactBytes: 10240 }
+    };
+
+    const result = await backend.start(input, callbacks);
+    await (result.handle as AntigravityHandle).opaque.process.done;
+    await waitFor(() => finalState, (state) => state === 'completed');
+
+    const hookResults = JSON.parse(await readFile(hookResultsFile, 'utf8'));
+    expect(hookResults).toHaveLength(5);
+    expect(hookResults[0]).toEqual({ decision: 'allow' });
+    expect(hookResults[1]).toEqual({ decision: 'deny', reason: 'path_excluded' });
+    expect(hookResults[2]).toEqual({ decision: 'deny', reason: 'path_outside_workspace' });
+    expect(hookResults[3]).toEqual({ decision: 'deny', reason: 'path_reserved' });
+    expect(hookResults[4]).toEqual({ decision: 'deny', reason: 'tool_not_in_profile' });
+
+    const toolCallEvents = events.filter((e) => e.type === 'tool_call');
+    expect(toolCallEvents).toHaveLength(1);
+    expect(toolCallEvents[0]?.data).toMatchObject({ tool: 'read_file' });
+
+    const toolDeniedEvents = events.filter((e) => e.type === 'tool_denied');
+    expect(toolDeniedEvents).toHaveLength(4);
+    expect(toolDeniedEvents.map((e) => e.data.reason)).toEqual([
+      'path_excluded',
+      'path_outside_workspace',
+      'path_reserved',
+      'tool_not_in_profile'
+    ]);
+
+    expect(finalUsage?.toolCalls).toEqual({
+      executed: 1,
+      deniedByHandler: 4,
+      deniedByPolicy: 0
+    });
+  });
+
+  it('integrates RunManager with exportReport to write approvals.json, populate tool_calls, and redact out-of-workspace paths', async () => {
+    const root = await makeRoot();
+    const workspace = path.join(root, 'workspace');
+    const dataDir = path.join(root, 'data');
+    await mkdir(workspace);
+    await mkdir(dataDir);
+
+    await writeFile(path.join(workspace, 'sample.txt'), 'hello from workspace\n');
+
+    const script = path.join(root, 'mock-agy.sh');
+    await writeExecutable(script, `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+const { execSync } = require('node:child_process');
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('agy 1.3.1');
+  process.exit(0);
+}
+const hooksJsonPath = path.join(process.env.HOME, '.gemini', 'antigravity-cli', 'hooks.json');
+const hooksConfig = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
+const hookCommand = hooksConfig['supervisor-policy-gate'].PreToolUse[0].hooks[0].command;
+
+// Call 1: valid in-workspace file
+execSync(hookCommand, {
+  input: JSON.stringify({
+    toolCall: { name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, 'sample.txt'))} } },
+    stepIdx: 1
+  }),
+  encoding: 'utf8',
+  stdio: ['pipe', 'pipe', 'inherit']
+});
+
+// Call 2: outside-workspace path
+execSync(hookCommand, {
+  input: JSON.stringify({
+    toolCall: { name: 'read_file', args: { path: '/outside/workspace/secret.key' } },
+    stepIdx: 2
+  }),
+  encoding: 'utf8',
+  stdio: ['pipe', 'pipe', 'inherit']
+});
+
+console.log(JSON.stringify({ status: 'SUCCESS', response: 'Completed e2e run with approvals.' }));
+process.exit(0);
+`);
+
+    const config = {
+      ...DEFAULT_CONFIG,
+      backend: 'antigravity' as const,
+      allowedWorkspaceRoots: [workspace],
+      paths: { antigravity: script }
+    };
+
+    const manager = new RunManager(config, dataDir);
+    await manager.initialize();
+
+    const start = await manager.reviewStart({
+      task: 'E2E export test',
+      cwd: workspace,
+      wait_seconds: 5
+    });
+
+    expect(start.backend).toBe('antigravity');
+    expect(start.state).toBe('completed');
+
+    const runDir = path.join(dataDir, 'runs', start.run_id);
+    const approvalsPath = path.join(runDir, 'artifacts', 'approvals.json');
+    const approvalsContent = JSON.parse(await readFile(approvalsPath, 'utf8'));
+    expect(approvalsContent.run_id).toBe(start.run_id);
+    expect(approvalsContent.records).toHaveLength(2);
+    expect(approvalsContent.records[0]).toMatchObject({ decision: 'approve' });
+    expect(approvalsContent.records[1]).toMatchObject({ decision: 'deny' });
+
+    const result = await manager.result({ run_id: start.run_id, detail: 'full' });
+    expect((result.usage as Record<string, unknown> | undefined)?.tool_calls).toEqual({
+      executed: 1,
+      denied_by_handler: 1,
+      denied_by_policy: 0
+    });
+
+    const exportBundle = path.join(root, 'exported-bundle');
+    const exportResult = await exportReport({ directory: runDir, output: exportBundle });
+    expect(exportResult.files).toContain('approvals.json');
+
+    const exportedApprovals = JSON.parse(await readFile(path.join(exportBundle, 'approvals.json'), 'utf8'));
+    expect(exportedApprovals.records).toHaveLength(2);
+    expect(exportedApprovals.records[0].path).toBe('sample.txt');
+    expect(exportedApprovals.records[1].path).toBe(OUTSIDE_WORKSPACE);
 
     await manager.shutdown();
   });
