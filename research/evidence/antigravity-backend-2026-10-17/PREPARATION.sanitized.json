@@ -2,8 +2,8 @@
   "schema_version": 1,
   "backend": "antigravity",
   "result": "pass",
-  "checked_at": "2026-10-17T10:18:51.255Z",
-  "candidate_sha256": "87594a540d95163425312feb94d1c8dc2f2992eb5deb40843114d62002036f38",
+  "checked_at": "2026-10-17T18:15:30.861Z",
+  "candidate_sha256": "cfa7fbecc59ccce422d88874798d5e9cae27772f0906f4c4a9ac2f2020e5738c",
   "executable": {
     "configured": "<private-path>",
     "resolved_path": "<private-path>",
@@ -36,6 +36,11 @@
       "level": "info",
       "code": "executable_verified",
       "message": "Antigravity CLI 1.4.0 verified (sha256: a4502aaf310b2fd6eb657fcfec2fcc31a690fbbd0c2d14c8eefbb556409024ce)."
+    },
+    {
+      "level": "info",
+      "code": "background_telemetry_refused",
+      "message": "Antigravity CLI background telemetry/updater requests were intercepted and refused by proxy (antigravity-unleash.goog, play.googleapis.com, antigravity-cli-auto-updater-974169037036.us-central1.run.app). No provider inference occurred."
     }
   ]
 }

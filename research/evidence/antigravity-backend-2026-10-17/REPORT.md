@@ -7,8 +7,8 @@ Recorded 2026-10-17. Target machine evidence for Google Antigravity (`agy` CLI) 
 - Target machine: macOS arm64 (macOS 27.0.1, Node 24.21.0, npm 10.8.2).
 - Antigravity binary: version 1.4.0, SHA-256 `a4502aaf310b2fd6eb657fcfec2fcc31a690fbbd0c2d14c8eefbb556409024ce`.
 - Configuration: `backend = "antigravity"`, `paths.antigravity` configured to the verified `agy 1.4.0` binary.
-- Candidate distribution: `87594a540d95163425312feb94d1c8dc2f2992eb5deb40843114d62002036f38`.
-- Preparation report digest: `1e963ae34c5f2eba60b1448f00a8035e04e0078998f88d3e59694d24d7177fe2`.
+- Candidate distribution: `cfa7fbecc59ccce422d88874798d5e9cae27772f0906f4c4a9ac2f2020e5738c`.
+- Preparation report digest: `4ca2ca88520d1acbd4d4112ce3c9609203cb1c5c293fc2dbde4eee07b85824bf`.
 
 ## 2. Checks Performed
 
@@ -22,7 +22,8 @@ Recorded 2026-10-17. Target machine evidence for Google Antigravity (`agy` CLI) 
    - Verified `$HOME/.gemini/config/hooks.json` registering `supervisor-policy-gate` with `PreToolUse` command hook.
 
 3. **Zero-Inference CLI Read-Back**:
-   - Executed slash commands (`-p /config`, `-p /hooks`, `-p /permissions`, `-p /skills` with `--output-format json --sandbox --print-timeout 5s`) routed through a refusing loopback proxy (`127.0.0.1:1`).
+   - Executed slash commands (`-p /config`, `-p /hooks`, `-p /permissions`, `-p /skills`, `-p /agents` with `--output-format json --sandbox --print-timeout 5s`) routed through a refusing loopback proxy.
+   - Refusing loopback proxy intercepted and refused (403) all background telemetry and updater requests (`play.googleapis.com`, `antigravity-unleash.goog`, `antigravity-cli-auto-updater...`). Zero provider inference endpoints were contacted.
    - Total model tokens consumed: 0.
 
 4. **Synthetic PreToolUse Hook Checks**:

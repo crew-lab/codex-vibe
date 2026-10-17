@@ -1,22 +1,10 @@
 {
-  "schema_version": 1,
-  "recorded_at": "2026-10-17T10:18:13Z",
-  "runtime": {
-    "node": "24.21.0",
-    "platform": "darwin arm64",
-    "macos": "27.0.1",
-    "git": "2.54.0"
-  },
-  "antigravity": {
-    "version": "1.4.0",
-    "executable_sha256": "a4502aaf310b2fd6eb657fcfec2fcc31a690fbbd0c2d14c8eefbb556409024ce",
-    "source_basis": "ADR 0008"
-  },
-  "preparation": {
-    "result": "pass",
-    "status": "passed",
-    "report_sha256": "1e963ae34c5f2eba60b1448f00a8035e04e0078998f88d3e59694d24d7177fe2",
-    "network_tokens": 0,
-    "synthetic_checks": 6
-  }
+  "candidate_distribution_sha256": "cfa7fbecc59ccce422d88874798d5e9cae27772f0906f4c4a9ac2f2020e5738c",
+  "antigravity_executable_sha256": "a4502aaf310b2fd6eb657fcfec2fcc31a690fbbd0c2d14c8eefbb556409024ce",
+  "antigravity_version": "1.4.0",
+  "node_version": "v24.21.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "generated_at": "2026-10-17T18:15:30.861Z",
+  "preparation_report_sha256": "4ca2ca88520d1acbd4d4112ce3c9609203cb1c5c293fc2dbde4eee07b85824bf"
 }

@@ -177,7 +177,8 @@
     },
     {
       "label": "antigravity-backend-1.4.0 target evidence",
-      "source_commit": "e4cd5155a71c2b3dced9b5ea4eb4c38f38f3ae86",
+      "source_commit": "51f34b065f0634a624a928ca9604da8ee6c81c14",
+      "candidate_distribution_sha256": "cfa7fbecc59ccce422d88874798d5e9cae27772f0906f4c4a9ac2f2020e5738c",
       "antigravity_version": "1.4.0",
       "executable_sha256": "a4502aaf310b2fd6eb657fcfec2fcc31a690fbbd0c2d14c8eefbb556409024ce",
       "runtime": "macOS arm64, Node 24.21.0, agy 1.4.0",
@@ -188,6 +189,14 @@
     }
   ],
   "verified": [
+    {
+      "name": "antigravity-backend-no-inference-check",
+      "status": "VERIFIED",
+      "build": "cfa7fbecc59ccce422d88874798d5e9cae27772f0906f4c4a9ac2f2020e5738c",
+      "evidence_required": "On the target machine with installed agy 1.4.0 and no provider inference, vibe-supervisor prepare check with backend = \"antigravity\" verifies the agy 1.4.0 executable and binary SHA-256 digest, validates isolated settings.json unified permission rules (toolPermission strict, enableTerminalSandbox true, allowNonWorkspaceAccess false, mode-specific allow/deny), verifies .gemini/config/hooks.json supervisor-policy-gate configuration, executes zero-inference slash-command read-backs (/config, /hooks, /permissions, /skills) against a validated refusing loopback proxy with positive control, and passes all synthetic PreToolUse hook evaluations writing a verified approval ledger.",
+      "evidence": "research/evidence/antigravity-backend-2026-10-17/ (ARTIFACT-IDENTITY.json, DOCTOR.sanitized.json, PREPARATION.sanitized.json, REPORT.md, SHA256SUMS); preparation report sha256 4ca2ca88520d1acbd4d4112ce3c9609203cb1c5c293fc2dbde4eee07b85824bf.",
+      "result": "PASS on target machine with agy 1.4.0 (sha256: a4502aaf310b2fd6eb657fcfec2fcc31a690fbbd0c2d14c8eefbb556409024ce): zero-inference slash-command read-backs (/config, /hooks, /permissions, /skills, /agents) passed with 0 tokens consumed. Refusing loopback proxy intercepted and refused (403) all background updater/telemetry connections with zero provider inference endpoints contacted. 6/6 synthetic PreToolUse hook checks passed writing 6 audited entries to the approval ledger. Clean shutdown and temporary directory cleanup verified."
+    },
     {
       "name": "v2.0.1-archive-package-kit-identity-binding",
       "status": "VERIFIED",
@@ -441,15 +450,6 @@
       "decision": "The owner performs it with a prepared packet; evidence from another archive is not carried over.",
       "carry_over": "Installation, registration and rollback are unchanged since 44dc6f8. Proposed, owner to confirm: run it once on the archive that is promoted to stable. If 2.0.2 is published before 2.0.1 leaves pre-release, run it on the 2.0.2 archive instead of on 7978719c; otherwise run it on 7978719c for 2.0.1 as planned and rerun it for 2.0.2 before its stable promotion.",
       "result": "PENDING 2026-10-17: owner reports no separate clean standard macOS account available. Current-account private-prefix checks do not satisfy this gate. Checklist: docs/clean-account-checklist.md."
-    },
-    {
-      "name": "antigravity-backend-no-inference-check",
-      "status": "UNVERIFIED",
-      "build": "explore_project_details (repairing)",
-      "evidence_required": "On the target machine with installed agy 1.4.0 and no provider inference, vibe-supervisor prepare check with backend = \"antigravity\" verifies the agy 1.4.0 executable and binary SHA-256 digest, validates isolated settings.json unified permission rules (toolPermission strict, enableTerminalSandbox true, allowNonWorkspaceAccess false, mode-specific allow/deny), verifies .gemini/config/hooks.json supervisor-policy-gate configuration, executes zero-inference slash-command read-backs (/config, /hooks, /permissions, /skills) against a validated refusing loopback proxy with positive control, and passes all synthetic PreToolUse hook evaluations writing a verified approval ledger.",
-      "prior_evidence": "Target evidence 2026-10-17 in research/evidence/antigravity-backend-2026-10-17/ preserved; independent review (report 01a13c77) exposed that preparation checker permitted mock exit-42 fallback and invented control validation. Gate marked UNVERIFIED pending checker repair.",
-      "carry_over": "Nothing to carry: Antigravity backend target conformance requires execution on the target machine with the installed agy 1.4.0 binary and repaired fail-closed checker.",
-      "decision": "Repair preparation checker (remove mock fallback, add exit-42 probe test, exact rule comparisons, real refusing proxy with control, reaper failure handling, remove Keychain link) before any new preparation check."
     },
     {
       "name": "antigravity-backend-hosted-review-edit",
