@@ -82,7 +82,7 @@ cd <supervisor-repository> && git fetch origin && git merge-base --is-ancestor "
 ```
 
 ```bash
-cd <supervisor-repository>/.claude/worktrees/package-2.0.1 && git rev-parse HEAD && node --version && npm --version && npm ci && VIBE_SUPERVISOR_TEST_NPM_CACHE=<coordinator-home>/.npm npm run package:rc; echo exit=$?
+cd <supervisor-repository>/.claude/worktrees/package-2.0.1 && git rev-parse HEAD && node --version && npm --version && npm ci && VIBE_SUPERVISOR_TEST_NPM_CACHE=<target-home>/.npm npm run package:rc; echo exit=$?
 ```
 
 - **What it does:** `verify:release` (lint, typecheck, build, the suite, acceptance, secret scan, SBOM), then the offline installed-package smoke test, then `npm pack` with the cache, then the version-matched kit. It never falls back to the network.
@@ -413,7 +413,7 @@ Order: wave 0 (contracts) first, then 1, 2, 3, 4, 6 and 7 in parallel, the backe
    - Created private per-run `antigravity-home` (`HOME`) and `antigravity-tmp` (`TMPDIR`) inside `input.runDir`, cleaned up automatically at run completion/close and by `removeLeftoverPrivateState()` on crash recovery.
    - Wrote `$HOME/.gemini/antigravity-cli/settings.json` before spawning `agy` with `toolPermission: "strict"`, `enableTerminalSandbox: true`, `allowNonWorkspaceAccess: false`, mode-scoped `permissions.allow` (`read_file`, `view_file`, `list_dir`, `grep_search`, `find_by_name` for reviews; plus `write_file`, `edit_file`, `replace_file_content`, `multi_replace_file_content` for edits), and `permissions.deny` blocking `bash`, `run_command`, `web_fetch`, `web_search`, `browser`, `mcp`, and reserved/secret globs (`.git/**`, `.vibe/**`, `.gemini/**`, `.agents/**`, `.env*`, `*.pem`, `*.key`).
 3. **Reject Untrusted Project `.gemini` and `.agents` Extensions (`src/security/workspace-guard.ts`, `src/core/run-manager.ts`)**:
-   - Added `assertNoProjectAntigravityExtensions(root)` in `src/security/workspace-guard.ts` and wired it into `RunManager.validateAdmission()` when `backend === "antigravity"`, failing closed with `VSUP_POLICY_DENIED` if `.gemini`, `.agents/hooks.json`, `.agents/mcp_config.json`, or `.agents/plugins` exist.
+   - Added `assertNoProjectAntigravityExtensions(root)` in `src/security/workspace-guard.ts` and wired it into `RunManager.validateAdmission()` when `backend === "antigravity"`, failing closed with `VSUP_WORKSPACE_INVALID` if `.gemini`, `.agents/hooks.json`, `.agents/mcp_config.json`, or `.agents/plugins` exist.
 4. **Wire Watchdog Progress & Boot-Bound Policy Drift (`src/core/run-manager.ts`, `src/config/config.ts`, `src/config/policy.ts`)**:
    - Updated `callbacks.onEvent` in `src/core/run-manager.ts` so `"antigravity"` events call `this.noteActivity(...)` alongside `"vibe"`.
    - Added `backend` and `paths.antigravity` to `configFingerprint()` and `BOOT_BOUND_SETTINGS` so changing either surfaces `boot_drift` and `restart_required: true`.
