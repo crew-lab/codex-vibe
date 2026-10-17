@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "operation": "edit",
+  "max_turns": 12,
+  "timeout_seconds": 180,
+  "timestamps": {
+    "connect": "2026-10-16T17:23:30.776Z",
+    "start": "2026-10-16T17:23:31.108Z",
+    "running_first_seen": "2026-10-16T17:23:32.898Z",
+    "running_observed": "2026-10-16T17:23:34.901Z",
+    "client_close": "2026-10-16T17:23:34.901Z",
+    "client_close_returned": "2026-10-16T17:23:35.247Z",
+    "server_exit_observed": "2026-10-16T17:23:35.247Z",
+    "reconnect": "2026-10-16T17:23:36.917Z"
+  },
+  "task_sha256": "8c824ba6e3c35cbf28bd1256b7b55e49b8db240145a4f8c130ae04a00e026567",
+  "server_pid": 31442,
+  "readiness": {
+    "server_version": "2.0.1",
+    "policy_path": "<private-supervisor-home>/2.0.1-reporting-2a49abd/state/config.toml",
+    "policy_revision": "94e1f16c15c27f73e1a2416121af7f57aa1b28689bc5b1592a0183d9fce9b1ab",
+    "restart_required": false,
+    "boot_drift": [],
+    "operation": "edit",
+    "requested_workspace": "<supervisor-repository>/tmp/hosted-201-20261016",
+    "workspace": "<supervisor-repository>/tmp/hosted-201-20261016",
+    "base_ref": "c8c255cbb838b541b11d01983551a84d945ca457",
+    "base_commit": "c8c255cbb838b541b11d01983551a84d945ca457",
+    "eligible": true,
+    "workspace_eligible": true,
+    "candidate": {
+      "version": "2.0.1",
+      "sha256": "1c3c135862e2fe888428a2bf67fc6cd02fe9852259a494e7d624e2a3e96a45c0"
+    },
+    "preparation": {
+      "status": "passed",
+      "candidate_sha256": "1c3c135862e2fe888428a2bf67fc6cd02fe9852259a494e7d624e2a3e96a45c0",
+      "version": "2.0.1",
+      "reason": "Version-matched no-inference evidence; hosted acceptance remains separate"
+    },
+    "blockers": [],
+    "active_slot": {
+      "busy": false
+    },
+    "runtime": {
+      "executable": "<vibe-tool-env>/bin/vibe",
+      "resolved_executable": "<vibe-tool-env>/bin/vibe-app-server",
+      "executable_found": true,
+      "pinned_version": "2.26.1",
+      "version_verified": false,
+      "note": "Vibe was not launched. The app-server executable is resolved only; the exact version 2.26.1 and the installed files are verified when a run starts and drift fails that run closed."
+    },
+    "next_action": "Start the edit with readiness_receipt before receipt_expires_at on this same connection. The receipt proves preparation only; it does not authorize the task or guarantee provider availability."
+  },
+  "observer": {
+    "pid": 31469,
+    "output": "<temporary>/vsup-disconnect-2a49abd-20261016/observer.jsonl",
+    "started": true
+  },
+  "run_id": "b3fd8675-6391-4dfd-a060-2a4f40b7b3a1",
+  "state_before_disconnect": "running",
+  "last_seq_before_disconnect": 2,
+  "observed_running": true,
+  "settled_before_disconnect": false,
+  "server_exited": true,
+  "state_after_reconnect": "failed",
+  "error_after_reconnect": {
+    "code": "VSUP_BACKEND_CRASHED",
+    "message": "The supervisor shut down before this one-shot run completed; the task will not be resumed or replayed.",
+    "remediation": "Inspect the run's diagnostic events and start a new run.",
+    "retryable": false
+  },
+  "events_after_reconnect": 2,
+  "verdict": "PASS"
+}

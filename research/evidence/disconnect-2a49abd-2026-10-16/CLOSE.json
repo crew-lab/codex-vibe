@@ -1,0 +1,7 @@
+{
+  "supervisor_version": "2.0.1",
+  "run_id": "b3fd8675-6391-4dfd-a060-2a4f40b7b3a1",
+  "state": "closed",
+  "next_action": "The run is closed; start a new run for more work.",
+  "worktree_removed": true
+}

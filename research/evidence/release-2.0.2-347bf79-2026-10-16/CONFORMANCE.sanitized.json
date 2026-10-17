@@ -1,0 +1,1056 @@
+{
+  "format": 1,
+  "tool": "v2-conformance-check",
+  "supervisor_version": "2.0.2",
+  "pinned_vibe": "2.26.1",
+  "started_at": "2026-10-16T17:56:27.253Z",
+  "node": "v20.19.0",
+  "platform": "darwin-arm64",
+  "inference": {
+    "turn_start_sent": false,
+    "note": "The check never sends turn/start, so no model request is made by the supervisor or the app-server."
+  },
+  "credential_mode": "placeholder",
+  "options": {
+    "modes": [
+      "review",
+      "edit"
+    ],
+    "observe_network": true,
+    "settle_ms": 3000,
+    "pin_runs": 3
+  },
+  "pin": {
+    "ok": true,
+    "manifest": {
+      "format": 1,
+      "version": "2.26.1",
+      "files": 783,
+      "record_sha256": "d1f3bc03c840ca008ce38e5e0fbc1ac3fc4ca892547edbc67e84b181c1ec6818"
+    },
+    "verify_runs_ms": [
+      193,
+      187,
+      178
+    ],
+    "environment": {
+      "version": "2.26.1",
+      "file_count": 783,
+      "total_bytes": 117705492,
+      "record_sha256": "d1f3bc03c840ca008ce38e5e0fbc1ac3fc4ca892547edbc67e84b181c1ec6818"
+    },
+    "tamper_control": {
+      "rejected": true,
+      "reason": "file-mismatch"
+    }
+  },
+  "runs": [
+    {
+      "label": "review",
+      "mode": "review",
+      "role": "subject",
+      "purpose": "conformance",
+      "spawned": true,
+      "stages": [
+        "spawn",
+        "initialize",
+        "session/start",
+        "session/ready/wait",
+        "runtime/read",
+        "config/effective/read",
+        "config/read",
+        "config/model/write",
+        "runtime/read",
+        "config/effective/read"
+      ],
+      "timings_ms": {
+        "spawn": 27,
+        "initialize": 1341,
+        "session_start": 232,
+        "ready_wait": 6,
+        "readback_before_thinking": 9,
+        "thinking_write": 24,
+        "readback_after_thinking": 2
+      },
+      "handshake": {
+        "server_name": "vibe-app-server",
+        "server_version": "2.26.1",
+        "version_ok": true,
+        "process_id_matches_spawned": true
+      },
+      "session_start": {
+        "harness": "unified",
+        "cwd_ok": true,
+        "history_entries": 0,
+        "event_id": 0,
+        "model": null,
+        "reasoning_effort": null
+      },
+      "readiness": {
+        "ready": true
+      },
+      "readback": {
+        "before_thinking": {
+          "mismatches": [],
+          "total": 0
+        },
+        "after_thinking": {
+          "mismatches": [],
+          "total": 0
+        }
+      },
+      "thinking": {
+        "write_status": "applied",
+        "before": "high",
+        "after": "off",
+        "alias": "mistral-medium-3.5",
+        "effective_models_thinking": "off",
+        "levels": [
+          "off",
+          "high"
+        ]
+      },
+      "observed": {
+        "runtime_tools": [
+          "read_file"
+        ],
+        "runtime_skills": [
+          {
+            "name": "vibe:create-plugin",
+            "source": "plugin",
+            "scope": "builtin"
+          },
+          {
+            "name": "vibe:skill-creator",
+            "source": "plugin",
+            "scope": "builtin"
+          },
+          {
+            "name": "vibe:vibe",
+            "source": "plugin",
+            "scope": "builtin"
+          },
+          {
+            "name": "vibe:worktree",
+            "source": "plugin",
+            "scope": "builtin"
+          }
+        ],
+        "tool_policies": {
+          "read_file": {
+            "permission": "ask",
+            "denylist_entries": 30,
+            "denylist_matches_expected": true
+          }
+        },
+        "permission_ask_visible": true,
+        "settings": {
+          "enable_subagents": {
+            "expected": false,
+            "actual": false
+          },
+          "enable_background_processes": {
+            "expected": false,
+            "actual": false
+          },
+          "managed_shell_tools_enabled": {
+            "expected": false,
+            "actual": false
+          },
+          "enable_connectors": {
+            "expected": false,
+            "actual": false
+          },
+          "disabled_skills": {
+            "expected": [
+              "*"
+            ],
+            "actual": [
+              "*"
+            ]
+          },
+          "mcp_servers": {
+            "expected": [],
+            "actual": []
+          },
+          "enable_telemetry": {
+            "expected": false,
+            "actual": false
+          },
+          "enable_otel": {
+            "expected": false,
+            "actual": false
+          },
+          "enable_update_checks": {
+            "expected": false,
+            "actual": false
+          },
+          "enable_auto_update": {
+            "expected": false,
+            "actual": false
+          },
+          "experimental_enable_model_catalog": {
+            "expected": false,
+            "actual": false
+          },
+          "experimental_enable_registry_skills": {
+            "expected": false,
+            "actual": false
+          },
+          "experiments.enable": {
+            "expected": false,
+            "actual": false
+          },
+          "session_logging.enabled": {
+            "expected": false,
+            "actual": false
+          },
+          "session_logging.generate_titles": {
+            "expected": false,
+            "actual": false
+          },
+          "bypass_tool_permissions": {
+            "expected": false,
+            "actual": false
+          },
+          "default_agent": {
+            "expected": "supervisor-review",
+            "actual": "supervisor-review"
+          },
+          "enabled_agents": {
+            "expected": [
+              "supervisor-review"
+            ],
+            "actual": [
+              "supervisor-review"
+            ]
+          },
+          "vibe_base_url": {
+            "expected": "http://127.0.0.1:53478",
+            "actual": "http://127.0.0.1:53478"
+          }
+        },
+        "effective_top_level_keys": [
+          "active_model",
+          "active_transcribe_model",
+          "active_tts_model",
+          "agent_paths",
+          "allowed_models",
+          "api_connect_timeout",
+          "api_pool_timeout",
+          "api_retry_max_elapsed_time",
+          "api_stream_idle_timeout",
+          "api_timeout",
+          "api_write_timeout",
+          "applied_migrations",
+          "ask_confirmation_on_exit",
+          "auto_compact_threshold",
+          "autocopy_to_clipboard",
+          "bypass_tool_permissions",
+          "compaction_model",
+          "compaction_prompt_id",
+          "connectors",
+          "console_base_url",
+          "context_warnings",
+          "cursor_blink",
+          "default_agent",
+          "disable_welcome_banner_animation",
+          "disabled_agents",
+          "disabled_skills",
+          "disabled_tools",
+          "displayed_workdir",
+          "enable_auto_update",
+          "enable_background_processes",
+          "enable_connectors",
+          "enable_notifications",
+          "enable_otel",
+          "enable_subagents",
+          "enable_system_trust_store",
+          "enable_telemetry",
+          "enable_update_checks",
+          "enabled_agents",
+          "enabled_skills",
+          "enabled_tools",
+          "experimental_enable_document_library_connector",
+          "experimental_enable_model_catalog",
+          "experimental_enable_registry_skills",
+          "experimental_enable_tab_status",
+          "experiments",
+          "file_watcher_for_autocomplete",
+          "include_commit_signature",
+          "include_model_info",
+          "include_project_context",
+          "include_prompt_detail",
+          "installed_agents",
+          "log_level",
+          "managed_shell_tools_enabled",
+          "mcp_servers",
+          "models",
+          "narrator_enabled",
+          "otel_endpoint",
+          "otel_redaction",
+          "project_context",
+          "providers",
+          "raise_on_compaction_failure",
+          "routed_default_model",
+          "routed_extra_models",
+          "routed_model_config",
+          "session_logging",
+          "show_greeting",
+          "show_subagent_status_list",
+          "show_thinking_nodes",
+          "skill_paths",
+          "smart_approve_available",
+          "smart_approve_default",
+          "system_prompt_id",
+          "theme",
+          "title_prompt_id",
+          "tool_paths",
+          "tools",
+          "transcribe_models",
+          "transcribe_providers",
+          "tts_models",
+          "tts_providers",
+          "utility_models",
+          "vibe_base_url",
+          "vibe_code_sessions_base_url",
+          "vision_model",
+          "voice_mode_enabled",
+          "worktree_limit"
+        ],
+        "effective_tool_keys": [
+          "read_file"
+        ],
+        "harness": "unified",
+        "harness_selection_source": null,
+        "experimental_harness": true,
+        "runtime_ready_flag": true,
+        "skills": 4,
+        "hooks": 0,
+        "mcp_sources": 0,
+        "connectors": {
+          "connected": 0,
+          "total": 0
+        },
+        "bypass_tool_permissions": false
+      },
+      "notifications": {
+        "total": 1,
+        "by_method": {
+          "runtime/updated": 1
+        },
+        "unknown_methods": [
+          "runtime/updated"
+        ]
+      },
+      "server_requests": [],
+      "server_warnings": [],
+      "stats_after": {
+        "model_calls": null,
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      },
+      "stderr": {
+        "bytes": 0,
+        "tail": ""
+      },
+      "shutdown": {
+        "stdin_closed": true,
+        "exited_on_eof": true,
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "exit_ms": 294,
+        "forced": false,
+        "group_gone": true,
+        "termination_verified": true,
+        "reaper": {
+          "reason": "stopped",
+          "killed": false,
+          "verified": true
+        },
+        "tmp_entries_at_close": [
+          "vibe-session-logging-disabled-705xouss"
+        ],
+        "tmp_entries_after_exit": [],
+        "tmp_left_by_server": [],
+        "vibe_home_entries": [
+          "agents",
+          "config.toml",
+          "logs",
+          "sessions",
+          "trusted_folders.toml",
+          "vibehistory"
+        ],
+        "child_home_entries": [],
+        "private_directories_removed": true,
+        "remaining": []
+      },
+      "blocked": null,
+      "child_environment_names": [
+        "ALL_PROXY",
+        "HOME",
+        "HTTPS_PROXY",
+        "HTTP_PROXY",
+        "LOG_LEVEL",
+        "MISTRAL_API_KEY",
+        "NO_PROXY",
+        "PATH",
+        "TMPDIR",
+        "VIBE_BYPASS_TOOL_PERMISSIONS",
+        "VIBE_DEFAULT_AGENT",
+        "VIBE_DISABLED_SKILLS",
+        "VIBE_ENABLED_AGENTS",
+        "VIBE_ENABLE_AUTO_UPDATE",
+        "VIBE_ENABLE_BACKGROUND_PROCESSES",
+        "VIBE_ENABLE_CONNECTORS",
+        "VIBE_ENABLE_OTEL",
+        "VIBE_ENABLE_SUBAGENTS",
+        "VIBE_ENABLE_TELEMETRY",
+        "VIBE_ENABLE_UPDATE_CHECKS",
+        "VIBE_EXPERIMENTAL_ENABLE_MODEL_CATALOG",
+        "VIBE_EXPERIMENTAL_ENABLE_REGISTRY_SKILLS",
+        "VIBE_EXPERIMENTS__ENABLE",
+        "VIBE_HOME",
+        "VIBE_MANAGED_SHELL_TOOLS_ENABLED",
+        "VIBE_MCP_SERVERS",
+        "VIBE_SESSION_LOGGING__ENABLED",
+        "VIBE_SESSION_LOGGING__GENERATE_TITLES",
+        "VIBE_SESSION_LOGGING__SAVE_DIR",
+        "VIBE_SUPERVISOR_CHILD",
+        "VIBE_VIBE_BASE_URL",
+        "all_proxy",
+        "http_proxy",
+        "https_proxy",
+        "no_proxy"
+      ]
+    },
+    {
+      "label": "edit",
+      "mode": "edit",
+      "role": "subject",
+      "purpose": "conformance",
+      "spawned": true,
+      "stages": [
+        "spawn",
+        "initialize",
+        "session/start",
+        "session/ready/wait",
+        "runtime/read",
+        "config/effective/read",
+        "config/read",
+        "config/model/write",
+        "runtime/read",
+        "config/effective/read"
+      ],
+      "timings_ms": {
+        "spawn": 26,
+        "initialize": 970,
+        "session_start": 145,
+        "ready_wait": 2,
+        "readback_before_thinking": 6,
+        "thinking_write": 22,
+        "readback_after_thinking": 2
+      },
+      "handshake": {
+        "server_name": "vibe-app-server",
+        "server_version": "2.26.1",
+        "version_ok": true,
+        "process_id_matches_spawned": true
+      },
+      "session_start": {
+        "harness": "unified",
+        "cwd_ok": true,
+        "history_entries": 0,
+        "event_id": 0,
+        "model": null,
+        "reasoning_effort": null
+      },
+      "readiness": {
+        "ready": true
+      },
+      "readback": {
+        "before_thinking": {
+          "mismatches": [],
+          "total": 0
+        },
+        "after_thinking": {
+          "mismatches": [],
+          "total": 0
+        }
+      },
+      "thinking": {
+        "write_status": "applied",
+        "before": "high",
+        "after": "off",
+        "alias": "mistral-medium-3.5",
+        "effective_models_thinking": "off",
+        "levels": [
+          "off",
+          "high"
+        ]
+      },
+      "observed": {
+        "runtime_tools": [
+          "edit",
+          "read_file",
+          "write_file"
+        ],
+        "runtime_skills": [
+          {
+            "name": "vibe:create-plugin",
+            "source": "plugin",
+            "scope": "builtin"
+          },
+          {
+            "name": "vibe:skill-creator",
+            "source": "plugin",
+            "scope": "builtin"
+          },
+          {
+            "name": "vibe:vibe",
+            "source": "plugin",
+            "scope": "builtin"
+          },
+          {
+            "name": "vibe:worktree",
+            "source": "plugin",
+            "scope": "builtin"
+          }
+        ],
+        "tool_policies": {
+          "read_file": {
+            "permission": "ask",
+            "denylist_entries": 30,
+            "denylist_matches_expected": true
+          },
+          "write_file": {
+            "permission": "ask",
+            "denylist_entries": 30,
+            "denylist_matches_expected": true
+          },
+          "edit": {
+            "permission": "ask",
+            "denylist_entries": 30,
+            "denylist_matches_expected": true
+          }
+        },
+        "permission_ask_visible": true,
+        "settings": {
+          "enable_subagents": {
+            "expected": false,
+            "actual": false
+          },
+          "enable_background_processes": {
+            "expected": false,
+            "actual": false
+          },
+          "managed_shell_tools_enabled": {
+            "expected": false,
+            "actual": false
+          },
+          "enable_connectors": {
+            "expected": false,
+            "actual": false
+          },
+          "disabled_skills": {
+            "expected": [
+              "*"
+            ],
+            "actual": [
+              "*"
+            ]
+          },
+          "mcp_servers": {
+            "expected": [],
+            "actual": []
+          },
+          "enable_telemetry": {
+            "expected": false,
+            "actual": false
+          },
+          "enable_otel": {
+            "expected": false,
+            "actual": false
+          },
+          "enable_update_checks": {
+            "expected": false,
+            "actual": false
+          },
+          "enable_auto_update": {
+            "expected": false,
+            "actual": false
+          },
+          "experimental_enable_model_catalog": {
+            "expected": false,
+            "actual": false
+          },
+          "experimental_enable_registry_skills": {
+            "expected": false,
+            "actual": false
+          },
+          "experiments.enable": {
+            "expected": false,
+            "actual": false
+          },
+          "session_logging.enabled": {
+            "expected": false,
+            "actual": false
+          },
+          "session_logging.generate_titles": {
+            "expected": false,
+            "actual": false
+          },
+          "bypass_tool_permissions": {
+            "expected": false,
+            "actual": false
+          },
+          "default_agent": {
+            "expected": "supervisor-edit",
+            "actual": "supervisor-edit"
+          },
+          "enabled_agents": {
+            "expected": [
+              "supervisor-edit"
+            ],
+            "actual": [
+              "supervisor-edit"
+            ]
+          },
+          "vibe_base_url": {
+            "expected": "http://127.0.0.1:53483",
+            "actual": "http://127.0.0.1:53483"
+          }
+        },
+        "effective_top_level_keys": [
+          "active_model",
+          "active_transcribe_model",
+          "active_tts_model",
+          "agent_paths",
+          "allowed_models",
+          "api_connect_timeout",
+          "api_pool_timeout",
+          "api_retry_max_elapsed_time",
+          "api_stream_idle_timeout",
+          "api_timeout",
+          "api_write_timeout",
+          "applied_migrations",
+          "ask_confirmation_on_exit",
+          "auto_compact_threshold",
+          "autocopy_to_clipboard",
+          "bypass_tool_permissions",
+          "compaction_model",
+          "compaction_prompt_id",
+          "connectors",
+          "console_base_url",
+          "context_warnings",
+          "cursor_blink",
+          "default_agent",
+          "disable_welcome_banner_animation",
+          "disabled_agents",
+          "disabled_skills",
+          "disabled_tools",
+          "displayed_workdir",
+          "enable_auto_update",
+          "enable_background_processes",
+          "enable_connectors",
+          "enable_notifications",
+          "enable_otel",
+          "enable_subagents",
+          "enable_system_trust_store",
+          "enable_telemetry",
+          "enable_update_checks",
+          "enabled_agents",
+          "enabled_skills",
+          "enabled_tools",
+          "experimental_enable_document_library_connector",
+          "experimental_enable_model_catalog",
+          "experimental_enable_registry_skills",
+          "experimental_enable_tab_status",
+          "experiments",
+          "file_watcher_for_autocomplete",
+          "include_commit_signature",
+          "include_model_info",
+          "include_project_context",
+          "include_prompt_detail",
+          "installed_agents",
+          "log_level",
+          "managed_shell_tools_enabled",
+          "mcp_servers",
+          "models",
+          "narrator_enabled",
+          "otel_endpoint",
+          "otel_redaction",
+          "project_context",
+          "providers",
+          "raise_on_compaction_failure",
+          "routed_default_model",
+          "routed_extra_models",
+          "routed_model_config",
+          "session_logging",
+          "show_greeting",
+          "show_subagent_status_list",
+          "show_thinking_nodes",
+          "skill_paths",
+          "smart_approve_available",
+          "smart_approve_default",
+          "system_prompt_id",
+          "theme",
+          "title_prompt_id",
+          "tool_paths",
+          "tools",
+          "transcribe_models",
+          "transcribe_providers",
+          "tts_models",
+          "tts_providers",
+          "utility_models",
+          "vibe_base_url",
+          "vibe_code_sessions_base_url",
+          "vision_model",
+          "voice_mode_enabled",
+          "worktree_limit"
+        ],
+        "effective_tool_keys": [
+          "edit",
+          "read_file",
+          "write_file"
+        ],
+        "harness": "unified",
+        "harness_selection_source": null,
+        "experimental_harness": true,
+        "runtime_ready_flag": true,
+        "skills": 4,
+        "hooks": 0,
+        "mcp_sources": 0,
+        "connectors": {
+          "connected": 0,
+          "total": 0
+        },
+        "bypass_tool_permissions": false
+      },
+      "notifications": {
+        "total": 1,
+        "by_method": {
+          "runtime/updated": 1
+        },
+        "unknown_methods": [
+          "runtime/updated"
+        ]
+      },
+      "server_requests": [],
+      "server_warnings": [],
+      "stats_after": {
+        "model_calls": null,
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      },
+      "stderr": {
+        "bytes": 0,
+        "tail": ""
+      },
+      "shutdown": {
+        "stdin_closed": true,
+        "exited_on_eof": true,
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "exit_ms": 273,
+        "forced": false,
+        "group_gone": true,
+        "termination_verified": true,
+        "reaper": {
+          "reason": "stopped",
+          "killed": false,
+          "verified": true
+        },
+        "tmp_entries_at_close": [
+          "vibe-session-logging-disabled-oy38_4f4"
+        ],
+        "tmp_entries_after_exit": [],
+        "tmp_left_by_server": [],
+        "vibe_home_entries": [
+          "agents",
+          "config.toml",
+          "logs",
+          "sessions",
+          "trusted_folders.toml",
+          "vibehistory"
+        ],
+        "child_home_entries": [],
+        "private_directories_removed": true,
+        "remaining": []
+      },
+      "blocked": null,
+      "child_environment_names": [
+        "ALL_PROXY",
+        "HOME",
+        "HTTPS_PROXY",
+        "HTTP_PROXY",
+        "LOG_LEVEL",
+        "MISTRAL_API_KEY",
+        "NO_PROXY",
+        "PATH",
+        "TMPDIR",
+        "VIBE_BYPASS_TOOL_PERMISSIONS",
+        "VIBE_DEFAULT_AGENT",
+        "VIBE_DISABLED_SKILLS",
+        "VIBE_ENABLED_AGENTS",
+        "VIBE_ENABLE_AUTO_UPDATE",
+        "VIBE_ENABLE_BACKGROUND_PROCESSES",
+        "VIBE_ENABLE_CONNECTORS",
+        "VIBE_ENABLE_OTEL",
+        "VIBE_ENABLE_SUBAGENTS",
+        "VIBE_ENABLE_TELEMETRY",
+        "VIBE_ENABLE_UPDATE_CHECKS",
+        "VIBE_EXPERIMENTAL_ENABLE_MODEL_CATALOG",
+        "VIBE_EXPERIMENTAL_ENABLE_REGISTRY_SKILLS",
+        "VIBE_EXPERIMENTS__ENABLE",
+        "VIBE_HOME",
+        "VIBE_MANAGED_SHELL_TOOLS_ENABLED",
+        "VIBE_MCP_SERVERS",
+        "VIBE_SESSION_LOGGING__ENABLED",
+        "VIBE_SESSION_LOGGING__GENERATE_TITLES",
+        "VIBE_SESSION_LOGGING__SAVE_DIR",
+        "VIBE_SUPERVISOR_CHILD",
+        "VIBE_VIBE_BASE_URL",
+        "all_proxy",
+        "http_proxy",
+        "https_proxy",
+        "no_proxy"
+      ]
+    },
+    {
+      "label": "control-experiments-on",
+      "mode": "review",
+      "role": "control",
+      "purpose": "network-control",
+      "spawned": true,
+      "stages": [
+        "spawn",
+        "initialize",
+        "session/start",
+        "session/ready/wait"
+      ],
+      "timings_ms": {
+        "spawn": 26,
+        "initialize": 926,
+        "session_start": 135,
+        "ready_wait": 7
+      },
+      "handshake": {
+        "server_name": "vibe-app-server",
+        "server_version": "2.26.1",
+        "version_ok": true,
+        "process_id_matches_spawned": true
+      },
+      "session_start": {
+        "harness": "unified",
+        "cwd_ok": true,
+        "history_entries": 0,
+        "event_id": 0,
+        "model": null,
+        "reasoning_effort": null
+      },
+      "readiness": {
+        "ready": true
+      },
+      "readback": null,
+      "thinking": null,
+      "observed": null,
+      "notifications": {
+        "total": 0,
+        "by_method": {},
+        "unknown_methods": []
+      },
+      "server_requests": [],
+      "server_warnings": [],
+      "stats_after": null,
+      "stderr": {
+        "bytes": 0,
+        "tail": ""
+      },
+      "shutdown": {
+        "stdin_closed": true,
+        "exited_on_eof": true,
+        "exit": {
+          "code": 0,
+          "signal": null
+        },
+        "exit_ms": 302,
+        "forced": false,
+        "group_gone": true,
+        "termination_verified": true,
+        "reaper": {
+          "reason": "stopped",
+          "killed": false,
+          "verified": true
+        },
+        "tmp_entries_at_close": [
+          "vibe-session-logging-disabled-hgwfdygm"
+        ],
+        "tmp_entries_after_exit": [],
+        "tmp_left_by_server": [],
+        "vibe_home_entries": [
+          "agents",
+          "logs",
+          "sessions",
+          "trusted_folders.toml",
+          "vibehistory"
+        ],
+        "child_home_entries": [],
+        "private_directories_removed": true,
+        "remaining": []
+      },
+      "blocked": null,
+      "child_environment_names": [
+        "ALL_PROXY",
+        "HOME",
+        "HTTPS_PROXY",
+        "HTTP_PROXY",
+        "LOG_LEVEL",
+        "MISTRAL_API_KEY",
+        "NO_PROXY",
+        "PATH",
+        "TMPDIR",
+        "VIBE_BYPASS_TOOL_PERMISSIONS",
+        "VIBE_DEFAULT_AGENT",
+        "VIBE_DISABLED_SKILLS",
+        "VIBE_ENABLED_AGENTS",
+        "VIBE_ENABLE_AUTO_UPDATE",
+        "VIBE_ENABLE_BACKGROUND_PROCESSES",
+        "VIBE_ENABLE_CONNECTORS",
+        "VIBE_ENABLE_OTEL",
+        "VIBE_ENABLE_SUBAGENTS",
+        "VIBE_ENABLE_TELEMETRY",
+        "VIBE_ENABLE_UPDATE_CHECKS",
+        "VIBE_EXPERIMENTAL_ENABLE_MODEL_CATALOG",
+        "VIBE_EXPERIMENTAL_ENABLE_REGISTRY_SKILLS",
+        "VIBE_EXPERIMENTS__ENABLE",
+        "VIBE_HOME",
+        "VIBE_MANAGED_SHELL_TOOLS_ENABLED",
+        "VIBE_MCP_SERVERS",
+        "VIBE_SESSION_LOGGING__ENABLED",
+        "VIBE_SESSION_LOGGING__GENERATE_TITLES",
+        "VIBE_SESSION_LOGGING__SAVE_DIR",
+        "VIBE_SUPERVISOR_CHILD",
+        "all_proxy",
+        "http_proxy",
+        "https_proxy",
+        "no_proxy"
+      ]
+    }
+  ],
+  "network_observation": {
+    "method": "local-refusing-proxy",
+    "description": "The child gets HTTP(S)_PROXY and ALL_PROXY pointing at a local listener that records only the method, host and port of the first request line and answers 403. Nothing is forwarded. The control enables telemetry and experiments and retains the vendor service URL. A shared host alone cannot attribute traffic to experiments; the observer sees CONNECT authority only, not encrypted paths.",
+    "proxy_variables": [
+      "HTTP_PROXY",
+      "HTTPS_PROXY",
+      "ALL_PROXY",
+      "http_proxy",
+      "https_proxy",
+      "all_proxy"
+    ],
+    "no_proxy": "127.0.0.1,localhost,::1",
+    "subject_attempts": [],
+    "control_attempts": [
+      {
+        "run": "control-experiments-on",
+        "method": "CONNECT",
+        "host": "chat.mistral.ai",
+        "port": 443
+      },
+      {
+        "run": "control-experiments-on",
+        "method": "CONNECT",
+        "host": "api.mistral.ai",
+        "port": 443
+      },
+      {
+        "run": "control-experiments-on",
+        "method": "CONNECT",
+        "host": "console.mistral.ai",
+        "port": 443
+      },
+      {
+        "run": "control-experiments-on",
+        "method": "CONNECT",
+        "host": "api.mistral.ai",
+        "port": 443
+      },
+      {
+        "run": "control-experiments-on",
+        "method": "CONNECT",
+        "host": "experiments.mistral.services",
+        "port": 443
+      },
+      {
+        "run": "control-experiments-on",
+        "method": "CONNECT",
+        "host": "api.mistral.ai",
+        "port": 443
+      },
+      {
+        "run": "control-experiments-on",
+        "method": "CONNECT",
+        "host": "api.mistral.ai",
+        "port": 443
+      },
+      {
+        "run": "control-experiments-on",
+        "method": "CONNECT",
+        "host": "api.mistral.ai",
+        "port": 443
+      }
+    ],
+    "control_hosts": [
+      "api.mistral.ai",
+      "chat.mistral.ai",
+      "console.mistral.ai",
+      "experiments.mistral.services"
+    ],
+    "experiments_verdict": "unverified-host-only-observation",
+    "verdict": "none-observed-control-validated"
+  },
+  "findings": [
+    {
+      "id": "unknown-notification-methods",
+      "severity": "info",
+      "run": "review",
+      "message": "Unknown notification methods were seen: runtime/updated."
+    },
+    {
+      "id": "unknown-notification-methods",
+      "severity": "info",
+      "run": "edit",
+      "message": "Unknown notification methods were seen: runtime/updated."
+    }
+  ],
+  "result": "pass",
+  "gates": {
+    "target-no-inference-conformance-check": "pass",
+    "permission-ask-visible-in-effective-config": {
+      "config": "visible",
+      "approval_handler_reached": "needs-hosted-run"
+    },
+    "thinking-off-effect": {
+      "setting_read_back": true,
+      "levels": [
+        "off",
+        "high"
+      ],
+      "effect": "needs-hosted-run"
+    },
+    "experiments-fetch-off": {
+      "setting_read_back": true,
+      "network": "unverified-host-only-observation"
+    },
+    "nested-run-typescript-shape-and-gating": {
+      "check": "needs-hosted-run"
+    }
+  },
+  "finished_at": "2026-10-16T17:56:41.874Z",
+  "duration_ms": 14621
+}
