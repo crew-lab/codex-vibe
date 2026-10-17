@@ -41,6 +41,12 @@
         "edit"
       ]
     },
+    "output": {
+      "enum": [
+        "text",
+        "findings"
+      ]
+    },
     "state": {
       "enum": [
         "starting",

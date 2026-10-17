@@ -19,6 +19,7 @@ import { denylistAnchors, workspaceAnchors } from '../security/globs.js';
 import { assertNoProjectVibeExtensions } from '../security/workspace-guard.js';
 import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { APP_VERSION } from '../version.js';
+import { FINDINGS_OUTPUT_CONTRACT } from '../core/findings.js';
 import { ApprovalHandler, type ApprovalHandlerOptions, type ApprovalRecord, type PendingApproval } from './app-server/approvals.js';
 import { resolveCredential, type CredentialResolution, type ResolvedCredential } from './app-server/credentials.js';
 import { EventProcessor, auditSessionHistory, unfinishedEffectFatal, type EffectRecord, type EventFatal, type EventSignal, type HistoryAudit } from './app-server/events.js';
@@ -182,7 +183,11 @@ function toSupervisorError(error: unknown, secrets: readonly string[]): Supervis
 function promptFor(input: StartRunInput, listing: string | null): string {
   const context = (input.contextFiles ?? []).map((file) => `Approved context path: ${file}`).join('\n');
   const prefix = [listing, context].filter((part): part is string => part !== null && part.length > 0).join('\n\n');
-  return prefix ? `${prefix}\n\nTask:\n${input.task}` : input.task;
+  let prompt = prefix ? `${prefix}\n\nTask:\n${input.task}` : input.task;
+  if (input.mode === 'review' && input.output === 'findings') {
+    prompt = `${prompt}\n\n${FINDINGS_OUTPUT_CONTRACT}`;
+  }
+  return prompt;
 }
 
 function usageFaultError(fault: UsageFault): SupervisorError {

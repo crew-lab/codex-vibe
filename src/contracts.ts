@@ -101,6 +101,43 @@ export interface ReviewIntegrity {
   reason?: string;
 }
 
+export type FindingSeverity = "error" | "warning" | "info" | "hint";
+
+export interface FindingLocation {
+  path: string;
+  startLine: number;
+  endLine?: number;
+  startColumn?: number;
+  endColumn?: number;
+}
+
+export interface ReviewFinding {
+  id: string;
+  ruleId: string;
+  message: string;
+  location: FindingLocation;
+  severity: FindingSeverity;
+}
+
+export interface RejectedFinding {
+  raw: unknown;
+  reason: "file_not_found" | "line_out_of_bounds" | "path_reserved" | "path_excluded" | "path_outside_workspace" | "path_secret" | "path_symlink" | "schema_invalid";
+}
+
+export interface FindingsArtifact {
+  version: 1;
+  findings: ReviewFinding[];
+  rejected: RejectedFinding[];
+  summary: {
+    total: number;
+    errors: number;
+    warnings: number;
+    info: number;
+    hints: number;
+    rejected: number;
+  };
+}
+
 export interface ResultSummary {
   stopReason?: string;
   summary?: string;
@@ -108,6 +145,7 @@ export interface ResultSummary {
   changedFiles?: string[];
   warnings?: string[];
   integrity?: ReviewIntegrity;
+  findings?: FindingsArtifact["summary"];
 }
 
 export interface SupervisorError {
@@ -164,6 +202,7 @@ export interface RunRecord {
   preparation?: import("./preparation/evidence.js").PreparationStatus;
   cleanup?: { worktree: "removed" | "retained" | "not_requested" | "none"; checked_at: string; reason?: string | undefined };
   modelObservations?: import("./reporting/telemetry.js").ModelObservation[];
+  output?: "text" | "findings";
   result?: ResultSummary;
   error?: SupervisorError;
 }
@@ -211,6 +250,7 @@ export interface StartRunInput {
   runDirectory: string;
   baseRef?: string;
   contextFiles?: string[];
+  output?: "text" | "findings";
   exclusions: ExclusionScope[];
   limits: RunLimits;
 }
@@ -280,7 +320,10 @@ export interface StartToolInput {
   timeout_seconds?: number;
   wait_seconds?: number;
 }
-export interface ReviewStartToolInput extends StartToolInput { context_files?: string[] }
+export interface ReviewStartToolInput extends StartToolInput {
+  context_files?: string[];
+  output?: "text" | "findings";
+}
 export interface EditStartToolInput extends StartToolInput {
   acceptance_contract?: AcceptanceContract;
   base_ref?: string;

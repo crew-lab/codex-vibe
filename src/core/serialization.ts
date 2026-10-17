@@ -64,6 +64,7 @@ export function runToWire(run: RunRecord): JsonObject {
     run_id: run.runId,
     backend: run.backend,
     mode: run.mode,
+    ...(run.output ? { output: run.output } : {}),
     state: run.state,
     ...(run.executionState ? { execution_state: run.executionState } : {}),
     source_workspace: run.sourceWorkspace,
@@ -132,6 +133,7 @@ export function runFromWire(value: unknown): RunRecord {
     taskSha256: stringValue(value.task_sha256),
     limits: limitsFromWire(limits)
   };
+  if (value.output === "text" || value.output === "findings") run.output = value.output;
   if (value.execution_state !== undefined) {
     if (value.execution_state !== "completed" && value.execution_state !== "failed" && value.execution_state !== "cancelled") throw new TypeError("Invalid persisted execution state");
     run.executionState = value.execution_state;
@@ -252,7 +254,19 @@ function resultToWire(result: NonNullable<RunRecord["result"]>): JsonObject {
     ...(result.artifacts ? { artifacts: result.artifacts.map((artifact) => ({ name: artifact.name, path: artifact.path, sha256: artifact.sha256, bytes: artifact.bytes, media_type: artifact.mediaType })) } : {}),
     ...(result.changedFiles ? { changed_files: result.changedFiles } : {}),
     ...(result.warnings ? { warnings: result.warnings } : {}),
-    ...(result.integrity ? { integrity: integrityToWire(result.integrity) } : {})
+    ...(result.integrity ? { integrity: integrityToWire(result.integrity) } : {}),
+    ...(result.findings ? { findings: result.findings } : {})
+  };
+}
+
+function findingsSummaryFromWire(value: JsonObject): NonNullable<NonNullable<RunRecord["result"]>["findings"]> {
+  return {
+    total: numberValue(value.total),
+    errors: numberValue(value.errors),
+    warnings: numberValue(value.warnings),
+    info: numberValue(value.info),
+    hints: numberValue(value.hints),
+    rejected: numberValue(value.rejected)
   };
 }
 
@@ -263,7 +277,8 @@ function resultFromWire(value: JsonObject): NonNullable<RunRecord["result"]> {
     ...(Array.isArray(value.changed_files) ? { changedFiles: value.changed_files.filter((item): item is string => typeof item === "string") } : {}),
     ...(Array.isArray(value.warnings) ? { warnings: value.warnings.filter((item): item is string => typeof item === "string") } : {}),
     ...(Array.isArray(value.artifacts) ? { artifacts: value.artifacts.filter(isObject).map((item) => ({ name: stringValue(item.name), path: stringValue(item.path), sha256: stringValue(item.sha256), bytes: numberValue(item.bytes), mediaType: stringValue(item.media_type) })) } : {}),
-    ...(isObject(value.integrity) ? { integrity: integrityFromWire(value.integrity) } : {})
+    ...(isObject(value.integrity) ? { integrity: integrityFromWire(value.integrity) } : {}),
+    ...(isObject(value.findings) ? { findings: findingsSummaryFromWire(value.findings) } : {})
   };
 }
 
