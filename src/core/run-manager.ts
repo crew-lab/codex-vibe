@@ -2,7 +2,7 @@ import { captureVerification, verifySaved } from "../acceptance/verify.js";
 import { contractDigest, verificationSummary, type AcceptanceContract, type AssessmentInput } from "../acceptance/schema.js";
 import { readOwnedFile } from "../reporting/private-files.js";
 import { createHash, randomUUID } from "node:crypto";
-import { open, readFile, readdir, realpath, rename, rm, lstat } from "node:fs/promises";
+import { open, readFile, readdir, realpath, rename, rm, lstat, unlink } from "node:fs/promises";
 import path from "node:path";
 import type {
   ApprovalLedgerSnapshot, BackendCallbacks, BackendKind, ExclusionScope, BackendRunHandle, BackendStateUpdate,
@@ -371,6 +371,20 @@ export class RunManager {
     await withDeadline(assertNoProjectVibeExtensions(source), deadline - Date.now(), "Project extension validation exceeded its preparation deadline.");
     if ((policy.config.backend ?? this.activeBackendKind) === "antigravity") {
       await withDeadline(assertNoProjectAntigravityExtensions(source), deadline - Date.now(), "Project extension validation exceeded its preparation deadline.");
+      if (policy.config.limits.maxCostUsd !== undefined) {
+        throw codedError(
+          "VSUP_BACKEND_ERROR",
+          "Antigravity CLI does not report USD pricing in headless stream-json output, so max_cost_usd cannot be enforced.",
+          { reason: "price_unavailable", ceiling_usd: policy.config.limits.maxCostUsd }
+        );
+      }
+      if (policy.config.limits.maxTokens !== undefined) {
+        throw codedError(
+          "VSUP_BACKEND_ERROR",
+          "Antigravity CLI only reports token usage in the terminal result envelope after execution, so max_tokens cannot be enforced during execution.",
+          { reason: "token_ceiling_unsupported", ceiling_tokens: policy.config.limits.maxTokens }
+        );
+      }
     }
     return { ...admitted, exclusions };
   }
@@ -1217,6 +1231,7 @@ export class RunManager {
     const names = [...Object.values(PRIVATE_DIRECTORY_NAMES), "antigravity-home", "antigravity-tmp"];
     const present = await Promise.all(names.map((name) => lstat(path.join(runtime.directory, name)).then(() => true, () => false)));
     if (present.some(Boolean)) await this.awaitWorkerWindow(runtime.record, lastSeen);
+    await unlink(path.join(runtime.directory, "antigravity-home", "Library", "Keychains")).catch(() => undefined);
     const results = await Promise.allSettled(names.map((name) => rm(path.join(runtime.directory, name), { recursive: true, force: true, maxRetries: 2 })));
     const failed = results.some((result) => result.status === "rejected");
     if (failed) reportBackgroundFailure("recovery-private-state", new Error(`Private Vibe state of run ${runtime.record.runId} could not be deleted.`));

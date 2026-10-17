@@ -52,12 +52,16 @@ export interface EvaluateAntigravityToolCallResult {
   hookResponse: { decision: 'allow' } | { decision: 'deny'; reason: string };
 }
 
+export interface AntigravityPreToolHookOptions {
+  mode: RunMode;
+  workerWorkspace: string;
+  excludedAnchors?: readonly ExclusionSpec[];
+  maxTurns?: number;
+  maxModelCalls?: number;
+}
+
 export async function evaluateAntigravityToolCall(
-  options: {
-    mode: RunMode;
-    workerWorkspace: string;
-    excludedAnchors?: readonly ExclusionSpec[];
-  },
+  options: AntigravityPreToolHookOptions,
   payload: unknown
 ): Promise<EvaluateAntigravityToolCallResult> {
   let raw: unknown = payload;
@@ -96,6 +100,31 @@ export async function evaluateAntigravityToolCall(
     : {};
   const stepIdx = obj.stepIdx ?? obj.step_index ?? obj.turnId ?? obj.turn_id;
   const turnId = stepIdx !== undefined && stepIdx !== null ? String(stepIdx) : null;
+  const numericStepIdx = typeof stepIdx === 'number' && Number.isFinite(stepIdx) ? Math.trunc(stepIdx) : undefined;
+
+  if (
+    numericStepIdx !== undefined &&
+    ((options.maxTurns !== undefined && numericStepIdx > options.maxTurns) ||
+      (options.maxModelCalls !== undefined && numericStepIdx > options.maxModelCalls))
+  ) {
+    const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
+    const entry: ApprovalLedgerEntry = {
+      callbackId: `agy-hook-${randomUUID()}`,
+      relatedEntryId: null,
+      turnId,
+      tool: toolName || null,
+      path: null,
+      fingerprint,
+      decision: 'deny',
+      reason: 'turn_limit_exceeded'
+    };
+    return {
+      decision: 'deny',
+      reason: 'turn_limit_exceeded',
+      entry,
+      hookResponse: { decision: 'deny', reason: 'turn_limit_exceeded' }
+    };
+  }
 
   const allowedTools = options.mode === 'edit' ? EDIT_ALLOWED_TOOLS : REVIEW_ALLOWED_TOOLS;
   if (!(allowedTools as readonly string[]).includes(toolName)) {
@@ -510,6 +539,32 @@ async function main() {
   const args = (rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)) ? rawArgs : {};
   const stepIdx = obj.stepIdx ?? obj.step_index ?? obj.turnId ?? obj.turn_id;
   const turnId = stepIdx !== undefined && stepIdx !== null ? String(stepIdx) : null;
+  const numericStepIdx = typeof stepIdx === 'number' && Number.isFinite(stepIdx) ? Math.trunc(stepIdx) : undefined;
+
+  let priorCalls = 0;
+  try {
+    const existingLedger = await fs.promises.readFile(policy.ledgerPath, 'utf8');
+    priorCalls = existingLedger.split('\\n').filter((line) => line.trim().length > 0).length;
+  } catch {
+    // Ledger does not exist yet
+  }
+  const currentCallNumber = priorCalls + 1;
+  const maxTurns = typeof policy.maxTurns === 'number' && Number.isFinite(policy.maxTurns) ? policy.maxTurns : undefined;
+  const maxModelCalls = typeof policy.maxModelCalls === 'number' && Number.isFinite(policy.maxModelCalls) ? policy.maxModelCalls : undefined;
+
+  if (
+    (maxTurns !== undefined && ((numericStepIdx !== undefined && numericStepIdx > maxTurns) || currentCallNumber > maxTurns)) ||
+    (maxModelCalls !== undefined && ((numericStepIdx !== undefined && numericStepIdx > maxModelCalls) || currentCallNumber > maxModelCalls))
+  ) {
+    return recordAndExit(policy, {
+      turnId,
+      tool: toolName || null,
+      path: null,
+      fingerprint: computeFingerprint(toolName, args),
+      decision: 'deny',
+      reason: 'turn_limit_exceeded'
+    });
+  }
 
   const allowedTools = policy.mode === 'edit' ? EDIT_ALLOWED_TOOLS : REVIEW_ALLOWED_TOOLS;
   if (!allowedTools.includes(toolName)) {
@@ -686,6 +741,8 @@ export async function writeAntigravityPreToolHook(
     mode: RunMode;
     workerWorkspace: string;
     excludedAnchors: readonly ExclusionSpec[];
+    maxTurns?: number;
+    maxModelCalls?: number;
   }
 ): Promise<void> {
   const geminiDir = path.join(childHome, '.gemini');
@@ -700,6 +757,8 @@ export async function writeAntigravityPreToolHook(
     mode: options.mode,
     workerWorkspace: options.workerWorkspace,
     excludedAnchors: options.excludedAnchors,
+    ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
+    ...(options.maxModelCalls !== undefined ? { maxModelCalls: options.maxModelCalls } : {}),
     ledgerPath
   };
   await writeFile(path.join(cliDir, 'hook-policy.json'), JSON.stringify(policy, null, 2) + '\n', { mode: 0o600 });
@@ -726,7 +785,6 @@ export async function writeAntigravityPreToolHook(
   };
   const hooksJsonContent = JSON.stringify(hooksConfig, null, 2) + '\n';
   await writeFile(path.join(configDir, 'hooks.json'), hooksJsonContent, { mode: 0o600 });
-  await writeFile(path.join(cliDir, 'hooks.json'), hooksJsonContent, { mode: 0o600 });
 }
 
 export async function readAntigravityHookLedger(

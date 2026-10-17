@@ -6,22 +6,37 @@ import { tmpdir } from 'node:os';
 import { realpath } from 'node:fs/promises';
 import { z } from 'zod';
 import { loadResolvedConfig } from '../config/config.js';
+import { runAntigravityPreparationCheck } from '../preparation/antigravity-prepare.js';
 import { candidateIdentity, packageRoot, preparationIdentity, receiptPath } from '../preparation/evidence.js';
 import { digest } from '../acceptance/schema.js';
 import { readOwnedFile } from '../reporting/private-files.js';
 import { atomicWriteJson } from '../persistence/atomic.js';
 const manifestSchema = z.object({schema_version:z.literal(1),version:z.string(),candidate_sha256:z.string().regex(/^[a-f0-9]{64}$/),script_sha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
 export async function prepareCommand(args: string[]): Promise<unknown> {
-  if(args[0] !== 'check') throw new Error('Usage: prepare check --kit <directory> --config <file>');
+  if(args[0] !== 'check') throw new Error('Usage: prepare check [--kit <directory>] --config <file>');
   const values = new Map<string,string>();
   for(let i=1;i<args.length;i+=2){ const key=args[i]!;const value=args[i+1];if(!['--kit','--config'].includes(key)||!value||values.has(key))throw new Error('Invalid preparation arguments');values.set(key,value); }
-  if(!values.has('--kit')||!values.has('--config'))throw new Error('Kit and config are required');
-  const kit=await realpath(values.get('--kit')!);
-  const manifest=manifestSchema.parse(JSON.parse(await readFile(path.join(kit,'manifest.json'),'utf8')));
+  if(!values.has('--config'))throw new Error('Kit and config are required');
   const candidate=await candidateIdentity();
+  if (values.has('--kit')) {
+    const kit=await realpath(values.get('--kit')!);
+    const manifest=manifestSchema.parse(JSON.parse(await readFile(path.join(kit,'manifest.json'),'utf8')));
+    const script=path.join(kit,'v2-conformance-check.mjs');
+    const scriptHash=digest(await readFile(script));
+    if(manifest.candidate_sha256!==candidate || scriptHash!==manifest.script_sha256 || scriptHash!==digest(await readFile(path.join(packageRoot,'scripts/v2-conformance-check.mjs'))))throw new Error('Preparation kit does not match installed candidate');
+  }
+  const preliminary=await loadResolvedConfig({configPath:values.get('--config')!,requirePinManifest:false});
+  if (preliminary.config.backend === 'antigravity') {
+    const out = await runAntigravityPreparationCheck(preliminary.config, { dataDir: preliminary.dataDir });
+    const current = await loadResolvedConfig({ configPath: preliminary.configPath, requirePinManifest: false });
+    if (await preparationIdentity(current.config, candidate) !== await preparationIdentity(preliminary.config, candidate)) {
+      throw new Error('Candidate or configuration changed during check');
+    }
+    return { status: out.status, candidate_sha256: out.candidate_sha256, hosted_acceptance: out.hosted_acceptance, report_sha256: out.report_sha256 };
+  }
+  if(!values.has('--kit'))throw new Error('Kit and config are required');
+  const kit=await realpath(values.get('--kit')!);
   const script=path.join(kit,'v2-conformance-check.mjs');
-  const scriptHash=digest(await readFile(script));
-  if(manifest.candidate_sha256!==candidate || scriptHash!==manifest.script_sha256 || scriptHash!==digest(await readFile(path.join(packageRoot,'scripts/v2-conformance-check.mjs'))))throw new Error('Preparation kit does not match installed candidate');
   const resolved=await loadResolvedConfig({configPath:values.get('--config')!,requirePinManifest:true});
   const identity=await preparationIdentity(resolved.config,candidate);
   const temporary=await realpath(await mkdtemp(path.join(tmpdir(),'vsup-preparation-')));

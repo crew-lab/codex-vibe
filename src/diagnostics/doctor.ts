@@ -69,9 +69,17 @@ async function antigravityCheck(config: SupervisorConfig, injected: SupervisorBa
   const backend = injected ?? new (await import('../backends/antigravity.js')).AntigravityBackend(config);
   const capabilities = await backend.probe();
   if (capabilities.available) {
-    return { name: 'antigravity', ok: true, status: 'ok', ...(capabilities.version ? { version: capabilities.version } : {}), message: 'Antigravity CLI (agy) is available.' };
+    const sha256 = typeof capabilities.details?.sha256 === 'string' ? ` (sha256: ${capabilities.details.sha256})` : '';
+    return {
+      name: 'antigravity',
+      ok: true,
+      status: 'ok',
+      ...(capabilities.version ? { version: capabilities.version } : {}),
+      message: `Antigravity CLI (agy) matches pinned version${sha256}.`
+    };
   }
-  return { name: 'antigravity', ok: false, message: `Antigravity CLI (agy) could not be probed: ${capabilities.details?.error ?? 'not found'}` };
+  const code = typeof capabilities.details?.code === 'string' ? ` [${capabilities.details.code}]` : '';
+  return { name: 'antigravity', ok: false, ...(capabilities.version ? { version: capabilities.version } : {}), message: `Antigravity CLI (agy) could not be verified: ${capabilities.details?.error ?? 'not found'}${code}` };
 }
 
 async function appServerCheck(config: SupervisorConfig, injected: SupervisorBackend | undefined): Promise<DoctorCheck> {
