@@ -28,7 +28,7 @@
       "type": "object", "required": ["status", "write_tool_observed"],
       "properties": { "status": { "enum": ["verified", "changed", "unverified"] }, "write_tool_observed": { "type": "boolean" }, "changed_paths": { "type": "array", "items": { "type": "string" } }, "changed_paths_total": { "type": "integer", "minimum": 0 }, "reason": { "type": "string" } }
     },
-    "usage": { "type": "object" },
+    "usage": { "$ref": "run.schema.json#/$defs/usage" },
     "warnings": { "type": "array", "items": { "type": "string" } },
     "error": { "type": "object" },
     "next_action": { "type": "string" }

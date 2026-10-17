@@ -398,6 +398,10 @@ Ranked by demand evidence, fit with the boundaries and effort in the features re
 | 9 | Per-language task templates in the skill | The coordinator, acceptance and preparation guidance | The templates | S | Review | No |
 | 10 | Antigravity execution backend hardening and 2.1 parity | **Phase 1 Done on `origin/explore_project_details`**: `agy 1.3.1` flag & permission hardening, private `HOME`/`TMPDIR` + `settings.json`, untrusted `.gemini`/`.agents` guard, watchdog & `boot_drift`, structured `stream-json` envelope parsing | Phase 2 (2.1 unification + `PreToolUse` hook) & Phase 3 (`prepare check` + ADR 0007/0008 + target gates) | M | Fixture + target acceptance | Yes (0008) |
 
+**Status 2026-10-16 / 2026-10-17.** Items 1, 2, 3 and 6 are implemented on branch `claude/2.1-wave-1` (waves 0 to 2 in `404b801`, `f6c852e` and `e4c1608`, documented in wave 3), pending cold review, the coordinator's release verification and the hosted gates in `docs/acceptance.json` (`hosted-usage-recorded`, `hosted-excluded-glob-readback-and-denial`, `hosted-run-exported`, `hosted-close-acceptance-recorded`). Items 4, 5, 7, 8 and 9 are not built. Two designs changed in delivery: item 2 kept only `runs usefulness` on the existing assessments, and item 6 extended the existing report directory instead of adding a single-file bundle.
+
+Order: wave 0 (contracts) first, then 1, 2, 3, 4, 6 and 7 in parallel, the backend wiring, then 5 and 8 after the 2.0.1 evidence. One 2.1 target sitting covers 1 to 4 and 6 with one review and one edit; 5 and 8 add their own runs. Section 9 has the graph and the waves. Any change to `scripts/v2-conformance-check.mjs`, `dist` or `schemas` changes the candidate identity, so 2.1 ships its own kit.
+
 ### 6.1 Antigravity Execution Backend Hardening & 2.1 Unification Plan (Phases 1–3)
 
 #### Phase 1 — CLI Compatibility, Permission Hardening, and Lifecycle Alignment (Completed on `origin/explore_project_details`)

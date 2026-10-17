@@ -8,7 +8,7 @@ const SELF = 'tests/unit/no-legacy-references.test.ts';
 const SKIPPED_DIRECTORIES = new Set(['node_modules', 'dist', '.git']);
 const SCANNED_DIRECTORIES = ['src', 'tests', 'scripts', 'skills', 'examples', 'schemas', 'docs'];
 const SCANNED_ROOT_FILES = ['README.md', 'SECURITY.md', 'CHANGELOG.md', 'AGENTS.md', 'Handoff.md'];
-const CHANGELOG_START = /^## 2\.0\.\d+\b/;
+const CHANGELOG_START = /^## \d+\.\d+\.\d+\b/;
 
 const VIBE_VERSION = /\bvibe\b[ \t:=@-]*(?:(?:version|release|tag|v)[ \t:=@-]*)?v?(\d+(?:\.\d+)+)/gi;
 

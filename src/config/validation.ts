@@ -9,10 +9,36 @@ const pathString = z.string().min(1).max(4096);
 const rootString = pathString.refine((value) => path.isAbsolute(value) || value === "~" || value.startsWith("~/"), "must be an absolute path or start with ~/");
 const executableString = pathString.refine((value) => path.isAbsolute(value) || !/[\\/]/.test(value), "must be an absolute path or a bare command name");
 const absolutePathString = pathString.refine((value) => path.isAbsolute(value), "must be an absolute path");
+export const MAX_EXCLUDED_GLOBS_PER_ROOT = 100;
+export const MAX_EXCLUDED_GLOB_CHARS = 256;
+export const MAX_EXCLUDED_GLOB_SEGMENTS = 16;
+const GLOB_SEGMENT_CHARACTERS = /^[A-Za-z0-9._@+=,*-]+$/;
+
+export function excludedGlobProblem(glob: string): string | null {
+  if (glob.length < 1 || glob.length > MAX_EXCLUDED_GLOB_CHARS) return `must be 1 to ${MAX_EXCLUDED_GLOB_CHARS} characters`;
+  if (glob.startsWith("/")) return "must be relative to the workspace, not start with /";
+  if (glob.startsWith("~")) return "must not start with ~";
+  const segments = glob.split("/");
+  if (segments.length > MAX_EXCLUDED_GLOB_SEGMENTS) return `must have at most ${MAX_EXCLUDED_GLOB_SEGMENTS} segments`;
+  for (const segment of segments) {
+    if (segment === "") return "must not contain an empty segment (a leading, trailing or doubled /)";
+    if (segment === "." || segment === "..") return "must not contain a . or .. segment";
+    if (!GLOB_SEGMENT_CHARACTERS.test(segment)) return "may only use ASCII letters, digits and . _ - @ + = , * in a segment (no negation, ?, [ ], braces or backslash)";
+    if (segment.includes("**") && segment !== "**") return "may use ** only as a whole segment";
+  }
+  return null;
+}
+
+const excludedGlobString = z.string().superRefine((value, context) => {
+  const problem = excludedGlobProblem(value);
+  if (problem !== null) context.addIssue({ code: "custom", message: problem });
+});
+
 const baseSchema = z.object({
   version: z.literal(1),
   backend: z.enum(BACKEND_KINDS).optional(),
   allowed_workspace_roots: z.array(rootString).max(100).default([]),
+  excluded_globs: z.record(pathString, z.array(excludedGlobString).max(MAX_EXCLUDED_GLOBS_PER_ROOT)).optional(),
   retention: z.object({
     days: z.number().int().min(0).max(3650).default(7)
   }).strict().prefault({}),
@@ -35,7 +61,13 @@ const baseSchema = z.object({
     vibe_pin_manifest: absolutePathString.optional(),
     antigravity: executableString.optional()
   }).strict().optional()
-}).strict();
+}).strict().superRefine((value, context) => {
+  for (const root of Object.keys(value.excluded_globs ?? {})) {
+    if (!value.allowed_workspace_roots.includes(root)) {
+      context.addIssue({ code: "custom", path: ["excluded_globs", root], message: "must equal an entry of allowed_workspace_roots, written the same way; an exclusion never grants access." });
+    }
+  }
+});
 
 const strictSchema = baseSchema.superRefine((value, context) => {
   if (value.backend !== "antigravity" && value.paths?.vibe_pin_manifest === undefined) {
@@ -47,20 +79,34 @@ const strictSchema = baseSchema.superRefine((value, context) => {
   }
 });
 
+function normalizeExcludedGlobs(input: Record<string, string[]> | undefined): Record<string, string[]> | undefined {
+  const entries = Object.entries(input ?? {})
+    .map(([root, globs]): [string, string[]] => [root, [...new Set(globs)]])
+    .filter(([, globs]) => globs.length > 0);
+  return entries.length === 0 ? undefined : Object.fromEntries(entries);
+}
+
 export interface ValidateConfigOptions {
   requirePinManifest?: boolean;
 }
 
 export function validateConfig(input: unknown, home = process.env.HOME ?? process.env.USERPROFILE ?? homedir(), options: ValidateConfigOptions = {}): SupervisorConfig {
   const parsed = (options.requirePinManifest === false ? baseSchema : strictSchema).parse(input);
+  const expandedRoots = new Map<string, string>();
   for (const root of parsed.allowed_workspace_roots) {
-    try { assertWorkspaceRootScope(root, home); }
+    let expanded: string;
+    try { expanded = assertWorkspaceRootScope(root, home); }
     catch (error) { throw new Error(`allowed_workspace_roots contains an unsafe root: ${(error as Error).message}`); }
+    const earlier = expandedRoots.get(expanded);
+    if (earlier !== undefined) throw new Error(`allowed_workspace_roots lists the same root twice (${JSON.stringify(earlier)} and ${JSON.stringify(root)}); keep one entry and merge its excluded_globs.`);
+    expandedRoots.set(expanded, root);
   }
+  const excludedGlobs = normalizeExcludedGlobs(parsed.excluded_globs);
   return {
     version: parsed.version,
     ...(parsed.backend === undefined ? {} : { backend: parsed.backend }),
     allowedWorkspaceRoots: parsed.allowed_workspace_roots,
+    ...(excludedGlobs === undefined ? {} : { excludedGlobs }),
     retention: { days: parsed.retention.days },
     limits: {
       reviewTimeoutSeconds: parsed.limits.review_timeout_seconds,

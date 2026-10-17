@@ -9,7 +9,9 @@ import {
   REVIEW_TOOLS,
   callbackContext,
   canonicalJson,
+  createExcludedMatcher,
   evaluateApproval,
+  excludedRelativePath,
   inputFingerprint,
   isProfileTool,
   isWriteTool,
@@ -281,6 +283,117 @@ describe('restrictedRelativePath', () => {
   });
 });
 
+describe('excluded globs', () => {
+  const excluded = ['*.tfvars', 'fixtures/private/**', 'dumps/*.sql', 'a/**/z.txt', 'vault'];
+  const matches = (relative: string, globs: readonly string[] = excluded) => excludedRelativePath(relative, globs);
+
+  it('matches a one-segment glob against every segment at any depth', () => {
+    for (const relative of ['prod.tfvars', 'infra/prod.tfvars', 'a/b/c/d/prod.tfvars', 'vault', 'src/vault/key.json', 'vault/deep/er/file']) expect(matches(relative), relative).toBe(true);
+    for (const relative of ['prod.tfvars.md', 'infra/tfvars', 'src/vaulted/key.json', 'src/my-vault.ts']) expect(matches(relative), relative).toBe(false);
+  });
+
+  it('anchors a multi-segment glob at the workspace root, with * inside one segment and ** across any number', () => {
+    for (const relative of ['fixtures/private/a.json', 'fixtures/private/x/y/z.json', 'fixtures/private', 'dumps/full.sql', 'a/z.txt', 'a/b/z.txt', 'a/b/c/d/z.txt']) expect(matches(relative), relative).toBe(true);
+    for (const relative of ['dumps/nested/full.sql', 'dumps/full.sql.bak', 'src/dumps/full.sql', 'src/fixtures/private/a.json', 'fixtures/public/a.json', 'fixtures/privates/a.json', 'b/a/z.txt', 'a/z.txt.bak']) expect(matches(relative), relative).toBe(false);
+  });
+
+  it('matches case-insensitively, as the secret patterns do, and splits on either separator', () => {
+    expect(matches('Prod.TFVars')).toBe(true);
+    expect(matches('FIXTURES/Private/a.json')).toBe(true);
+    expect(matches('fixtures\\private\\a.json')).toBe(true);
+  });
+
+  it('matches nothing without globs and handles a glob made only of **', () => {
+    expect(matches('src/index.ts', [])).toBe(false);
+    expect(matches('src/index.ts', ['**'])).toBe(true);
+    expect(matches('src/index.ts', ['*'])).toBe(true);
+    expect(createExcludedMatcher([])(['src'])).toBe(false);
+  });
+
+  it('does not take exponential time on many ** segments', () => {
+    const glob = Array.from({ length: 16 }, () => '**').join('/');
+    const segments = [...Array.from({ length: 60 }, (_, index) => `d${index}`), 'x'];
+    const started = Date.now();
+    expect(createExcludedMatcher([glob])(segments)).toBe(true);
+    expect(createExcludedMatcher([`${Array.from({ length: 15 }, () => '**').join('/')}/never`])(segments)).toBe(false);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it('matches many * in one segment in linear time, case-insensitively', () => {
+    const glob = '*a*a*a*a*a*a*a*b';
+    const segment = 'a'.repeat(255);
+    const started = performance.now();
+    expect(createExcludedMatcher([glob])([segment])).toBe(false);
+    expect(createExcludedMatcher([glob])(['src', segment])).toBe(false);
+    expect(createExcludedMatcher([`x/${glob}`])(['x', segment])).toBe(false);
+    expect(performance.now() - started).toBeLessThan(100);
+    expect(createExcludedMatcher([glob])([`${'A'.repeat(254)}B`])).toBe(true);
+    expect(createExcludedMatcher(['*.TFVARS'])(['prod.tfvars'])).toBe(true);
+    expect(createExcludedMatcher(['a*b*c'])(['abc'])).toBe(true);
+    expect(createExcludedMatcher(['a*b*c'])(['acb'])).toBe(false);
+    expect(createExcludedMatcher(['ab*ba'])(['aba'])).toBe(false);
+    expect(createExcludedMatcher(['ab*ba'])(['abba'])).toBe(true);
+  });
+
+  it('anchors globs at the allowed root, so a workspace below the root matches the root-relative path', async () => {
+    const anchored = [{ prefix: ['project'], globs: ['project/fixtures/**', '*/dumps/*.sql', 'project'] }];
+    expect(excludedRelativePath('fixtures/a.json', [{ prefix: ['project'], globs: ['project/fixtures/**'] }])).toBe(true);
+    expect(excludedRelativePath('dumps/full.sql', [{ prefix: ['project'], globs: ['*/dumps/*.sql'] }])).toBe(true);
+    expect(excludedRelativePath('fixtures/a.json', ['project/fixtures/**'])).toBe(false);
+    expect(excludedRelativePath('src/index.ts', [{ prefix: ['other'], globs: ['project/**'] }])).toBe(false);
+    expect(excludedRelativePath('src/index.ts', anchored)).toBe(true);
+    expect(await judgeWorkspacePath(workspace, 'fixtures/a.json', [{ prefix: ['project'], globs: ['project/fixtures/**'] }])).toEqual({ allowed: false, reason: 'path_excluded' });
+    expect(await judgeWorkspacePath(workspace, 'src/index.ts', [{ prefix: ['project'], globs: ['project/fixtures/**'] }])).toMatchObject({ allowed: true });
+  });
+
+  it('judges a path_excluded for a basename glob at depth, an anchored glob and **, for existing and new files', async () => {
+    const judge = async (raw: string) => {
+      const judgement = await judgeWorkspacePath(workspace, raw, excluded);
+      return judgement.allowed ? 'allowed' : judgement.reason;
+    };
+    for (const raw of ['prod.tfvars', 'nested/deep/new.tfvars', 'fixtures/private/a.json', path.join(workspace, 'fixtures', 'private', 'x', 'y.json'), 'dumps/new.sql', 'a/b/z.txt', 'src/vault/key']) {
+      expect(await judge(raw), raw).toBe('path_excluded');
+    }
+  });
+
+  it('approves a path that only looks similar', async () => {
+    for (const raw of ['src/index.ts', 'prod.tfvars.md', 'dumps/nested/full.sql', 'fixtures/public/a.json', 'fixtures/privates/a.json', 'src/fixtures/private/a.json', 'src/vaulted.ts']) {
+      expect(await judgeWorkspacePath(workspace, raw, excluded), raw).toMatchObject({ allowed: true });
+    }
+  });
+
+  it('keeps the reserved and secret reasons ahead of an exclusion and leaves everything open without exclusions', async () => {
+    expect(await judgeWorkspacePath(workspace, '.env', ['.env'])).toEqual({ allowed: false, reason: 'path_secret' });
+    expect(await judgeWorkspacePath(workspace, '.git/config', ['**'])).toEqual({ allowed: false, reason: 'path_reserved' });
+    expect(await judgeWorkspacePath(workspace, 'prod.tfvars')).toMatchObject({ allowed: true });
+    expect(await judgeWorkspacePath(workspace, 'prod.tfvars', [])).toMatchObject({ allowed: true });
+  });
+
+  it('judges the real location and the lexical path, so a symlink cannot launder an excluded file', async () => {
+    await mkdir(path.join(workspace, 'fixtures', 'private'), { recursive: true });
+    await writeFile(path.join(workspace, 'fixtures', 'private', 'a.json'), '{}');
+    await symlink(path.join(workspace, 'fixtures', 'private', 'a.json'), path.join(workspace, 'innocent.json'));
+    await symlink(path.join(workspace, 'src', 'index.ts'), path.join(workspace, 'prod.tfvars'));
+    expect(await judgeWorkspacePath(workspace, 'innocent.json', excluded)).toEqual({ allowed: false, reason: 'path_excluded' });
+    expect(await judgeWorkspacePath(workspace, 'prod.tfvars', excluded)).toEqual({ allowed: false, reason: 'path_excluded' });
+  });
+
+  it('denies an excluded file for review and edit through the approval evaluation, and approves its neighbour', async () => {
+    const options = (mode: 'review' | 'edit') => ({ mode, workspace, excludedGlobs: excluded });
+    expect(await evaluateApproval(options('review'), request('file_system.read_file', { filePath: 'fixtures/private/a.json' }))).toEqual({ decision: 'deny', reason: 'path_excluded' });
+    expect(await evaluateApproval(options('edit'), request('file_system.write_file', { filePath: 'infra/main.tfvars', content: '' }))).toEqual({ decision: 'deny', reason: 'path_excluded' });
+    expect(await evaluateApproval(options('edit'), request('file_system.search_replace', { filePath: 'dumps/full.sql', changes: [] }))).toEqual({ decision: 'deny', reason: 'path_excluded' });
+    expect(await evaluateApproval(options('review'), request('file_system.read_file', { filePath: 'src/index.ts' }))).toEqual({ decision: 'approve', reason: null });
+  });
+
+  it('records the exclusion in the ledger when the handler denies it', async () => {
+    const handler = new ApprovalHandler({ mode: 'review', workspace, excludedGlobs: excluded });
+    const verdict = await handler.decide(request('file_system.read_file', { filePath: 'fixtures/private/a.json' }));
+    expect(verdict).toEqual({ decision: 'deny', reason: 'path_excluded' });
+    expect(handler.ledger.all()).toMatchObject([{ tool: 'file_system.read_file', decision: 'deny', reason: 'path_excluded' }]);
+  });
+});
+
 describe('ApprovalHandler session and effect binding', () => {
   const read = 'file_system.read_file';
   const context = (sessionId: string | null, turnId: string | null) => ({ sessionId, turnId });
@@ -321,6 +434,21 @@ describe('ApprovalHandler session and effect binding', () => {
     expect((await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-1', relatedEntryId: 'e1' }))).decision).toBe('approve');
     expect(await handler.decide(request(read, { filePath: 'src/other.ts' }, { callbackId: 'cb-2', relatedEntryId: 'e1' }))).toEqual({ decision: 'deny', reason: 'duplicate_callback' });
     expect(handler.ledger.forEffect('e1')?.callbackId).toBe('cb-1');
+  });
+
+  it('records every duplicate callback as a denied ledger entry, bounded by the same cap', async () => {
+    const handler = new ApprovalHandler({ mode: 'review', workspace, ledger: new ApprovalLedger(3) });
+    expect((await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-1', relatedEntryId: 'e1' }))).decision).toBe('approve');
+    expect(await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-1', relatedEntryId: 'e1' }))).toEqual({ decision: 'deny', reason: 'duplicate_callback' });
+    expect(await handler.decide(request(read, { filePath: 'src/other.ts' }, { callbackId: 'cb-2', relatedEntryId: 'e1' }))).toEqual({ decision: 'deny', reason: 'duplicate_callback' });
+    expect(handler.ledger.all().map((entry) => [entry.callbackId, entry.decision, entry.reason])).toEqual([
+      ['cb-1', 'approve', null], ['cb-1', 'deny', 'duplicate_callback'], ['cb-2', 'deny', 'duplicate_callback']
+    ]);
+    expect(handler.ledger.truncated).toBe(false);
+    expect(handler.ledger.forEffect('e1')?.decision).toBe('approve');
+    expect(await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-1', relatedEntryId: 'e1' }))).toEqual({ decision: 'deny', reason: 'duplicate_callback' });
+    expect(handler.ledger.size).toBe(3);
+    expect(handler.ledger.truncated).toBe(true);
   });
 
   it('denies everything after it was revoked, including an approval that was still being evaluated', async () => {

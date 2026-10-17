@@ -253,3 +253,122 @@ describe("app-server keys", () => {
     expect(bootBoundDrift(base, validateConfig(appServer))).toEqual([]);
   });
 });
+
+describe("excluded_globs", () => {
+  const project = "/work/project";
+  const other = "/work/other";
+  const withExclusions = (excluded: unknown, allowed: string[] = [project, other]) => ({ ...base, allowed_workspace_roots: allowed, excluded_globs: excluded });
+
+  it("maps each allowed root to its globs, drops duplicates, keeps order and omits the key when nothing is excluded", () => {
+    const config = validateConfig(withExclusions({ [project]: ["*.tfvars", "fixtures/private/**", "*.tfvars", "dumps/*.sql"], [other]: [] }));
+    expect(config.excludedGlobs).toEqual({ [project]: ["*.tfvars", "fixtures/private/**", "dumps/*.sql"] });
+    expect(validateConfig(withExclusions({}))).not.toHaveProperty("excludedGlobs");
+    expect(validateConfig(withExclusions({ [project]: [] }))).not.toHaveProperty("excludedGlobs");
+    expect(validateConfig({ ...base, allowed_workspace_roots: [project] })).not.toHaveProperty("excludedGlobs");
+  });
+
+  it("rejects the same root listed twice, written alike or differently, so its exclusions cannot split", () => {
+    expect(() => validateConfig({ ...base, allowed_workspace_roots: [project, project] }, "/home-of/me")).toThrow(/lists the same root twice/);
+    expect(() => validateConfig({ ...base, allowed_workspace_roots: [project, `${project}/`] }, "/home-of/me")).toThrow(/lists the same root twice/);
+    expect(() => validateConfig({ ...base, allowed_workspace_roots: ["~/code", "/home-of/me/code"], excluded_globs: { "~/code": ["a"], "/home-of/me/code": ["b"] } }, "/home-of/me")).toThrow(/lists the same root twice/);
+    expect(validateConfig({ ...base, allowed_workspace_roots: [project, other] }, "/home-of/me").allowedWorkspaceRoots).toEqual([project, other]);
+  });
+
+  it("accepts the documented syntax", () => {
+    const globs = ["*.tfvars", "fixtures/private/**", "dumps/*.sql", "**/secret.json", "a/**/b", "x@1+2=3,4_5-6.7", "**", "*", "a/**", ".hidden", "v1.2/*.yaml", "A".repeat(256)];
+    expect(validateConfig(withExclusions({ [project]: globs })).excludedGlobs?.[project]).toEqual(globs);
+    expect(validateConfig(withExclusions({ [project]: [Array.from({ length: 16 }, () => "a").join("/")] })).excludedGlobs?.[project]).toHaveLength(1);
+  });
+
+  it("rejects a key that is not an allowed root, as written, so an exclusion never implies access", () => {
+    expect(() => validateConfig(withExclusions({ "/work/unlisted": ["*.tfvars"] }))).toThrow(/excluded_globs.*must equal an entry of allowed_workspace_roots/s);
+    expect(() => validateConfig(withExclusions({ "/work/project/": ["*.tfvars"] }))).toThrow(/allowed_workspace_roots/);
+    expect(() => validateConfig(withExclusions({ "/work/project/../project": ["*.tfvars"] }))).toThrow(/allowed_workspace_roots/);
+    expect(() => validateConfig(withExclusions({ [project]: ["*.tfvars"] }, []))).toThrow(/allowed_workspace_roots/);
+    expect(() => validateConfig(withExclusions({ "~/code": ["*.tfvars"] }, ["/work/project"]))).toThrow(/allowed_workspace_roots/);
+    expect(validateConfig(withExclusions({ "~/code": ["*.tfvars"] }, ["~/code"])).excludedGlobs).toEqual({ "~/code": ["*.tfvars"] });
+  });
+
+  it("rejects patterns that would leave the workspace, negate a rule or change how the matchers read them", () => {
+    const rejected: Array<[string, RegExp]> = [
+      ["/etc/passwd", /not start with \//],
+      ["/", /not start with \//],
+      ["~/secrets", /not start with ~/],
+      ["~", /not start with ~/],
+      ["../outside", /\.\. segment/],
+      ["a/../b", /\.\. segment/],
+      ["./a", /\. or \.\. segment/],
+      ["a/./b", /\. or \.\. segment/],
+      ["..", /\.\. segment/],
+      [".", /\. or \.\. segment/],
+      ["a//b", /empty segment/],
+      ["a/", /empty segment/],
+      ["", /1 to 256 characters/],
+      ["A".repeat(257), /1 to 256 characters/],
+      ["a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q", /at most 16 segments/],
+      ["!keep.txt", /negation/],
+      ["a?b", /\?/],
+      ["a[bc]", /\[ \]/],
+      ["{a,b}", /braces/],
+      ["a\\b", /backslash/],
+      ["a b", /ASCII/],
+      ["café", /ASCII/],
+      ["a\nb", /ASCII/],
+      ["a**", /whole segment/],
+      ["**a", /whole segment/],
+      ["a/b**/c", /whole segment/],
+      ["***", /whole segment/],
+      ["#comment", /ASCII/],
+      ["$HOME", /ASCII/]
+    ];
+    for (const [glob, message] of rejected) expect(() => validateConfig(withExclusions({ [project]: [glob] })), JSON.stringify(glob)).toThrow(message);
+  });
+
+  it("bounds the number of globs per root and the shapes it accepts", () => {
+    expect(validateConfig(withExclusions({ [project]: Array.from({ length: 100 }, (_, index) => `f${index}.txt`) })).excludedGlobs?.[project]).toHaveLength(100);
+    expect(() => validateConfig(withExclusions({ [project]: Array.from({ length: 101 }, (_, index) => `f${index}.txt`) }))).toThrow(/excluded_globs/);
+    expect(() => validateConfig(withExclusions({ [project]: "*.tfvars" }))).toThrow(/excluded_globs/);
+    expect(() => validateConfig(withExclusions({ [project]: [1] }))).toThrow(/excluded_globs/);
+    expect(() => validateConfig(withExclusions([]))).toThrow(/excluded_globs/);
+    expect(() => validateConfig(withExclusions("*.tfvars"))).toThrow(/excluded_globs/);
+  });
+
+  it("reports the field path of the offending glob", () => {
+    try { validateConfig(withExclusions({ [project]: ["ok", "../bad"] })); expect.unreachable(); }
+    catch (error) { expect(String(error)).toMatch(/excluded_globs/); expect(String(error)).toContain(project); }
+  });
+
+  it("loads from TOML and reports an invalid table as a stable configuration error", async () => {
+    const root = await mkdtemp(join(canonicalTmp, "vsup-config-")); roots.push(root);
+    const workspace = join(root, "workspace"); await mkdir(workspace);
+    await writeFile(join(root, "config.toml"), `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n${manifestToml}\n[excluded_globs]\n${JSON.stringify(workspace)} = ["*.tfvars", "fixtures/private/**"]\n`);
+    expect((await loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } })).excludedGlobs).toEqual({ [workspace]: ["*.tfvars", "fixtures/private/**"] });
+    await writeFile(join(root, "config.toml"), `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n${manifestToml}\n[excluded_globs]\n${JSON.stringify(workspace)} = ["/etc/passwd"]\n`);
+    await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } })).rejects.toMatchObject({ supervisor: { code: "VSUP_CONFIG_INVALID" } });
+    await writeFile(join(root, "config.toml"), `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n${manifestToml}\n[excluded_globs]\n"/somewhere/else" = ["*.tfvars"]\n`);
+    await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } })).rejects.toMatchObject({ supervisor: { code: "VSUP_CONFIG_INVALID" } });
+  });
+
+  it("changes the policy revision with an exclusion, leaves it unchanged without one, and is not boot-bound", () => {
+    const plain = validateConfig({ ...base, allowed_workspace_roots: [project] });
+    const revision = configFingerprint(plain);
+    expect(configFingerprint(validateConfig(withExclusions({}, [project])))).toBe(revision);
+    expect(configFingerprint(validateConfig(withExclusions({ [project]: [] }, [project])))).toBe(revision);
+    const one = validateConfig(withExclusions({ [project]: ["*.tfvars"] }, [project]));
+    const two = validateConfig(withExclusions({ [project]: ["*.tfvars", "dumps/*.sql"] }, [project]));
+    const reordered = validateConfig(withExclusions({ [project]: ["dumps/*.sql", "*.tfvars"] }, [project]));
+    const elsewhere = validateConfig(withExclusions({ [other]: ["*.tfvars"] }, [other]));
+    const fingerprints = [revision, configFingerprint(one), configFingerprint(two), configFingerprint(reordered), configFingerprint(elsewhere)];
+    expect(new Set(fingerprints).size).toBe(fingerprints.length);
+    expect(configFingerprint(validateConfig(withExclusions({ [project]: ["*.tfvars"] }, [project])))).toBe(configFingerprint(one));
+    expect(configFingerprint(validateConfig(withExclusions({ [project]: ["*.tfvars", "*.tfvars"] }, [project])))).toBe(configFingerprint(one));
+    expect(bootBoundDrift(plain, one)).toEqual([]);
+    expect(bootBoundDrift(one, two)).toEqual([]);
+  });
+
+  it("keys the fingerprint on the resolved root, whatever order the table is written in", () => {
+    const first = validateConfig(withExclusions({ [project]: ["a"], [other]: ["b"] }));
+    const second = validateConfig(withExclusions({ [other]: ["b"], [project]: ["a"] }));
+    expect(configFingerprint(first)).toBe(configFingerprint(second));
+  });
+});
