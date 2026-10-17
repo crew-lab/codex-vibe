@@ -1,16 +1,16 @@
 {
   "ok": true,
-  "generatedAt": "2026-10-17T10:18:51.445Z",
+  "generatedAt": "2026-10-17T18:15:29.063Z",
   "provenance": {
     "backend": "antigravity",
-    "executable": "<nvm-home>/versions/node/v24.21.0/bin/node",
+    "executable": "<target-home>/.nvm/versions/node/v24.21.0/bin/node",
     "application_entrypoint": "<supervisor-repository>/dist/cli.js",
     "runtime_module": "<supervisor-repository>/dist/diagnostics/doctor.js",
     "app_version": "2.0.2",
-    "config_path": "<private-supervisor-home>/config.toml",
+    "config_path": "<target-home>/Library/Application Support/VibeSupervisor-oneshot/config.toml",
     "config_source": "default",
-    "config_fingerprint": "c375c1877a21c32ca281f45796ed331823aa69043f5f482909435947e6e3acab",
-    "data_directory": "<private-supervisor-home>",
+    "config_fingerprint": "0c08982de64b07fdf444d9a04b90cd512f6d00f629d6944408a1841187474262",
+    "data_directory": "<target-home>/Library/Application Support/VibeSupervisor-oneshot",
     "storage_mode": "selected-template"
   },
   "checks": [
@@ -48,7 +48,7 @@
     {
       "name": "codex",
       "ok": true,
-      "version": "codex-cli 0.162.1",
+      "version": "codex-cli 0.163.0",
       "message": "Codex CLI is available."
     },
     {
