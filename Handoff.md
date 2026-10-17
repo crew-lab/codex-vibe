@@ -188,11 +188,11 @@ The owner decided on 2026-10-17 to halt the exploratory feature run (deferred: w
 | F | Done 2026-10-17: Proposed carry-over confirmed; published on no-inference evidence without extra hosted runs per owner decision | Owner | E |
 | G | Done 2026-10-17: Published v2.0.2 as a pre-release from the checked target-held assets (`84bff941…`) tagged at `b275b1b` with release notes and full asset bundle | Owner | F |
 
-**The skipped `workflow` scope.** Until it is added, no workflow file can be pushed, so the repository has no CI. To unblock: at https://github.com/settings/tokens give the push token the `workflow` scope (fine-grained: "Workflows: Read and write" on `crew-lab/codex-vibe`), update the Keychain entry `crew-lab-codex-vibe-github-token` if the value changed, then push the local CI branch rebased onto the current line and watch its first run.
+**CI active and verified.** The push token's `workflow` scope is present, `.github/workflows/ci.yml` is active, and GitHub Actions CI runs `verify:release` under Node 20.19 on macOS for every push and release tag (all recent runs verified PASS).
 
 ## Testing on another machine
 
-Main is one thread: every former branch, the deleted v2.0.0 draft's commit `f2c2119`, the 2.0.1 cleanup and the workflow line are in its history, and GitHub holds `main` only. On another Mac (Apple silicon, Node 20.19 or later, Git):
+Main is one thread: every former branch, the deleted v2.0.0 draft's commit `f2c2119`, the 2.0.1 cleanup, the workflow line and 2.1 waves are in its history, and GitHub holds `main` only. On another Mac (Apple silicon, Node 20.19 or later, Git):
 
 ```bash
 git clone https://github.com/crew-lab/codex-vibe.git vibe-supervisor && cd vibe-supervisor && npm ci && npm run verify:release
@@ -206,11 +206,7 @@ CACHE="$PWD/.npm-offline-cache" && node -e 'const l=require("./package-lock.json
 
 Hosted behaviour needs Vibe 2.26.1 and follows [docs/target-acceptance.md](docs/target-acceptance.md): after `pin-manifest`, run `vibe-supervisor prepare check --kit <absolute path of the kit> --config "$CONFIG"` once, because readiness and every start need its pass. The v2.0.0 draft archive (`f2c2119`, SHA-256 `485ecce3…`) is not a useful target build: it lacks the repairs above.
 
-Deleting the remote branches that main already contains (owner; it skips any branch that is not an ancestor of main):
-
-```bash
-git fetch --prune origin && for b in $(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin | grep -v -x -e HEAD -e main); do git merge-base --is-ancestor "origin/$b" origin/main && git push origin --delete "$b"; done
-```
+Deleting the remote branches that main already contains: completed on 2026-10-17 (`codex/package-kit-identity` and `claude/2.1-wave-1` deleted; GitHub holds `main` and active worktree branches).
 
 ## Open questions
 
