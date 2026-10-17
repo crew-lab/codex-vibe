@@ -3,14 +3,33 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AntigravityBackend, type AntigravityHandle } from '../../src/backends/antigravity.js';
+import {
+  AntigravityBackend,
+  SUPPORTED_ANTIGRAVITY_VERSION,
+  type AntigravityBackendOptions,
+  type AntigravityHandle
+} from '../../src/backends/antigravity.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import type { BackendCallbacks, StartRunInput, SupervisorError, UsageState } from '../../src/contracts.js';
+import { runDoctor } from '../../src/diagnostics/doctor.js';
+import { runAntigravityPreparationCheck } from '../../src/preparation/antigravity-prepare.js';
 import { exportReport, OUTSIDE_WORKSPACE } from '../../src/reporting/export.js';
+import { APP_VERSION } from '../../src/version.js';
 
 const canonicalTmp = await realpath(tmpdir());
 const roots: string[] = [];
+
+const passedPreparation: AntigravityBackendOptions = {
+  preparation: {
+    check: async () => ({
+      status: 'passed',
+      candidate_sha256: 'a'.repeat(64),
+      version: APP_VERSION,
+      reason: 'test'
+    })
+  }
+};
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -37,37 +56,84 @@ async function waitFor<T>(read: () => Promise<T> | T, done: (value: T) => boolea
   return value;
 }
 
-describe('AntigravityBackend', () => {
-  it('probes executable version, runtimeCheck, and preparationCheck', async () => {
+describe('AntigravityBackend (agy 1.4.0)', () => {
+  it('probes executable version 1.4.0, binary sha256, runtimeCheck, requires preparation receipt by default, and rejects unsupported versions', async () => {
     const root = await makeRoot();
     const counter = path.join(root, 'count');
     const script = path.join(root, 'mock-agy.sh');
     await writeExecutable(script, `#!/bin/sh
 if [ "$1" = "--version" ]; then
   echo x >> "${counter}"
-  echo "agy 1.3.1 (antigravity-darwin-arm64)"
+  echo "${SUPPORTED_ANTIGRAVITY_VERSION}"
   exit 0
 fi
 exit 1
 `);
 
-    const backend = new AntigravityBackend({
+    const prevHome = process.env.VIBE_SUPERVISOR_HOME;
+    process.env.VIBE_SUPERVISOR_HOME = path.join(root, 'unprepared-home');
+    try {
+      const backend = new AntigravityBackend({
+        ...DEFAULT_CONFIG,
+        backend: 'antigravity',
+        paths: { antigravity: script }
+      });
+
+      const probeResult = await backend.probe();
+      expect(probeResult.available).toBe(true);
+      expect(probeResult.backend).toBe('antigravity');
+      expect(probeResult.version).toBe('1.4.0');
+      expect(typeof probeResult.details?.sha256).toBe('string');
+
+      const runtimeCheck = await backend.runtimeCheck();
+      expect(runtimeCheck.executable_found).toBe(true);
+      expect(runtimeCheck.pinned_version).toBe('1.4.0');
+      expect(runtimeCheck.version_verified).toBe(false);
+
+      // Without preparation-receipt.json, preparationCheck MUST return missing (never fallback to passed)
+      const prep = await backend.preparationCheck();
+      expect(prep.status).toBe('missing');
+
+      await expect(
+        backend.start(
+          {
+            runId: '00000000-1111-4222-8333-444444444444',
+            mode: 'review',
+            task: 'Must fail without preparation receipt',
+            cwd: root,
+            workerWorkspace: root,
+            runDirectory: root,
+            exclusions: [],
+            limits: { timeoutSeconds: 30, maxTurns: 5, maxEventBytes: 10240, maxTranscriptBytes: 10240, maxArtifactBytes: 10240 }
+          },
+          { onEvent() {}, onState() {} }
+        )
+      ).rejects.toMatchObject({
+        code: 'VSUP_INVALID_STATE',
+        details: { preparation: { status: 'missing' } }
+      });
+    } finally {
+      if (prevHome === undefined) delete process.env.VIBE_SUPERVISOR_HOME;
+      else process.env.VIBE_SUPERVISOR_HOME = prevHome;
+    }
+
+    // Unsupported version fails closed
+    const wrongScript = path.join(root, 'mock-agy-old.sh');
+    await writeExecutable(wrongScript, `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "1.3.1"
+  exit 0
+fi
+exit 1
+`);
+    const wrongBackend = new AntigravityBackend({
       ...DEFAULT_CONFIG,
       backend: 'antigravity',
-      paths: { antigravity: script }
+      paths: { antigravity: wrongScript }
     });
-
-    const probeResult = await backend.probe();
-    expect(probeResult.available).toBe(true);
-    expect(probeResult.backend).toBe('antigravity');
-    expect(probeResult.version).toBe('1.3.1');
-
-    const runtimeCheck = await backend.runtimeCheck();
-    expect(runtimeCheck.executable_found).toBe(true);
-    expect(runtimeCheck.pinned_version).toBe('1.3.1');
-
-    const prep = await backend.preparationCheck();
-    expect(['passed', 'missing']).toContain(prep.status);
+    const wrongProbe = await wrongBackend.probe();
+    expect(wrongProbe.available).toBe(false);
+    expect(wrongProbe.details?.code).toBe('VSUP_VIBE_VERSION_UNSUPPORTED');
   });
 
   it('reports unavailable when executable does not exist', async () => {
@@ -85,7 +151,7 @@ exit 1
     expect(runtimeCheck.executable_found).toBe(false);
   });
 
-  it('runs a review task with --mode plan, isolated settings.json, envelope parsing, secret redaction, and cleanup', async () => {
+  it('runs a review task with agy 1.4.0 stream-json envelopes, unified settings.json rules, secret redaction, cleanup, and distinguishes turns from modelCalls', async () => {
     const root = await makeRoot();
     const workspace = path.join(root, 'workspace');
     const runDir = path.join(root, 'run');
@@ -102,7 +168,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('agy 1.3.1');
+  console.log('1.4.0');
   process.exit(0);
 }
 fs.writeFileSync(${JSON.stringify(recordedArgsFile)}, JSON.stringify(args));
@@ -110,23 +176,41 @@ const settingsPath = path.join(process.env.HOME, '.gemini', 'antigravity-cli', '
 if (fs.existsSync(settingsPath)) {
   fs.copyFileSync(settingsPath, ${JSON.stringify(recordedSettingsFile)});
 }
-console.log(JSON.stringify({ type: 'message', role: 'assistant', text: 'Analyzing repository... ' }));
-console.log(JSON.stringify({ type: 'thought', reasoning: 'Internal private reasoning that must not leak' }));
 console.log(JSON.stringify({
-  status: 'SUCCESS',
-  response: 'Bearer secret_token_1234567890abcdef is used.',
-  num_turns: 2,
-  usage: { prompt_tokens: 120, completion_tokens: 30, total_tokens: 150 },
-  denied_actions: [{ tool: 'run_command', reason: 'sandbox_denied' }]
+  event: 'init',
+  conversation_id: 'conv-1',
+  init: { cwd: process.cwd(), tools: ['view_file', 'list_dir', 'sed_file', 'notebook_edit'], permission_mode: 'strict' }
+}));
+console.log(JSON.stringify({
+  event: 'step_update',
+  step_update: { conversation_id: 'conv-1', step_index: 1, state: 'DONE', step_type: 'view_file', tool_name: 'view_file' }
+}));
+console.log(JSON.stringify({
+  event: 'step_update',
+  step_update: { conversation_id: 'conv-1', step_index: 2, state: 'DONE', step_type: 'planner_response', content: 'Reviewing sample.ts...' }
+}));
+console.log(JSON.stringify({
+  event: 'result',
+  result: {
+    conversation_id: 'conv-1',
+    status: 'SUCCESS',
+    response: 'Analyzing repository... Bearer secret_token_1234567890abcdef is used.',
+    num_turns: 2,
+    usage: { input_tokens: 120, output_tokens: 30, thinking_tokens: 15, cache_read_tokens: 40, total_tokens: 150 },
+    denied_actions: [{ tool: 'run_command', reason: 'sandbox_denied' }]
+  }
 }));
 process.exit(0);
 `);
 
-    const backend = new AntigravityBackend({
-      ...DEFAULT_CONFIG,
-      backend: 'antigravity',
-      paths: { antigravity: script }
-    });
+    const backend = new AntigravityBackend(
+      {
+        ...DEFAULT_CONFIG,
+        backend: 'antigravity',
+        paths: { antigravity: script }
+      },
+      passedPreparation
+    );
 
     const events: Array<Parameters<BackendCallbacks['onEvent']>[0]> = [];
     let finalState: string | undefined;
@@ -150,6 +234,7 @@ process.exit(0);
       workerWorkspace: workspace,
       runDirectory: runDir,
       contextFiles: ['sample.ts'],
+      exclusions: [],
       limits: { timeoutSeconds: 30, maxTurns: 5, maxEventBytes: 10240, maxTranscriptBytes: 10240, maxArtifactBytes: 10240 }
     };
 
@@ -163,47 +248,58 @@ process.exit(0);
     expect(finalSummary).toContain('Analyzing repository');
     expect(finalSummary).toContain('[REDACTED]');
     expect(finalSummary).not.toContain('secret_token');
-    expect(finalSummary).not.toContain('Internal private reasoning');
+    // Note: num_turns is 2, while planner_response model call steps is 1 -> modelCalls is 1 (distinguished from num_turns!)
     expect(finalUsage).toEqual({
       tokensUsed: 150,
       promptTokens: 120,
       completionTokens: 30,
-      modelCalls: 2,
-      toolCalls: { executed: 0, deniedByHandler: 0, deniedByPolicy: 1 }
+      cachedTokens: 40,
+      modelCalls: 1,
+      toolCalls: { executed: 1, deniedByHandler: 0, deniedByPolicy: 1 }
     });
 
     const deniedEvents = events.filter((e) => e.type === 'tool_denied');
     expect(deniedEvents).toHaveLength(1);
     expect(deniedEvents[0]?.data).toMatchObject({ tool: 'run_command', reason: 'sandbox_denied' });
 
+    const reasoningDiag = events.find((e) => e.type === 'diagnostic' && e.data?.reason === 'reasoning_observation');
+    expect(reasoningDiag?.data).toMatchObject({
+      reason: 'reasoning_observation',
+      streamed_entries: 1,
+      history_entries: null,
+      history_audited: false
+    });
+
     const recordedArgs = JSON.parse(await readFile(recordedArgsFile, 'utf8')) as string[];
-    expect(recordedArgs).toContain('--mode');
-    expect(recordedArgs).toContain('plan');
+    // Review mode omits --mode plan so --disable-slash-commands does not emit a warning in agy 1.4.0
+    expect(recordedArgs).not.toContain('--mode');
     expect(recordedArgs).toContain('--output-format');
     expect(recordedArgs).toContain('stream-json');
     expect(recordedArgs).toContain('--disable-slash-commands');
     expect(recordedArgs).toContain('--sandbox');
     expect(recordedArgs).toContain('--print-timeout');
     expect(recordedArgs).toContain('30s');
-    expect(recordedArgs).not.toContain('--cwd');
-    expect(recordedArgs).not.toContain('--dangerously-skip-permissions');
-    // Prompt includes the workspace file listing for review mode
     expect(recordedArgs[1]).toContain('sample.ts');
 
     const settings = JSON.parse(await readFile(recordedSettingsFile, 'utf8'));
     expect(settings.toolPermission).toBe('strict');
     expect(settings.allowNonWorkspaceAccess).toBe(false);
     expect(settings.enableTerminalSandbox).toBe(true);
-    expect(settings.permissions.allow).toContain('read_file');
-    expect(settings.permissions.allow).not.toContain('write_file');
-    expect(settings.permissions.deny).toContain('run_command');
+    expect(settings.permissions.allow).toContain(`read_file(${workspace})`);
+    expect(settings.permissions.allow).toContain(`read_file(${workspace}/**)`);
+    expect(settings.permissions.allow).not.toContain(`write_file(${workspace})`);
+    expect(settings.permissions.deny).toContain('command(*)');
+    expect(settings.permissions.deny).toContain('mcp(*)');
+    expect(settings.permissions.deny).toContain('read_url(*)');
+    expect(settings.permissions.deny).toContain('execute_url(*)');
+    expect(settings.permissions.deny).toContain('write_file(*)');
 
     // Verify private childHome and childTmp were cleaned up after completion
     await expect(lstat(path.join(runDir, 'antigravity-home'))).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(lstat(path.join(runDir, 'antigravity-tmp'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('runs an edit task with --mode accept-edits and write tools in isolated settings', async () => {
+  it('runs an edit task with --mode accept-edits and write_file unified rules in isolated settings', async () => {
     const root = await makeRoot();
     const workspace = path.join(root, 'workspace');
     const runDir = path.join(root, 'run');
@@ -219,7 +315,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('agy 1.3.1');
+  console.log('1.4.0');
   process.exit(0);
 }
 fs.writeFileSync(${JSON.stringify(recordedArgsFile)}, JSON.stringify(args));
@@ -227,15 +323,18 @@ const settingsPath = path.join(process.env.HOME, '.gemini', 'antigravity-cli', '
 if (fs.existsSync(settingsPath)) {
   fs.copyFileSync(settingsPath, ${JSON.stringify(recordedSettingsFile)});
 }
-console.log(JSON.stringify({ status: 'SUCCESS', response: 'Edit applied.' }));
+console.log(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: 'Edit applied.' } }));
 process.exit(0);
 `);
 
-    const backend = new AntigravityBackend({
-      ...DEFAULT_CONFIG,
-      backend: 'antigravity',
-      paths: { antigravity: script }
-    });
+    const backend = new AntigravityBackend(
+      {
+        ...DEFAULT_CONFIG,
+        backend: 'antigravity',
+        paths: { antigravity: script }
+      },
+      passedPreparation
+    );
 
     const callbacks: BackendCallbacks = {
       onEvent() {},
@@ -249,6 +348,7 @@ process.exit(0);
       cwd: workspace,
       workerWorkspace: workspace,
       runDirectory: runDir,
+      exclusions: [],
       limits: { timeoutSeconds: 30, maxTurns: 5, maxEventBytes: 10240, maxTranscriptBytes: 10240, maxArtifactBytes: 10240 }
     };
 
@@ -260,29 +360,36 @@ process.exit(0);
     expect(recordedArgs).toContain('accept-edits');
 
     const settings = JSON.parse(await readFile(recordedSettingsFile, 'utf8'));
-    expect(settings.permissions.allow).toContain('write_file');
-    expect(settings.permissions.allow).toContain('edit_file');
+    expect(settings.permissions.allow).toContain(`write_file(${workspace})`);
+    expect(settings.permissions.allow).toContain(`write_file(${workspace}/**)`);
+    expect(settings.permissions.deny).not.toContain('write_file(*)');
   });
 
-  it('fails closed when envelope status is ERROR even if exit code is 0, or on non-zero exit', async () => {
+  it('fails closed when nested result.status is ERROR even if exit code is 0, and rejects unsupported ceilings (maxCostUsd, maxTokens) before dispatch', async () => {
     const root = await makeRoot();
     const script = path.join(root, 'mock-agy.sh');
 
     await writeExecutable(script, `#!/usr/bin/env node
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('agy 1.3.1');
+  console.log('1.4.0');
   process.exit(0);
 }
-console.log(JSON.stringify({ status: 'ERROR', response: 'Control request rejected' }));
+console.log(JSON.stringify({
+  event: 'result',
+  result: { status: 'ERROR', error: 'print-timeout exceeded (2s)', response: '' }
+}));
 process.exit(0);
 `);
 
-    const backend = new AntigravityBackend({
-      ...DEFAULT_CONFIG,
-      backend: 'antigravity',
-      paths: { antigravity: script }
-    });
+    const backend = new AntigravityBackend(
+      {
+        ...DEFAULT_CONFIG,
+        backend: 'antigravity',
+        paths: { antigravity: script }
+      },
+      passedPreparation
+    );
 
     let failedState: string | undefined;
     let failureError: SupervisorError | undefined;
@@ -304,6 +411,7 @@ process.exit(0);
       cwd: root,
       workerWorkspace: root,
       runDirectory: root,
+      exclusions: [],
       limits: { timeoutSeconds: 30, maxTurns: 5, maxEventBytes: 10240, maxTranscriptBytes: 10240, maxArtifactBytes: 10240 }
     };
 
@@ -313,7 +421,126 @@ process.exit(0);
 
     expect(failedState).toBe('failed');
     expect(failureError?.code).toBe('VSUP_ANTIGRAVITY_EXEC_FAILED');
-    expect(failureError?.message).toContain('ERROR');
+    expect(failureError?.message).toContain('print-timeout exceeded');
+
+    // Verify maxCostUsd is rejected before dispatch with price_unavailable
+    await expect(
+      backend.start(
+        {
+          ...input,
+          runId: '33333333-4444-4555-8666-777777777778',
+          limits: { ...input.limits, maxCostUsd: 1.5 }
+        },
+        { onEvent() {}, onState() {} }
+      )
+    ).rejects.toMatchObject({
+      code: 'VSUP_BACKEND_ERROR',
+      details: { reason: 'price_unavailable', ceiling_usd: 1.5 }
+    });
+
+    // Verify maxTokens is rejected before dispatch with token_ceiling_unsupported
+    await expect(
+      backend.start(
+        {
+          ...input,
+          runId: '33333333-4444-4555-8666-777777777779',
+          limits: { ...input.limits, maxTokens: 5000 }
+        },
+        { onEvent() {}, onState() {} }
+      )
+    ).rejects.toMatchObject({
+      code: 'VSUP_BACKEND_ERROR',
+      details: { reason: 'token_ceiling_unsupported', ceiling_tokens: 5000 }
+    });
+  });
+
+  it('enforces turn and model-call limits during execution and terminates the worker immediately upon breach', async () => {
+    const root = await makeRoot();
+    const workspace = path.join(root, 'workspace');
+    const runDir = path.join(root, 'run');
+    await mkdir(workspace);
+    await mkdir(runDir);
+
+    const script = path.join(root, 'mock-agy-loop.sh');
+    await writeExecutable(script, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.4.0');
+  process.exit(0);
+}
+console.log(JSON.stringify({
+  event: 'step_update',
+  step_update: { conversation_id: 'conv-loop', step_index: 1, state: 'DONE', step_type: 'planner_response', content: 'Step 1' }
+}));
+console.log(JSON.stringify({
+  event: 'step_update',
+  step_update: { conversation_id: 'conv-loop', step_index: 2, state: 'DONE', step_type: 'planner_response', content: 'Step 2' }
+}));
+console.log(JSON.stringify({
+  event: 'step_update',
+  step_update: { conversation_id: 'conv-loop', step_index: 3, state: 'DONE', step_type: 'planner_response', content: 'Step 3 exceeds maxTurns=2' }
+}));
+// Hang so only mid-execution termination settles the process promptly
+setTimeout(() => process.exit(0), 30000);
+`);
+
+    const backend = new AntigravityBackend(
+      {
+        ...DEFAULT_CONFIG,
+        backend: 'antigravity',
+        paths: { antigravity: script }
+      },
+      passedPreparation
+    );
+
+    const events: Array<Parameters<BackendCallbacks['onEvent']>[0]> = [];
+    let finalState: string | undefined;
+    let stopReason: string | undefined;
+    let finalUsage: UsageState | undefined;
+
+    const callbacks: BackendCallbacks = {
+      onEvent(e) { events.push(e); },
+      onState(state, update) {
+        finalState = state;
+        if (update?.result?.stopReason) stopReason = update.result.stopReason;
+        if (update?.usage) finalUsage = update.usage;
+      }
+    };
+
+    const result = await backend.start(
+      {
+        runId: '34343434-4444-4555-8666-777777777777',
+        mode: 'review',
+        task: 'Test live execution limit enforcement',
+        cwd: workspace,
+        workerWorkspace: workspace,
+        runDirectory: runDir,
+        exclusions: [],
+        limits: {
+          timeoutSeconds: 30,
+          maxTurns: 2,
+          maxModelCalls: 3,
+          maxEventBytes: 10240,
+          maxTranscriptBytes: 10240,
+          maxArtifactBytes: 10240
+        }
+      },
+      callbacks
+    );
+
+    await (result.handle as AntigravityHandle).opaque.process.done;
+    await waitFor(() => finalState, (state) => state === 'completed');
+
+    expect(finalState).toBe('completed');
+    expect(stopReason).toBe('turn_limit');
+    expect(finalUsage?.modelCalls).toBe(3);
+    const limitEvent = events.find((e) => e.type === 'diagnostic' && e.data?.reason === 'limit_enforced_during_execution');
+    expect(limitEvent?.data).toMatchObject({
+      reason: 'limit_enforced_during_execution',
+      limit: 'turn_limit',
+      observed_turns: 3,
+      max_turns: 2
+    });
   });
 
   it('rejects workspaces containing untrusted .gemini or .agents/hooks.json', async () => {
@@ -324,15 +551,18 @@ process.exit(0);
 
     const script = path.join(root, 'mock-agy.sh');
     await writeExecutable(script, `#!/bin/sh
-echo "agy 1.3.1"
+echo "1.4.0"
 exit 0
 `);
 
-    const backend = new AntigravityBackend({
-      ...DEFAULT_CONFIG,
-      backend: 'antigravity',
-      paths: { antigravity: script }
-    });
+    const backend = new AntigravityBackend(
+      {
+        ...DEFAULT_CONFIG,
+        backend: 'antigravity',
+        paths: { antigravity: script }
+      },
+      passedPreparation
+    );
 
     const input: StartRunInput = {
       runId: '44444444-5555-4666-8777-888888888888',
@@ -341,59 +571,14 @@ exit 0
       cwd: workspace,
       workerWorkspace: workspace,
       runDirectory: root,
+      exclusions: [],
       limits: { timeoutSeconds: 30, maxTurns: 5, maxEventBytes: 10240, maxTranscriptBytes: 10240, maxArtifactBytes: 10240 }
     };
 
     await expect(backend.start(input, { onEvent() {}, onState() {} })).rejects.toThrow(/\.agents\/hooks\.json/);
   });
 
-  it('integrates with RunManager when backend="antigravity" is configured', async () => {
-    const root = await makeRoot();
-    const workspace = path.join(root, 'workspace');
-    const dataDir = path.join(root, 'data');
-    await writeFile(path.join(root, 'mock-agy.sh'), `#!/usr/bin/env node
-const args = process.argv.slice(2);
-if (args[0] === '--version') {
-  console.log('agy 1.3.1');
-  process.exit(0);
-}
-console.log(JSON.stringify({ status: 'SUCCESS', response: 'All security checks verified.' }));
-process.exit(0);
-`);
-    const script = path.join(root, 'mock-agy.sh');
-    await chmod(script, 0o755);
-
-    await mkdir(workspace);
-    await writeFile(path.join(workspace, 'index.js'), 'console.log("hello");\n');
-
-    const config = {
-      ...DEFAULT_CONFIG,
-      backend: 'antigravity' as const,
-      allowedWorkspaceRoots: [workspace],
-      paths: { antigravity: script }
-    };
-
-    const manager = new RunManager(config, dataDir);
-    await manager.initialize();
-
-    const start = await manager.reviewStart({
-      task: 'Verify workspace',
-      cwd: workspace,
-      wait_seconds: 5
-    });
-
-    expect(start.backend).toBe('antigravity');
-    expect(start.state).toBe('completed');
-
-    const result = await manager.result({ run_id: start.run_id });
-    expect(result.backend).toBe('antigravity');
-    expect(result.state).toBe('completed');
-    expect(result.summary).toContain('All security checks verified.');
-
-    await manager.shutdown();
-  });
-
-  it('filters excluded files from review prompt workspace listing and populates settings.json permissions.deny', async () => {
+  it('filters excluded files from review prompt workspace listing and populates unified settings.json permissions.deny', async () => {
     const root = await makeRoot();
     const workspace = path.join(root, 'workspace');
     const runDir = path.join(root, 'run');
@@ -416,7 +601,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('agy 1.3.1');
+  console.log('1.4.0');
   process.exit(0);
 }
 fs.writeFileSync(${JSON.stringify(recordedArgsFile)}, JSON.stringify(args));
@@ -424,15 +609,18 @@ const settingsPath = path.join(process.env.HOME, '.gemini', 'antigravity-cli', '
 if (fs.existsSync(settingsPath)) {
   fs.copyFileSync(settingsPath, ${JSON.stringify(recordedSettingsFile)});
 }
-console.log(JSON.stringify({ status: 'SUCCESS', response: 'ok' }));
+console.log(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: 'ok' } }));
 process.exit(0);
 `);
 
-    const backend = new AntigravityBackend({
-      ...DEFAULT_CONFIG,
-      backend: 'antigravity',
-      paths: { antigravity: script }
-    });
+    const backend = new AntigravityBackend(
+      {
+        ...DEFAULT_CONFIG,
+        backend: 'antigravity',
+        paths: { antigravity: script }
+      },
+      passedPreparation
+    );
 
     const callbacks: BackendCallbacks = {
       onEvent() {},
@@ -459,14 +647,14 @@ process.exit(0);
     expect(prompt).not.toContain('secret.txt');
 
     const settings = JSON.parse(await readFile(recordedSettingsFile, 'utf8'));
-    expect(settings.permissions.deny).toContain('secret.txt');
-    expect(settings.permissions.deny).toContain(`${workspace}/secret.txt`);
-    expect(settings.permissions.deny).toContain('.git/**');
-    expect(settings.permissions.deny).toContain('.gemini/**');
-    expect(settings.permissions.deny).toContain('.env*');
+    expect(settings.permissions.deny).toContain('read_file(secret.txt)');
+    expect(settings.permissions.deny).toContain(`read_file(${workspace}/secret.txt)`);
+    expect(settings.permissions.deny).toContain('read_file(.git/**)');
+    expect(settings.permissions.deny).toContain('read_file(.gemini/**)');
+    expect(settings.permissions.deny).toContain('read_file(.env*)');
   });
 
-  it('pre-tool hook invoked via hooks.json approves valid reads and denies excluded, outside, reserved, and unprofiled tools', async () => {
+  it('pre-tool hook invoked via .gemini/config/hooks.json approves valid reads and denies excluded, outside, reserved, unprofiled tools, and turn limits', async () => {
     const root = await makeRoot();
     const workspace = path.join(root, 'workspace');
     const runDir = path.join(root, 'run');
@@ -484,19 +672,20 @@ const path = require('node:path');
 const { execSync } = require('node:child_process');
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('agy 1.3.1');
+  console.log('1.4.0');
   process.exit(0);
 }
-const hooksJsonPath = path.join(process.env.HOME, '.gemini', 'antigravity-cli', 'hooks.json');
+const hooksJsonPath = path.join(process.env.HOME, '.gemini', 'config', 'hooks.json');
 const hooksConfig = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
 const hookCommand = hooksConfig['supervisor-policy-gate'].PreToolUse[0].hooks[0].command;
 
 const testCalls = [
-  { name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, 'sample.ts'))} } },
-  { name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, 'secret.txt'))} } },
-  { name: 'read_file', args: { path: '/outside/workspace/file.txt' } },
-  { name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, '.gemini', 'config.json'))} } },
-  { name: 'write_file', args: { path: ${JSON.stringify(path.join(workspace, 'sample.ts'))}, content: 'illegal' } }
+  { name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, 'sample.ts'))} }, stepIdx: 1 },
+  { name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, 'secret.txt'))} }, stepIdx: 2 },
+  { name: 'read_file', args: { path: '/outside/workspace/file.txt' }, stepIdx: 3 },
+  { name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, '.gemini', 'config.json'))} }, stepIdx: 4 },
+  { name: 'write_file', args: { path: ${JSON.stringify(path.join(workspace, 'sample.ts'))}, content: 'illegal' }, stepIdx: 5 },
+  { name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, 'sample.ts'))} }, stepIdx: 6 }
 ];
 
 const results = [];
@@ -504,7 +693,7 @@ for (let i = 0; i < testCalls.length; i++) {
   const call = testCalls[i];
   const payload = JSON.stringify({
     toolCall: { name: call.name, args: call.args },
-    stepIdx: i + 1,
+    stepIdx: call.stepIdx,
     conversationId: 'conv-123'
   });
   try {
@@ -515,25 +704,30 @@ for (let i = 0; i < testCalls.length; i++) {
   }
 }
 fs.writeFileSync(${JSON.stringify(hookResultsFile)}, JSON.stringify(results, null, 2));
-console.log(JSON.stringify({ status: 'SUCCESS', response: 'Executed all hook test calls.' }));
+console.log(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: 'Executed all hook test calls.' } }));
 process.exit(0);
 `);
 
-    const backend = new AntigravityBackend({
-      ...DEFAULT_CONFIG,
-      backend: 'antigravity',
-      paths: { antigravity: script }
-    });
+    const backend = new AntigravityBackend(
+      {
+        ...DEFAULT_CONFIG,
+        backend: 'antigravity',
+        paths: { antigravity: script }
+      },
+      passedPreparation
+    );
 
     const events: Array<Parameters<BackendCallbacks['onEvent']>[0]> = [];
     let finalState: string | undefined;
     let finalUsage: UsageState | undefined;
+    let stopReason: string | undefined;
 
     const callbacks: BackendCallbacks = {
       onEvent(e) { events.push(e); },
       onState(state, update) {
         finalState = state;
         if (update?.usage) finalUsage = update.usage;
+        if (update?.result?.stopReason) stopReason = update.result.stopReason;
       }
     };
 
@@ -553,34 +747,38 @@ process.exit(0);
     await waitFor(() => finalState, (state) => state === 'completed');
 
     const hookResults = JSON.parse(await readFile(hookResultsFile, 'utf8'));
-    expect(hookResults).toHaveLength(5);
+    expect(hookResults).toHaveLength(6);
     expect(hookResults[0]).toEqual({ decision: 'allow' });
     expect(hookResults[1]).toEqual({ decision: 'deny', reason: 'path_excluded' });
     expect(hookResults[2]).toEqual({ decision: 'deny', reason: 'path_outside_workspace' });
     expect(hookResults[3]).toEqual({ decision: 'deny', reason: 'path_reserved' });
     expect(hookResults[4]).toEqual({ decision: 'deny', reason: 'tool_not_in_profile' });
+    expect(hookResults[5]).toEqual({ decision: 'deny', reason: 'turn_limit_exceeded' });
+
+    expect(stopReason).toBe('turn_limit');
 
     const toolCallEvents = events.filter((e) => e.type === 'tool_call');
     expect(toolCallEvents).toHaveLength(1);
     expect(toolCallEvents[0]?.data).toMatchObject({ tool: 'read_file' });
 
     const toolDeniedEvents = events.filter((e) => e.type === 'tool_denied');
-    expect(toolDeniedEvents).toHaveLength(4);
+    expect(toolDeniedEvents).toHaveLength(5);
     expect(toolDeniedEvents.map((e) => e.data.reason)).toEqual([
       'path_excluded',
       'path_outside_workspace',
       'path_reserved',
-      'tool_not_in_profile'
+      'tool_not_in_profile',
+      'turn_limit_exceeded'
     ]);
 
     expect(finalUsage?.toolCalls).toEqual({
       executed: 1,
-      deniedByHandler: 4,
+      deniedByHandler: 5,
       deniedByPolicy: 0
     });
   });
 
-  it('integrates RunManager with exportReport to write approvals.json, populate tool_calls, and redact out-of-workspace paths', async () => {
+  it('integrates RunManager with mandatory preparation, exportReport, approvals.json, pin identity, reasoning_observation, and redacts out-of-workspace paths', async () => {
     const root = await makeRoot();
     const workspace = path.join(root, 'workspace');
     const dataDir = path.join(root, 'data');
@@ -596,10 +794,31 @@ const path = require('node:path');
 const { execSync } = require('node:child_process');
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('agy 1.3.1');
+  console.log('1.4.0');
   process.exit(0);
 }
-const hooksJsonPath = path.join(process.env.HOME, '.gemini', 'antigravity-cli', 'hooks.json');
+// Support zero-inference slash commands during runAntigravityPreparationCheck
+const promptIdx = args.indexOf('-p');
+const promptVal = promptIdx >= 0 ? args[promptIdx + 1] : '';
+if (promptVal === '/config' || promptVal === '/hooks' || promptVal === '/permissions' || promptVal === '/skills') {
+  const settingsPath = path.join(process.env.HOME, '.gemini', 'antigravity-cli', 'settings.json');
+  const settings = fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath, 'utf8')) : {};
+  const hooksPath = path.join(process.env.HOME, '.gemini', 'config', 'hooks.json');
+  const hooks = fs.existsSync(hooksPath) ? JSON.parse(fs.readFileSync(hooksPath, 'utf8')) : {};
+  if (promptVal === '/config') {
+    console.log(JSON.stringify({ status: 'SUCCESS', command: { name: 'config', data: { config: settings } } }));
+  } else if (promptVal === '/hooks') {
+    console.log(JSON.stringify({ status: 'SUCCESS', command: { name: 'hooks', data: { hooks: Object.keys(hooks).map((name) => ({ name, enabled: true, events: [{ event: 'PreToolUse', matcher: '*', count: 1 }] })) } } }));
+  } else if (promptVal === '/permissions') {
+    const perms = settings.permissions || { allow: [], deny: [] };
+    console.log(JSON.stringify({ status: 'SUCCESS', command: { name: 'permissions', data: { permissions: [{ scope: 'global', allow: perms.allow, deny: perms.deny }] } } }));
+  } else if (promptVal === '/skills') {
+    console.log(JSON.stringify({ status: 'SUCCESS', command: { name: 'skills', data: { skills: [] } } }));
+  }
+  process.exit(0);
+}
+
+const hooksJsonPath = path.join(process.env.HOME, '.gemini', 'config', 'hooks.json');
 const hooksConfig = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
 const hookCommand = hooksConfig['supervisor-policy-gate'].PreToolUse[0].hooks[0].command;
 
@@ -623,53 +842,112 @@ execSync(hookCommand, {
   stdio: ['pipe', 'pipe', 'inherit']
 });
 
-console.log(JSON.stringify({ status: 'SUCCESS', response: 'Completed e2e run with approvals.' }));
+console.log(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: 'Completed e2e run with approvals.' } }));
 process.exit(0);
+`);
+
+    const prevHome = process.env.VIBE_SUPERVISOR_HOME;
+    process.env.VIBE_SUPERVISOR_HOME = dataDir;
+    try {
+      const config = {
+        ...DEFAULT_CONFIG,
+        backend: 'antigravity' as const,
+        allowedWorkspaceRoots: [workspace],
+        paths: { antigravity: script }
+      };
+
+      // Write mandatory preparation receipt first
+      const prepCheck = await runAntigravityPreparationCheck(config, { dataDir });
+      expect(prepCheck.status).toBe('passed');
+
+      const manager = new RunManager(config, dataDir);
+      await manager.initialize();
+
+      const start = await manager.reviewStart({
+        task: 'E2E export test',
+        cwd: workspace,
+        wait_seconds: 5
+      });
+
+      expect(start.backend).toBe('antigravity');
+      expect(start.state).toBe('completed');
+
+      const runDir = path.join(dataDir, 'runs', start.run_id);
+      const approvalsPath = path.join(runDir, 'artifacts', 'approvals.json');
+      const approvalsContent = JSON.parse(await readFile(approvalsPath, 'utf8'));
+      expect(approvalsContent.run_id).toBe(start.run_id);
+      expect(approvalsContent.records).toHaveLength(2);
+      expect(approvalsContent.records[0]).toMatchObject({ decision: 'approve' });
+      expect(approvalsContent.records[1]).toMatchObject({ decision: 'deny' });
+
+      const result = await manager.result({ run_id: start.run_id, detail: 'full' });
+      expect((result.usage as Record<string, unknown> | undefined)?.tool_calls).toEqual({
+        executed: 1,
+        denied_by_handler: 1,
+        denied_by_policy: 0
+      });
+
+      const exportBundle = path.join(root, 'exported-bundle');
+      const exportResult = await exportReport({ directory: runDir, output: exportBundle, include: ['events'] });
+      expect(exportResult.files).toContain('approvals.json');
+      expect(exportResult.files).toContain('events.json');
+
+      const exportedReport = JSON.parse(await readFile(path.join(exportBundle, 'report.json'), 'utf8'));
+      expect(exportedReport.pin).toMatchObject({ vibe_version: '1.4.0' });
+
+      const exportedApprovals = JSON.parse(await readFile(path.join(exportBundle, 'approvals.json'), 'utf8'));
+      expect(exportedApprovals.records).toHaveLength(2);
+      expect(exportedApprovals.records[0].path).toBe('sample.txt');
+      expect(exportedApprovals.records[1].path).toBe(OUTSIDE_WORKSPACE);
+
+      await manager.shutdown();
+    } finally {
+      if (prevHome === undefined) delete process.env.VIBE_SUPERVISOR_HOME;
+      else process.env.VIBE_SUPERVISOR_HOME = prevHome;
+    }
+  });
+
+  it('executes runAntigravityPreparationCheck and runDoctor with zero model inference', async () => {
+    const root = await makeRoot();
+    const dataDir = path.join(root, 'data');
+    await mkdir(dataDir, { recursive: true });
+
+    const script = path.join(root, 'mock-agy.sh');
+    await writeExecutable(script, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.4.0');
+  process.exit(0);
+}
+process.exit(1);
 `);
 
     const config = {
       ...DEFAULT_CONFIG,
       backend: 'antigravity' as const,
-      allowedWorkspaceRoots: [workspace],
+      allowedWorkspaceRoots: [root],
       paths: { antigravity: script }
     };
 
-    const manager = new RunManager(config, dataDir);
-    await manager.initialize();
+    const prepOut = await runAntigravityPreparationCheck(config, { dataDir });
+    expect(prepOut.status).toBe('passed');
+    expect(prepOut.report.result).toBe('pass');
+    expect(prepOut.report.profiles.review.settings_valid).toBe(true);
+    expect(prepOut.report.profiles.review.hooks_valid).toBe(true);
+    expect(prepOut.report.profiles.review.synthetic_checks_passed).toBe(true);
+    expect(prepOut.report.profiles.review.ledger_entries).toBe(6);
+    expect(prepOut.report.profiles.edit.settings_valid).toBe(true);
+    expect(prepOut.report.profiles.edit.hooks_valid).toBe(true);
+    expect(prepOut.report.profiles.edit.synthetic_checks_passed).toBe(true);
+    expect(prepOut.report.profiles.edit.ledger_entries).toBe(6);
+    expect(prepOut.report.network_observation.verdict).toBe('none-observed-control-validated');
 
-    const start = await manager.reviewStart({
-      task: 'E2E export test',
-      cwd: workspace,
-      wait_seconds: 5
-    });
-
-    expect(start.backend).toBe('antigravity');
-    expect(start.state).toBe('completed');
-
-    const runDir = path.join(dataDir, 'runs', start.run_id);
-    const approvalsPath = path.join(runDir, 'artifacts', 'approvals.json');
-    const approvalsContent = JSON.parse(await readFile(approvalsPath, 'utf8'));
-    expect(approvalsContent.run_id).toBe(start.run_id);
-    expect(approvalsContent.records).toHaveLength(2);
-    expect(approvalsContent.records[0]).toMatchObject({ decision: 'approve' });
-    expect(approvalsContent.records[1]).toMatchObject({ decision: 'deny' });
-
-    const result = await manager.result({ run_id: start.run_id, detail: 'full' });
-    expect((result.usage as Record<string, unknown> | undefined)?.tool_calls).toEqual({
-      executed: 1,
-      denied_by_handler: 1,
-      denied_by_policy: 0
-    });
-
-    const exportBundle = path.join(root, 'exported-bundle');
-    const exportResult = await exportReport({ directory: runDir, output: exportBundle });
-    expect(exportResult.files).toContain('approvals.json');
-
-    const exportedApprovals = JSON.parse(await readFile(path.join(exportBundle, 'approvals.json'), 'utf8'));
-    expect(exportedApprovals.records).toHaveLength(2);
-    expect(exportedApprovals.records[0].path).toBe('sample.txt');
-    expect(exportedApprovals.records[1].path).toBe(OUTSIDE_WORKSPACE);
-
-    await manager.shutdown();
+    const doctorReport = await runDoctor(config, { dataDir });
+    expect(doctorReport.ok).toBe(true);
+    expect(doctorReport.provenance.backend).toBe('antigravity');
+    const agyCheck = doctorReport.checks.find((c) => c.name === 'antigravity');
+    expect(agyCheck?.ok).toBe(true);
+    expect(agyCheck?.version).toBe('1.4.0');
+    expect(agyCheck?.message).toContain('sha256:');
   });
 });

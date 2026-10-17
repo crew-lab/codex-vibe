@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "candidate": "2.0.2",
-  "scope": "App-server client: one-shot review and isolated edit through vibe-app-server 2.26.1, one process per run; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work. There is one engine and no backend selector or backend config key. Around the five tools: optional frozen acceptance contracts checked against the exact exported patch, append-only coordinator assessments, sanitized run reports, a version-matched preparation pass that gates ordinary dispatch, and owned validation copies.",
+  "scope": "One-shot review and isolated edit with vibe-app-server 2.26.1 as the default engine (one process per run; backend = \"app-server\"), with Google Antigravity (agy 1.4.0 CLI) supported as an optional second execution backend (backend = \"antigravity\", paths.antigravity); one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work. Around the five tools: optional frozen acceptance contracts checked against the exact exported patch, append-only coordinator assessments, sanitized run reports, a version-matched preparation pass that gates ordinary dispatch, and owned validation copies.",
   "deterministic": [
     {
       "name": "lint-typecheck-build-tests-acceptance-secret-scan-sbom",
@@ -85,6 +85,10 @@
     },
     {
       "name": "approval-ledger-and-pin-identity-in-run-export",
+      "status": "RUN_BY_focused-tests"
+    },
+    {
+      "name": "antigravity-backend-settings-pretool-hook-ledger-and-prepare",
       "status": "RUN_BY_focused-tests"
     }
   ],
@@ -426,6 +430,22 @@
       "decision": "The owner performs it with a prepared packet; evidence from another archive is not carried over.",
       "carry_over": "Installation, registration and rollback are unchanged since 44dc6f8. Proposed, owner to confirm: run it once on the archive that is promoted to stable. If 2.0.2 is published before 2.0.1 leaves pre-release, run it on the 2.0.2 archive instead of on 7978719c; otherwise run it on 7978719c for 2.0.1 as planned and rerun it for 2.0.2 before its stable promotion.",
       "result": "PENDING 2026-10-17: owner reports no separate clean standard macOS account available. Current-account private-prefix checks do not satisfy this gate. Checklist: docs/clean-account-checklist.md."
+    },
+    {
+      "name": "antigravity-backend-no-inference-check",
+      "status": "UNVERIFIED",
+      "build": "2.1.0 (unreleased)",
+      "evidence_required": "On the target machine with installed agy 1.4.0 and no provider inference, vibe-supervisor prepare check with backend = \"antigravity\" verifies the agy 1.4.0 executable and binary SHA-256 digest, validates isolated settings.json unified permission rules (toolPermission strict, enableTerminalSandbox true, allowNonWorkspaceAccess false, mode-specific allow/deny), verifies .gemini/config/hooks.json supervisor-policy-gate configuration, executes zero-inference slash-command read-backs (/config, /hooks, /permissions, /skills) against a refusing loopback proxy, and passes all synthetic PreToolUse hook evaluations writing a verified approval ledger.",
+      "prior_evidence": "Fixture tests cover executable resolution, binary digest checking, isolated settings generation, PreToolUse hook enforcement, and zero-inference prepare check (tests/unit/antigravity-backend.test.ts).",
+      "carry_over": "Nothing to carry: Antigravity backend target conformance requires execution on the target machine with the installed agy 1.4.0 binary."
+    },
+    {
+      "name": "antigravity-backend-hosted-review-edit",
+      "status": "UNVERIFIED",
+      "build": "2.1.0 (unreleased)",
+      "evidence_required": "One hosted review and one hosted edit run through AntigravityBackend on agy 1.4.0 with isolated HOME/TMPDIR: review verifies read-only workspace bounds and prompt listing; edit executes in a detached worktree; every tool call passes through the PreToolUse hook and is recorded in approvals.json; stream-json envelopes parse status, usage and denied actions; and artifacts export cleanly with runs export without leaking machine paths.",
+      "prior_evidence": "Fixture and integration tests cover stream-json envelope parsing, watchdog progress, mode-specific permissions, detached worktree editing, hook ledger export, and untrusted extension guards (tests/unit/antigravity-backend.test.ts).",
+      "carry_over": "Nothing to carry. Requires authorized hosted runs on the target machine with agy 1.4.0."
     }
   ],
   "not_required_for_2_0": [],
