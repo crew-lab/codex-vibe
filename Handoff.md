@@ -168,9 +168,9 @@ The owner decided on 2026-10-17 to halt the exploratory feature run (deferred: w
 | 5 | Done 2026-10-15/16 on the target: 2.0.1 packaged from git (`44dc6f8`, archive `7978719c…`), installed side by side, pin and `doctor`, one `prepare check` PASS, SDK and native readiness PASS. Hosted: the review rejected on answer quality (one start); the edit rejected on its contract (a second start). Recorded in `docs/acceptance.json` | — | — |
 | 6 | Done 2026-10-16 on the target (`347bf79` on `origin/codex/package-kit-identity`): the MCP-client disconnect passed on the installed 2.0.1 candidate | Target agent | — |
 | 7 | Done 2026-10-17: Reviewed and merged `origin/codex/package-kit-identity` (`6faee25`, carrying 2.0.1 disconnect PASS and 2.0.2 target readiness PASS) into main; followed by convergence of `explore_project_details` (`f64db99`) into main | Coordinator | Step 6 |
-| 8 | Clean-account installation of the frozen archive (`docs/clean-account-checklist.md`) | Owner | — |
+| 8 | Pending: Clean-account installation of the frozen archive (`docs/clean-account-checklist.md`; owner has no separate clean standard macOS account) | Owner | — |
 | 9 | Done 2026-10-16: the owner documented worker answer quality as a limit and chose to publish the tested archive from `44dc6f8` as v2.0.1; main's later changes are 2.0.2 | — | — |
-| 10 | Publish v2.0.1 as a pre-release from the tested assets with [planning/release-notes-2.0.1.md](planning/release-notes-2.0.1.md), per the commands in the owner decision above; `--latest` once steps 7 and 8 are recorded | Owner | — |
+| 10 | Done 2026-10-17: Published v2.0.1 as a pre-release from the tested assets (`7978719c…`) tagged at `44dc6f8` with release notes and full asset bundle | Owner | — |
 | 11 | Done 2026-10-17 on `origin/explore_project_details`: Phases 1, 2 & 3 hardening, 2.1 unification and target conformance of `AntigravityBackend` (Phase 1 `agy` CLI flags & `settings.json`, Phase 2 `excluded_globs` & `PreToolUse` hook emitting `approvals.json`, Phase 3 `agy 1.4.0` revalidation, zero-inference `prepare check`, ADR 0008, target acceptance gates) | Agents | — |
 | 12 | Decide the repository rename (`codex-vibe` → `vibe-supervisor`) and read the Mistral and OpenAI brand pages | Owner | Before the article goes out |
 | 13 | Read the 2.0 article draft (`marketing/article/devto-2.0.md`) with its [editor notes](marketing/article/editor-notes.md) and [story sources](marketing/sources.md); update it for the workflow features and publish after the release with the AI-Assisted label and the `[UPDATE AT PUBLISH]` markers filled, in the marketing strategy's [order](marketing/strategy.md#6-next-actions-in-order) | Owner reads and publishes; agent fills the markers from the evidence | Step 10 |
@@ -185,8 +185,8 @@ The owner decided on 2026-10-17 to halt the exploratory feature run (deferred: w
 | C | Done (`1f906e8`): One `prepare check` (no-inference conformance) on the 2.0.2 candidate, then installed SDK readiness PASS | Target agent | — |
 | D | Done (`a3c9631`): Switched the desktop registration to 2.0.2 (rollback kept) and verified native readiness with `expected_candidate` after desktop restart | Target agent | — |
 | E | Done 2026-10-17: Reviewed and merged `origin/codex/package-kit-identity` (`6faee25`) into main | Coordinator | D |
-| F | Confirm the proposed carry-over in `docs/acceptance.json` (`6faee25`) and decide whether one hosted review shows the reporting fix on a real run (`execution-provenance-on-hosted-run`, optional) | Owner | E |
-| G | Publish v2.0.2 from the checked target-held assets with [planning/release-notes-2.0.2.md](planning/release-notes-2.0.2.md), tagged at `b275b1b` | Owner | F |
+| F | Done 2026-10-17: Proposed carry-over confirmed; published on no-inference evidence without extra hosted runs per owner decision | Owner | E |
+| G | Done 2026-10-17: Published v2.0.2 as a pre-release from the checked target-held assets (`84bff941…`) tagged at `b275b1b` with release notes and full asset bundle | Owner | F |
 
 **The skipped `workflow` scope.** Until it is added, no workflow file can be pushed, so the repository has no CI. To unblock: at https://github.com/settings/tokens give the push token the `workflow` scope (fine-grained: "Workflows: Read and write" on `crew-lab/codex-vibe`), update the Keychain entry `crew-lab-codex-vibe-github-token` if the value changed, then push the local CI branch rebased onto the current line and watch its first run.
 
