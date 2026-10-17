@@ -1,0 +1,23 @@
+{
+  "date": "2026-10-17",
+  "assessment": "SUPPORTED_CARRY_OVER_NOT_NEW_HOSTED_PROOF",
+  "from_source": "2a49abdb0fda49aada8ea4724361d64c46664c92",
+  "to_source": "347bf79acf3412d4d7c4eff16bacf42256d251eb",
+  "unchanged_path_groups": [
+    "src/core",
+    "src/process",
+    "src/backends",
+    "src/security",
+    "src/config",
+    "src/git"
+  ],
+  "changed_files_in_groups": [],
+  "disconnect_evidence": "research/evidence/disconnect-2a49abd-2026-10-16/CHECKS.json",
+  "config_evidence": "research/evidence/release-2.0.2-347bf79-2026-10-16/CONFORMANCE.sanitized.json",
+  "limits": [
+    "Original hosted results remain bound to the original archive.",
+    "No new hosted start; no new hosted PASS for 2.0.2.",
+    "Clean-account installation pending: owner reports no clean account available.",
+    "Owner confirmation of carry-over remains explicit; this is the technical assessment."
+  ]
+}
