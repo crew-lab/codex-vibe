@@ -78,24 +78,24 @@ Package in a detached worktree at the exact main commit that carries the integra
 
 ```bash
 read -r COMMIT   # the 40-hex main commit to package
-cd /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe && git fetch origin && git merge-base --is-ancestor "$COMMIT" origin/main && git worktree add --detach .claude/worktrees/package-2.0.1 "$COMMIT"
+cd <supervisor-repository> && git fetch origin && git merge-base --is-ancestor "$COMMIT" origin/main && git worktree add --detach .claude/worktrees/package-2.0.1 "$COMMIT"
 ```
 
 ```bash
-cd /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/.claude/worktrees/package-2.0.1 && git rev-parse HEAD && node --version && npm --version && npm ci && VIBE_SUPERVISOR_TEST_NPM_CACHE=/Users/r.senchuk/.npm npm run package:rc; echo exit=$?
+cd <supervisor-repository>/.claude/worktrees/package-2.0.1 && git rev-parse HEAD && node --version && npm --version && npm ci && VIBE_SUPERVISOR_TEST_NPM_CACHE=<target-home>/.npm npm run package:rc; echo exit=$?
 ```
 
 - **What it does:** `verify:release` (lint, typecheck, build, the suite, acceptance, secret scan, SBOM), then the offline installed-package smoke test, then `npm pack` with the cache, then the version-matched kit. It never falls back to the network.
 - **Where outputs land:** `.claude/worktrees/package-2.0.1/release/`: `vibe-supervisor-2.0.1.tgz`, `sbom.spdx.json`, `acceptance.json` (the packaging-time report, not `docs/acceptance.json`), `SHA256SUMS` over those three, and `preparation-kit-2.0.1/` (`v2-conformance-check.mjs`, `manifest.json` with the candidate identity, `PROCEDURE.md`, its own `SHA256SUMS`). Copy them to the gitignored `release/2.0.1/` of the primary checkout before the worktree is removed:
 
 ```bash
-mkdir -p /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/2.0.1 && cp -Rp /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/.claude/worktrees/package-2.0.1/release/vibe-supervisor-2.0.1.tgz /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/.claude/worktrees/package-2.0.1/release/sbom.spdx.json /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/.claude/worktrees/package-2.0.1/release/acceptance.json /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/.claude/worktrees/package-2.0.1/release/SHA256SUMS /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/.claude/worktrees/package-2.0.1/release/preparation-kit-2.0.1 /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/2.0.1/
+mkdir -p <supervisor-repository>/release/2.0.1 && cp -Rp <supervisor-repository>/.claude/worktrees/package-2.0.1/release/vibe-supervisor-2.0.1.tgz <supervisor-repository>/.claude/worktrees/package-2.0.1/release/sbom.spdx.json <supervisor-repository>/.claude/worktrees/package-2.0.1/release/acceptance.json <supervisor-repository>/.claude/worktrees/package-2.0.1/release/SHA256SUMS <supervisor-repository>/.claude/worktrees/package-2.0.1/release/preparation-kit-2.0.1 <supervisor-repository>/release/2.0.1/
 ```
 
 - **Check and compute the SHA-256**, each a separate exit code:
 
 ```bash
-cd /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/2.0.1 && shasum -a 256 -c SHA256SUMS; echo exit=$?
+cd <supervisor-repository>/release/2.0.1 && shasum -a 256 -c SHA256SUMS; echo exit=$?
 (cd preparation-kit-2.0.1 && shasum -a 256 -c SHA256SUMS); echo exit=$?
 shasum -a 256 vibe-supervisor-2.0.1.tgz sbom.spdx.json acceptance.json SHA256SUMS preparation-kit-2.0.1/SHA256SUMS
 jq -e '[.deterministic_checks[] | select(.status != "PASS")] | length == 0' acceptance.json; echo exit=$?
@@ -276,7 +276,7 @@ CONFIG="$HOME/Library/Application Support/VibeSupervisor-oneshot/config.toml"
 - **Rename** (recommended before the first outreach post; GitHub redirects the old name and old clones keep working):
 
 ```bash
-gh repo rename vibe-supervisor --repo crew-lab/codex-vibe --yes && git -C /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe remote set-url origin https://github.com/crew-lab/vibe-supervisor.git && git -C /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe remote -v
+gh repo rename vibe-supervisor --repo crew-lab/codex-vibe --yes && git -C <supervisor-repository> remote set-url origin https://github.com/crew-lab/vibe-supervisor.git && git -C <supervisor-repository> remote -v
 ```
 
 - **Description and nine topics**, from the outreach draft (commit `d360f28`, `docs/history/outreach-drafts.md`, section 2):
@@ -294,15 +294,15 @@ REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner) && gh repo edit "$RE
 **Three more assets**, after the evidence branch is merged: the kit as one archive, the evidence summary and the asset checksums.
 
 ```bash
-cd /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/2.0.1 && tar -czf preparation-kit-2.0.1.tar.gz preparation-kit-2.0.1; echo exit=$?
+cd <supervisor-repository>/release/2.0.1 && tar -czf preparation-kit-2.0.1.tar.gz preparation-kit-2.0.1; echo exit=$?
 ```
 
 ```bash
-cd /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe && read -r COMMIT && jq --arg sha "$(shasum -a 256 release/2.0.1/vibe-supervisor-2.0.1.tgz | cut -d' ' -f1)" --arg commit "$COMMIT" --arg evidence_commit "$(git rev-parse origin/main)" '{schema_version: 1, version: "2.0.1", tag: "v2.0.1", source_commit: $commit, archive_sha256: $sha, evidence_record: ("docs/acceptance.json at " + $evidence_commit), verified: [.verified[] | {name, status, result}], open: [.unverified[] | {name, status, result}], hosted_allowance_remaining: .delivery_requirements.hosted_allowance_remaining, packaging_report_note: "The acceptance.json asset is the packaging-time report; this file records the later target results for the same archive, which was not rebuilt."}' docs/acceptance.json > release/2.0.1/release-evidence.json; echo exit=$?
+cd <supervisor-repository> && read -r COMMIT && jq --arg sha "$(shasum -a 256 release/2.0.1/vibe-supervisor-2.0.1.tgz | cut -d' ' -f1)" --arg commit "$COMMIT" --arg evidence_commit "$(git rev-parse origin/main)" '{schema_version: 1, version: "2.0.1", tag: "v2.0.1", source_commit: $commit, archive_sha256: $sha, evidence_record: ("docs/acceptance.json at " + $evidence_commit), verified: [.verified[] | {name, status, result}], open: [.unverified[] | {name, status, result}], hosted_allowance_remaining: .delivery_requirements.hosted_allowance_remaining, packaging_report_note: "The acceptance.json asset is the packaging-time report; this file records the later target results for the same archive, which was not rebuilt."}' docs/acceptance.json > release/2.0.1/release-evidence.json; echo exit=$?
 ```
 
 ```bash
-cd /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/2.0.1 && shasum -a 256 vibe-supervisor-2.0.1.tgz sbom.spdx.json acceptance.json SHA256SUMS preparation-kit-2.0.1.tar.gz release-evidence.json | jq -R -s '{tag: "v2.0.1", algorithm: "sha256", assets: (split("\n") | map(select(length > 0) | capture("^(?<sha256>[0-9a-f]{64})  (?<name>.+)$")))}' > asset-checksums.json; echo exit=$?
+cd <supervisor-repository>/release/2.0.1 && shasum -a 256 vibe-supervisor-2.0.1.tgz sbom.spdx.json acceptance.json SHA256SUMS preparation-kit-2.0.1.tar.gz release-evidence.json | jq -R -s '{tag: "v2.0.1", algorithm: "sha256", assets: (split("\n") | map(select(length > 0) | capture("^(?<sha256>[0-9a-f]{64})  (?<name>.+)$")))}' > asset-checksums.json; echo exit=$?
 ```
 
 `SHA256SUMS` stays exactly as `package:rc` wrote it; `asset-checksums.json` covers the later files.
@@ -310,8 +310,8 @@ cd /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/2.0.1 && shasum -
 **Publish (you).** A draft first, so the assets can be checked before anything is public. The target commit must be on main's history:
 
 ```bash
-cd /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe && read -r COMMIT && git fetch origin && git merge-base --is-ancestor "$COMMIT" origin/main && echo on-main
-REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner) && REL=/Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/release/2.0.1 && gh release create v2.0.1 --repo "$REPO" --draft --target "$COMMIT" --title "vibe-supervisor 2.0.1" --notes-file "$REL/release-notes.md" "$REL/vibe-supervisor-2.0.1.tgz" "$REL/sbom.spdx.json" "$REL/acceptance.json" "$REL/SHA256SUMS" "$REL/preparation-kit-2.0.1.tar.gz" "$REL/release-evidence.json" "$REL/asset-checksums.json"
+cd <supervisor-repository> && read -r COMMIT && git fetch origin && git merge-base --is-ancestor "$COMMIT" origin/main && echo on-main
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner) && REL=<supervisor-repository>/release/2.0.1 && gh release create v2.0.1 --repo "$REPO" --draft --target "$COMMIT" --title "vibe-supervisor 2.0.1" --notes-file "$REL/release-notes.md" "$REL/vibe-supervisor-2.0.1.tgz" "$REL/sbom.spdx.json" "$REL/acceptance.json" "$REL/SHA256SUMS" "$REL/preparation-kit-2.0.1.tar.gz" "$REL/release-evidence.json" "$REL/asset-checksums.json"
 gh release view v2.0.1 --repo "$REPO" --json isDraft,assets --jq '.isDraft, (.assets[] | "\(.digest)  \(.name)")'
 ```
 
@@ -324,8 +324,8 @@ REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner) && gh release edit v
 **After publishing** (coordinator or you):
 
 ```bash
-cd /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe && read -r COMMIT && git fetch origin --tags && test "$(git rev-parse v2.0.1^{commit})" = "$COMMIT" && echo tag-ok
-REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner) && CHECK=$(mktemp -d) && gh release download v2.0.1 --repo "$REPO" --dir "$CHECK" && cd "$CHECK" && shasum -a 256 -c SHA256SUMS && test "$(shasum -a 256 vibe-supervisor-2.0.1.tgz | cut -d' ' -f1)" = "$(jq -r .frozen_archive_sha256 /Users/r.senchuk/src/github.com/whitebithq/cdx-vibe/docs/acceptance.json)" && echo archive-matches-record
+cd <supervisor-repository> && read -r COMMIT && git fetch origin --tags && test "$(git rev-parse v2.0.1^{commit})" = "$COMMIT" && echo tag-ok
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner) && CHECK=$(mktemp -d) && gh release download v2.0.1 --repo "$REPO" --dir "$CHECK" && cd "$CHECK" && shasum -a 256 -c SHA256SUMS && test "$(shasum -a 256 vibe-supervisor-2.0.1.tgz | cut -d' ' -f1)" = "$(jq -r .frozen_archive_sha256 <supervisor-repository>/docs/acceptance.json)" && echo archive-matches-record
 ```
 
 Then on main (coordinator, by path, `make push` with your yes): the Handoff's release identity says "published", the 2.0.1 changelog line "Unreleased" becomes the date and the link, and the 2.0.0 entry's release sentence says it was not released. Existing releases are never replaced or retagged; a wrong asset means a new patch release, not an edit of the old one.
@@ -413,7 +413,7 @@ Order: wave 0 (contracts) first, then 1, 2, 3, 4, 6 and 7 in parallel, the backe
    - Created private per-run `antigravity-home` (`HOME`) and `antigravity-tmp` (`TMPDIR`) inside `input.runDir`, cleaned up automatically at run completion/close and by `removeLeftoverPrivateState()` on crash recovery.
    - Wrote `$HOME/.gemini/antigravity-cli/settings.json` before spawning `agy` with `toolPermission: "strict"`, `enableTerminalSandbox: true`, `allowNonWorkspaceAccess: false`, mode-scoped `permissions.allow` (`read_file`, `view_file`, `list_dir`, `grep_search`, `find_by_name` for reviews; plus `write_file`, `edit_file`, `replace_file_content`, `multi_replace_file_content` for edits), and `permissions.deny` blocking `bash`, `run_command`, `web_fetch`, `web_search`, `browser`, `mcp`, and reserved/secret globs (`.git/**`, `.vibe/**`, `.gemini/**`, `.agents/**`, `.env*`, `*.pem`, `*.key`).
 3. **Reject Untrusted Project `.gemini` and `.agents` Extensions (`src/security/workspace-guard.ts`, `src/core/run-manager.ts`)**:
-   - Added `assertNoProjectAntigravityExtensions(root)` in `src/security/workspace-guard.ts` and wired it into `RunManager.validateAdmission()` when `backend === "antigravity"`, failing closed with `VSUP_POLICY_DENIED` if `.gemini`, `.agents/hooks.json`, `.agents/mcp_config.json`, or `.agents/plugins` exist.
+   - Added `assertNoProjectAntigravityExtensions(root)` in `src/security/workspace-guard.ts` and wired it into `RunManager.validateAdmission()` when `backend === "antigravity"`, failing closed with `VSUP_WORKSPACE_INVALID` if `.gemini`, `.agents/hooks.json`, `.agents/mcp_config.json`, or `.agents/plugins` exist.
 4. **Wire Watchdog Progress & Boot-Bound Policy Drift (`src/core/run-manager.ts`, `src/config/config.ts`, `src/config/policy.ts`)**:
    - Updated `callbacks.onEvent` in `src/core/run-manager.ts` so `"antigravity"` events call `this.noteActivity(...)` alongside `"vibe"`.
    - Added `backend` and `paths.antigravity` to `configFingerprint()` and `BOOT_BOUND_SETTINGS` so changing either surfaces `boot_drift` and `restart_required: true`.
