@@ -1,0 +1,12 @@
+{
+  "result": "PASS",
+  "node": "v20.19.0",
+  "version": "2.0.2",
+  "archive_sha256": "84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09",
+  "candidate_sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1",
+  "script_sha256": "7d563e9c346c5f687545f0c2989787a9ba4570e659ad27b6c03a354ac6bc490e",
+  "delivery_checksums": "PASS",
+  "kit_checksums": "PASS",
+  "installation": "offline lifecycle-disabled",
+  "temporary_installation": "removed in finally"
+}

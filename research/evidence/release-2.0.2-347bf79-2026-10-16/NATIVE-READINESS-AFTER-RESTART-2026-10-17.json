@@ -1,0 +1,58 @@
+{
+  "checked_date": "2026-10-17",
+  "status": "PASS",
+  "hosted_runs_started": 0,
+  "tools": [
+    "vibe_close",
+    "vibe_edit_start",
+    "vibe_result",
+    "vibe_review_start",
+    "vibe_status"
+  ],
+  "checks": [
+    {
+      "operation": "review",
+      "server_version": "2.0.2",
+      "candidate": {
+        "version": "2.0.2",
+        "sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1"
+      },
+      "preparation": {
+        "status": "passed",
+        "candidate_sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1",
+        "version": "2.0.2",
+        "reason": "Version-matched no-inference evidence; hosted acceptance remains separate"
+      },
+      "eligible": true,
+      "workspace_eligible": true,
+      "active_slot": {
+        "busy": false
+      },
+      "restart_required": false,
+      "boot_drift": [],
+      "blockers": []
+    },
+    {
+      "operation": "edit",
+      "server_version": "2.0.2",
+      "candidate": {
+        "version": "2.0.2",
+        "sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1"
+      },
+      "preparation": {
+        "status": "passed",
+        "candidate_sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1",
+        "version": "2.0.2",
+        "reason": "Version-matched no-inference evidence; hosted acceptance remains separate"
+      },
+      "eligible": true,
+      "workspace_eligible": true,
+      "active_slot": {
+        "busy": false
+      },
+      "restart_required": false,
+      "boot_drift": [],
+      "blockers": []
+    }
+  ]
+}

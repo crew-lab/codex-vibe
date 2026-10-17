@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-17",
+  "source_review_head": "a3c9631 plus documentation-only review updates",
+  "frozen_source": "347bf79",
+  "node": "20.19.0",
+  "npm": "10.8.2",
+  "verify_release": "PASS",
+  "tests": 1305,
+  "test_files": 89,
+  "checks": [
+    "lint",
+    "typecheck",
+    "build",
+    "tests",
+    "acceptance",
+    "secret-scan",
+    "SBOM"
+  ],
+  "initial_sandbox_attempt": {
+    "result": "FAIL",
+    "test_files_failed": 13,
+    "tests_failed": 130,
+    "cause": "Sandbox denied local listeners and process operations; no candidate or policy modification was made before unrestricted verification."
+  },
+  "archive_rehash": "PASS: 84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09",
+  "clean_account_install": "PENDING: owner reports no separate account available",
+  "hosted_starts": 0,
+  "publication": false,
+  "merge": false
+}

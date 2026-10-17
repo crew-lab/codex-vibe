@@ -143,6 +143,17 @@
       "target_evidence": "none",
       "transfers_to_candidate": false,
       "note": "Packaged from 0101f28 plus a test-race fix and a packaging fix, without the workflow features. Its src/ is identical to the 2.0.0 runtime whose first no-inference target check failed on the null harnessSelectionSource and saw startup connections (ADR 0005)."
+    },
+    {
+      "label": "reporting repair target disconnect",
+      "source_commit": "2a49abdb0fda49aada8ea4724361d64c46664c92",
+      "archive_sha256": "133e77bdf20fc1cc839d3f0e5bfcdc644aa5ec09e4eb02558fb43cd1b8d191a8",
+      "candidate_distribution_sha256": "1c3c135862e2fe888428a2bf67fc6cd02fe9852259a494e7d624e2a3e96a45c0",
+      "runtime": "macOS arm64, Node 20.19.0, Vibe 2.26.1",
+      "recorded_on": "2026-10-16",
+      "evidence_packet": "research/evidence/disconnect-2a49abd-2026-10-16/REPORT.md",
+      "transfers_to_candidate": false,
+      "note": "Disconnect PASS on this exact target-built archive. The global packaging_time_snapshot identifies another archive and is preserved; this does not promote that snapshot or accept the failed hosted review/edit."
     }
   ],
   "verified": [
@@ -228,49 +239,78 @@
       "status": "PASSED_LOCALLY",
       "evidence_required": "vibe-supervisor validation prepare on a representative project with a populated pnpm store: exact Node and manager pins, frozen lockfile, dependencies inside the owned copies, hooks, lifecycle scripts and fetches off, explicit blockers for unsupported profiles, source preserved and cleanup refusal shown.",
       "evidence": "2026-10-15, preparing machine (macOS arm64), Node v20.19.0 from nvm, pnpm 9.15.4 installed into that Node: vibe-supervisor validation prepare on a public fixture (two registry dependencies, exact packageManager pin, pnpm-lock.yaml v9) with a pnpm store populated beforehand. Prepared with dependencies installed inside both owned copies and no link resolving outside the validation root; the manifest records Node v20.19.0, pnpm 9.15.4, the base commit, the patch and lockfile hashes. Lifecycle scripts stayed off: with a preinstall exiting 97 and a postinstall exiting 99 the preparation still succeeded. The source checkout stayed clean at its base. Cleanup removed an untouched workspace and retained a changed one (also after a git checkout restore, which rewrites the copy's index). Unsupported profiles (file:, link:, workspace:, git dependencies, requiresBuild, hasInstallScript) are blocked by unit tests. The first run found a defect: the lockfile check matched excludeLinksFromLockfile, present in every pnpm 9 lockfile, so every populated pnpm project was blocked; fixed with regression tests before this pass."
-    }
-  ],
-  "unverified": [
+    },
+    {
+      "name": "reporting-repair-target-mcp-client-disconnect-hosted",
+      "status": "VERIFIED",
+      "build": "2a49abdb0fda49aada8ea4724361d64c46664c92",
+      "archive_sha256": "133e77bdf20fc1cc839d3f0e5bfcdc644aa5ec09e4eb02558fb43cd1b8d191a8",
+      "candidate_distribution_sha256": "1c3c135862e2fe888428a2bf67fc6cd02fe9852259a494e7d624e2a3e96a45c0",
+      "evidence": "research/evidence/disconnect-2a49abd-2026-10-16/REPORT.md",
+      "result": "PASS on this build only: active official-client disconnect, server/worker groups gone, lock absent, saved failed without replay, private directories removed, source unchanged and native close removed worktree."
+    },
     {
       "name": "package-kit-identity-binding",
-      "status": "UNVERIFIED",
-      "build": "2.0.2",
+      "status": "VERIFIED",
+      "build": "347bf79",
       "evidence_required": "The archive under test and its preparation kit come from one packaging run: the kit names the candidate identity of the packaged dist, an offline lifecycle-disabled installation of the exact archive reports that identity, version and conformance-script hash, and the delivery and kit checksums verify.",
       "prior_evidence": "v2.0.1-archive-package-kit-identity-binding passed on archive 7978719c0010c8ba.",
-      "carry_over": "Basis for the procedure only: the packaging code is unchanged since 44dc6f8, so the 2.0.1 pass shows package:rc binds the kit to the archive it ships with. Identity belongs to an archive, so 2.0.2 needs its own package:rc on the target from git and the identity check of that archive (kit candidate, offline installation, version 2.0.2, conformance-script hash, delivery and kit checksums). The conformance script is unchanged, so its hash should again be 7d563e9c346c5f68."
+      "carry_over": "Basis for the procedure only: the packaging code is unchanged since 44dc6f8, so the 2.0.1 pass shows package:rc binds the kit to the archive it ships with. Identity belongs to an archive, so 2.0.2 needs its own package:rc on the target from git and the identity check of that archive (kit candidate, offline installation, version 2.0.2, conformance-script hash, delivery and kit checksums). The conformance script is unchanged, so its hash should again be 7d563e9c346c5f68.",
+      "archive_sha256": "84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09",
+      "candidate_distribution_sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1",
+      "evidence": "research/evidence/release-2.0.2-347bf79-2026-10-16/REPORT.md",
+      "result": "PASS: mandatory and independent lifecycle-disabled offline installations match candidate, version, script and kit checksums."
     },
     {
       "name": "node-floor-20.19.0",
-      "status": "UNVERIFIED",
-      "build": "2.0.2",
+      "status": "VERIFIED",
+      "build": "347bf79",
       "evidence_required": "npm run verify:release passes on exactly Node 20.19.0 for the frozen source of this candidate.",
       "prior_evidence": "v2.0.1-archive-node-floor-20.19.0 passed for 44dc6f8 (89 files, 1296 tests). The 2.0.2 source changes (2a49abd) were reported passing verify:release under Node 20.19.0 on the repair branch (89 files, 1305 tests); that is not a frozen source.",
-      "carry_over": "Not carried: the 2.0.2 package:rc on the target under exactly Node 20.19.0 closes it in the same step as packaging."
+      "carry_over": "Not carried: the 2.0.2 package:rc on the target under exactly Node 20.19.0 closes it in the same step as packaging.",
+      "archive_sha256": "84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09",
+      "candidate_distribution_sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1",
+      "evidence": "research/evidence/release-2.0.2-347bf79-2026-10-16/REPORT.md",
+      "result": "PASS: package:rc on exact Node 20.19.0/npm 10.8.2, 89 files/1305 tests, offline smoke."
     },
     {
       "name": "target-no-inference-conformance-check",
-      "status": "UNVERIFIED",
-      "build": "2.0.2",
+      "status": "VERIFIED",
+      "build": "347bf79",
       "evidence_required": "On the target with the installed Vibe 2.26.1 and no provider, with this build's preparation kit (vibe-supervisor prepare check): vibe-supervisor pin-manifest generated and then verified on the target (with the per-run hashing cost recorded), serverInfo.version 2.26.1, the initialize handshake, session/start with the supervisor profile, and the complete read-back (profile tools exact, only the bundled skill catalogue ADR 0006 permits, the owned loopback managed-config URL from ADR 0005, no MCP sources, connectors or hooks, bypass off, unified harness, each VIBE_* setting, thinking off), with no turn and no hosted inference.",
       "prior_evidence": "v2.0.1-archive-target-no-inference-conformance-check passed once on archive 7978719c0010c8ba; the workflow candidate passed it earlier on its own archive.",
-      "carry_over": "Reasonable basis for the result: Since 44dc6f8 the runtime changed in reporting only (2a49abd: execution_state and started_at kept through close, the count-only reasoning_observation diagnostic; 41070f5: the run schema's execution_state and a reworded export message). Launch, the pin, the session configuration and read-back, the approval handler, the event validator, cleanup, packaging (scripts/package-rc.mjs, scripts/finalize-package.mjs) and scripts/v2-conformance-check.mjs are unchanged. The preparation receipt is bound to the candidate bytes, so ordinary dispatch of 2.0.2 needs one prepare check on its archive anyway; that one check closes this gate. Expect the same outcome; any difference is a finding."
+      "carry_over": "Reasonable basis for the result: Since 44dc6f8 the runtime changed in reporting only (2a49abd: execution_state and started_at kept through close, the count-only reasoning_observation diagnostic; 41070f5: the run schema's execution_state and a reworded export message). Launch, the pin, the session configuration and read-back, the approval handler, the event validator, cleanup, packaging (scripts/package-rc.mjs, scripts/finalize-package.mjs) and scripts/v2-conformance-check.mjs are unchanged. The preparation receipt is bound to the candidate bytes, so ordinary dispatch of 2.0.2 needs one prepare check on its archive anyway; that one check closes this gate. Expect the same outcome; any difference is a finding.",
+      "archive_sha256": "84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09",
+      "candidate_distribution_sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1",
+      "evidence": "research/evidence/release-2.0.2-347bf79-2026-10-16/REPORT.md",
+      "result": "PASS once: matched 2.0.2 kit, fixed fake key, validated refusing observer, complete read-back and cleanup."
     },
     {
       "name": "installed-sdk-readiness-on-candidate",
-      "status": "UNVERIFIED",
-      "build": "2.0.2",
+      "status": "VERIFIED",
+      "build": "347bf79",
       "evidence_required": "Through the official MCP SDK over stdio, readiness on the installed archive reports its server_version and candidate identity, preparation passed, an eligible workspace, a free slot, no blockers, no restart required and exactly the five tools, and rejects a wrong expected_candidate.",
       "prior_evidence": "v2.0.1-archive-installed-sdk-readiness passed on candidate 8b1b7dd556ea985e.",
-      "carry_over": "Not carried: readiness names the candidate identity, so it is rerun on the installed 2.0.2 archive through the official MCP SDK after its prepare check. No inference."
+      "carry_over": "Not carried: readiness names the candidate identity, so it is rerun on the installed 2.0.2 archive through the official MCP SDK after its prepare check. No inference.",
+      "archive_sha256": "84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09",
+      "candidate_distribution_sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1",
+      "evidence": "research/evidence/release-2.0.2-347bf79-2026-10-16/REPORT.md",
+      "result": "PASS through official SDK: expected 2.0.2 identity, preparation passed, eligible workspace, free slot, exact five tools; native remains separate."
     },
     {
       "name": "native-readiness-on-candidate",
-      "status": "UNVERIFIED",
-      "build": "2.0.2",
+      "status": "VERIFIED",
+      "build": "347bf79",
       "evidence_required": "On the intended Codex desktop connection, readiness reports the server_version and candidate identity of the frozen archive under test, matching preparation PASS, an eligible workspace, no blockers and a free slot.",
       "prior_evidence": "v2.0.1-archive-native-readiness passed on 2026-10-16 on the native desktop connection.",
-      "carry_over": "Not carried: rerun on the native desktop connection with expected_candidate set to the 2.0.2 candidate after the registration is switched (rollback kept). No inference."
-    },
+      "carry_over": "Not carried: rerun on the native desktop connection with expected_candidate set to the 2.0.2 candidate after the registration is switched (rollback kept). No inference.",
+      "result": "PASS on 2026-10-17 after desktop restart: both review and edit report exact 2.0.2 identity, matching preparation PASS, eligible workspace, free slot, no blockers or drift, no restart required; native catalog has exactly five tools. No hosted start.",
+      "archive_sha256": "84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09",
+      "candidate_distribution_sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1",
+      "evidence": "research/evidence/release-2.0.2-347bf79-2026-10-16/NATIVE-READINESS-AFTER-RESTART-2026-10-17.json"
+    }
+  ],
+  "unverified": [
     {
       "name": "execution-provenance-on-hosted-run",
       "status": "UNVERIFIED",
@@ -294,7 +334,7 @@
       "name": "mcp-client-disconnect-hosted",
       "status": "UNVERIFIED",
       "evidence_required": "One real client disconnect during a running hosted run on the 2.0 engine, through the official client: the server exits, the worker process group is gone, the owner lock is released, the run is failed and never relaunched, the private directories are deleted, and an edit worktree is kept until vibe_close cleanup.",
-      "result": "PENDING: not run. On 2026-10-16 the owner authorized the one remaining hosted start for this gate only, on the installed 2.0.1 candidate, following the disconnect procedure in docs/target-acceptance.md; stop at the first failure.",
+      "result": "Exact reporting-repair target source 2a49abd/archive 133e77bd passed; per-build record only. No automatic transfer to source 44dc6f8/archive 7978719c or new 2.0.2 bytes; any proposed carry-over remains an owner decision.",
       "build": "2.0.1 corrected archive",
       "carry_over": "Its evidence belongs to 2.0.1: the authorized start runs on the installed 2.0.1 candidate. Proposed basis for 2.0.2 once it passes, owner to confirm: the disconnect, owner-lock, reaper and cleanup paths are unchanged, and restart recovery only also records execution_state failed, which the recovery tests cover. 2.0.2 then needs no hosted disconnect of its own. If it fails, the fix is a new candidate and neither archive's gate closes."
     },
@@ -336,19 +376,36 @@
       "status": "REQUIRED_NOT_RUN",
       "evidence_required": "Before stable promotion, complete the documented fresh macOS Apple silicon account installation on the frozen, reviewable artifact, recording installation, registration, rollback, and cleanup.",
       "decision": "The owner performs it with a prepared packet; evidence from another archive is not carried over.",
-      "carry_over": "Installation, registration and rollback are unchanged since 44dc6f8. Proposed, owner to confirm: run it once on the archive that is promoted to stable. If 2.0.2 is published before 2.0.1 leaves pre-release, run it on the 2.0.2 archive instead of on 7978719c; otherwise run it on 7978719c for 2.0.1 as planned and rerun it for 2.0.2 before its stable promotion."
+      "carry_over": "Installation, registration and rollback are unchanged since 44dc6f8. Proposed, owner to confirm: run it once on the archive that is promoted to stable. If 2.0.2 is published before 2.0.1 leaves pre-release, run it on the 2.0.2 archive instead of on 7978719c; otherwise run it on 7978719c for 2.0.1 as planned and rerun it for 2.0.2 before its stable promotion.",
+      "result": "PENDING 2026-10-17: owner reports no separate clean standard macOS account available. Current-account private-prefix checks do not satisfy this gate. Checklist: docs/clean-account-checklist.md."
     }
   ],
   "not_required_for_2_0": [],
   "delivery_requirements": {
     "source_ci": "There is no GitHub CI and the workflow scope is skipped; npm run verify:release passes locally on the release commit.",
     "stable_promotion": "Every gate above, exact final source/archive identity, applicable confirmation and separate merge/tag/publication authorization remain required. A release publishes the bytes the target tested. v2.0.1 is the tested archive 7978719c from 44dc6f8, published as a pre-release; it becomes the latest release once the disconnect and the clean-account installation are recorded. 2.0.2 is published only from its own target-built archive after its own packaging, identity, no-inference conformance and readiness checks; no receipt or result of 2.0.1, the workflow candidate, the 2.0.0 draft archive, the reference package or the rejected packet transfers, and a gate is carried over only where its carry_over note says so and the owner confirms. Only the latest release is supported.",
-    "hosted_allowance_remaining": 1,
-    "hosted_allowance_note": "Three hosted starts were authorized for the 2.0.1 sitting. The review used one (recorded on main); the edit used a second (reported only on an unmerged target branch). On 2026-10-16 the owner authorized the last one for the MCP-client disconnect only, on the installed 2.0.1 candidate. 2.0.2 has no hosted allowance.",
+    "hosted_allowance_remaining": 0,
+    "hosted_allowance_note": "All three original starts are consumed: review rejected on correctness, edit rejected by its frozen contract, and distinct disconnect PASS on source 2a49abd/archive 133e77bd. No retries or further hosted starts are authorized. 2.0.2 preparation is no-inference only; any proposed carry-over remains explicitly build-bound and subject to owner confirmation.",
     "candidate_minimum_target_checks": "For 2.0.2, no hosted start: package:rc from git on the target under Node 20.19.0, the archive and kit identity check, install side by side and pin-manifest and doctor, one prepare check, installed SDK readiness, then the registration switch and native readiness with expected_candidate, rollback kept. Optional, with a new owner allowance: one hosted review for execution-provenance-on-hosted-run."
   },
-  "updated_at": "2026-10-16",
-  "frozen_archive_sha256": null,
-  "packaging_time_snapshot": null,
+  "updated_at": "2026-10-17",
+  "frozen_archive_sha256": "84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09",
+  "packaging_time_snapshot": {
+    "commit": "347bf79",
+    "packaged_on": "2026-10-16",
+    "node": "20.19.0",
+    "npm": "10.8.2",
+    "tests": "89 files, 1305 tests",
+    "candidate_distribution_sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1",
+    "assets_sha256": {
+      "vibe-supervisor-2.0.2.tgz": "84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09",
+      "preparation-kit-2.0.2.tar.gz": "02c12d99ed47773ecbdf83900cad2971ac19938cf57e4f456dd33f079ea5387e",
+      "sbom.spdx.json": "fa94455e8b111f801976a257ef91b41073c54ccd03533647e2e9a98dfa8f1fe7",
+      "acceptance.json": "a10c1f89d00ef5be9e5ff6221697f110c9aca2a328546533badaa37d98fb2802",
+      "SHA256SUMS": "b61ba538e0cee13d8fb639bb507175efb1ad7c852888065800bad1b54a32f754"
+    },
+    "offline_cache": "populated operator npm cache; no network fallback",
+    "evidence": "research/evidence/release-2.0.2-347bf79-2026-10-16/REPORT.md"
+  },
   "candidate_note": "2.0.2 is the source on main after 44dc6f8 and is not packaged yet; frozen_archive_sha256 and packaging_time_snapshot are filled from its target packaging. The 2.0.1 archive's identity and packaging snapshot are under evidence_builds."
 }

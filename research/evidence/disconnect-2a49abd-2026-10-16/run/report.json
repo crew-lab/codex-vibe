@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "run_id": "b3fd8675-6391-4dfd-a060-2a4f40b7b3a1",
+  "supervisor_version": "2.0.1",
+  "mode": "edit",
+  "execution": {
+    "state": "failed",
+    "stop_reason": null
+  },
+  "verification": {
+    "status": "not_requested",
+    "check_count": 0,
+    "failed_checks": []
+  },
+  "assessment": "unassessed",
+  "assessments": [],
+  "provenance": {
+    "task_sha256": "8c824ba6e3c35cbf28bd1256b7b55e49b8db240145a4f8c130ae04a00e026567",
+    "base_commit": null,
+    "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "contract_sha256": null,
+    "policy_revision": "94e1f16c15c27f73e1a2416121af7f57aa1b28689bc5b1592a0183d9fce9b1ab"
+  },
+  "timestamps": {
+    "created": "2026-10-16T17:23:31.133Z",
+    "launched": "2026-10-16T17:23:31.140Z",
+    "started": "2026-10-16T17:23:32.897Z",
+    "finished": "2026-10-16T17:23:35.236Z"
+  },
+  "preparation": {
+    "status": "passed",
+    "candidate_sha256": "1c3c135862e2fe888428a2bf67fc6cd02fe9852259a494e7d624e2a3e96a45c0",
+    "version": "2.0.1",
+    "reason": "Version-matched no-inference evidence; hosted acceptance remains separate"
+  },
+  "models": {
+    "observations": [
+      {
+        "observed_at": "2026-10-16T17:23:32.879Z",
+        "source": "runtime/read",
+        "session_model": null,
+        "alias": "mistral-medium-3.5",
+        "thinking": "off",
+        "reported_name": "mistral-vibe-cli-latest",
+        "prices_per_million": {
+          "input": 1.5,
+          "output": 7.5,
+          "cached_input": 0.15
+        }
+      }
+    ],
+    "provider": null,
+    "underlying_model": null,
+    "unavailable_reason": "Runtime-reported session model, model name and alias are recorded when exposed; provider and underlying weights remain unverified."
+  },
+  "durations_ms": {
+    "inference": null,
+    "finalization": null,
+    "preparation": 7,
+    "startup": 1757,
+    "execution_and_finalization": 2339,
+    "total": 4103
+  },
+  "usage": {
+    "tokensUsed": 6965,
+    "contextSize": 209715,
+    "cost": {
+      "amount": 0.0106155,
+      "currency": "USD",
+      "authoritative": false
+    },
+    "promptTokens": 6937,
+    "completionTokens": 28,
+    "cachedTokens": 0,
+    "modelCalls": 1,
+    "costSource": "runtime-stats-prices"
+  },
+  "limits": {
+    "timeoutSeconds": 180,
+    "maxTurns": 12,
+    "maxEventBytes": 52428800,
+    "maxTranscriptBytes": 10485760,
+    "maxArtifactBytes": 104857600
+  },
+  "warnings": [],
+  "error": {
+    "code": "VSUP_BACKEND_CRASHED",
+    "message": "The supervisor shut down before this one-shot run completed; the task will not be resumed or replayed.",
+    "remediation": "Inspect the run's diagnostic events and start a new run.",
+    "retryable": false
+  },
+  "cleanup": {
+    "worktree": "removed",
+    "checked_at": "2026-10-16T17:26:27.696Z"
+  },
+  "external_validation": null
+}
