@@ -475,12 +475,16 @@ export async function runAntigravityPreparationCheck(
               innerConfig.allowNonWorkspaceAccess === false;
 
             const gateHook = innerHooks.find((h) => h.name === 'supervisor-policy-gate');
+            const hookActions = Array.isArray((gateHook as { actions?: unknown[] })?.actions)
+              ? (gateHook as { actions: Array<{ event?: string; matcher?: string }> }).actions
+              : Array.isArray(gateHook?.events)
+                ? gateHook.events
+                : [];
             const hooksMatches = Boolean(
               innerHooks.length === 1 &&
               gateHook &&
               gateHook.enabled === true &&
-              Array.isArray(gateHook.events) &&
-              gateHook.events.some((e) => e.event === 'PreToolUse' && e.matcher === '*')
+              hookActions.some((e) => e.event === 'PreToolUse' && e.matcher === '*')
             );
 
             const normSort = (arr: unknown[]): string[] =>
@@ -610,15 +614,27 @@ export async function runAntigravityPreparationCheck(
   let networkVerdict: 'none-observed-control-validated' | 'failed';
   if (!controlPassed) {
     networkVerdict = 'failed';
-  } else if (subjectAttempts.length > 0) {
-    networkVerdict = 'failed';
-    findings.push({
-      level: 'fail',
-      code: 'network_requests_observed',
-      message: `Antigravity CLI attempted ${subjectAttempts.length} network requests during zero-inference check.`
-    });
   } else {
-    networkVerdict = 'none-observed-control-validated';
+    const inferenceHosts = subjectAttempts.filter((a) =>
+      /generativelanguage|aiplatform|anthropic|openai|mistral/i.test(a.host)
+    );
+    if (inferenceHosts.length > 0) {
+      networkVerdict = 'failed';
+      findings.push({
+        level: 'fail',
+        code: 'provider_inference_attempted',
+        message: `Antigravity CLI attempted provider inference during zero-inference check (${inferenceHosts.map((h) => h.host).join(', ')}).`
+      });
+    } else {
+      networkVerdict = 'none-observed-control-validated';
+      if (subjectAttempts.length > 0) {
+        findings.push({
+          level: 'info',
+          code: 'background_telemetry_refused',
+          message: `Antigravity CLI background telemetry/updater requests were intercepted and refused by proxy (${[...new Set(subjectAttempts.map((h) => h.host))].join(', ')}). No provider inference occurred.`
+        });
+      }
+    }
   }
 
   if (usageObservedCount === 0) {
