@@ -16,8 +16,8 @@ The same steps as 2.0.1 with 2.0.2 names: download `vibe-supervisor-2.0.2.tgz`, 
 
 ## Exact tested artifact
 
-- Source: commit `[UPDATE AT PUBLISH]` (this release's tag).
-- Archive: `vibe-supervisor-2.0.2.tgz`, SHA-256 `[UPDATE AT PUBLISH]`, packaged on the target under Node 20.19.0; installed candidate `[UPDATE AT PUBLISH]`.
+- Source: commit `b275b1b8c5f2892d47e0be8d707d0fa3f31261b4` (this release's tag).
+- Archive: `vibe-supervisor-2.0.2.tgz`, SHA-256 `84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09`, packaged on the target under Node 20.19.0 and npm 10.8.2; installed candidate `eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1`.
 
 ## Acceptance
 
@@ -25,13 +25,13 @@ Gates to record on the 2.0.2 archive before publishing, none of which needs a ho
 
 | Gate | Result |
 |---|---|
-| Release verification on Node 20.19.0, offline installed-package smoke, package and kit identity | `[UPDATE AT PUBLISH]` |
-| No-inference conformance check against the installed Vibe 2.26.1 | `[UPDATE AT PUBLISH]` |
-| Installed SDK readiness; native desktop readiness | `[UPDATE AT PUBLISH]` |
+| Release verification on Node 20.19.0, offline installed-package smoke, package and kit identity | Passed on candidate `eaa40320…` (89 files, 1,305 tests) |
+| No-inference conformance check against the installed Vibe 2.26.1 | Passed on 2026-10-16 (report `b5c40f05…`; 0 tokens, thinking off, permitted bundled skills) |
+| Installed SDK readiness; native desktop readiness | Passed on candidate `eaa40320…`; native review/edit readiness passed after desktop restart on 2026-10-17 |
 | Hosted review and hosted edit | Documented limitation carried from 2.0.1 (owner decision); no 2.0.2 change touches it |
-| MCP-client disconnect | `[UPDATE AT PUBLISH]`: recorded on 2.0.1, proposed as the basis for 2.0.2 |
+| MCP-client disconnect | Passed (carried over from 2.0.1 disconnect PASS on source `2a49abd` / candidate `1c3c1358…`; unchanged core, process, backend, security and config paths through `347bf79`) |
 | Execution provenance on a hosted run | Optional, with a new owner allowance; covered by tests |
-| Clean-account installation | `[UPDATE AT PUBLISH]` |
+| Clean-account installation | Pending: owner reports no separate standard macOS account available (`docs/clean-account-checklist.md`) |
 | `permission = "ask"` per-tool fields; thinking-off effect; experiments fetch attribution; nested `run_typescript` gating | Open or not exercised, as for 2.0.1 |
 
 ## Limits
