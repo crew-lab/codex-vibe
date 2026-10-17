@@ -1,4 +1,4 @@
-import { lstat, open, readdir, realpath } from 'node:fs/promises';
+import { lstat, open } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import path from 'node:path';
 import { exportReport, locateSavedRun } from '../reporting/export.js';
@@ -8,13 +8,15 @@ import { supervisorError } from '../contracts.js';
 import { fail } from './fail.js';
 import { runsUsefulness } from './runs/usefulness.js';
 import { runsSarif } from './runs/sarif.js';
+import { runsUsage } from './runs/usage.js';
+import { enumerateRunDirectories } from '../core/usage-ledger.js';
 
+export { enumerateRunDirectories };
 export const MAX_SESSION_DIRECTORIES = 128;
 export const SESSION_SCAN_LIMIT_MESSAGE = 'The isolated session namespace exceeds its safe scan limit; inspect it manually.';
-const SESSION_NAME = /^session-[A-Za-z0-9]{6}$/;
 const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_RUN_JSON_BYTES = 100 * 1024 * 1024;
-const RUNS_USAGE = 'Usage: vibe-supervisor runs [--config <path>] <list|show|tail|cleanup|usefulness|verify|export|sarif> [run-id]';
+const RUNS_USAGE = 'Usage: vibe-supervisor runs [--config <path>] <list|show|tail|cleanup|usefulness|verify|export|sarif|usage> [run-id]';
 const REPORT_USAGE = 'Usage: runs verify|export <run-id> --out <directory> [--include patch,events] [--validation <file>]';
 
 export interface RunsServices {
@@ -38,7 +40,8 @@ export const RUNS_SUBCOMMANDS: Readonly<Record<string, RunsSubcommand>> = {
   verify: reportRun,
   export: reportRun,
   usefulness: runsUsefulness,
-  sarif: runsSarif
+  sarif: runsSarif,
+  usage: runsUsage
 };
 
 export async function runsCommand(args: readonly string[], services: RunsServices): Promise<void> {
@@ -76,70 +79,11 @@ export async function readRunJson(file: string): Promise<unknown> {
   } finally { await handle.close(); }
 }
 
-export async function enumerateRunDirectories(dataDir: string): Promise<string[]> {
-  if (!await lstat(dataDir).then(() => true, (error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return false; throw error; })) return [];
-  const root = await realpath(dataDir);
-  const info = await lstat(root);
-  if (!info.isDirectory() || foreignOwner(info.uid)) throw invalidState(`The supervisor data root ${dataDir} is not a directory owned by the current user; inspect it manually.`);
-  const directories = [...await runDirectoriesIn(path.join(root, 'runs'))];
-  for (const home of await sessionHomes(path.join(root, 'mcp-sessions'))) {
-    try { directories.push(...await runDirectoriesIn(path.join(home, 'runs'))); }
-    catch (error) { warnSkipped(home, error); }
-  }
-  return directories;
-}
-
 export async function locateListedRun(dataDir: string, runId: string): Promise<string> {
   const matches = (await enumerateRunDirectories(dataDir)).filter((directory) => path.basename(directory).toLowerCase() === runId.toLowerCase());
   if (matches.length === 0) throw Object.assign(new Error(`Run ${runId} was not found in the data root or its isolated sessions.`), supervisorError('VSUP_NOT_FOUND', `Run ${runId} was not found in the data root or its isolated sessions.`));
   if (matches.length > 1) throw invalidState(`Run ${runId} appears in more than one store; inspect the data root manually.`);
   return matches[0] as string;
-}
-
-function warnSkipped(home: string, error: unknown): void {
-  const reason = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`Skipped the isolated session ${home}: ${reason}\n`);
-}
-
-async function sessionHomes(sessions: string): Promise<string[]> {
-  if (!await privateDirectory(sessions, 'session root')) return [];
-  const entries = await readdir(sessions);
-  if (entries.length > MAX_SESSION_DIRECTORIES) throw invalidState(SESSION_SCAN_LIMIT_MESSAGE);
-  const homes: string[] = [];
-  for (const name of entries.filter((entry) => SESSION_NAME.test(entry)).sort()) {
-    const home = path.join(sessions, name);
-    try { if (await privateDirectory(home, 'session directory')) homes.push(home); }
-    catch (error) { warnSkipped(home, error); }
-  }
-  return homes;
-}
-
-async function runDirectoriesIn(runs: string): Promise<string[]> {
-  if (!await privateDirectory(runs, 'run directory')) return [];
-  const directories: string[] = [];
-  for (const name of (await readdir(runs)).filter(validRunId).sort()) {
-    const directory = path.join(runs, name);
-    const info = await lstat(directory).catch(() => undefined);
-    if (!info || info.isSymbolicLink() || !info.isDirectory() || foreignOwner(info.uid)) continue;
-    directories.push(directory);
-  }
-  return directories;
-}
-
-async function privateDirectory(directory: string, label: string): Promise<boolean> {
-  let info;
-  try { info = await lstat(directory); }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-    throw error;
-  }
-  if (info.isSymbolicLink() || !info.isDirectory() || (info.mode & 0o077) !== 0 || foreignOwner(info.uid)) throw invalidState(`An unsafe ${label} was found at ${directory}; inspect it manually.`);
-  if (await realpath(directory).catch(() => undefined) !== path.resolve(directory)) throw invalidState(`The ${label} path ${directory} changed or resolves through a link; inspect it manually.`);
-  return true;
-}
-
-function foreignOwner(uid: number): boolean {
-  return typeof process.getuid === 'function' && uid !== process.getuid();
 }
 
 function invalidState(message: string): Error {

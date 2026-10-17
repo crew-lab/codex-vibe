@@ -68,7 +68,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   try {
     if (command === '--version' || command === '-v') { print(APP_VERSION); return; }
     if (command === 'help' || command === '--help' || command === '-h' || !command) {
-      print('Usage: vibe-supervisor <setup --workspace <dir> [--config <path>] [--codex user|project] [--isolated] [--yes|--dry-run]|allow [--config <path>] <dir>|doctor [--json] [--config <path>]|pin-manifest [--config <path>] [--executable <path>] [--output <path>] [--force]|serve --stdio [--config <path>] [--isolated]|runs [--config <path>] list|show|tail|cleanup [run-id] | runs verify|export <run-id> --out <directory> [--include patch,events] [--validation <file>] | runs sarif <run-id> [--output <file>]|--version>'); return;
+      print('Usage: vibe-supervisor <setup --workspace <dir> [--config <path>] [--codex user|project] [--isolated] [--yes|--dry-run]|allow [--config <path>] <dir>|doctor [--json] [--config <path>]|pin-manifest [--config <path>] [--executable <path>] [--output <path>] [--force]|serve --stdio [--config <path>] [--isolated]|runs [--config <path>] list|show|tail|cleanup [run-id] | runs verify|export <run-id> --out <directory> [--include patch,events] [--validation <file>] | runs sarif <run-id> [--output <file>] | runs usage [--since <YYYY-MM-DD>] [--root <path>] [--json]|--version>'); return;
     }
     if (command === 'doctor') return await doctorCommand(args);
     if (command === 'pin-manifest') return await pinManifestCommand(args);

@@ -8,6 +8,11 @@ allowed_workspace_roots = []
 # [excluded_globs]
 # "~/src/project" = ["*.tfvars", "fixtures/private/**", "dumps/*.sql"]
 
+# Optional: daily spending ceilings per allowed root, rolling 24 hours.
+# Each key must equal an entry of allowed_workspace_roots as written.
+# [budgets."~/src/project"]
+# max_cost_usd_per_day = 50.0
+
 [retention]
 days = 7
 

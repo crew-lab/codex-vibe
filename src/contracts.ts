@@ -168,7 +168,8 @@ export type SupervisorErrorCode =
   | "VSUP_BACKEND_ERROR" | "VSUP_LIMIT_EXCEEDED"
   | "VSUP_NO_PROGRESS" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR" | "VSUP_INTERNAL"
   | "VSUP_RESTART_REQUIRED" | "VSUP_READINESS_RECEIPT_INVALID"
-  | "VSUP_OWNER_LOCKED" | "VSUP_PREPARATION_TIMEOUT";
+  | "VSUP_OWNER_LOCKED" | "VSUP_PREPARATION_TIMEOUT"
+  | "VSUP_BUDGET_EXCEEDED";
 
 export interface RunRecord {
   /** Release that created the run; absent on records written without it. */
@@ -219,6 +220,10 @@ export interface SupervisorEvent {
   data: Record<string, unknown>;
 }
 
+export interface RootBudget {
+  maxCostUsdPerDay?: number;
+}
+
 export interface SupervisorConfig {
   version: 1;
   backend?: BackendKind;
@@ -239,6 +244,7 @@ export interface SupervisorConfig {
   };
   paths?: { vibe?: string; appServer?: string; vibePinManifest?: string; antigravity?: string };
   excludedGlobs?: Record<string, string[]>;
+  budgets?: Record<string, RootBudget>;
 }
 
 export interface StartRunInput {
@@ -361,6 +367,7 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_OWNER_LOCKED: "Another vibe-supervisor owns this data directory, or its owner lock needs inspection. Stop the other process or give each Codex session its own VIBE_SUPERVISOR_HOME, then retry; for an unsafe or malformed lock, inspect the file named in details.lock_path.",
   VSUP_PREPARATION_TIMEOUT: "Preparation did not finish within its fixed deadline and no run was created. Check that the workspace, repository and configuration filesystems respond, then check readiness again.",
   VSUP_READINESS_RECEIPT_INVALID: "No run was created and nothing was launched. Call vibe_status with workspace and operation on this same connection, resolve any blockers, and start once with the new readiness_receipt; do not retry the start automatically.",
+  VSUP_BUDGET_EXCEEDED: "Increase budgets.<root>.max_cost_usd_per_day in config.toml or wait until earlier runs age out of the 24-hour rolling window.",
 };
 
 export function supervisorError(code: SupervisorErrorCode, message: string, details?: Record<string, unknown>, retryable = false): SupervisorError {
