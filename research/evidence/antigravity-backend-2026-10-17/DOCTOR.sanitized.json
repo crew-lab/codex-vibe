@@ -1,0 +1,87 @@
+{
+  "ok": true,
+  "generatedAt": "2026-10-17T10:18:51.445Z",
+  "provenance": {
+    "backend": "antigravity",
+    "executable": "<nvm-home>/versions/node/v24.21.0/bin/node",
+    "application_entrypoint": "<supervisor-repository>/dist/cli.js",
+    "runtime_module": "<supervisor-repository>/dist/diagnostics/doctor.js",
+    "app_version": "2.0.2",
+    "config_path": "<private-supervisor-home>/config.toml",
+    "config_source": "default",
+    "config_fingerprint": "c375c1877a21c32ca281f45796ed331823aa69043f5f482909435947e6e3acab",
+    "data_directory": "<private-supervisor-home>",
+    "storage_mode": "selected-template"
+  },
+  "checks": [
+    {
+      "name": "node",
+      "ok": true,
+      "version": "24.21.0",
+      "message": "Supported Node.js runtime (20.19.0 or newer)."
+    },
+    {
+      "name": "platform",
+      "ok": true,
+      "version": "darwin arm64",
+      "message": "Detected darwin on arm64."
+    },
+    {
+      "name": "git",
+      "ok": true,
+      "version": "git version 2.54.0 (Apple Git-157)",
+      "message": "Git is available."
+    },
+    {
+      "name": "macos",
+      "ok": true,
+      "version": "27.0.1",
+      "message": "macOS version detected."
+    },
+    {
+      "name": "antigravity",
+      "ok": true,
+      "status": "ok",
+      "version": "1.4.0",
+      "message": "Antigravity CLI (agy) matches pinned version (sha256: a4502aaf310b2fd6eb657fcfec2fcc31a690fbbd0c2d14c8eefbb556409024ce)."
+    },
+    {
+      "name": "codex",
+      "ok": true,
+      "version": "codex-cli 0.162.1",
+      "message": "Codex CLI is available."
+    },
+    {
+      "name": "workspace-roots",
+      "ok": true,
+      "message": "1/1 allowed workspace root(s) resolve to existing directories."
+    },
+    {
+      "name": "data-directory",
+      "ok": true,
+      "message": "Supervisor data directory is writable."
+    },
+    {
+      "name": "lock",
+      "ok": true,
+      "message": "No supervisor currently holds the data directory."
+    },
+    {
+      "name": "authentication",
+      "ok": true,
+      "status": "unverified",
+      "message": "The Mistral credential is resolved from the environment or the macOS Keychain when a run starts; doctor does not read it."
+    },
+    {
+      "name": "codex-registration",
+      "ok": true,
+      "status": "unverified",
+      "message": "Codex desktop visibility is not verified by doctor; run `vibe-supervisor setup` and restart Codex after reviewing its changes."
+    },
+    {
+      "name": "mcp-server",
+      "ok": true,
+      "message": "The MCP SDK dependency is installed."
+    }
+  ]
+}

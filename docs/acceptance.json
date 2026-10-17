@@ -174,6 +174,17 @@
       "evidence_packet": "research/evidence/disconnect-2a49abd-2026-10-16/REPORT.md",
       "transfers_to_candidate": false,
       "note": "Disconnect PASS on this exact target-built archive. The global packaging_time_snapshot identifies another archive and is preserved; this does not promote that snapshot or accept the failed hosted review/edit."
+    },
+    {
+      "label": "antigravity-backend-1.4.0 target evidence",
+      "source_commit": "e4cd5155a71c2b3dced9b5ea4eb4c38f38f3ae86",
+      "antigravity_version": "1.4.0",
+      "executable_sha256": "a4502aaf310b2fd6eb657fcfec2fcc31a690fbbd0c2d14c8eefbb556409024ce",
+      "runtime": "macOS arm64, Node 24.21.0, agy 1.4.0",
+      "recorded_on": "2026-10-17",
+      "evidence_packet": "research/evidence/antigravity-backend-2026-10-17/ (ARTIFACT-IDENTITY.json, DOCTOR.sanitized.json, PREPARATION.sanitized.json, REPORT.md, SHA256SUMS)",
+      "transfers_to_candidate": false,
+      "note": "Target machine no-inference evidence for Google Antigravity (agy 1.4.0) execution backend on explore_project_details. Resolves antigravity-backend-no-inference-check."
     }
   ],
   "verified": [
@@ -328,6 +339,18 @@
       "archive_sha256": "84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09",
       "candidate_distribution_sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1",
       "evidence": "research/evidence/release-2.0.2-347bf79-2026-10-16/NATIVE-READINESS-AFTER-RESTART-2026-10-17.json"
+    },
+    {
+      "name": "antigravity-backend-no-inference-check",
+      "status": "VERIFIED",
+      "build": "explore_project_details",
+      "evidence_required": "On the target machine with installed agy 1.4.0 and no provider inference, vibe-supervisor prepare check with backend = \"antigravity\" verifies the agy 1.4.0 executable and binary SHA-256 digest, validates isolated settings.json unified permission rules (toolPermission strict, enableTerminalSandbox true, allowNonWorkspaceAccess false, mode-specific allow/deny), verifies .gemini/config/hooks.json supervisor-policy-gate configuration, executes zero-inference slash-command read-backs (/config, /hooks, /permissions, /skills) against a refusing loopback proxy, and passes all synthetic PreToolUse hook evaluations writing a verified approval ledger.",
+      "prior_evidence": "Fixture tests cover executable resolution, binary digest checking, isolated settings generation, PreToolUse hook enforcement, and zero-inference prepare check (tests/unit/antigravity-backend.test.ts).",
+      "carry_over": "Nothing to carry: Antigravity backend target conformance requires execution on the target machine with the installed agy 1.4.0 binary.",
+      "antigravity_version": "1.4.0",
+      "executable_sha256": "a4502aaf310b2fd6eb657fcfec2fcc31a690fbbd0c2d14c8eefbb556409024ce",
+      "evidence": "research/evidence/antigravity-backend-2026-10-17/REPORT.md",
+      "result": "PASS on 2026-10-17: agy 1.4.0 binary SHA-256 verified, isolated settings and supervisor-policy-gate verified, zero network tokens across /config, /hooks, /permissions, /skills slash commands, 6 synthetic PreToolUse hook evaluations passed with approval ledger recorded, readiness receipt issued."
     }
   ],
   "unverified": [
@@ -430,14 +453,6 @@
       "decision": "The owner performs it with a prepared packet; evidence from another archive is not carried over.",
       "carry_over": "Installation, registration and rollback are unchanged since 44dc6f8. Proposed, owner to confirm: run it once on the archive that is promoted to stable. If 2.0.2 is published before 2.0.1 leaves pre-release, run it on the 2.0.2 archive instead of on 7978719c; otherwise run it on 7978719c for 2.0.1 as planned and rerun it for 2.0.2 before its stable promotion.",
       "result": "PENDING 2026-10-17: owner reports no separate clean standard macOS account available. Current-account private-prefix checks do not satisfy this gate. Checklist: docs/clean-account-checklist.md."
-    },
-    {
-      "name": "antigravity-backend-no-inference-check",
-      "status": "UNVERIFIED",
-      "build": "2.1.0 (unreleased)",
-      "evidence_required": "On the target machine with installed agy 1.4.0 and no provider inference, vibe-supervisor prepare check with backend = \"antigravity\" verifies the agy 1.4.0 executable and binary SHA-256 digest, validates isolated settings.json unified permission rules (toolPermission strict, enableTerminalSandbox true, allowNonWorkspaceAccess false, mode-specific allow/deny), verifies .gemini/config/hooks.json supervisor-policy-gate configuration, executes zero-inference slash-command read-backs (/config, /hooks, /permissions, /skills) against a refusing loopback proxy, and passes all synthetic PreToolUse hook evaluations writing a verified approval ledger.",
-      "prior_evidence": "Fixture tests cover executable resolution, binary digest checking, isolated settings generation, PreToolUse hook enforcement, and zero-inference prepare check (tests/unit/antigravity-backend.test.ts).",
-      "carry_over": "Nothing to carry: Antigravity backend target conformance requires execution on the target machine with the installed agy 1.4.0 binary."
     },
     {
       "name": "antigravity-backend-hosted-review-edit",
