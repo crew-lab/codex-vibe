@@ -33,6 +33,7 @@ import { PRIVATE_DIRECTORY_NAMES } from "../backends/app-server/session-config.j
 import { turnBackstop } from "../backends/app-server/usage.js";
 import { approvalsToWire, eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire, usageToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
+import { checkBudgetAdmission } from "./usage-ledger.js";
 import { changedSinceSnapshot, parseManifest, serializeManifest, snapshotWorkspace } from "./workspace-snapshot.js";
 import type { ManifestEntry, WorkspaceSnapshot } from "./workspace-snapshot.js";
 import { extractFindingsJsonBlock, validateFindings } from "./findings.js";
@@ -395,6 +396,25 @@ export class RunManager {
           "VSUP_BACKEND_ERROR",
           "Antigravity CLI only reports token usage in the terminal result envelope after execution, so max_tokens cannot be enforced during execution.",
           { reason: "token_ceiling_unsupported", ceiling_tokens: policy.config.limits.maxTokens }
+        );
+      }
+    }
+    const rootBudget = policy.config.budgets?.[admitted.root];
+    if (rootBudget?.maxCostUsdPerDay !== undefined) {
+      const budgetCheck = await withDeadline(
+        checkBudgetAdmission({
+          dataDir: this.dataDir,
+          admittedRoot: admitted.root,
+          budget: rootBudget
+        }),
+        deadline - Date.now(),
+        "Budget validation exceeded its preparation deadline."
+      );
+      if (!budgetCheck.allowed) {
+        throw codedError(
+          "VSUP_BUDGET_EXCEEDED",
+          `The 24-hour cost limit of $${budgetCheck.limitCostUsd.toFixed(2)} for allowed root ${admitted.root} has been reached (current rolling 24h usage is $${budgetCheck.currentCostUsd.toFixed(2)}).`,
+          { admitted_root: admitted.root, current_cost_usd: budgetCheck.currentCostUsd, max_cost_usd_per_day: budgetCheck.limitCostUsd }
         );
       }
     }

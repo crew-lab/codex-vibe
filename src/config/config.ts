@@ -7,7 +7,7 @@ import { parse } from "smol-toml";
 import { DEFAULT_CONFIG } from "./defaults.js";
 import { validateConfig } from "./validation.js";
 import { supervisorError } from "../contracts.js";
-import type { SupervisorConfig } from "../contracts.js";
+import type { RootBudget, SupervisorConfig } from "../contracts.js";
 import { createPrivateDir, inspectWorkspaceRoots } from "../security/paths.js";
 
 export interface LoadConfigOptions {
@@ -70,12 +70,24 @@ function excludedGlobsSemantics(config: SupervisorConfig): { excludedGlobs?: Arr
   return entries.length === 0 ? {} : { excludedGlobs: entries };
 }
 
+function budgetsSemantics(config: SupervisorConfig): { budgets?: Array<[string, RootBudget]> } {
+  const entries = Object.entries(config.budgets ?? {})
+    .filter(([, budget]) => budget.maxCostUsdPerDay !== undefined)
+    .map(([root, budget]): [string, RootBudget] => [
+      resolveConfiguredRoot(root),
+      { ...(budget.maxCostUsdPerDay !== undefined ? { maxCostUsdPerDay: budget.maxCostUsdPerDay } : {}) }
+    ])
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+  return entries.length === 0 ? {} : { budgets: entries };
+}
+
 /** Stable semantic fingerprint. Credentials and arbitrary config fields are excluded by construction. */
 export function configFingerprint(config: SupervisorConfig): string {
   const semantic = {
     version: config.version,
     allowedWorkspaceRoots: config.allowedWorkspaceRoots.map(resolveConfiguredRoot),
     ...excludedGlobsSemantics(config),
+    ...budgetsSemantics(config),
     retention: { days: config.retention.days },
     limits: {
       reviewTimeoutSeconds: config.limits.reviewTimeoutSeconds,
@@ -143,7 +155,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Super
   } catch (error) {
     if (error instanceof Error) {
       throw Object.assign(new Error(`Invalid supervisor configuration: ${error.message}`, { cause: error }), {
-        supervisor: supervisorError("VSUP_CONFIG_INVALID", `Invalid configuration file ${selection.configPath}: ${error.message} Supported fields are version, allowed_workspace_roots, excluded_globs, retention, limits (including max_tokens and max_cost_usd), and paths (vibe, app_server, vibe_pin_manifest); remove unsupported fields.`, { configPath: selection.configPath })
+        supervisor: supervisorError("VSUP_CONFIG_INVALID", `Invalid configuration file ${selection.configPath}: ${error.message} Supported fields are version, allowed_workspace_roots, excluded_globs, budgets, retention, limits (including max_tokens and max_cost_usd), and paths (vibe, app_server, vibe_pin_manifest); remove unsupported fields.`, { configPath: selection.configPath })
       });
     }
     throw error;

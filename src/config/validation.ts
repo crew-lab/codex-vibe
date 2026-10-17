@@ -60,11 +60,22 @@ const baseSchema = z.object({
     app_server: executableString.optional(),
     vibe_pin_manifest: absolutePathString.optional(),
     antigravity: executableString.optional()
-  }).strict().optional()
+  }).strict().optional(),
+  budgets: z.record(
+    pathString,
+    z.object({
+      max_cost_usd_per_day: z.number().positive().max(1_000_000).optional()
+    }).strict()
+  ).optional()
 }).strict().superRefine((value, context) => {
   for (const root of Object.keys(value.excluded_globs ?? {})) {
     if (!value.allowed_workspace_roots.includes(root)) {
       context.addIssue({ code: "custom", path: ["excluded_globs", root], message: "must equal an entry of allowed_workspace_roots, written the same way; an exclusion never grants access." });
+    }
+  }
+  for (const root of Object.keys(value.budgets ?? {})) {
+    if (!value.allowed_workspace_roots.includes(root)) {
+      context.addIssue({ code: "custom", path: ["budgets", root], message: "must equal an entry of allowed_workspace_roots, written the same way; a budget can only be set on an allowed root." });
     }
   }
 });
@@ -86,6 +97,17 @@ function normalizeExcludedGlobs(input: Record<string, string[]> | undefined): Re
   return entries.length === 0 ? undefined : Object.fromEntries(entries);
 }
 
+function normalizeBudgets(input: Record<string, { max_cost_usd_per_day?: number | undefined }> | undefined): Record<string, { maxCostUsdPerDay?: number }> | undefined {
+  if (!input) return undefined;
+  const entries: [string, { maxCostUsdPerDay?: number }][] = [];
+  for (const [root, budget] of Object.entries(input)) {
+    if (budget.max_cost_usd_per_day !== undefined) {
+      entries.push([root, { maxCostUsdPerDay: budget.max_cost_usd_per_day }]);
+    }
+  }
+  return entries.length === 0 ? undefined : Object.fromEntries(entries);
+}
+
 export interface ValidateConfigOptions {
   requirePinManifest?: boolean;
 }
@@ -102,11 +124,13 @@ export function validateConfig(input: unknown, home = process.env.HOME ?? proces
     expandedRoots.set(expanded, root);
   }
   const excludedGlobs = normalizeExcludedGlobs(parsed.excluded_globs);
+  const budgets = normalizeBudgets(parsed.budgets);
   return {
     version: parsed.version,
     ...(parsed.backend === undefined ? {} : { backend: parsed.backend }),
     allowedWorkspaceRoots: parsed.allowed_workspace_roots,
     ...(excludedGlobs === undefined ? {} : { excludedGlobs }),
+    ...(budgets === undefined ? {} : { budgets }),
     retention: { days: parsed.retention.days },
     limits: {
       reviewTimeoutSeconds: parsed.limits.review_timeout_seconds,

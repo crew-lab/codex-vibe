@@ -371,4 +371,34 @@ describe("excluded_globs", () => {
     const second = validateConfig(withExclusions({ [other]: ["b"], [project]: ["a"] }));
     expect(configFingerprint(first)).toBe(configFingerprint(second));
   });
+
+  it("loads budgets from TOML and enforces workspace root membership", async () => {
+    const root = await mkdtemp(join(canonicalTmp, "vsup-config-")); roots.push(root);
+    const workspace = join(root, "workspace"); await mkdir(workspace);
+    await writeFile(join(root, "config.toml"), `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n${manifestToml}\n[budgets.${JSON.stringify(workspace)}]\nmax_cost_usd_per_day = 25.5\n`);
+    const loaded = await loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } });
+    expect(loaded.budgets).toEqual({ [workspace]: { maxCostUsdPerDay: 25.5 } });
+
+    // Rejection of unknown root in budgets
+    await writeFile(join(root, "config.toml"), `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n${manifestToml}\n[budgets."/unknown/root"]\nmax_cost_usd_per_day = 10\n`);
+    await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } })).rejects.toMatchObject({ supervisor: { code: "VSUP_CONFIG_INVALID" } });
+
+    // Rejection of unknown properties under budget
+    await writeFile(join(root, "config.toml"), `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n${manifestToml}\n[budgets.${JSON.stringify(workspace)}]\nunsupported_key = 10\n`);
+    await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } })).rejects.toMatchObject({ supervisor: { code: "VSUP_CONFIG_INVALID" } });
+
+    // Rejection of zero or negative budget
+    await writeFile(join(root, "config.toml"), `version = 1\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n${manifestToml}\n[budgets.${JSON.stringify(workspace)}]\nmax_cost_usd_per_day = -5\n`);
+    await expect(loadConfig({ env: { VIBE_SUPERVISOR_HOME: root } })).rejects.toMatchObject({ supervisor: { code: "VSUP_CONFIG_INVALID" } });
+  });
+
+  it("changes configFingerprint when a budget changes and is not boot-bound", () => {
+    const plain = validateConfig({ ...base, allowed_workspace_roots: [project] });
+    const withBudget = validateConfig({ ...base, allowed_workspace_roots: [project], budgets: { [project]: { max_cost_usd_per_day: 50 } } });
+    const withDifferentBudget = validateConfig({ ...base, allowed_workspace_roots: [project], budgets: { [project]: { max_cost_usd_per_day: 100 } } });
+
+    expect(configFingerprint(withBudget)).not.toBe(configFingerprint(plain));
+    expect(configFingerprint(withDifferentBudget)).not.toBe(configFingerprint(withBudget));
+    expect(bootBoundDrift(plain, withBudget)).toEqual([]);
+  });
 });

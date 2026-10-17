@@ -29,6 +29,18 @@
         }
       }
     },
+    "budgets": {
+      "type": "object",
+      "description": "Per allowed root, daily budget limits that cap estimated model spending in a rolling 24-hour window. Each key must equal an entry of allowed_workspace_roots as written.",
+      "propertyNames": { "minLength": 1, "maxLength": 4096 },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "max_cost_usd_per_day": { "type": "number", "exclusiveMinimum": 0, "maximum": 1000000 }
+        }
+      }
+    },
     "retention": {
       "type": "object",
       "additionalProperties": false,
