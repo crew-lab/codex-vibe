@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "candidate": "2.0.2",
+  "candidate": "2.1.0",
   "scope": "One-shot review and isolated edit with vibe-app-server 2.26.1 as the default engine (one process per run; backend = \"app-server\"), with Google Antigravity (agy 1.4.0 CLI) supported as an optional second execution backend (backend = \"antigravity\", paths.antigravity); one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work. Around the five tools: optional frozen acceptance contracts checked against the exact exported patch, append-only coordinator assessments, sanitized run reports, a version-matched preparation pass that gates ordinary dispatch, and owned validation copies.",
   "deterministic": [
     {
@@ -487,5 +487,5 @@
     "offline_cache": "populated operator npm cache; no network fallback",
     "evidence": "research/evidence/release-2.0.2-347bf79-2026-10-16/REPORT.md"
   },
-  "candidate_note": "2.0.2 is the source on main after 44dc6f8 and is not packaged yet; frozen_archive_sha256 and packaging_time_snapshot are filled from its target packaging. The 2.0.1 archive's identity and packaging snapshot are under evidence_builds."
+  "candidate_note": "2.1.0 is the active unreleased development line on main covering Waves 0–5 and the Google Antigravity execution backend. The published pre-releases v2.0.1 and v2.0.2 identities and packaging snapshots are preserved under evidence_builds and historical release assets."
 }
