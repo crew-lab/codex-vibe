@@ -1,13 +1,14 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
-import { access, lstat, readFile, realpath, rm, symlink, unlink, writeFile } from 'node:fs/promises';
+import { access, lstat, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import { promisify } from 'node:util';
 import path from 'node:path';
+import { digest } from '../acceptance/schema.js';
 import type {
   BackendCapabilities, BackendRunHandle, BackendStartResult, PinIdentity,
-  StartRunInput, SupervisorBackend, BackendCallbacks, RuntimeCheck, UsageState
+  StartRunInput, SupervisorBackend, BackendCallbacks, RuntimeCheck, UsageState, SupervisorError
 } from '../contracts.js';
 import { supervisorError, type SupervisorConfig } from '../contracts.js';
 import { executableSearchPath } from '../config/config.js';
@@ -32,8 +33,10 @@ export const SUPPORTED_ANTIGRAVITY_VERSION = '1.4.0';
 
 export interface AntigravityBackendOptions {
   preparation?: {
-    check: (config: SupervisorConfig) => Promise<PreparationStatus>;
+    check: (config: SupervisorConfig, dataDir?: string) => Promise<PreparationStatus>;
   };
+  dataDir?: string;
+  expectedExecutableSha256?: string | undefined;
 }
 
 const UNIFIED_TOOL_DENIES = [
@@ -329,7 +332,6 @@ function createStreamOutputParser(
     try {
       entry = JSON.parse(line);
     } catch {
-      await onEntry({ text: line, meta: { deniedActions: [] } });
       return;
     }
     const text = extractTextFromStreamEntry(entry);
@@ -432,31 +434,29 @@ export async function writeIsolatedSettings(
   await writeFile(path.join(cliDir, 'settings.json'), JSON.stringify(settings, null, 2) + '\n', { mode: 0o600 });
 }
 
-async function linkMacOsKeychainIfPresent(childHome: string): Promise<void> {
-  if (process.platform !== 'darwin') return;
-  const hostHome = os.homedir();
-  const hostKeychains = path.join(hostHome, 'Library', 'Keychains');
-  try {
-    const info = await lstat(hostKeychains);
-    if (!info.isDirectory()) return;
-    const childLibrary = path.join(childHome, 'Library');
-    await createPrivateDir(childLibrary);
-    await symlink(hostKeychains, path.join(childLibrary, 'Keychains'));
-  } catch {
-    // Keychain link is best-effort for macOS OAuth resolution
-  }
-}
-
-export async function cleanupPrivateDirectories(childHome: string, childTmp: string): Promise<void> {
-  await unlink(path.join(childHome, 'Library', 'Keychains')).catch(() => undefined);
+export async function cleanupPrivateDirectories(
+  childHome: string,
+  childTmp: string
+): Promise<{ cleaned: boolean; retained: string[] }> {
+  const retained: string[] = [];
   await Promise.allSettled([
     rm(childHome, { recursive: true, force: true, maxRetries: 2 }),
     rm(childTmp, { recursive: true, force: true, maxRetries: 2 })
   ]);
+  for (const dir of [childHome, childTmp]) {
+    try {
+      const info = await lstat(dir);
+      if (info) retained.push(path.basename(dir));
+    } catch {
+      // Directory gone is cleaned
+    }
+  }
+  return { cleaned: retained.length === 0, retained };
 }
 
 export class AntigravityBackend implements SupervisorBackend {
   readonly kind = 'antigravity' as const;
+  private probedSha256?: string | undefined;
 
   constructor(
     private readonly config: SupervisorConfig,
@@ -474,6 +474,7 @@ export class AntigravityBackend implements SupervisorBackend {
         details: { error: resolved.error ?? 'Antigravity CLI (agy) could not be resolved or probed.' }
       };
     }
+    this.probedSha256 = resolved.sha256 ?? undefined;
     if (resolved.version !== SUPPORTED_ANTIGRAVITY_VERSION) {
       return {
         available: false,
@@ -504,6 +505,7 @@ export class AntigravityBackend implements SupervisorBackend {
   async runtimeCheck(): Promise<RuntimeCheck> {
     const cmd = executable(this.config);
     const resolved = await resolveAntigravityExecutable(cmd);
+    this.probedSha256 = resolved.sha256 ?? undefined;
     const versionVerified = resolved.version === SUPPORTED_ANTIGRAVITY_VERSION;
     return {
       executable: cmd,
@@ -516,7 +518,7 @@ export class AntigravityBackend implements SupervisorBackend {
   }
 
   async preparationCheck(): Promise<PreparationStatus> {
-    return (this.options.preparation?.check ?? checkPreparation)(this.config);
+    return (this.options.preparation?.check ?? checkPreparation)(this.config, this.options.dataDir);
   }
 
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
@@ -535,6 +537,25 @@ export class AntigravityBackend implements SupervisorBackend {
         { expected_version: SUPPORTED_ANTIGRAVITY_VERSION, actual_version: resolved.version }
       );
     }
+
+    const binaryBytes = await readFile(resolved.resolvedPath);
+    const binaryDigest = digest(binaryBytes);
+    const expectedDigest = this.options.expectedExecutableSha256 ?? this.probedSha256;
+    if (expectedDigest && binaryDigest !== expectedDigest) {
+      throw supervisorError(
+        'VSUP_ANTIGRAVITY_EXEC_FAILED',
+        `Antigravity binary digest changed between resolution and execution (expected ${expectedDigest}, got ${binaryDigest}).`,
+        { reason: 'binary_digest_drift' }
+      );
+    }
+    if (resolved.sha256 && binaryDigest !== resolved.sha256) {
+      throw supervisorError(
+        'VSUP_ANTIGRAVITY_EXEC_FAILED',
+        `Antigravity binary digest changed between resolution and execution (expected ${resolved.sha256}, got ${binaryDigest}).`,
+        { reason: 'binary_digest_drift' }
+      );
+    }
+    this.probedSha256 = binaryDigest;
 
     const preparation = await this.preparationCheck();
     if (preparation.status !== 'passed') {
@@ -564,8 +585,9 @@ export class AntigravityBackend implements SupervisorBackend {
     await assertNoProjectAntigravityExtensions(input.cwd);
     await assertNoProjectAntigravityExtensions(input.workerWorkspace);
 
-    const childHome = path.join(input.runDirectory, 'antigravity-home');
-    const childTmp = path.join(input.runDirectory, 'antigravity-tmp');
+    const baseDir = input.runDirectory ?? path.join(os.tmpdir(), `vsup-run-${input.runId}`);
+    const childHome = path.join(baseDir, 'antigravity-home');
+    const childTmp = path.join(baseDir, 'antigravity-tmp');
     await createPrivateDir(childHome);
     await createPrivateDir(childTmp);
 
@@ -589,9 +611,6 @@ export class AntigravityBackend implements SupervisorBackend {
       maxTurns,
       maxModelCalls
     });
-    if (!hasGeminiApiKey) {
-      await linkMacOsKeychainIfPresent(childHome);
-    }
 
     const childEnv = buildChildEnvironment(process.env, [
       'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'ANTIGRAVITY_API_KEY', 'ANTIGRAVITY_HOME'
@@ -735,9 +754,19 @@ export class AntigravityBackend implements SupervisorBackend {
     childBox.current = child;
 
     const deadlineAtMs = Date.now() + input.limits.timeoutSeconds * 1000 + 15_000;
-    const reaper = child.child.pid !== undefined
-      ? await startReaper({ workerPid: child.child.pid, deadlineAtMs }).catch(() => undefined)
-      : undefined;
+    if (child.child.pid === undefined) {
+      await child.terminate();
+      await cleanupPrivateDirectories(childHome, childTmp);
+      throw supervisorError('VSUP_INTERNAL', 'Failed to retrieve child process PID for reaper registration.');
+    }
+    let reaper: Awaited<ReturnType<typeof startReaper>>;
+    try {
+      reaper = await startReaper({ workerPid: child.child.pid, deadlineAtMs });
+    } catch (reaperError) {
+      await child.terminate();
+      await cleanupPrivateDirectories(childHome, childTmp);
+      throw supervisorError('VSUP_INTERNAL', `Failed to start process reaper: ${reaperError instanceof Error ? reaperError.message : String(reaperError)}`);
+    }
 
     const opaque: AntigravityHandle['opaque'] = {
       process: child,
@@ -875,11 +904,17 @@ export class AntigravityBackend implements SupervisorBackend {
             usage: finalUsage,
             approvals
           });
-        } else if (code === 0) {
+        } else if (code === 0 && envelopeStatus === 'SUCCESS') {
           await callbacks.onState('completed', {
             usage: finalUsage,
             approvals,
             result: { stopReason: 'end_turn', summary: opaque.latestSummary || 'Antigravity run completed.' }
+          });
+        } else if (code === 0) {
+          await callbacks.onState('failed', {
+            usage: finalUsage,
+            approvals,
+            error: supervisorError('VSUP_ANTIGRAVITY_EXEC_FAILED', `Antigravity exited 0 without validated terminal SUCCESS status (status: ${envelopeStatus ?? 'absent'}).`)
           });
         } else {
           await callbacks.onState('failed', {
@@ -889,7 +924,18 @@ export class AntigravityBackend implements SupervisorBackend {
           });
         }
       } finally {
-        await cleanupPrivateDirectories(childHome, childTmp);
+        const cleanup = await cleanupPrivateDirectories(childHome, childTmp);
+        if (!cleanup.cleaned) {
+          await callbacks.onEvent({
+            source: 'supervisor',
+            type: 'diagnostic',
+            severity: 'warning',
+            data: {
+              reason: 'private_directories_retained',
+              retained: cleanup.retained
+            }
+          });
+        }
       }
     }).catch(async (error: unknown) => {
       opaque.done = true;
@@ -907,16 +953,44 @@ export class AntigravityBackend implements SupervisorBackend {
           toolCalls: { executed: streamExecutedCalls, deniedByHandler: 0, deniedByPolicy: allDeniedActions.length },
           hookEntries: []
         }));
-        await cleanupPrivateDirectories(childHome, childTmp);
+        const cleanup = await cleanupPrivateDirectories(childHome, childTmp);
+        if (!cleanup.cleaned) {
+          await callbacks.onEvent({
+            source: 'supervisor',
+            type: 'diagnostic',
+            severity: 'warning',
+            data: {
+              reason: 'private_directories_retained',
+              retained: cleanup.retained
+            }
+          });
+        }
+        const errObj = (error && typeof error === 'object' && 'code' in error && 'remediation' in error)
+          ? (error as SupervisorError)
+          : supervisorError('VSUP_BACKEND_CRASHED', redactSecrets(String(error)));
         await callbacks.onState('failed', {
           usage: { ...(latestUsage ?? {}), toolCalls },
           approvals,
-          error: supervisorError('VSUP_BACKEND_CRASHED', redactSecrets(String(error)))
+          error: errObj
         });
       } catch {
-        await cleanupPrivateDirectories(childHome, childTmp);
+        const cleanup = await cleanupPrivateDirectories(childHome, childTmp);
+        if (!cleanup.cleaned) {
+          await callbacks.onEvent({
+            source: 'supervisor',
+            type: 'diagnostic',
+            severity: 'warning',
+            data: {
+              reason: 'private_directories_retained',
+              retained: cleanup.retained
+            }
+          });
+        }
+        const errObj = (error && typeof error === 'object' && 'code' in error && 'remediation' in error)
+          ? (error as SupervisorError)
+          : supervisorError('VSUP_BACKEND_CRASHED', redactSecrets(String(error)));
         await callbacks.onState('failed', {
-          error: supervisorError('VSUP_BACKEND_CRASHED', redactSecrets(String(error)))
+          error: errObj
         });
       }
     });

@@ -7,7 +7,7 @@ import type {
   RunMode,
   ToolCallCounts
 } from '../contracts.js';
-import { MAX_APPROVAL_LEDGER_RECORDS } from '../contracts.js';
+import { MAX_APPROVAL_LEDGER_RECORDS, supervisorError } from '../contracts.js';
 import { createPrivateDir } from '../security/paths.js';
 import {
   canonicalJson,
@@ -234,6 +234,25 @@ export async function evaluateAntigravityToolCall(
     }
 
     if (resolved !== null && resolved === realWorkspace && isDirectoryReadTool) {
+      if ((options.excludedAnchors?.length ?? 0) > 0) {
+        const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
+        const entry: ApprovalLedgerEntry = {
+          callbackId: `agy-hook-${randomUUID()}`,
+          relatedEntryId: null,
+          turnId,
+          tool: toolName,
+          path: candidatePath.slice(0, 512),
+          fingerprint,
+          decision: 'deny',
+          reason: 'path_excluded'
+        };
+        return {
+          decision: 'deny',
+          reason: 'path_excluded',
+          entry,
+          hookResponse: { decision: 'deny', reason: 'path_excluded' }
+        };
+      }
       continue;
     }
 
@@ -651,6 +670,16 @@ async function main() {
     }
 
     if (resolved !== null && resolved === root && isDirectoryReadTool) {
+      if (Array.isArray(policy.excludedAnchors) && policy.excludedAnchors.length > 0) {
+        return recordAndExit(policy, {
+          turnId,
+          tool: toolName,
+          path: rawPath,
+          fingerprint: computeFingerprint(toolName, args),
+          decision: 'deny',
+          reason: 'path_excluded'
+        });
+      }
       continue;
     }
 
@@ -678,6 +707,16 @@ async function main() {
     }
 
     if (located.resolved === root && isDirectoryReadTool) {
+      if (Array.isArray(policy.excludedAnchors) && policy.excludedAnchors.length > 0) {
+        return recordAndExit(policy, {
+          turnId,
+          tool: toolName,
+          path: rawPath,
+          fingerprint: computeFingerprint(toolName, args),
+          decision: 'deny',
+          reason: 'path_excluded'
+        });
+      }
       continue;
     }
 
@@ -806,14 +845,23 @@ export async function readAntigravityHookLedger(
       try {
         const parsed = JSON.parse(trimmed) as ApprovalLedgerEntry;
         hookEntries.push(parsed);
-      } catch {
-        // Skip unparseable line
+      } catch (err) {
+        throw supervisorError('VSUP_INTERNAL', `Corrupted approval ledger entry in hook ledger: ${String(err)}`);
       }
     }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-      // Ignore reading failure for ledger
+      if (error && typeof error === 'object' && 'code' in error && 'remediation' in error) throw error;
+      throw supervisorError('VSUP_INTERNAL', `Failed to read hook audit ledger: ${String(error)}`);
     }
+  }
+
+  const approvedHookEntries = hookEntries.filter((e) => e.decision === 'approve');
+  if (streamExecutedCount > 0 && approvedHookEntries.length === 0) {
+    throw supervisorError(
+      'VSUP_INTERNAL',
+      `Audit unavailable: stream recorded ${streamExecutedCount} executed tool calls, but hook ledger recorded ${approvedHookEntries.length} approved entries.`
+    );
   }
 
   const envelopeEntries: ApprovalLedgerEntry[] = envelopeDeniedActions.map((item) => ({
@@ -832,7 +880,6 @@ export async function readAntigravityHookLedger(
   const records = allRecords.slice(0, MAX_APPROVAL_LEDGER_RECORDS);
   const approvals: ApprovalLedgerSnapshot = { records, truncated };
 
-  const approvedHookEntries = hookEntries.filter((e) => e.decision === 'approve');
   const deniedHookEntries = hookEntries.filter((e) => e.decision === 'deny');
 
   const toolCalls: ToolCallCounts = {
