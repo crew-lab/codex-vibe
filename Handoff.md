@@ -128,8 +128,15 @@ Per user instruction, Google Antigravity execution backend support has been inte
   - **Executable Pin & Doctor**: Extended `doctor`, `prepare check`, and `AntigravityBackend` to verify `agy 1.4.0` binary version and SHA-256 digest, rejecting unverified or drifted binaries.
   - **Unified Rule Syntax**: Populated `settings.json` `permissions.allow` (`read_file(...)`, `write_file(...)`) and `permissions.deny` (`command(*)`, `mcp(*)`, `read_url(*)`, `execute_url(*)`, `write_file(*)`, plus excluded, reserved, and secret paths) matching `agy 1.4.0`'s validated parser.
   - **Zero-Inference Preparation Check**: Implemented `runAntigravityPreparationCheck()` in `src/preparation/antigravity-prepare.ts` and wired into `vibe-supervisor prepare check`: validates `settings.json` and `hooks.json`, executes zero-inference slash-command read-backs (`/config`, `/hooks`, `/permissions`, `/skills` with `--output-format json` routed through a refusing loopback proxy), runs 6 synthetic `PreToolUse` hook checks, and generates `preparation-receipt.json` bound to the `agy 1.4.0` binary SHA-256 digest.
-  - **ADR 0008 & Target Acceptance Gates**: Recorded the four-layer defense-in-depth isolation architecture in [ADR 0008](docs/adr/0008-antigravity-execution-backend.md), added deterministic check `antigravity-backend-settings-pretool-hook-ledger-and-prepare` and target gates `antigravity-backend-no-inference-check` and `antigravity-backend-hosted-review-edit` in `docs/acceptance.json` and `docs/compatibility.md`. Target evidence from 2026-10-17 in `research/evidence/antigravity-backend-2026-10-17/` is preserved; independent verification (report `01a13c77`) identified preparation checker gaps (mock exit-42 fallback, invented control validation), and the gate is marked UNVERIFIED pending checker repair.
-- **Verification**: Tests in `tests/unit/antigravity-backend.test.ts`, `tests/unit/config.test.ts`, and full release verification pass cleanly.
+- **Verification**: Tests in `tests/unit/antigravity-backend.test.ts`, `tests/unit/config.test.ts`, and full release verification pass cleanly (1,441 tests passing across 98 test files).
+
+### Owner strategic decision — 2026-10-17: Pivot from feature expansion to operational stability ("Working ASAP")
+
+The owner decided on 2026-10-17 to halt the exploratory feature run (deferred: wheel candidate extraction scripts, review search sidecar, outreach and task template pipelines). The 2.1 line is frozen at the delivered Waves 0–5 (usage tool-call counts, ceilings, cross-session runs, usefulness, exclusions, approval ledgers, review findings & SARIF 2.1.0, daily cost ledger & per-root budgets) and the Antigravity execution backend. The strategic priority is to see the system working end-to-end immediately:
+1. Target-level zero-inference conformance validation on the local `agy 1.4.0` installation (`antigravity-backend-no-inference-check`) using the repaired checker (`3fcf732`).
+2. Live operational verification of real review and edit delegation on the target machine with verified hook enforcement and clean exports.
+3. Branch convergence (`origin/codex/package-kit-identity`, `origin/claude/2.1-wave-1`, `origin/explore_project_details`) into main.
+4. Stable, predictable everyday use with the active MCP tools.
 
 ## Release identity
 
@@ -167,7 +174,7 @@ Per user instruction, Google Antigravity execution backend support has been inte
 | 11 | Done 2026-10-17 on `origin/explore_project_details`: Phases 1, 2 & 3 hardening, 2.1 unification and target conformance of `AntigravityBackend` (Phase 1 `agy` CLI flags & `settings.json`, Phase 2 `excluded_globs` & `PreToolUse` hook emitting `approvals.json`, Phase 3 `agy 1.4.0` revalidation, zero-inference `prepare check`, ADR 0008, target acceptance gates) | Agents | — |
 | 12 | Decide the repository rename (`codex-vibe` → `vibe-supervisor`) and read the Mistral and OpenAI brand pages | Owner | Before the article goes out |
 | 13 | Read the 2.0 article draft (`marketing/article/devto-2.0.md`) with its [editor notes](marketing/article/editor-notes.md) and [story sources](marketing/sources.md); update it for the workflow features and publish after the release with the AI-Assisted label and the `[UPDATE AT PUBLISH]` markers filled, in the marketing strategy's [order](marketing/strategy.md#6-next-actions-in-order) | Owner reads and publishes; agent fills the markers from the evidence | Step 10 |
-| 14 | In progress 2026-10-17 on `origin/explore_project_details`: Phase 3 unification completed (`prepare check` extension, ADR 0008, target evidence preserved in `research/evidence/antigravity-backend-2026-10-17/`); independent review `01a13c77` identified preparation checker gaps, repairing checker before re-running gate per the [development plan](planning/development-plan.md#61-antigravity-execution-backend-hardening--21-unification-plan-phases-13) | Agents | Step G |
+| 14 | In progress 2026-10-17 on `explore_project_details`: Checker repaired (`3fcf732`), Wave 4 & 5 delivered and verified (`d9c3726`); executing target zero-inference conformance check on local `agy 1.4.0` to close `antigravity-backend-no-inference-check`, followed by operational review/edit delegation | Agents | Step G |
 
 **2.0.2.** Steps A to D were completed on the target and recorded on `origin/codex/package-kit-identity` (`1f906e8`, `a3c9631`, `6faee25`).
 
