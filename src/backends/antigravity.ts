@@ -24,9 +24,12 @@ import { buildWorkspaceListing } from './app-server/workspace-listing.js';
 import { FINDINGS_OUTPUT_CONTRACT } from '../core/findings.js';
 import { anchoredDenylistPatterns, denylistAnchors, workspaceAnchors, type DenylistAnchor } from '../security/globs.js';
 import {
+  PATH_KEYS,
   readAntigravityHookLedger,
-  writeAntigravityPreToolHook
+  writeAntigravityPreToolHook,
+  type StreamExecutedCall
 } from './antigravity-hook.js';
+import { canonicalJson } from './app-server/approvals.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -94,6 +97,7 @@ interface ParsedEnvelopeMeta {
   deniedActions: Array<{ tool: string; reason: string; path?: string }>;
   numToolCalls?: number;
   toolCalls?: unknown;
+  executedCalls: StreamExecutedCall[];
   type?: string;
   thoughtObserved?: boolean;
 }
@@ -220,9 +224,30 @@ export function extractTextFromStreamEntry(entry: unknown): string {
 }
 
 export function extractEnvelopeMeta(entry: unknown): ParsedEnvelopeMeta {
-  const meta: ParsedEnvelopeMeta = { deniedActions: [] };
+  const meta: ParsedEnvelopeMeta = { deniedActions: [], executedCalls: [] };
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return meta;
   const top = entry as Record<string, unknown>;
+
+  const parseCallObj = (item: Record<string, unknown>, defaultTurnId: string | null): StreamExecutedCall | null => {
+    const rawTool = item.tool_name ?? item.name ?? item.tool;
+    if (typeof rawTool !== 'string' || !rawTool.trim()) return null;
+    const tool = rawTool.trim();
+    const rawCallId = item.call_id ?? item.id ?? item.callId;
+    const callId = typeof rawCallId === 'string' && rawCallId.trim() ? rawCallId.trim() : null;
+    const rawTurn = item.step_index ?? item.turnId ?? item.turn_id;
+    const turnId = rawTurn !== undefined && rawTurn !== null ? String(rawTurn) : defaultTurnId;
+    const rawArgs = item.args ?? item.tool_input ?? item.input;
+    const args = (rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)) ? (rawArgs as Record<string, unknown>) : null;
+    let targetPath: string | null = null;
+    if (args) {
+      for (const key of PATH_KEYS) {
+        const v = args[key];
+        if (typeof v === 'string' && v.trim()) { targetPath = v.trim(); break; }
+      }
+    }
+    const fingerprint = args ? createHash('sha256').update(canonicalJson({ tool, args })).digest('hex') : null;
+    return { tool, callId, turnId, args, path: targetPath, fingerprint };
+  };
 
   if (typeof top.type === 'string' && /thought|reasoning/i.test(top.type)) {
     meta.thoughtObserved = true;
@@ -245,10 +270,20 @@ export function extractEnvelopeMeta(entry: unknown): ParsedEnvelopeMeta {
         meta.isModelCallStep = true;
       }
     }
-    if (typeof step.tool_name === 'string' && step.tool_name.trim().length > 0 && step.state === 'DONE') {
+    if (typeof step.tool_name === 'string' && step.tool_name.trim().length > 0 && (step.state === 'DONE' || step.state === 'COMPLETED' || step.state === undefined)) {
       meta.type = 'tool_call';
+      const call = parseCallObj(step, meta.stepIdx !== undefined ? String(meta.stepIdx) : null);
+      if (call) meta.executedCalls.push(call);
     } else if (stepType) {
       meta.type = stepType;
+    }
+    if (Array.isArray(step.tool_calls)) {
+      for (const c of step.tool_calls) {
+        if (c && typeof c === 'object' && !Array.isArray(c)) {
+          const call = parseCallObj(c as Record<string, unknown>, meta.stepIdx !== undefined ? String(meta.stepIdx) : null);
+          if (call) meta.executedCalls.push(call);
+        }
+      }
     }
   }
 
@@ -259,6 +294,20 @@ export function extractEnvelopeMeta(entry: unknown): ParsedEnvelopeMeta {
   if (typeof obj.status === 'string') meta.status = obj.status.toUpperCase();
   if (typeof obj.error === 'string' && obj.error.trim().length > 0) meta.error = obj.error.trim();
   if (!meta.type && typeof obj.type === 'string') meta.type = obj.type;
+
+  if (Array.isArray(obj.tool_calls)) {
+    for (const c of obj.tool_calls) {
+      if (c && typeof c === 'object' && !Array.isArray(c)) {
+        const call = parseCallObj(c as Record<string, unknown>, null);
+        if (call) meta.executedCalls.push(call);
+      }
+    }
+  }
+
+  if ((top.type === 'tool_use' || top.type === 'tool_call') && meta.executedCalls.length === 0) {
+    const call = parseCallObj(top, meta.stepIdx !== undefined ? String(meta.stepIdx) : null);
+    if (call) meta.executedCalls.push(call);
+  }
 
   if (typeof obj.num_tool_calls === 'number' && Number.isFinite(obj.num_tool_calls) && obj.num_tool_calls >= 0) {
     meta.numToolCalls = Math.trunc(obj.num_tool_calls);
@@ -650,6 +699,7 @@ export class AntigravityBackend implements SupervisorBackend {
     let limitStopReason: 'turn_limit' | 'token_limit' | undefined;
     let reasoningObservedCount = 0;
     const allDeniedActions: Array<{ tool: string; reason: string; path?: string }> = [];
+    const allExecutedCalls: StreamExecutedCall[] = [];
     const childBox: { current?: ReturnType<typeof spawnManaged> } = {};
 
     const chunks = createStreamOutputParser(async ({ text, meta }) => {
@@ -677,6 +727,15 @@ export class AntigravityBackend implements SupervisorBackend {
         streamToolUseEvents += 1;
         streamExecutedCalls = Math.max(streamExecutedCalls, streamToolUseEvents);
         observedTurns = Math.max(observedTurns, streamToolUseEvents);
+      }
+      for (const call of meta.executedCalls) {
+        if (call.callId && allExecutedCalls.some((c) => c.callId && c.callId === call.callId)) {
+          continue;
+        }
+        allExecutedCalls.push(call);
+      }
+      if (allExecutedCalls.length > 0) {
+        streamExecutedCalls = Math.max(streamExecutedCalls, allExecutedCalls.length);
       }
       for (const denied of meta.deniedActions) {
         allDeniedActions.push(denied);
@@ -836,7 +895,8 @@ export class AntigravityBackend implements SupervisorBackend {
         const { approvals, toolCalls, hookEntries } = await readAntigravityHookLedger(
           childHome,
           allDeniedActions,
-          streamExecutedCalls
+          streamExecutedCalls,
+          allExecutedCalls
         );
 
         for (const entry of hookEntries) {
@@ -951,10 +1011,11 @@ export class AntigravityBackend implements SupervisorBackend {
         const { approvals, toolCalls } = await readAntigravityHookLedger(
           childHome,
           allDeniedActions,
-          streamExecutedCalls
+          streamExecutedCalls,
+          allExecutedCalls
         ).catch(() => ({
           approvals: { records: [], truncated: false },
-          toolCalls: { executed: streamExecutedCalls, deniedByHandler: 0, deniedByPolicy: allDeniedActions.length },
+          toolCalls: { executed: allExecutedCalls.length, deniedByHandler: 0, deniedByPolicy: allDeniedActions.length },
           hookEntries: []
         }));
         const cleanup = await cleanupPrivateDirectories(childHome, childTmp);

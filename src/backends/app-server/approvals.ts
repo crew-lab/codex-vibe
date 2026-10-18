@@ -7,7 +7,7 @@ import { isPathWithinRoot } from '../../security/paths.js';
 import type { JsonObject } from './jsonrpc.js';
 import { EFFECT_PATH_FIELD, callbackAcknowledgement, effectFilePath, parseCallbackCall, type ApprovalDecisionType, type ApprovalRequest } from './protocol.js';
 
-export { createExcludedMatcher, excludedRelativePath, type ExcludedMatcher, type ExclusionAnchor, type ExclusionSpec } from '../../security/globs.js';
+export { anchorsOf, createExcludedMatcher, excludedRelativePath, type ExcludedMatcher, type ExclusionAnchor, type ExclusionSpec } from '../../security/globs.js';
 
 export const REVIEW_TOOLS: readonly string[] = ['file_system.read_file'];
 export const EDIT_TOOLS: readonly string[] = ['file_system.read_file', 'file_system.write_file', 'file_system.search_replace'];
@@ -135,7 +135,7 @@ export function isWriteTool(tool: string): boolean {
 const SENSITIVE_MATCHERS = SENSITIVE_FILE_PATTERNS.map(compileSegment);
 const RESERVED_NAMES = new Set([...RESERVED_DIRECTORIES, ...RESERVED_FILES].map((name) => name.toLowerCase()));
 
-function restrictedSegment(segments: readonly string[]): 'path_reserved' | 'path_secret' | null {
+export function restrictedSegment(segments: readonly string[]): 'path_reserved' | 'path_secret' | null {
   const lowered = segments.map((segment) => segment.toLowerCase());
   for (const segment of lowered) if (RESERVED_NAMES.has(segment)) return 'path_reserved';
   for (const segment of lowered) if (SENSITIVE_MATCHERS.some((matches) => matches(segment))) return 'path_secret';

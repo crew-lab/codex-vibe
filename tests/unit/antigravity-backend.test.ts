@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { appendFile, chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -201,7 +201,7 @@ console.log(JSON.stringify({
 }));
 console.log(JSON.stringify({
   event: 'step_update',
-  step_update: { conversation_id: 'conv-1', step_index: 1, state: 'DONE', step_type: 'view_file', tool_name: 'view_file' }
+  step_update: { conversation_id: 'conv-1', step_index: 1, state: 'DONE', step_type: 'view_file', tool_name: 'view_file', args: { AbsolutePath: path.join(process.cwd(), 'sample.ts') } }
 }));
 console.log(JSON.stringify({
   event: 'step_update',
@@ -722,6 +722,10 @@ for (let i = 0; i < testCalls.length; i++) {
   }
 }
 fs.writeFileSync(${JSON.stringify(hookResultsFile)}, JSON.stringify(results, null, 2));
+console.log(JSON.stringify({
+  event: 'step_update',
+  step_update: { step_index: 1, state: 'DONE', step_type: 'tool_call', tool_name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, 'sample.ts'))} } }
+}));
 console.log(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: 'Executed all hook test calls.' } }));
 process.exit(0);
 `);
@@ -862,6 +866,10 @@ execSync(hookCommand, {
   stdio: ['pipe', 'pipe', 'inherit']
 });
 
+console.log(JSON.stringify({
+  event: 'step_update',
+  step_update: { step_index: 1, state: 'DONE', step_type: 'tool_call', tool_name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, 'sample.txt'))} } }
+}));
 console.log(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: 'Completed e2e run with approvals.' } }));
 process.exit(0);
 `);
@@ -1211,5 +1219,185 @@ process.exit(0);
       code: 'VSUP_INTERNAL',
       message: expect.stringContaining('Audit unavailable')
     });
+  });
+
+  it('strictly correlates executed calls to hook approvals and rejects duplicates, mismatches, and unmatched counts', async () => {
+    const root = await makeRoot();
+    const home = path.join(root, 'home');
+    const cliDir = path.join(home, '.gemini', 'antigravity-cli');
+    await mkdir(cliDir, { recursive: true });
+
+    const approval1 = {
+      callbackId: 'agy-call-1',
+      relatedEntryId: 'call-1',
+      turnId: '1',
+      tool: 'read_file',
+      path: 'sample.ts',
+      fingerprint: 'fp-sample',
+      decision: 'approve',
+      reason: null
+    };
+    const approval2 = {
+      callbackId: 'agy-call-2',
+      relatedEntryId: 'call-2',
+      turnId: '2',
+      tool: 'read_file',
+      path: 'sample.ts',
+      fingerprint: 'fp-sample',
+      decision: 'approve',
+      reason: null
+    };
+
+    // 1. Hook ledger has 1 approval, but stream executed 2 identical calls -> fails (duplicate usage)
+    await writeFile(path.join(cliDir, 'hook-ledger.jsonl'), JSON.stringify(approval1) + '\n');
+    await expect(
+      readAntigravityHookLedger(home, [], 2, [
+        { tool: 'read_file', callId: 'call-1', path: 'sample.ts', fingerprint: 'fp-sample' },
+        { tool: 'read_file', callId: 'call-2', path: 'sample.ts', fingerprint: 'fp-sample' }
+      ])
+    ).rejects.toMatchObject({
+      code: 'VSUP_INTERNAL',
+      message: expect.stringContaining('Audit mismatch')
+    });
+
+    // 2. Hook ledger has 2 approvals for identical calls, stream executed 2 identical calls -> succeeds
+    await writeFile(path.join(cliDir, 'hook-ledger.jsonl'), JSON.stringify(approval1) + '\n' + JSON.stringify(approval2) + '\n');
+    const twoCallsResult = await readAntigravityHookLedger(home, [], 2, [
+      { tool: 'read_file', callId: 'call-1', path: 'sample.ts', fingerprint: 'fp-sample' },
+      { tool: 'read_file', callId: 'call-2', path: 'sample.ts', fingerprint: 'fp-sample' }
+    ]);
+    expect(twoCallsResult.toolCalls.executed).toBe(2);
+
+    // 3. Tool mismatch rejection: callId matches, but tool name differs
+    await writeFile(path.join(cliDir, 'hook-ledger.jsonl'), JSON.stringify(approval1) + '\n');
+    await expect(
+      readAntigravityHookLedger(home, [], 1, [
+        { tool: 'write_file', callId: 'call-1', path: 'sample.ts', fingerprint: 'fp-sample' }
+      ])
+    ).rejects.toMatchObject({
+      code: 'VSUP_INTERNAL',
+      message: expect.stringContaining('does not match approved tool')
+    });
+
+    // 4. Arguments / fingerprint mismatch rejection
+    await expect(
+      readAntigravityHookLedger(home, [], 1, [
+        { tool: 'read_file', callId: 'call-1', path: 'sample.ts', fingerprint: 'different-fp' }
+      ])
+    ).rejects.toMatchObject({
+      code: 'VSUP_INTERNAL',
+      message: expect.stringContaining('arguments fingerprint does not match approved fingerprint')
+    });
+
+    // 5. Unmatched effect: stream reports 2 calls executed, but only 1 call record was provided
+    await writeFile(path.join(cliDir, 'hook-ledger.jsonl'), JSON.stringify(approval1) + '\n' + JSON.stringify(approval2) + '\n');
+    await expect(
+      readAntigravityHookLedger(home, [], 2, [
+        { tool: 'read_file', callId: 'call-1', path: 'sample.ts', fingerprint: 'fp-sample' }
+      ])
+    ).rejects.toMatchObject({
+      code: 'VSUP_INTERNAL',
+      message: expect.stringContaining('only 1 call records with identifiers were received')
+    });
+
+    // 6. Approval alone must NOT count as execution: hook ledger recorded 2 approvals, but 0 calls executed
+    await writeFile(path.join(cliDir, 'hook-ledger.jsonl'), JSON.stringify(approval1) + '\n' + JSON.stringify(approval2) + '\n');
+    const zeroExecResult = await readAntigravityHookLedger(home, [], 0, []);
+    expect(zeroExecResult.toolCalls.executed).toBe(0);
+    expect(zeroExecResult.approvals.records).toHaveLength(2);
+  });
+
+  it('enforces recursive-search boundaries on workspace root, subdirectories, symlinks, depth, and secrets', async () => {
+    const root = await makeRoot();
+    const workspace = path.join(root, 'workspace');
+    await mkdir(workspace, { recursive: true });
+
+    // Create subdirectories
+    const srcDir = path.join(workspace, 'src');
+    const secretSubDir = path.join(srcDir, 'secrets');
+    await mkdir(secretSubDir, { recursive: true });
+    await writeFile(path.join(secretSubDir, 'token.key'), 'secret-key');
+    await writeFile(path.join(srcDir, 'index.ts'), 'console.log("hello");');
+
+    // 1. Recursive search at workspace root when exclusions exist -> path_excluded
+    const rootExclEval = await evaluateAntigravityToolCall(
+      { mode: 'review', workerWorkspace: workspace, excludedAnchors: [{ root: workspace, globs: ['src/secrets/**'] }] },
+      { toolCall: { name: 'grep_search', args: { SearchDirectory: workspace } } }
+    );
+    expect(rootExclEval.decision).toBe('deny');
+    expect(rootExclEval.reason).toBe('path_excluded');
+
+    // 2. Recursive search at workspace root when NO exclusions exist -> path_reserved (cannot constrain away from .git/.gemini)
+    const rootNoExclEval = await evaluateAntigravityToolCall(
+      { mode: 'review', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'find_by_name', args: { DirectoryPath: workspace } } }
+    );
+    expect(rootNoExclEval.decision).toBe('deny');
+    expect(rootNoExclEval.reason).toBe('path_reserved');
+
+    // 3. Shallow list_dir at workspace root without exclusions -> allowed
+    const rootListDirEval = await evaluateAntigravityToolCall(
+      { mode: 'review', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'list_dir', args: { DirectoryPath: workspace } } }
+    );
+    expect(rootListDirEval.decision).toBe('allow');
+
+    // 4. Recursive search on subdirectory with nested exclusion -> path_excluded
+    const subExclEval = await evaluateAntigravityToolCall(
+      { mode: 'review', workerWorkspace: workspace, excludedAnchors: [{ root: workspace, globs: ['src/secrets/**'] }] },
+      { toolCall: { name: 'find_by_name', args: { DirectoryPath: srcDir } } }
+    );
+    expect(subExclEval.decision).toBe('deny');
+    expect(subExclEval.reason).toBe('path_excluded');
+
+    // 5. Recursive search on subdirectory containing secret file -> path_secret
+    const subSecretEval = await evaluateAntigravityToolCall(
+      { mode: 'review', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'grep_search', args: { SearchDirectory: srcDir } } }
+    );
+    expect(subSecretEval.decision).toBe('deny');
+    expect(subSecretEval.reason).toBe('path_secret');
+
+    // 6. Subdirectory with symlink -> path_symlink
+    const cleanDir = path.join(workspace, 'clean');
+    await mkdir(cleanDir, { recursive: true });
+    await writeFile(path.join(cleanDir, 'file.txt'), 'hello');
+    const symlinkDir = path.join(workspace, 'symlink-dir');
+    await mkdir(symlinkDir, { recursive: true });
+    await symlink(path.join(cleanDir, 'file.txt'), path.join(symlinkDir, 'link.txt'));
+
+    const symlinkEval = await evaluateAntigravityToolCall(
+      { mode: 'review', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'find_by_name', args: { DirectoryPath: symlinkDir } } }
+    );
+    expect(symlinkEval.decision).toBe('deny');
+    expect(symlinkEval.reason).toBe('path_symlink');
+
+    // 7. Subdirectory exceeding depth 4 -> path_invalid
+    const deepDir = path.join(workspace, 'd1', 'd2', 'd3', 'd4', 'd5', 'd6');
+    await mkdir(deepDir, { recursive: true });
+    await writeFile(path.join(deepDir, 'deep.txt'), 'deep');
+    const deepEval = await evaluateAntigravityToolCall(
+      { mode: 'review', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'find_by_name', args: { DirectoryPath: path.join(workspace, 'd1') } } }
+    );
+    expect(deepEval.decision).toBe('deny');
+    expect(deepEval.reason).toBe('path_invalid');
+
+    // 8. File tool called on a directory -> path_invalid
+    const readFileDirEval = await evaluateAntigravityToolCall(
+      { mode: 'review', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'read_file', args: { path: cleanDir } } }
+    );
+    expect(readFileDirEval.decision).toBe('deny');
+    expect(readFileDirEval.reason).toBe('path_invalid');
+
+    // 9. Clean subdirectory within limits -> allowed
+    const cleanEval = await evaluateAntigravityToolCall(
+      { mode: 'review', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'find_by_name', args: { DirectoryPath: cleanDir } } }
+    );
+    expect(cleanEval.decision).toBe('allow');
+    expect(cleanEval.reason).toBeNull();
   });
 });
