@@ -87,10 +87,15 @@ export async function verifyDirectoryDescendants(
     if (excludedAnchors.length > 0) {
       return { allowed: false, reason: 'path_excluded' };
     }
+    const isExcluded = createExcludedMatcher(excludedAnchors);
     try {
       const entries = await readdir(resolvedDir, { withFileTypes: true });
       for (const ent of entries) {
         if (ent.isSymbolicLink()) return { allowed: false, reason: 'path_symlink' };
+        const childRelParts = [ent.name];
+        const restricted = restrictedSegment(childRelParts);
+        if (restricted) return { allowed: false, reason: restricted };
+        if (isExcluded(childRelParts)) return { allowed: false, reason: 'path_excluded' };
       }
     } catch {
       return { allowed: false, reason: 'path_unresolvable' };
@@ -186,6 +191,11 @@ export async function verifyDirectoryDescendants(
         return { allowed: false, reason: 'path_invalid' };
       }
     }
+  }
+
+  // Recursive directory operations cannot be constrained during traversal by the host process.
+  if (isRecursive) {
+    return { allowed: false, reason: 'path_invalid' };
   }
 
   return { allowed: true };
@@ -759,10 +769,15 @@ async function verifyDirectoryDescendants(resolvedDir, realWorkspace, excludedAn
     if (Array.isArray(excludedAnchors) && excludedAnchors.length > 0) {
       return { allowed: false, reason: 'path_excluded' };
     }
+    const isExcluded = createExcludedMatcher(excludedAnchors || []);
     try {
       const entries = await fs.promises.readdir(resolvedDir, { withFileTypes: true });
       for (const ent of entries) {
         if (ent.isSymbolicLink()) return { allowed: false, reason: 'path_symlink' };
+        const childRelParts = [ent.name];
+        const restricted = restrictedSegment(childRelParts);
+        if (restricted) return { allowed: false, reason: restricted };
+        if (isExcluded(childRelParts)) return { allowed: false, reason: 'path_excluded' };
       }
     } catch {
       return { allowed: false, reason: 'path_unresolvable' };
@@ -848,6 +863,11 @@ async function verifyDirectoryDescendants(resolvedDir, realWorkspace, excludedAn
         return { allowed: false, reason: 'path_invalid' };
       }
     }
+  }
+
+  // Recursive directory operations cannot be constrained during traversal by the host process.
+  if (isRecursive) {
+    return { allowed: false, reason: 'path_invalid' };
   }
 
   return { allowed: true };
@@ -1325,6 +1345,7 @@ export async function readAntigravityHookLedger(
     let matchedIdx: number | null = null;
 
     if (call.callId) {
+      // An execution with a call ID MUST match an approval with that verified ID.
       for (const idx of unusedApprovalIndices) {
         const approval = approvedHookEntries[idx]!;
         if (approval.relatedEntryId === call.callId) {
@@ -1340,37 +1361,54 @@ export async function readAntigravityHookLedger(
               `Audit mismatch: call ID '${call.callId}' arguments fingerprint does not match approved fingerprint.`
             );
           }
+          if (call.path && approval.path && approval.path !== call.path) {
+            throw supervisorError(
+              'VSUP_INTERNAL',
+              `Audit mismatch: call ID '${call.callId}' path '${call.path}' does not match approved path '${approval.path}'.`
+            );
+          }
           matchedIdx = idx;
           break;
         }
       }
-    }
 
-    if (matchedIdx === null && call.fingerprint) {
+      if (matchedIdx === null) {
+        throw supervisorError(
+          'VSUP_INTERNAL',
+          `Audit mismatch: executed tool call '${call.tool}' has call ID '${call.callId}', but no unused approval in hook ledger matches this call ID.`
+        );
+      }
+    } else {
+      // If the execution has no call ID, require a complete canonical fingerprint.
+      if (!call.fingerprint) {
+        throw supervisorError(
+          'VSUP_INTERNAL',
+          `Audit mismatch: executed tool call '${call.tool}' lacks both call ID and canonical arguments fingerprint.`
+        );
+      }
+
       for (const idx of unusedApprovalIndices) {
         const approval = approvedHookEntries[idx]!;
+        // An approval with a specific relatedEntryId cannot be claimed by a call without callId
+        // if an executed call with that callId exists.
+        if (approval.relatedEntryId && executedCalls.some((c) => c.callId === approval.relatedEntryId)) {
+          continue;
+        }
         if (approval.tool === call.tool && approval.fingerprint === call.fingerprint) {
+          if (call.path && approval.path && approval.path !== call.path) {
+            continue;
+          }
           matchedIdx = idx;
           break;
         }
       }
-    }
 
-    if (matchedIdx === null && call.path) {
-      for (const idx of unusedApprovalIndices) {
-        const approval = approvedHookEntries[idx]!;
-        if (approval.tool === call.tool && approval.path === call.path) {
-          matchedIdx = idx;
-          break;
-        }
+      if (matchedIdx === null) {
+        throw supervisorError(
+          'VSUP_INTERNAL',
+          `Audit mismatch: executed tool call '${call.tool}' (fingerprint: ${call.fingerprint}, path: ${call.path ?? 'none'}) has no matching unused approval in hook ledger.`
+        );
       }
-    }
-
-    if (matchedIdx === null) {
-      throw supervisorError(
-        'VSUP_INTERNAL',
-        `Audit mismatch: executed tool call '${call.tool}' (callId: ${call.callId ?? 'none'}, path: ${call.path ?? 'none'}) has no matching unused approval in hook ledger.`
-      );
     }
 
     unusedApprovalIndices.delete(matchedIdx);

@@ -681,6 +681,9 @@ process.exit(0);
 
     await writeFile(path.join(workspace, 'sample.ts'), 'export const a = 1;\n');
     await writeFile(path.join(workspace, 'secret.txt'), 'secret data\n');
+    const cleanDir = path.join(workspace, 'clean');
+    await mkdir(cleanDir, { recursive: true });
+    await writeFile(path.join(cleanDir, 'file.txt'), 'hello');
     const hookResultsFile = path.join(root, 'hook-results.json');
 
     const script = path.join(root, 'mock-agy.sh');
@@ -703,7 +706,10 @@ const testCalls = [
   { name: 'read_file', args: { path: '/outside/workspace/file.txt' }, stepIdx: 3 },
   { name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, '.gemini', 'config.json'))} }, stepIdx: 4 },
   { name: 'write_file', args: { path: ${JSON.stringify(path.join(workspace, 'sample.ts'))}, content: 'illegal' }, stepIdx: 5 },
-  { name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, 'sample.ts'))} }, stepIdx: 6 }
+  { name: 'find_by_name', args: { DirectoryPath: ${JSON.stringify(cleanDir)} }, stepIdx: 1 },
+  { name: 'grep_search', args: { SearchDirectory: ${JSON.stringify(cleanDir)} }, stepIdx: 1 },
+  { name: 'list_dir', args: { DirectoryPath: ${JSON.stringify(cleanDir)} }, stepIdx: 1 },
+  { name: 'read_file', args: { path: ${JSON.stringify(path.join(workspace, 'sample.ts'))} }, stepIdx: 9 }
 ];
 
 const results = [];
@@ -761,7 +767,7 @@ process.exit(0);
       workerWorkspace: workspace,
       runDirectory: runDir,
       exclusions: [{ root: workspace, globs: ['secret.txt'] }],
-      limits: { timeoutSeconds: 30, maxTurns: 5, maxEventBytes: 10240, maxTranscriptBytes: 10240, maxArtifactBytes: 10240 }
+      limits: { timeoutSeconds: 30, maxTurns: 8, maxEventBytes: 10240, maxTranscriptBytes: 10240, maxArtifactBytes: 10240 }
     };
 
     const result = await backend.start(input, callbacks);
@@ -769,33 +775,39 @@ process.exit(0);
     await waitFor(() => finalState, (state) => state === 'completed');
 
     const hookResults = JSON.parse(await readFile(hookResultsFile, 'utf8'));
-    expect(hookResults).toHaveLength(6);
+    expect(hookResults).toHaveLength(9);
     expect(hookResults[0]).toEqual({ decision: 'allow' });
     expect(hookResults[1]).toEqual({ decision: 'deny', reason: 'path_excluded' });
     expect(hookResults[2]).toEqual({ decision: 'deny', reason: 'path_outside_workspace' });
     expect(hookResults[3]).toEqual({ decision: 'deny', reason: 'path_reserved' });
     expect(hookResults[4]).toEqual({ decision: 'deny', reason: 'tool_not_in_profile' });
-    expect(hookResults[5]).toEqual({ decision: 'deny', reason: 'turn_limit_exceeded' });
+    expect(hookResults[5]).toEqual({ decision: 'deny', reason: 'path_invalid' });
+    expect(hookResults[6]).toEqual({ decision: 'deny', reason: 'path_invalid' });
+    expect(hookResults[7]).toEqual({ decision: 'allow' });
+    expect(hookResults[8]).toEqual({ decision: 'deny', reason: 'turn_limit_exceeded' });
 
     expect(stopReason).toBe('turn_limit');
 
     const toolCallEvents = events.filter((e) => e.type === 'tool_call');
-    expect(toolCallEvents).toHaveLength(1);
+    expect(toolCallEvents).toHaveLength(2);
     expect(toolCallEvents[0]?.data).toMatchObject({ tool: 'read_file' });
+    expect(toolCallEvents[1]?.data).toMatchObject({ tool: 'list_dir' });
 
     const toolDeniedEvents = events.filter((e) => e.type === 'tool_denied');
-    expect(toolDeniedEvents).toHaveLength(5);
+    expect(toolDeniedEvents).toHaveLength(7);
     expect(toolDeniedEvents.map((e) => e.data.reason)).toEqual([
       'path_excluded',
       'path_outside_workspace',
       'path_reserved',
       'tool_not_in_profile',
+      'path_invalid',
+      'path_invalid',
       'turn_limit_exceeded'
     ]);
 
     expect(finalUsage?.toolCalls).toEqual({
       executed: 1,
-      deniedByHandler: 5,
+      deniedByHandler: 7,
       deniedByPolicy: 0
     });
   });
@@ -1289,7 +1301,93 @@ process.exit(0);
       message: expect.stringContaining('arguments fingerprint does not match approved fingerprint')
     });
 
-    // 5. Unmatched effect: stream reports 2 calls executed, but only 1 call record was provided
+    // 5. Differing call ID and arguments fingerprint on same path -> rejects without falling back to path matching
+    await writeFile(
+      path.join(cliDir, 'hook-ledger.jsonl'),
+      JSON.stringify({
+        callbackId: 'agy-call-approved',
+        relatedEntryId: 'approved-id',
+        turnId: '1',
+        tool: 'write_file',
+        path: 'same.txt',
+        fingerprint: 'fp-approved',
+        decision: 'approve',
+        reason: null
+      }) + '\n'
+    );
+    await expect(
+      readAntigravityHookLedger(home, [], 1, [
+        { tool: 'write_file', callId: 'different-id', path: 'same.txt', fingerprint: 'fp-different' }
+      ])
+    ).rejects.toMatchObject({
+      code: 'VSUP_INTERNAL',
+      message: expect.stringContaining('no unused approval in hook ledger matches this call ID')
+    });
+
+    // 6. Missing fingerprint when call ID is also missing -> rejects fail-closed
+    await expect(
+      readAntigravityHookLedger(home, [], 1, [
+        { tool: 'write_file', callId: null, path: 'same.txt', fingerprint: null }
+      ])
+    ).rejects.toMatchObject({
+      code: 'VSUP_INTERNAL',
+      message: expect.stringContaining('lacks both call ID and canonical arguments fingerprint')
+    });
+
+    // 7. Conflicting repeated IDs in execution stream against single approval -> rejects
+    await writeFile(path.join(cliDir, 'hook-ledger.jsonl'), JSON.stringify(approval1) + '\n');
+    await expect(
+      readAntigravityHookLedger(home, [], 2, [
+        { tool: 'read_file', callId: 'call-1', path: 'sample.ts', fingerprint: 'fp-sample' },
+        { tool: 'read_file', callId: 'call-1', path: 'sample.ts', fingerprint: 'fp-sample' }
+      ])
+    ).rejects.toMatchObject({
+      code: 'VSUP_INTERNAL',
+      message: expect.stringContaining('Audit mismatch')
+    });
+
+    // 8. Identical repeated calls without call IDs matching by canonical fingerprint -> succeeds
+    await writeFile(
+      path.join(cliDir, 'hook-ledger.jsonl'),
+      JSON.stringify({
+        callbackId: 'agy-hook-1',
+        relatedEntryId: null,
+        turnId: '1',
+        tool: 'read_file',
+        path: 'sample.ts',
+        fingerprint: 'fp-sample',
+        decision: 'approve',
+        reason: null
+      }) + '\n' +
+      JSON.stringify({
+        callbackId: 'agy-hook-2',
+        relatedEntryId: null,
+        turnId: '2',
+        tool: 'read_file',
+        path: 'sample.ts',
+        fingerprint: 'fp-sample',
+        decision: 'approve',
+        reason: null
+      }) + '\n'
+    );
+    const fingerprintRepeatResult = await readAntigravityHookLedger(home, [], 2, [
+      { tool: 'read_file', callId: null, path: 'sample.ts', fingerprint: 'fp-sample' },
+      { tool: 'read_file', callId: null, path: 'sample.ts', fingerprint: 'fp-sample' }
+    ]);
+    expect(fingerprintRepeatResult.toolCalls.executed).toBe(2);
+
+    // 9. Path mismatch when callId matches -> rejects
+    await writeFile(path.join(cliDir, 'hook-ledger.jsonl'), JSON.stringify(approval1) + '\n');
+    await expect(
+      readAntigravityHookLedger(home, [], 1, [
+        { tool: 'read_file', callId: 'call-1', path: 'other.ts', fingerprint: 'fp-sample' }
+      ])
+    ).rejects.toMatchObject({
+      code: 'VSUP_INTERNAL',
+      message: expect.stringContaining("does not match approved path 'sample.ts'")
+    });
+
+    // 10. Unmatched effect: stream reports 2 calls executed, but only 1 call record was provided
     await writeFile(path.join(cliDir, 'hook-ledger.jsonl'), JSON.stringify(approval1) + '\n' + JSON.stringify(approval2) + '\n');
     await expect(
       readAntigravityHookLedger(home, [], 2, [
@@ -1300,7 +1398,7 @@ process.exit(0);
       message: expect.stringContaining('only 1 call records with identifiers were received')
     });
 
-    // 6. Approval alone must NOT count as execution: hook ledger recorded 2 approvals, but 0 calls executed
+    // 11. Approval alone must NOT count as execution: hook ledger recorded 2 approvals, but 0 calls executed
     await writeFile(path.join(cliDir, 'hook-ledger.jsonl'), JSON.stringify(approval1) + '\n' + JSON.stringify(approval2) + '\n');
     const zeroExecResult = await readAntigravityHookLedger(home, [], 0, []);
     expect(zeroExecResult.toolCalls.executed).toBe(0);
@@ -1392,12 +1490,27 @@ process.exit(0);
     expect(readFileDirEval.decision).toBe('deny');
     expect(readFileDirEval.reason).toBe('path_invalid');
 
-    // 9. Clean subdirectory within limits -> allowed
-    const cleanEval = await evaluateAntigravityToolCall(
+    // 9. Recursive operations on clean subdirectory -> denied as path_invalid (unconstrained traversal)
+    const cleanFindEval = await evaluateAntigravityToolCall(
       { mode: 'review', workerWorkspace: workspace, excludedAnchors: [] },
       { toolCall: { name: 'find_by_name', args: { DirectoryPath: cleanDir } } }
     );
-    expect(cleanEval.decision).toBe('allow');
-    expect(cleanEval.reason).toBeNull();
+    expect(cleanFindEval.decision).toBe('deny');
+    expect(cleanFindEval.reason).toBe('path_invalid');
+
+    const cleanGrepEval = await evaluateAntigravityToolCall(
+      { mode: 'review', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'grep_search', args: { SearchDirectory: cleanDir } } }
+    );
+    expect(cleanGrepEval.decision).toBe('deny');
+    expect(cleanGrepEval.reason).toBe('path_invalid');
+
+    // 10. Shallow list_dir on clean subdirectory -> allowed
+    const cleanListEval = await evaluateAntigravityToolCall(
+      { mode: 'review', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'list_dir', args: { DirectoryPath: cleanDir } } }
+    );
+    expect(cleanListEval.decision).toBe('allow');
+    expect(cleanListEval.reason).toBeNull();
   });
 });
