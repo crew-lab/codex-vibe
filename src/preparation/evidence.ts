@@ -51,6 +51,9 @@ export function receiptPath(config: SupervisorConfig, dataDirOverride?: string):
   if (config.paths?.vibePinManifest && path.isAbsolute(config.paths.vibePinManifest)) {
     return path.join(path.dirname(config.paths.vibePinManifest), 'preparation-receipt.json');
   }
+  if (dataDirOverride && path.isAbsolute(dataDirOverride)) {
+    return path.join(dataDirOverride, 'preparation-receipt.json');
+  }
   throw new Error('Absolute pin manifest required');
 }
 export async function preparationIdentity(config: SupervisorConfig, candidate?: string): Promise<string> {

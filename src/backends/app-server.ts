@@ -95,7 +95,8 @@ export const DEFAULT_APP_SERVER_TIMING: Readonly<AppServerTiming> = {
 };
 
 export interface AppServerBackendOptions {
-  preparation?: { check: (config: SupervisorConfig) => Promise<PreparationStatus> };
+  preparation?: { check: (config: SupervisorConfig, dataDir?: string) => Promise<PreparationStatus> };
+  dataDir?: string;
   executable?: string;
   expectedServerVersion?: string;
   pin?: { manifestPath?: string; verify?: (executable: string) => Promise<unknown> };
@@ -1044,7 +1045,7 @@ export class AppServerBackend implements SupervisorBackend {
     }
   }
 
-  async preparationCheck(): Promise<PreparationStatus> { return (this.options.preparation?.check ?? checkPreparation)(this.config); }
+  async preparationCheck(): Promise<PreparationStatus> { return (this.options.preparation?.check ?? checkPreparation)(this.config, this.options.dataDir); }
 
   async runtimeCheck(): Promise<RuntimeCheck> {
     const command = this.options.executable ?? this.config.paths?.vibe ?? 'vibe';
