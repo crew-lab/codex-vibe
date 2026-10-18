@@ -16,7 +16,7 @@ The same steps as 2.0.1 with 2.0.2 names: download `vibe-supervisor-2.0.2.tgz`, 
 
 ## Exact tested artifact
 
-- Source: commit `b275b1b8c5f2892d47e0be8d707d0fa3f31261b4` (this release's tag).
+- Source: commit `347bf79acf3412d4d7c4eff16bacf42256d251eb` (`v2.0.2` tag, corrected from intermediate handoff commit `b275b1b`; the prior tag reference is preserved at `v2.0.2-pre-correction-b275b1b`).
 - Archive: `vibe-supervisor-2.0.2.tgz`, SHA-256 `84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09`, packaged on the target under Node 20.19.0 and npm 10.8.2; installed candidate `eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1`.
 
 ## Acceptance
