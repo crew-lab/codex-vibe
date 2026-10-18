@@ -18,6 +18,7 @@ export interface IsolatedRunRouterOptions {
   currentHome: string;
   config: SupervisorConfig;
   policy?: PolicySource;
+  preparationDataDir?: string;
 }
 
 function fail(code: "VSUP_NOT_FOUND" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR" | "VSUP_OWNER_LOCKED", message: string): Error {
@@ -94,7 +95,7 @@ async function locate(sessions: string, runId: string): Promise<string> {
   return matches[0]!;
 }
 
-async function createBorrowedManager(config: SupervisorConfig, policy: PolicySource | undefined, home: string, sessions: string, runId: string): Promise<Manager> {
+async function createBorrowedManager(config: SupervisorConfig, policy: PolicySource | undefined, home: string, sessions: string, runId: string, preparationDataDir?: string): Promise<Manager> {
   const lock = await acquireOwnerLock(home).catch((error: unknown) => {
     if (isOwnerLockContention(error)) throw fail("VSUP_OWNER_LOCKED", "The isolated session is owned by another live supervisor; retry when it is available.");
     throw error;
@@ -106,7 +107,10 @@ async function createBorrowedManager(config: SupervisorConfig, policy: PolicySou
     await assertPrivateDirectory(home, "session directory");
     await assertCanonicalPath(home, "session directory");
     const { RunManager } = await import("./run-manager.js");
-    manager = new RunManager(config, home, [], lock, policy ? { policy } : {}) as Manager;
+    manager = new RunManager(config, home, [], lock, {
+      ...(policy ? { policy } : {}),
+      ...(preparationDataDir ? { preparationDataDir } : {})
+    }) as Manager;
     await manager.initialize();
     return manager;
   } catch (error) {
@@ -134,7 +138,7 @@ export function createIsolatedRunRouter(manager: Manager, options: IsolatedRunRo
       if (shuttingDown) throw fail("VSUP_INVALID_STATE", "The isolated supervisor is shutting down.");
       const home = await locate(sessions, runId);
       if (path.resolve(home) === currentHome) return operation(manager);
-      const borrowed = await createBorrowedManager(options.config, options.policy, home, sessions, runId);
+      const borrowed = await createBorrowedManager(options.config, options.policy, home, sessions, runId, options.preparationDataDir);
       try {
         return await operation(borrowed);
       } finally {

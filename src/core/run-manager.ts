@@ -136,6 +136,7 @@ export interface RunManagerOptions {
   policy?: PolicySource;
   sessionId?: string;
   recoveryWorkerWindowMs?: number;
+  preparationDataDir?: string;
 }
 
 type StartOptions = {
@@ -166,6 +167,7 @@ export class RunManager {
   private readonly unverifiedWorktrees = new Map<string, string>();
   private readonly unreadableRecords = new Set<string>();
   private readonly policy: PolicySource;
+  private readonly preparationDataDir: string | undefined;
   private readonly sessionId: string | undefined;
   private readonly recoveryWorkerWindowMs: number;
   private workerWindowEndsAt: number | undefined;
@@ -174,6 +176,7 @@ export class RunManager {
   constructor(private readonly config: SupervisorConfig, private readonly dataDir: string, backends: readonly SupervisorBackend[] = [], preAcquiredLock?: OwnerLock, options: RunManagerOptions = {}) {
     this.ownerLock = preAcquiredLock;
     this.policy = options.policy ?? fixedPolicy(config);
+    this.preparationDataDir = options.preparationDataDir ?? (this.policy.configPath ? path.dirname(this.policy.configPath) : path.resolve(dataDir));
     this.sessionId = options.sessionId;
     this.recoveryWorkerWindowMs = options.recoveryWorkerWindowMs ?? RECOVERY_WORKER_WINDOW_MS;
     this.runRoot = path.join(path.resolve(dataDir), "runs");
@@ -981,9 +984,13 @@ export class RunManager {
 
   private async loadDefaultBackends(): Promise<void> {
     const { AppServerBackend } = await import("../backends/app-server.js");
-    this.backends.set("app-server", new AppServerBackend(this.config));
+    this.backends.set("app-server", new AppServerBackend(this.config, {
+      ...(this.preparationDataDir ? { dataDir: this.preparationDataDir } : {})
+    }));
     const { AntigravityBackend } = await import("../backends/antigravity.js");
-    this.backends.set("antigravity", new AntigravityBackend(this.config));
+    this.backends.set("antigravity", new AntigravityBackend(this.config, {
+      ...(this.preparationDataDir ? { dataDir: this.preparationDataDir } : {})
+    }));
   }
 
   private async launch(runtime: Runtime): Promise<void> {
