@@ -100,9 +100,18 @@ function matchesGlob(glob: CompiledGlob, lowered: readonly string[]): boolean {
   return matchesWhole(glob.parts, lowered);
 }
 
-function anchorsOf(specs: readonly ExclusionSpec[]): ExclusionAnchor[] {
+export function anchorsOf(specs: readonly ExclusionSpec[]): ExclusionAnchor[] {
   const plain = specs.filter((spec): spec is string => typeof spec === 'string');
-  const anchored = specs.filter((spec): spec is ExclusionAnchor => typeof spec !== 'string');
+  const anchored = specs
+    .filter((spec): spec is ExclusionAnchor => Boolean(spec && typeof spec === 'object'))
+    .map((spec: unknown) => {
+      const record = spec as Record<string, unknown>;
+      const prefix = Array.isArray(record.prefix) ? (record.prefix as string[]) : [];
+      const globs = Array.isArray(record.globs)
+        ? (record.globs as string[])
+        : (typeof record.glob === 'string' ? [record.glob] : []);
+      return { prefix, globs };
+    });
   return plain.length === 0 ? anchored : [{ prefix: [], globs: plain }, ...anchored];
 }
 
