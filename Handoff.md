@@ -2,6 +2,39 @@
 
 Updated 2026-10-19. Status only: what the source, the archives and the installations are, what remains and who does it, what is open, and where the records are. The picture and the rules are in the [development strategy](docs/development-strategy.md); the sequenced work is in the [development plan](planning/development-plan.md); the boundaries are in [AGENTS.md](AGENTS.md).
 
+## Goals and state at a glance — 2026-10-19
+
+This section is the one-page summary; the dated sections below are the record behind it.
+
+**Goals, in the owner's order.**
+1. **A working 2.x, now** (owner decision 2026-10-17, "working ASAP"): stable everyday use of the five MCP tools, proven on the target, before more features.
+2. **One supported line, no history in the tree** (the 2.0.1 goal): only the latest release is supported and described. Done in the tree; the guard test keeps it so.
+3. **2.1 as a frozen scope:** Waves 0–5 plus the Antigravity backend, experimental and opt-in (owner decision 2026-10-19). Deferred: the wheel candidate scripts, the review search sidecar, outreach and task-template pipelines.
+
+**State.**
+
+| Item | State |
+|---|---|
+| Source | `main` at `212bd38` (or later), version 2.1.0, unreleased. GitHub holds `main` only |
+| Releases | v2.0.1 and v2.0.2 published as pre-releases (the v2.0.2 tag corrected to `347bf79`); the earlier published major is still marked latest |
+| Default engine (`app-server`, Vibe 2.26.1) | Proven on the target: conformance, native readiness, the disconnect. Worker answer quality is an owner-accepted limitation, not a passed gate |
+| Antigravity (`agy` 1.4.0) | Experimental, off unless `[experimental] antigravity = true`. Cold-reviewed; fixes for F1–F10 and F14–F16 on main; F11–F13 wait for the five agy preparation probes on the target |
+| 2.1 features | On main: tool-call counts and ceilings, `excluded_globs` (anchored per root, linear-time matching), `runs usefulness`, the approval ledger and pin in exports, findings with SARIF, the daily cost ledger and per-root budgets. Hosted gates for them are open |
+| Checks | `npm run verify:release` green on `212bd38` (101 files, 1,477 tests; three consecutive full runs) |
+
+**What remains, in order.**
+
+| # | Step | Who |
+|---|---|---|
+| 1 | Package 2.1.0 from main on the target (offline cache filled with the locked versions; the target-built archive is the one published) | Target agent |
+| 2 | `doctor` and `prepare check` for `app-server`; with Antigravity opted in, the five agy probes (hook invoked and deny honoured, failure modes deny, stream shape, proxy honoured, project config not loaded) | Target agent; owner opts in |
+| 3 | One hosted review and one edit on 2.1.0 to record the 2.1 hosted gates (usage, exclusions, export, assessment); a new hosted allowance | Owner authorizes; target agent runs |
+| 4 | Clean-account installation of the 2.1.0 archive; blocked until a separate macOS account exists ([checklist](docs/clean-account-checklist.md)) | Owner |
+| 5 | Publish 2.1.0 and mark it latest; a pre-release while step 4 is open | Owner |
+| 6 | Repository rename (`codex-vibe` → `vibe-supervisor`) and outreach, after a release is latest | Owner |
+
+**Open risks.** Real `agy` tool argument names may differ from the hook's list, in which case those calls are denied until it matches; the agy probes need `agy` to accept a local model endpoint; running `agy` headless under a consumer sign-in may be outside Antigravity's consumer terms, so prefer API-key or enterprise authentication.
+
 ### Test-suite stability under load — 2026-10-19
 
 With 101 test files the suite spawns many real processes, and at full parallelism (9 workers on 10 cores) process-timing tests failed intermittently. Fixed at their causes, not retried: `vitest.config.ts` caps workers at 4; the six app-server deadline tests use an 8-second deadline (the deadline also covers spawn, `initialize` and the startup read-back, which took over 3 seconds under load); the credential timeout test polls until the killed process is gone; and process-group verification on macOS now treats a group whose only members are zombies as gone (`src/process/managed.ts`, `darwinGroupHasRunningMembers`, the counterpart of the Linux `/proc` check), so a natural exit is no longer reported as `termination_unverified` while `launchd` has not yet reaped a killed helper. Three consecutive full runs passed (1,477 tests, about 110 s each).
