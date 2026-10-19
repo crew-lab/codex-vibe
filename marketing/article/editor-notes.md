@@ -102,7 +102,7 @@ The article has two explicit markers and four sentences that must be re-read at 
 | 5 | Front matter `description` | Mentions "1,204 green tests"; change with item 3. |
 | 6 | "Try it": release tarball, checksums, `vibe-supervisor` commands | Confirm the installed-CLI command names and the `allow`, `pin-manifest`, `doctor` sequence against the 2.0.0 README at the tag; confirm the Codex registration shape against `src/cli/codex.ts` at the tag (today: `[mcp_servers.vibe-supervisor]`, `startup_timeout_sec = 30`, `tool_timeout_sec = 600`). |
 | 7 | Closing line and disclosure paragraph | Confirm the sentences describe what the owner did. Set the AI-Assisted label in the DEV editor. |
-| 8 | Repository link and embed | Confirm the repository has not been renamed (the strategy suggests renaming to `vibe-supervisor` at 2.0.1). If it has, update the two URLs and the embed. |
+| 8 | Repository link and embed | The repository keeps the name `codex-vibe` (owner 2026-10-19); check the two URLs and the embed point at it. |
 
 ## 5. Alternative titles and hooks
 

@@ -53,9 +53,9 @@ Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily co
 | 6 | Done, rejected: the hosted review (answer quality); the hosted edit (its contract). Neither retried | — | — |
 | 7 | Done on the target (`347bf79` on `origin/codex/package-kit-identity`): the MCP-client disconnect passed on the installed 2.0.1 archive | Target agent | — |
 | 8 | Review and merge `origin/codex/package-kit-identity` (`6faee25`, carrying both 2.0.1 disconnect and 2.0.2 target readiness) | Coordinator | Yes to the merge and `make push` |
-| 9 | Clean-account installation of the frozen archive (`docs/clean-account-checklist.md`) | You | **Do it, with the packet in 4.6** |
+| 9 | Clean-account installation of the frozen archive (`docs/clean-account-checklist.md`) | You | Postponed by the owner 2026-10-19 |
 | 10 | Done 2026-10-16: worker answer quality is a documented limit; the tested archive from `44dc6f8` is published as v2.0.1 and main's later changes are 2.0.2 | — | — |
-| 11 | Repo readiness: rename, description, topics | Coordinator prepares | **Decide the rename; run two `gh` commands** |
+| 11 | Repo readiness: description, topics | Coordinator prepares | **Run the `gh` command**; no rename (owner 2026-10-19) |
 | 12 | Publish v2.0.1 as a pre-release from the target-held tested assets, with the commands in the Handoff; mark it latest once step 9 is recorded | You | **Run `gh release create` on the target Mac** |
 | 13 | Done on the target (`1f906e8` on `origin/codex/package-kit-identity`): 2.0.2 packaged (`84bff941…`, candidate `eaa40320…`) under Node 20.19.0 | Target agent | — |
 | 14 | Done on the target (`1f906e8` & `a3c9631` on `origin/codex/package-kit-identity`): 2.0.2 identity check, side-by-side install, pin and `doctor`, one `prepare check`, installed SDK readiness, registration switch with rollback and native readiness PASS | Target agent | — |
@@ -274,11 +274,7 @@ CONFIG="$HOME/Library/Application Support/VibeSupervisor-oneshot/config.toml"
 
 ### 4.7 Repo readiness (you run, coordinator prepares)
 
-- **Rename** (recommended before the first outreach post; GitHub redirects the old name and old clones keep working):
-
-```bash
-gh repo rename vibe-supervisor --repo crew-lab/codex-vibe --yes && git -C <supervisor-repository> remote set-url origin https://github.com/crew-lab/vibe-supervisor.git && git -C <supervisor-repository> remote -v
-```
+- **Name.** The owner decided on 2026-10-19 to keep `codex-vibe`; there is no rename.
 
 - **Description and nine topics**, from the outreach draft (commit `d360f28`, `docs/history/outreach-drafts.md`, section 2):
 
@@ -378,7 +374,7 @@ Decided 2026-10-15: deleted; rebuilt in 2.2.
 3. Start the bounded Vibe task once. Preserve the original output and allowance. Vibe's own pinned bundled skills are allowed; skills never expand tools or roots.
 4. Independently verify exported bytes, hashes and deterministic assertions. A concise final message is not evidence of missing code. Completed execution and an automated pass do not by themselves mean coordinator acceptance.
 5. Prepare owned validation copies; run the declared checks deliberately. Export sanitized reports and record the decision. Correct a mistaken decision by appending, preserving who made the error.
-6. Use GPT-6 Luna/high only for an evidence-backed implementation failure, within the authorized fallback scope. Attribute Vibe and fallback changes separately. Extra hosted starts need explicit remaining allowance. Integration and remote delivery keep the user's scope and authorization.
+6. Use the fallback implementer only for an evidence-backed implementation failure, within the authorized fallback scope. Attribute Vibe and fallback changes separately. Extra hosted starts need explicit remaining allowance. Integration and remote delivery keep the user's scope and authorization.
 
 The `<site-project>` run showed why step 4 matters: Vibe's exact patch contained the disclosure that its summary abbreviated. The initial rejection was a review error; no fallback edits reached the accepted website patch. The generic regression is now automated; that historical result does not certify a different supervisor build. Its pull request and the first-visit consent overlap it exposed are separate tasks in that repository, each with its own authorization.
 
@@ -500,9 +496,9 @@ Then 2.1.x for fixes and 2.2 below.
 | V1 | Populated pnpm validation | R1 | Coordinator |
 | R2 | Archive and kit to the target | R1 | You |
 | R3 | 2.0.1 target sitting | R2, authorizations | Target agent |
-| R4 | Clean-account installation | R1 | You |
+| R4 | Clean-account installation (postponed 2026-10-19) | R1 | You |
 | R5 | Evidence branch reviewed and merged | R3, R4, V1 | Coordinator |
-| R6 | Rename, description, topics; then the README top section | — | You; Coordinator for the README |
+| R6 | Description, topics; then the README top section | — | You; Coordinator for the README |
 | R7 | Release notes filled; kit archive, `release-evidence.json`, `asset-checksums.json` | R5 | Coordinator |
 | R8 | v2.0.1 published | R7, your yes | You |
 | R9 | Plugin path if "delete" | — (before R1 if chosen) | Coordinator |
@@ -562,7 +558,7 @@ You send everything personally; agents only draft.
 
 | When | Action | Who |
 |---|---|---|
-| Now | Rename decision; description and topics (section 4.7) | You |
+| Now | Description and topics (section 4.7) | You |
 | Now | Rewrite the Mistral Discussion for 2.0 (add the managed-configuration refresh and the skill catalogue); draft three Bug Reports; write the private note for Mistral security; protocol feedback note; one-page brief; rewrite the Multica comment (it still describes the removed launcher), draft the Paperclip comment. Story facts come from `marketing/sources.md` on main, which cites commits now that the history is out of the tree | Agents draft |
 | Now | Send the private note to Mistral security; wait for a reply or two weeks | You |
 | 2.0.1 published | Publish the article (update it for the workflow features, apply its `[UPDATE AT PUBLISH]` list from the merged `docs/acceptance.json`; pick dev.to's AI-assisted label); post the Discussion and Bug Reports with the hosted results; Show and tell; Multica and Paperclip comments | You |

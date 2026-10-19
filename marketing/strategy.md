@@ -143,7 +143,7 @@ Status updated 15 October 2026: the [consolidated plan](../planning/development-
 | # | Action | Who | Needs 2.0.0 stable |
 |---|---|---|---|
 | 1 | Set the repository description and topics from the outreach draft | Owner-only | No |
-| 2 | Read the Mistral and OpenAI brand pages; settle the independence wording and the repo rename | Owner-only | No |
+| 2 | Read the Mistral and OpenAI brand pages; settle the independence wording (no repo rename, owner 2026-10-19) | Owner-only | No |
 | 3 | `CONTRIBUTING.md`, issue templates, badge row without CI | Agent-doable; owner pushes | No; after the concurrent 2.0 edits land |
 | 4 | Rewrite the article, the Discussion and the Show HN comment for 2.0, numbers only from recorded evidence | Agent-doable draft; owner reads in own voice | Publishing yes |
 | 5 | Copy the story material out of the shipped tree before 2.0.1 | Agent-doable | No |

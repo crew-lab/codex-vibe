@@ -12,4 +12,4 @@ A private receipt and sanitized report are saved beside the selected pin manifes
 
 Readiness reports workspace_eligible separately from eligible, candidate identity and preparation status. An optional expected_candidate SHA-256 detects connection drift. Existing runtime pin validation still runs at dispatch; an initialization-only receipt does not prove hosted inference, effective hosted permission enforcement, thinking behavior, disconnect soak, fresh-account installation or Intel support.
 
-Review report.json/diagnostics and conformance findings before hosted testing. Hosted work retains its separately bounded allowance. A preparation failure is infrastructure evidence and must not trigger Luna fallback or replay the original task.
+Review report.json/diagnostics and conformance findings before hosted testing. Hosted work retains its separately bounded allowance. A preparation failure is infrastructure evidence and must not trigger the fallback implementer or replay the original task.
