@@ -1,6 +1,10 @@
 version = 1
 allowed_workspace_roots = []
 
+# Optional execution backend: "app-server" (default, Mistral Vibe). "antigravity"
+# (Google Antigravity CLI) is experimental and also needs [experimental] antigravity = true.
+# backend = "app-server"
+
 # Optional: workspace-relative globs that no run under a root may read or write,
 # added to the fixed reserved and secret patterns. Each key must equal an entry of
 # allowed_workspace_roots as written. One segment (`*.tfvars`) matches at any depth;
@@ -29,9 +33,6 @@ max_mcp_result_chars = 8000
 # Optional budgets enforced by the supervisor from Vibe's usage statistics.
 # max_tokens = 2000000
 # max_cost_usd = 5.0
-
-# Optional execution backend: "app-server" (default, Mistral Vibe) or "antigravity" (Google Antigravity CLI).
-# backend = "app-server"
 
 [paths]
 # Required for app-server backend: the manifest written on the machine that runs Vibe by
