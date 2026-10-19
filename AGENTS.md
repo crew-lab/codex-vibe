@@ -4,9 +4,9 @@ These instructions apply to this repository and its descendants unless a more sp
 
 ## Project and orientation
 
-This is codex-vibe, a local MCP supervisor for one-shot Mistral Vibe reviews and isolated edits. The source version is `vibe-supervisor` `2.1.0` (unreleased; latest published release is 2.0.2), ESM, npm-private and distributed through GitHub Releases. `vibe-app-server` is the default engine (one process per run); following the owner's 2026-10-17 decision, Google Antigravity (`agy` CLI) is supported as an optional second execution backend (`backend = "antigravity"`, `paths.antigravity`). There is no automatic patch integration, and only the latest release is supported. The source version, a published release, a frozen archive, an installed candidate and the connected server are separate facts; [Handoff.md](Handoff.md) records which is which. Preserve the existing MIT license and copyright notice.
+This is codex-vibe, a local MCP supervisor for one-shot Mistral Vibe reviews and isolated edits. The package is `vibe-supervisor` (version in `package.json`), ESM, npm-private and distributed through GitHub Releases. `vibe-app-server` is the default engine (one process per run). Google Antigravity (`agy` CLI) is an experimental second backend, off unless a configuration sets `experimental.antigravity = true` with `backend = "antigravity"` ([ADR 0008](docs/adr/0008-antigravity-execution-backend.md)); it is not for production until its target probes pass. There is no automatic patch integration, and only the latest release is supported. The source version, a published release, a frozen archive, an installed candidate and the connected server are separate facts; [Handoff.md](Handoff.md) records which is which. Preserve the existing MIT license and copyright notice.
 
-Read [README.md](README.md) for usage, [Handoff.md](Handoff.md) for scope and remaining work, [docs/reference.md](docs/reference.md) for tools/config/CLI, and [docs/functionality.md](docs/functionality.md) for behavior. The coordinator workflow is in [docs/workflow-acceptance.md](docs/workflow-acceptance.md) (acceptance contracts, assessments and reports), [docs/preparation.md](docs/preparation.md) (the version-matched preparation kit that gates dispatch) and [docs/validation-workspace.md](docs/validation-workspace.md) (owned validation copies). Consult [docs/security.md](docs/security.md), [docs/compatibility.md](docs/compatibility.md) (its source basis records the Vibe tag and file hashes the wire facts were read from), [docs/target-acceptance.md](docs/target-acceptance.md) (the procedure that proves a build on the machine that runs Vibe), and the ADRs (0004 is the app-server client, 0005 the managed-configuration isolation, 0006 Vibe's bundled skills) before changing those boundaries. `docs/errors.md` is generated: run `npm run docs:errors` after changing a remedy.
+Read [README.md](README.md) for usage, [Handoff.md](Handoff.md) for scope and remaining work, [docs/reference.md](docs/reference.md) for tools/config/CLI, and [docs/functionality.md](docs/functionality.md) for behavior. The coordinator workflow is in [docs/workflow-acceptance.md](docs/workflow-acceptance.md) (acceptance contracts, assessments and reports), [docs/preparation.md](docs/preparation.md) (the version-matched preparation kit that gates dispatch) and [docs/validation-workspace.md](docs/validation-workspace.md) (owned validation copies). Consult [docs/security.md](docs/security.md), [docs/compatibility.md](docs/compatibility.md) (its source basis records the Vibe tag and file hashes the wire facts were read from), [docs/target-acceptance.md](docs/target-acceptance.md) (the procedure that proves a build on the machine that runs Vibe), and the ADRs (0004 is the app-server client, 0005 the managed-configuration isolation, 0006 Vibe's bundled skills, 0008 the Antigravity backend) before changing those boundaries. `docs/errors.md` is generated: run `npm run docs:errors` after changing a remedy.
 
 The user's implementation preference is GPT-6 Luna agents. When delegating implementation, use that model where available, assign clear file ownership, and tell workers they share the codebase and must preserve others' changes. Do not create user-owned chats for internal implementation subtasks. If that model is unavailable, report the limitation rather than silently claiming to use it.
 
@@ -22,6 +22,7 @@ The main chat coordinates and independently verifies. GPT-6 Luna/high is fallbac
 - Edit source in `src/`, tests in `tests/`, documentation in the repository root or `docs/`, and scripts in `scripts/`. Do not edit generated `dist/`, `node_modules/`, or release tarballs as source.
 - Inspect current Git status before edits and preserve unrelated changes. Commit, push, publish, deploy, or change user-global configuration only within explicit user authorization.
 - Keep stdout reserved for MCP frames in server mode. Send diagnostics to stderr; redact sensitive data before logging or persistence.
+- Do not add code comments. Name things so the code reads without them; what cannot be inferred goes in `docs/`. Comments a tool reads (lint or compiler directives) are allowed.
 - Update relevant behavior documentation when changing functionality. Prefer meaningful regression tests for lifecycle, permission, recovery, process, or Git behavior over tests that merely repeat implementation.
 
 ## Boundaries that must remain intact
@@ -35,11 +36,12 @@ The main chat coordinates and independently verifies. GPT-6 Luna/high is fallbac
 - Ordinary dispatch requires a version-matched preparation PASS for the installed candidate, pin, runtime and policy ([docs/preparation.md](docs/preparation.md)); there is no production bypass, and the pin is still checked at launch. A preparation receipt is no-inference evidence only and never stands in for a hosted gate.
 - One run owns each server/storage instance's active slot; a competing start fails immediately. A restart marks interrupted one-shot work failed and never launches Vibe, reloads a session, replays a task, restores grants, or signals a PID from saved data.
 - Preserve bounded deadlines, output limits, owner locking, retention, and process cleanup. Remove a worktree only after checking a fresh export against the saved artifact and accounting for residual files.
-- Do not copy credentials into docs, prompts, transcripts, reports, or committed files. The credential reaches the worker only as `MISTRAL_API_KEY` in its child environment.
+- The Antigravity backend keeps its own enforcement points ([ADR 0008](docs/adr/0008-antigravity-execution-backend.md), [security](docs/security.md#antigravity-backend-experimental)): the experimental opt-in, the per-run `PreToolUse` hook that denies unless the call is the profile's tool on a readable in-workspace path, a private per-run home, an exactly filtered child environment, and the agy preparation probes that gate its receipt. Loosening one needs an ADR.
+- Do not copy credentials into docs, prompts, transcripts, reports, or committed files. Test fixtures never use credential-shaped literals; build fakes from parts so the secret scan stays meaningful. The credential reaches the worker only as `MISTRAL_API_KEY` in its child environment.
 
 ## Verification and reporting
 
-For code changes, select relevant tests and run lint, typecheck, and build as appropriate. Before creating a release candidate run:
+For code changes, run the relevant tests (`npx vitest run <files>`) and `npm run lint`, `npm run typecheck` and `npm run build` as appropriate; CI runs `npm run verify:release` on Node 20.19. Before creating a release candidate run:
 
 ```sh
 npm run verify:release
@@ -50,7 +52,7 @@ VIBE_SUPERVISOR_TEST_NPM_CACHE=/absolute/path/to/populated/npm-cache npm run pac
 
 For documentation-only changes, verify local links and `git diff --check`; a full test rerun is unnecessary without a behavioral change. Packaging should be regenerated when delivering an updated tarball.
 
-Report checks actually performed. Fake Vibe fixtures and initialization-only probes do not prove hosted behavior. The 2.0 gates in [docs/compatibility.md](docs/compatibility.md#unverified-gates) stay unverified until their evidence is recorded there. Handoff.md holds the working rules for where evidence may come from.
+Report checks actually performed. Fake Vibe fixtures and initialization-only probes do not prove hosted behavior. Gates in [docs/acceptance.json](docs/acceptance.json) and [docs/compatibility.md](docs/compatibility.md#unverified-gates) stay unverified until their evidence is recorded there. Handoff.md holds the working rules for where evidence may come from.
 
 ### Code changes on the target machine
 
