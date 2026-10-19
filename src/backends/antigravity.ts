@@ -1,7 +1,6 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { constants as fsConstants } from 'node:fs';
-import { access, lstat, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -11,29 +10,59 @@ import type {
   StartRunInput, SupervisorBackend, BackendCallbacks, RuntimeCheck, UsageState, SupervisorError
 } from '../contracts.js';
 import { supervisorError, type SupervisorConfig } from '../contracts.js';
-import { executableSearchPath } from '../config/config.js';
 import { checkPreparation, type PreparationStatus } from '../preparation/evidence.js';
 import { spawnManaged } from '../process/managed.js';
 import { startReaper, type ReaperHandle } from '../process/reaper.js';
 import { assertNoProjectAntigravityExtensions, assertNoProjectVibeExtensions } from '../security/workspace-guard.js';
-import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
-import { buildChildEnvironment } from '../security/environment.js';
+import {
+  environmentSecrets,
+  GOOGLE_CREDENTIAL_VARIABLES,
+  googleCredentialSecrets,
+  redactSecrets,
+  StreamingRedactor
+} from '../security/redaction.js';
+import { resolveExecutableFile } from '../security/executable.js';
 import { createPrivateDir } from '../security/paths.js';
 import { turnBackstop } from './app-server/usage.js';
 import { buildWorkspaceListing } from './app-server/workspace-listing.js';
 import { FINDINGS_OUTPUT_CONTRACT } from '../core/findings.js';
 import { anchoredDenylistPatterns, denylistAnchors, workspaceAnchors, type DenylistAnchor } from '../security/globs.js';
 import {
-  PATH_KEYS,
+  parseToolArguments,
+  primaryToolPath,
   readAntigravityHookLedger,
+  toolCallFingerprint,
   writeAntigravityPreToolHook,
   type StreamExecutedCall
 } from './antigravity-hook.js';
-import { canonicalJson } from './app-server/approvals.js';
 
 const execFileAsync = promisify(execFile);
 
 export const SUPPORTED_ANTIGRAVITY_VERSION = '1.4.0';
+
+export const ANTIGRAVITY_FORWARDED_VARIABLES = ['PATH', 'LANG', ...GOOGLE_CREDENTIAL_VARIABLES] as const;
+
+export function antigravityChildEnvironment(
+  source: NodeJS.ProcessEnv,
+  childHome: string,
+  childTmp: string
+): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = {};
+  for (const name of ANTIGRAVITY_FORWARDED_VARIABLES) {
+    if (source[name] !== undefined) env[name] = source[name];
+  }
+  for (const [key, value] of Object.entries(source)) {
+    if (key.startsWith('LC_') && value !== undefined) env[key] = value;
+  }
+  env.HOME = childHome;
+  env.TMPDIR = childTmp;
+  env.AGY_CLI_OSC7501 = 'off';
+  return env;
+}
+
+const VERSION_PROBE_TIMEOUT_MS = 10_000;
+const NATURAL_EXIT_TERMINATION_ATTEMPTS = 4;
+const VERSION_PROBE_MAX_BYTES = 64 * 1024;
 
 export interface AntigravityBackendOptions {
   preparation?: {
@@ -119,34 +148,11 @@ export async function resolveAntigravityExecutable(configuredCommand: string): P
   version: string | null;
   error?: string;
 }> {
-  let candidatePath: string | null = null;
-  if (path.isAbsolute(configuredCommand) || /[\\/]/.test(configuredCommand)) {
-    try {
-      const real = await realpath(configuredCommand);
-      await access(real, fsConstants.X_OK);
-      candidatePath = real;
-    } catch (error) {
-      return { resolvedPath: null, sha256: null, version: null, error: String(error) };
-    }
-  } else {
-    const extensions = process.platform === 'win32' ? (process.env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';') : [''];
-    for (const dir of executableSearchPath()) {
-      for (const ext of extensions) {
-        const candidate = path.join(dir, `${configuredCommand}${ext}`);
-        try {
-          const real = await realpath(candidate);
-          await access(real, fsConstants.X_OK);
-          candidatePath = real;
-          break;
-        } catch {
-          // continue searching PATH
-        }
-      }
-      if (candidatePath) break;
-    }
-    if (!candidatePath) {
-      return { resolvedPath: null, sha256: null, version: null, error: `Executable ${configuredCommand} was not found on PATH.` };
-    }
+  let candidatePath: string;
+  try {
+    candidatePath = await resolveExecutableFile(configuredCommand);
+  } catch (error) {
+    return { resolvedPath: null, sha256: null, version: null, error: error instanceof Error ? error.message : String(error) };
   }
 
   let sha256: string | null = null;
@@ -158,11 +164,7 @@ export async function resolveAntigravityExecutable(configuredCommand: string): P
   }
 
   try {
-    const result = await execFileAsync(candidatePath, ['--version'], {
-      timeout: 10_000,
-      maxBuffer: 64 * 1024,
-      windowsHide: true
-    });
+    const result = await probeAntigravityVersion(candidatePath);
     const version = parseAntigravityVersion(result.stdout, result.stderr) ?? null;
     return { resolvedPath: candidatePath, sha256, version };
   } catch (error) {
@@ -170,57 +172,94 @@ export async function resolveAntigravityExecutable(configuredCommand: string): P
   }
 }
 
-function cleanPrivateFields(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(cleanPrivateFields);
-  if (value === null || typeof value !== 'object') return value;
-  const out: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value)) {
-    if (/^(reasoning|thought|chain_?of_?thought|thinking)/i.test(key)) continue;
-    if (key === 'type' && typeof item === 'string' && /thought|reasoning/i.test(item)) return undefined;
-    const cleaned = cleanPrivateFields(item);
-    if (cleaned !== undefined) out[key] = cleaned;
+async function probeAntigravityVersion(resolvedExecutable: string): Promise<{ stdout: string; stderr: string }> {
+  const probeHome = await realpath(await mkdtemp(path.join(os.tmpdir(), 'vsup-agy-version-')));
+  try {
+    const env: NodeJS.ProcessEnv = {
+      HOME: probeHome,
+      TMPDIR: probeHome,
+      AGY_CLI_OSC7501: 'off',
+      NO_COLOR: '1',
+      ...(process.env.PATH === undefined ? {} : { PATH: process.env.PATH })
+    };
+    const result = await execFileAsync(resolvedExecutable, ['--version'], {
+      cwd: probeHome,
+      env,
+      timeout: VERSION_PROBE_TIMEOUT_MS,
+      killSignal: 'SIGKILL',
+      maxBuffer: VERSION_PROBE_MAX_BYTES,
+      windowsHide: true
+    });
+    return { stdout: String(result.stdout), stderr: String(result.stderr) };
+  } finally {
+    await rm(probeHome, { recursive: true, force: true, maxRetries: 2 }).catch(() => undefined);
   }
-  return out;
+}
+
+const VISIBLE_STEP_TYPES: ReadonlySet<string> = new Set(['planner_response', 'assistant_message', 'message']);
+const VISIBLE_TEXT_KEYS = ['text', 'response', 'content', 'message'] as const;
+const TEXT_BEARING_KEY = /^(?:text|response|content|message|delta|chunks?|parts?|output|summary|thoughts?|reasoning|thinking)$/i;
+const PRIVATE_KEY = /^(?:reasoning|thought|chain_?of_?thought|thinking)/i;
+const MAX_TEXT_SCAN_DEPTH = 8;
+
+export interface StreamEntryText {
+  text: string;
+  withheld: boolean;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function carriesText(value: unknown, depth = 0): boolean {
+  if (depth > MAX_TEXT_SCAN_DEPTH) return true;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.some((item) => carriesText(item, depth + 1));
+  if (!isRecord(value)) return false;
+  return Object.entries(value).some(([key, item]) =>
+    (TEXT_BEARING_KEY.test(key) || PRIVATE_KEY.test(key) || typeof item === 'object') && carriesText(item, depth + 1));
+}
+
+function privateTextPresent(record: Record<string, unknown>): boolean {
+  return Object.entries(record).some(([key, item]) => PRIVATE_KEY.test(key) && carriesText(item));
+}
+
+function visibleText(record: Record<string, unknown>): StreamEntryText {
+  let withheld = privateTextPresent(record);
+  for (const key of VISIBLE_TEXT_KEYS) {
+    const value = record[key];
+    if (typeof value === 'string') return { text: value, withheld };
+    if (!Array.isArray(value)) continue;
+    const parts: string[] = [];
+    for (const part of value) {
+      if (isRecord(part) && part.type === 'text' && typeof part.text === 'string') parts.push(part.text);
+      else if (carriesText(part)) withheld = true;
+    }
+    return { text: parts.join(''), withheld };
+  }
+  return { text: '', withheld };
+}
+
+export function classifyStreamEntry(entry: unknown): StreamEntryText {
+  if (!isRecord(entry)) return { text: '', withheld: carriesText(entry) };
+  if (entry.event === 'init') return { text: '', withheld: false };
+  if (entry.event === 'step_update' && isRecord(entry.step_update)) {
+    const step = entry.step_update;
+    if (typeof step.step_type === 'string' && VISIBLE_STEP_TYPES.has(step.step_type)) return visibleText(step);
+    if (typeof step.tool_name === 'string' && step.tool_name.trim()) return { text: '', withheld: false };
+    return { text: '', withheld: carriesText(step) };
+  }
+  if (entry.event === 'result' && isRecord(entry.result)) {
+    const result = entry.result;
+    const text = typeof result.response === 'string' ? result.response : typeof result.text === 'string' ? result.text : '';
+    return { text, withheld: privateTextPresent(result) };
+  }
+  if (entry.event === undefined && (entry.type === 'tool_use' || entry.type === 'tool_call')) return { text: '', withheld: false };
+  return { text: '', withheld: carriesText(entry) };
 }
 
 export function extractTextFromStreamEntry(entry: unknown): string {
-  if (typeof entry === 'string') return entry;
-  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return '';
-  const rawObj = entry as Record<string, unknown>;
-  if (rawObj.event === 'init') return '';
-  if (rawObj.event === 'step_update' && rawObj.step_update && typeof rawObj.step_update === 'object' && !Array.isArray(rawObj.step_update)) {
-    const step = rawObj.step_update as Record<string, unknown>;
-    if (step.step_type && step.step_type !== 'planner_response' && step.step_type !== 'assistant_message' && step.step_type !== 'message') {
-      return '';
-    }
-    return extractTextFromStreamEntry(step);
-  }
-  if (rawObj.event === 'result' && rawObj.result && typeof rawObj.result === 'object' && !Array.isArray(rawObj.result)) {
-    return extractTextFromStreamEntry(rawObj.result);
-  }
-
-  const cleaned = cleanPrivateFields(entry);
-  if (!cleaned || typeof cleaned !== 'object') return '';
-  const obj = cleaned as Record<string, unknown>;
-  if (typeof obj.text === 'string') return obj.text;
-  if (typeof obj.response === 'string') return obj.response;
-  if (typeof obj.content === 'string') return obj.content;
-  if (typeof obj.message === 'string') return obj.message;
-
-  const parts: string[] = [];
-  const visit = (value: unknown): void => {
-    if (typeof value === 'string') { parts.push(value); return; }
-    if (Array.isArray(value)) { for (const item of value) visit(item); return; }
-    if (!value || typeof value !== 'object') return;
-    const record = value as Record<string, unknown>;
-    if (record.type === 'text' && typeof record.text === 'string') parts.push(record.text);
-    else if (typeof record.content === 'string') parts.push(record.content);
-    else for (const [key, item] of Object.entries(record)) {
-      if (!/^(reasoning|thought|thinking)/i.test(key)) visit(item);
-    }
-  };
-  visit(obj.content ?? obj.message ?? obj.chunks ?? obj.delta ?? obj.response);
-  return parts.join('');
+  return classifyStreamEntry(entry).text;
 }
 
 export function extractEnvelopeMeta(entry: unknown): ParsedEnvelopeMeta {
@@ -237,16 +276,9 @@ export function extractEnvelopeMeta(entry: unknown): ParsedEnvelopeMeta {
     const rawTurn = item.step_index ?? item.turnId ?? item.turn_id;
     const turnId = rawTurn !== undefined && rawTurn !== null ? String(rawTurn) : defaultTurnId;
     const rawArgs = item.args ?? item.tool_input ?? item.input;
-    const args = (rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)) ? (rawArgs as Record<string, unknown>) : null;
-    let targetPath: string | null = null;
-    if (args) {
-      for (const key of PATH_KEYS) {
-        const v = args[key];
-        if (typeof v === 'string' && v.trim()) { targetPath = v.trim(); break; }
-      }
-    }
-    const fingerprint = args ? createHash('sha256').update(canonicalJson({ tool, args })).digest('hex') : null;
-    return { tool, callId, turnId, args, path: targetPath, fingerprint };
+    const args = rawArgs === undefined || rawArgs === null ? null : parseToolArguments(rawArgs);
+    const fingerprint = args ? toolCallFingerprint(tool, args) : null;
+    return { tool, callId, turnId, args, path: primaryToolPath(tool, args), fingerprint };
   };
 
   if (typeof top.type === 'string' && /thought|reasoning/i.test(top.type)) {
@@ -373,7 +405,7 @@ export function extractEnvelopeMeta(entry: unknown): ParsedEnvelopeMeta {
 }
 
 function createStreamOutputParser(
-  onEntry: (payload: { text?: string; meta: ParsedEnvelopeMeta }) => Promise<void>,
+  onEntry: (payload: { text?: string; withheld: boolean; meta: ParsedEnvelopeMeta }) => Promise<void>,
   maxLineBytes: number
 ) {
   let pending = '';
@@ -382,12 +414,14 @@ function createStreamOutputParser(
     try {
       entry = JSON.parse(line);
     } catch {
+      await onEntry({ withheld: true, meta: { deniedActions: [], executedCalls: [] } });
       return;
     }
-    const text = extractTextFromStreamEntry(entry);
+    const { text, withheld } = classifyStreamEntry(entry);
     const meta = extractEnvelopeMeta(entry);
     if (
       text ||
+      withheld ||
       meta.status ||
       meta.error ||
       meta.usage ||
@@ -401,7 +435,7 @@ function createStreamOutputParser(
       meta.type === 'tool_use' ||
       meta.type === 'tool_call'
     ) {
-      await onEntry({ ...(text ? { text } : {}), meta });
+      await onEntry({ ...(text ? { text } : {}), withheld, meta });
     }
   };
   return {
@@ -494,12 +528,8 @@ export async function cleanupPrivateDirectories(
     rm(childTmp, { recursive: true, force: true, maxRetries: 2 })
   ]);
   for (const dir of [childHome, childTmp]) {
-    try {
-      const info = await lstat(dir);
-      if (info) retained.push(path.basename(dir));
-    } catch {
-      // Directory gone is cleaned
-    }
+    const info = await lstat(dir).catch(() => null);
+    if (info) retained.push(path.basename(dir));
   }
   return { cleaned: retained.length === 0, retained };
 }
@@ -587,9 +617,9 @@ export class AntigravityBackend implements SupervisorBackend {
         { expected_version: SUPPORTED_ANTIGRAVITY_VERSION, actual_version: resolved.version }
       );
     }
+    const executablePath = resolved.resolvedPath;
 
-    const binaryBytes = await readFile(resolved.resolvedPath);
-    const binaryDigest = digest(binaryBytes);
+    const binaryDigest = digest(await readFile(executablePath));
     const expectedDigest = this.options.expectedExecutableSha256 ?? this.probedSha256;
     if (expectedDigest && binaryDigest !== expectedDigest) {
       throw supervisorError(
@@ -646,7 +676,11 @@ export class AntigravityBackend implements SupervisorBackend {
     const maxTurns = input.limits.maxTurns;
     const maxModelCalls = input.limits.maxModelCalls ?? turnBackstop(maxTurns);
 
-    const hasGeminiApiKey = Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
+    const childEnv = antigravityChildEnvironment(process.env, childHome, childTmp);
+    const sentinels = [...googleCredentialSecrets(childEnv), ...environmentSecrets(process.env)];
+    const redact = (text: string): string => redactSecrets(text, sentinels);
+
+    const hasGeminiApiKey = Boolean(childEnv.GEMINI_API_KEY || childEnv.GOOGLE_API_KEY);
     await writeIsolatedSettings(
       childHome,
       input.mode,
@@ -661,13 +695,6 @@ export class AntigravityBackend implements SupervisorBackend {
       maxTurns,
       maxModelCalls
     });
-
-    const childEnv = buildChildEnvironment(process.env, [
-      'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'ANTIGRAVITY_API_KEY', 'ANTIGRAVITY_HOME'
-    ]);
-    childEnv.HOME = childHome;
-    childEnv.TMPDIR = childTmp;
-    childEnv.AGY_CLI_OSC7501 = 'off';
 
     const listing = input.mode === 'review' ? await buildWorkspaceListing(input.workerWorkspace, {}, anchors) : null;
     const contextPrefix = (input.contextFiles ?? []).map((file) => `Approved context path: ${file}`).join('\n');
@@ -698,14 +725,16 @@ export class AntigravityBackend implements SupervisorBackend {
     let observedModelCalls = 0;
     let limitStopReason: 'turn_limit' | 'token_limit' | undefined;
     let reasoningObservedCount = 0;
+    let withheldTextCount = 0;
     const allDeniedActions: Array<{ tool: string; reason: string; path?: string }> = [];
     const allExecutedCalls: StreamExecutedCall[] = [];
     const childBox: { current?: ReturnType<typeof spawnManaged> } = {};
 
-    const chunks = createStreamOutputParser(async ({ text, meta }) => {
+    const chunks = createStreamOutputParser(async ({ text, withheld, meta }) => {
       if (meta.status) envelopeStatus = meta.status;
       if (meta.error) envelopeError = meta.error;
-      if (meta.thoughtObserved) reasoningObservedCount += 1;
+      if (meta.thoughtObserved || withheld) reasoningObservedCount += 1;
+      if (withheld) withheldTextCount += 1;
       if (meta.isModelCallStep) observedModelCalls += 1;
       if (meta.stepIdx !== undefined) observedTurns = Math.max(observedTurns, meta.stepIdx);
       if (meta.numTurns !== undefined) observedTurns = Math.max(observedTurns, meta.numTurns);
@@ -744,14 +773,14 @@ export class AntigravityBackend implements SupervisorBackend {
           type: 'tool_denied',
           severity: 'warning',
           data: {
-            tool: redactSecrets(denied.tool),
-            reason: redactSecrets(denied.reason),
-            ...(denied.path ? { path: redactSecrets(denied.path) } : {})
+            tool: redact(denied.tool),
+            reason: redact(denied.reason),
+            ...(denied.path ? { path: redact(denied.path) } : {})
           }
         });
       }
       if (text) {
-        const redacted = redactSecrets(text);
+        const redacted = redact(text);
         latestSummary = (latestSummary ? `${latestSummary}\n${redacted}` : redacted).slice(-input.limits.maxTranscriptBytes);
         await callbacks.onEvent({ source: 'antigravity', type: 'message', severity: 'info', data: { text: `${redacted}\n` } });
       }
@@ -770,27 +799,40 @@ export class AntigravityBackend implements SupervisorBackend {
             max_model_calls: maxModelCalls
           }
         });
-        void childBox.current?.terminate();
+        void childBox.current?.terminate().catch(() => undefined);
       }
     }, input.limits.maxEventBytes);
 
-    const stderrRedactor = new StreamingRedactor();
+    const stderrRedactor = new StreamingRedactor(sentinels);
     let outputLimited = false;
     let parserFailed = false;
 
-    const child = spawnManaged(resolved.resolvedPath, args, {
+    const launchDigest = await readFile(executablePath).then(digest, () => null);
+    if (launchDigest !== binaryDigest) {
+      await cleanupPrivateDirectories(childHome, childTmp);
+      throw supervisorError(
+        'VSUP_ANTIGRAVITY_EXEC_FAILED',
+        `Antigravity binary digest changed before launch (expected ${binaryDigest}, got ${launchDigest ?? 'unreadable'}).`,
+        { reason: 'binary_digest_drift' }
+      );
+    }
+
+    const child = spawnManaged(executablePath, args, {
       cwd: input.workerWorkspace,
-      env: childEnv,
-      forwardEnv: Object.keys(childEnv),
+      exactEnv: childEnv,
       maxStdoutBytes: input.limits.maxTranscriptBytes,
       maxStderrBytes: input.limits.maxEventBytes,
       onLimit: (stream) => {
         outputLimited = true;
-        if (stream === 'stdout') {
-          void callbacks.onState('failed', {
-            error: supervisorError('VSUP_OUTPUT_LIMIT', 'Antigravity output exceeded the configured transcript limit.')
-          });
-        }
+        void callbacks.onState('failed', {
+          error: supervisorError(
+            'VSUP_OUTPUT_LIMIT',
+            stream === 'stdout'
+              ? 'Antigravity output exceeded the configured transcript limit.'
+              : 'Antigravity diagnostic output exceeded the configured event limit.',
+            { stream }
+          )
+        });
       },
       onStdout: (chunk) => {
         callbacks.onActivity?.('antigravity:stdout');
@@ -798,10 +840,10 @@ export class AntigravityBackend implements SupervisorBackend {
           if (!parserFailed) {
             parserFailed = true;
             await callbacks.onState('failed', {
-              error: supervisorError('VSUP_OUTPUT_LIMIT', redactSecrets(String(error)))
+              error: supervisorError('VSUP_OUTPUT_LIMIT', redact(String(error)))
             });
           }
-          await child.terminate();
+          await child.terminate().catch(() => undefined);
         });
       },
       onStderr: (chunk) => {
@@ -818,7 +860,7 @@ export class AntigravityBackend implements SupervisorBackend {
 
     const deadlineAtMs = Date.now() + input.limits.timeoutSeconds * 1000 + 15_000;
     if (child.child.pid === undefined) {
-      await child.terminate();
+      await child.terminate().catch(() => undefined);
       await cleanupPrivateDirectories(childHome, childTmp);
       throw supervisorError('VSUP_INTERNAL', 'Failed to retrieve child process PID for reaper registration.');
     }
@@ -826,7 +868,7 @@ export class AntigravityBackend implements SupervisorBackend {
     try {
       reaper = await startReaper({ workerPid: child.child.pid, deadlineAtMs });
     } catch (reaperError) {
-      await child.terminate();
+      await child.terminate().catch(() => undefined);
       await cleanupPrivateDirectories(childHome, childTmp);
       throw supervisorError('VSUP_INTERNAL', `Failed to start process reaper: ${reaperError instanceof Error ? reaperError.message : String(reaperError)}`);
     }
@@ -846,25 +888,69 @@ export class AntigravityBackend implements SupervisorBackend {
 
     const processRecord = {
       ...(child.child.pid === undefined ? {} : { pid: child.child.pid }),
-      executable: resolved.resolvedPath,
+      executable: executablePath,
       version: resolved.version
     };
-    const pin: PinIdentity | undefined = resolved.sha256
-      ? {
-          vibeVersion: resolved.version,
-          manifestSha256: resolved.sha256,
-          recordSha256: resolved.sha256
-        }
-      : undefined;
+    const pin: PinIdentity = {
+      vibeVersion: resolved.version,
+      manifestSha256: binaryDigest,
+      recordSha256: binaryDigest
+    };
 
     await callbacks.onState('running', {
       preparation,
       process: processRecord,
-      ...(pin ? { pin } : {})
+      pin
     });
+
+    const reportRetained = async (): Promise<void> => {
+      const cleanup = await cleanupPrivateDirectories(childHome, childTmp);
+      if (!cleanup.cleaned) {
+        await callbacks.onEvent({
+          source: 'supervisor',
+          type: 'diagnostic',
+          severity: 'warning',
+          data: {
+            reason: 'private_directories_retained',
+            retained: cleanup.retained
+          }
+        });
+      }
+    };
 
     void child.done.then(async ({ code, signal }) => {
       opaque.done = true;
+      let terminationError: unknown;
+      for (let attempt = 0; attempt < NATURAL_EXIT_TERMINATION_ATTEMPTS; attempt += 1) {
+        try {
+          await child.terminate();
+          terminationError = undefined;
+          break;
+        } catch (error) {
+          terminationError = error;
+        }
+      }
+      if (terminationError !== undefined) {
+        await callbacks.onEvent({
+          source: 'supervisor',
+          type: 'diagnostic',
+          severity: 'error',
+          data: {
+            reason: 'termination_unverified',
+            text: redact(terminationError instanceof Error ? terminationError.message : String(terminationError))
+          }
+        });
+        if (!outputLimited && !parserFailed) {
+          await callbacks.onState('failed', {
+            error: supervisorError(
+              'VSUP_BACKEND_ERROR',
+              'The Antigravity process group termination could not be verified; the run keeps its handle so cleanup can be retried.',
+              { reason: 'termination_unverified' }
+            )
+          });
+        }
+        return;
+      }
       try {
         if (opaque.reaper) {
           const reaperOutcome = await opaque.reaper.stop().catch(() => undefined);
@@ -906,8 +992,8 @@ export class AntigravityBackend implements SupervisorBackend {
               type: 'tool_call',
               severity: 'info',
               data: {
-                tool: redactSecrets(entry.tool ?? 'tool'),
-                ...(entry.path ? { path: redactSecrets(entry.path) } : {})
+                tool: redact(entry.tool ?? 'tool'),
+                ...(entry.path ? { path: redact(entry.path) } : {})
               }
             });
           } else {
@@ -919,9 +1005,9 @@ export class AntigravityBackend implements SupervisorBackend {
               type: 'tool_denied',
               severity: 'warning',
               data: {
-                tool: redactSecrets(entry.tool ?? 'tool'),
-                reason: redactSecrets(entry.reason ?? 'denied'),
-                ...(entry.path ? { path: redactSecrets(entry.path) } : {})
+                tool: redact(entry.tool ?? 'tool'),
+                reason: redact(entry.reason ?? 'denied'),
+                ...(entry.path ? { path: redact(entry.path) } : {})
               }
             });
           }
@@ -934,6 +1020,7 @@ export class AntigravityBackend implements SupervisorBackend {
           data: {
             reason: 'reasoning_observation',
             streamed_entries: reasoningObservedCount,
+            withheld_text_entries: withheldTextCount,
             history_entries: null,
             history_audited: false
           }
@@ -957,7 +1044,7 @@ export class AntigravityBackend implements SupervisorBackend {
             result: { stopReason: limitStopReason, summary: opaque.latestSummary || 'Antigravity run stopped at configured limit.' }
           });
         } else if (code === 0 && (envelopeStatus === 'ERROR' || envelopeStatus === 'INVALID')) {
-          const detail = envelopeError ? `: ${redactSecrets(envelopeError).slice(0, 300)}` : '';
+          const detail = envelopeError ? `: ${redact(envelopeError).slice(0, 300)}` : '';
           await callbacks.onState('failed', {
             usage: finalUsage,
             approvals,
@@ -988,21 +1075,13 @@ export class AntigravityBackend implements SupervisorBackend {
           });
         }
       } finally {
-        const cleanup = await cleanupPrivateDirectories(childHome, childTmp);
-        if (!cleanup.cleaned) {
-          await callbacks.onEvent({
-            source: 'supervisor',
-            type: 'diagnostic',
-            severity: 'warning',
-            data: {
-              reason: 'private_directories_retained',
-              retained: cleanup.retained
-            }
-          });
-        }
+        await reportRetained();
       }
     }).catch(async (error: unknown) => {
       opaque.done = true;
+      const errObj = (error && typeof error === 'object' && 'code' in error && 'remediation' in error)
+        ? (error as SupervisorError)
+        : supervisorError('VSUP_BACKEND_CRASHED', redact(String(error)));
       try {
         if (opaque.reaper) {
           await opaque.reaper.stop().catch(() => undefined);
@@ -1018,42 +1097,14 @@ export class AntigravityBackend implements SupervisorBackend {
           toolCalls: { executed: allExecutedCalls.length, deniedByHandler: 0, deniedByPolicy: allDeniedActions.length },
           hookEntries: []
         }));
-        const cleanup = await cleanupPrivateDirectories(childHome, childTmp);
-        if (!cleanup.cleaned) {
-          await callbacks.onEvent({
-            source: 'supervisor',
-            type: 'diagnostic',
-            severity: 'warning',
-            data: {
-              reason: 'private_directories_retained',
-              retained: cleanup.retained
-            }
-          });
-        }
-        const errObj = (error && typeof error === 'object' && 'code' in error && 'remediation' in error)
-          ? (error as SupervisorError)
-          : supervisorError('VSUP_BACKEND_CRASHED', redactSecrets(String(error)));
+        await reportRetained();
         await callbacks.onState('failed', {
           usage: { ...(latestUsage ?? {}), toolCalls },
           approvals,
           error: errObj
         });
       } catch {
-        const cleanup = await cleanupPrivateDirectories(childHome, childTmp);
-        if (!cleanup.cleaned) {
-          await callbacks.onEvent({
-            source: 'supervisor',
-            type: 'diagnostic',
-            severity: 'warning',
-            data: {
-              reason: 'private_directories_retained',
-              retained: cleanup.retained
-            }
-          });
-        }
-        const errObj = (error && typeof error === 'object' && 'code' in error && 'remediation' in error)
-          ? (error as SupervisorError)
-          : supervisorError('VSUP_BACKEND_CRASHED', redactSecrets(String(error)));
+        await reportRetained();
         await callbacks.onState('failed', {
           error: errObj
         });
@@ -1074,7 +1125,7 @@ export class AntigravityBackend implements SupervisorBackend {
 
   async close(handle: BackendRunHandle): Promise<void> {
     const state = handle.opaque as AntigravityHandle['opaque'];
-    if (!state.done) await state.process.terminate();
+    await state.process.terminate();
     if (state.reaper) {
       await state.reaper.stop().catch(() => undefined);
       state.reaper = undefined;

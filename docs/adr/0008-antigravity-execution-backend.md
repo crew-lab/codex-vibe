@@ -1,6 +1,6 @@
 # ADR 0008: optional Antigravity CLI execution backend
 
-Status: owner-approved on 2026-10-17; implemented on branch explore_project_details.
+Status: owner-approved on 2026-10-17; implemented on main; ships in 2.1.0 off by default behind `experimental.antigravity = true` (owner decision 2026-10-19); experimental until the target checks in [docs/target-acceptance.md](../target-acceptance.md#antigravity-backend-probes) pass.
 
 vibe-app-server (pinned to Vibe 2.26.1) remains the default engine (`backend = "app-server"`). Following the owner's 2026-10-17 decision, Google Antigravity (`agy` CLI, pinned to `agy 1.4.0` and binary SHA-256) is supported as an optional second execution backend selected by `backend = "antigravity"` (with optional `paths.antigravity`, defaulting to `"agy"`). Both configuration keys are boot-bound: modifying either surfaces `boot_drift` and requires a server restart.
 

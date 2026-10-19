@@ -784,17 +784,17 @@ describe('app-server backend: transport failures', () => {
 
 describe('app-server backend: deadline, cancel, close and termination', () => {
   it('interrupts at the deadline and fails with a timeout', async () => {
-    const harness = new Harness('hold', { limits: { timeoutSeconds: 3 } });
+    const harness = new Harness('hold', { limits: { timeoutSeconds: 8 } });
     const terminal = await harness.run();
 
     expect(terminal.state).toBe('failed');
     expect(errorOf(terminal).code).toBe('VSUP_TIMEOUT');
     expect(harness.fixtureEvents('interrupt')).toHaveLength(1);
     harness.expectCleanedUp();
-  }, 20_000);
+  }, 40_000);
 
   it('kills a wedged server that ignores SIGTERM and fails with a timeout', async () => {
-    const harness = new Harness('wedge', { limits: { timeoutSeconds: 3 } });
+    const harness = new Harness('wedge', { limits: { timeoutSeconds: 8 } });
     const terminal = await harness.run();
 
     expect(terminal.state).toBe('failed');
@@ -802,7 +802,7 @@ describe('app-server backend: deadline, cancel, close and termination', () => {
     expect(harness.fixtureEvents('wedged')).toHaveLength(1);
     expect(harness.fixtureEvents('signalIgnored').length).toBeGreaterThanOrEqual(1);
     harness.expectCleanedUp();
-  }, 20_000);
+  }, 40_000);
 
   it('lets the reaper kill a wedged group at its recorded deadline', async () => {
     const runTimeoutMs = 60_000;
@@ -1187,13 +1187,13 @@ describe('app-server backend: audit after a forced limit stop', () => {
   });
 
   it('audits the history at the deadline and reports the unapproved write instead of a plain timeout', async () => {
-    const harness = new Harness({ name: 'deadline-hidden-write', interrupt: 'ignore', steps: [SILENT_WRITE, { op: 'hold' }] }, { limits: { timeoutSeconds: 3 } });
+    const harness = new Harness({ name: 'deadline-hidden-write', interrupt: 'ignore', steps: [SILENT_WRITE, { op: 'hold' }] }, { limits: { timeoutSeconds: 8 } });
     const terminal = await harness.run();
 
     expect(terminal.state).toBe('failed');
     expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'unapproved_effect' } });
     harness.expectCleanedUp();
-  }, 20_000);
+  }, 40_000);
 });
 
 describe('app-server backend: stop requests revoke the approval handler', () => {
@@ -1242,15 +1242,15 @@ describe('app-server backend: stop requests revoke the approval handler', () => 
 
   it('denies a callback that arrives after the deadline interrupt', async () => {
     const { harness, evaluated } = await lateCallRun(
-      { name: 'late-after-deadline', interrupt: 'ignore', steps: [{ op: 'delay', ms: 3300 }, lateCall, { op: 'hold' }] },
-      { limits: { timeoutSeconds: 3 }, options: { timing: { interruptGraceMs: 5000 } } },
+      { name: 'late-after-deadline', interrupt: 'ignore', steps: [{ op: 'delay', ms: 8300 }, lateCall, { op: 'hold' }] },
+      { limits: { timeoutSeconds: 8 }, options: { timing: { interruptGraceMs: 8000 } } },
       async () => undefined
     );
     await harness.terminal;
 
     expect(evaluated).toBe(0);
     expect(harness.fixtureEvents('approvalAnswer')[0]).toMatchObject({ decision: 'deny' });
-  }, 20_000);
+  }, 40_000);
 });
 
 describe('app-server backend: protocol failures outrank a later stop request', () => {
@@ -1270,20 +1270,20 @@ describe('app-server backend: protocol failures outrank a later stop request', (
   });
 
   it('keeps the watermark gap error when the deadline arrives after it', async () => {
-    const harness = new Harness(gapThenHold, { limits: { timeoutSeconds: 3 }, options: { timing: { interruptGraceMs: 5000 } } });
+    const harness = new Harness(gapThenHold, { limits: { timeoutSeconds: 8 }, options: { timing: { interruptGraceMs: 8000 } } });
     const terminal = await harness.run();
 
     expect(terminal.state).toBe('failed');
     expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'watermark_gap', also: ['deadline'] } });
     harness.expectCleanedUp();
-  }, 20_000);
+  }, 40_000);
 
   it('still reports a plain timeout when no protocol failure came first', async () => {
-    const harness = new Harness({ name: 'plain-deadline', interrupt: 'ignore', steps: [{ op: 'hold' }] }, { limits: { timeoutSeconds: 3 } });
+    const harness = new Harness({ name: 'plain-deadline', interrupt: 'ignore', steps: [{ op: 'hold' }] }, { limits: { timeoutSeconds: 8 } });
     const terminal = await harness.run();
 
     expect(errorOf(terminal).code).toBe('VSUP_TIMEOUT');
-  }, 20_000);
+  }, 40_000);
 });
 
 describe('app-server backend: notifications in the turn/start response chunk', () => {

@@ -1,7 +1,7 @@
-import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
+import { execFile, spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 import { StringDecoder } from 'node:string_decoder';
-import { buildChildEnvironment } from '../security/environment.js';
+import { buildChildEnvironment, exactChildEnvironment } from '../security/environment.js';
 
 export class BoundedCollector {
   private chunks: Buffer[] = [];
@@ -27,6 +27,7 @@ export interface ManagedProcessOptions {
   cwd: string;
   env?: NodeJS.ProcessEnv;
   forwardEnv?: readonly string[];
+  exactEnv?: Readonly<Record<string, string | undefined>>;
   maxStdoutBytes?: number;
   maxStderrBytes?: number;
   retainStdout?: boolean;
@@ -60,7 +61,7 @@ export function spawnManaged(executable: string, args: readonly string[], option
   let terminationVerified = false;
   const child = spawn(executable, [...args], {
     cwd: options.cwd,
-    env: buildChildEnvironment(options.env ?? process.env, options.forwardEnv),
+    env: options.exactEnv ? exactChildEnvironment(options.exactEnv) : buildChildEnvironment(options.env ?? process.env, options.forwardEnv),
     shell: false,
     detached: process.platform !== 'win32',
     stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'],
@@ -131,6 +132,7 @@ export function spawnManaged(executable: string, args: readonly string[], option
           // Linux procfs can distinguish a zombie left by init from a process
           // that can still run. Any incomplete scan remains unresolved.
           if (process.platform === 'linux' && !await linuxGroupHasRunningMembers(child.pid)) return true;
+          if (process.platform === 'darwin' && !await darwinGroupHasRunningMembers(child.pid)) return true;
           try { process.kill(-child.pid, 0); }
           catch (error) {
             const code = (error as NodeJS.ErrnoException).code;
@@ -180,4 +182,17 @@ async function linuxGroupHasRunningMembers(groupId: number): Promise<boolean> {
     }
   }
   return false;
+}
+
+function darwinGroupHasRunningMembers(groupId: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile('/bin/ps', ['-A', '-o', 'pgid=,stat='], { timeout: 2000, maxBuffer: 4 * 1024 * 1024, env: { PATH: '/usr/bin:/bin' } }, (error, stdout) => {
+      if (error) { resolve(true); return; }
+      for (const line of stdout.split('\n')) {
+        const [group, state] = line.trim().split(/\s+/);
+        if (Number(group) === groupId && state !== undefined && !state.startsWith('Z')) { resolve(true); return; }
+      }
+      resolve(false);
+    });
+  });
 }

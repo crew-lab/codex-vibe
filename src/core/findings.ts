@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { constants as fsConstants } from 'node:fs';
+import { open } from 'node:fs/promises';
 import type {
   FindingsArtifact,
   FindingSeverity,
@@ -34,7 +36,6 @@ Conclude your review with a fenced JSON block containing your structured finding
 export function extractFindingsJsonBlock(text: string): { findings: unknown[]; rawJson?: string } | null {
   if (!text || typeof text !== 'string') return null;
 
-  // Search for fenced JSON code block first (```json ... ``` or ``` ... ```)
   const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
   let match: RegExpExecArray | null;
   const candidates: string[] = [];
@@ -46,7 +47,6 @@ export function extractFindingsJsonBlock(text: string): { findings: unknown[]; r
     }
   }
 
-  // Iterate candidates from last to first (models typically place the final output at the end)
   for (let i = candidates.length - 1; i >= 0; i -= 1) {
     const candidate = candidates[i];
     if (!candidate) continue;
@@ -62,11 +62,10 @@ export function extractFindingsJsonBlock(text: string): { findings: unknown[]; r
         }
       }
     } catch {
-      // Continue to next candidate
+      continue;
     }
   }
 
-  // Fallback: search for bare trailing JSON object with "findings" key
   const findingsKeyIndex = text.lastIndexOf('"findings"');
   if (findingsKeyIndex !== -1) {
     const candidateStart = text.lastIndexOf('{', findingsKeyIndex);
@@ -93,7 +92,7 @@ export function extractFindingsJsonBlock(text: string): { findings: unknown[]; r
               }
             }
           } catch {
-            // Ignore
+            return null;
           }
         }
       }
@@ -101,6 +100,39 @@ export function extractFindingsJsonBlock(text: string): { findings: unknown[]; r
   }
 
   return null;
+}
+
+export const MAX_FINDING_FILE_BYTES = 16 * 1024 * 1024;
+const LINE_READ_CHUNK_BYTES = 64 * 1024;
+
+export async function fileLineReach(file: string, line: number, maxBytes = MAX_FINDING_FILE_BYTES): Promise<'present' | 'beyond' | 'missing'> {
+  let handle;
+  try {
+    handle = await open(file, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0) | (fsConstants.O_NONBLOCK ?? 0));
+  } catch {
+    return 'missing';
+  }
+  try {
+    const info = await handle.stat();
+    if (!info.isFile()) return 'missing';
+    const buffer = Buffer.alloc(LINE_READ_CHUNK_BYTES);
+    let completedLines = 0;
+    let consumed = 0;
+    let lastByte = -1;
+    while (consumed < maxBytes) {
+      const { bytesRead } = await handle.read(buffer, 0, Math.min(buffer.length, maxBytes - consumed), consumed);
+      if (bytesRead === 0) return completedLines + (lastByte >= 0 && lastByte !== 0x0a ? 1 : 0) >= line ? 'present' : 'beyond';
+      for (let index = 0; index < bytesRead; index += 1) if (buffer[index] === 0x0a) completedLines += 1;
+      if (completedLines >= line) return 'present';
+      lastByte = buffer[bytesRead - 1]!;
+      consumed += bytesRead;
+    }
+    return 'beyond';
+  } catch {
+    return 'missing';
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
 }
 
 export async function validateFindings(options: {
@@ -150,7 +182,6 @@ export async function validateFindings(options: {
     const startColumn = typeof loc.startColumn === 'number' && Number.isInteger(loc.startColumn) && loc.startColumn >= 1 ? loc.startColumn : undefined;
     const endColumn = typeof loc.endColumn === 'number' && Number.isInteger(loc.endColumn) && loc.endColumn >= 1 ? loc.endColumn : undefined;
 
-    // Safety and workspace containment check
     const judgement = await judgeWorkspacePath(workspace, rawPath, excluded);
     if (!judgement.allowed) {
       let reason: RejectedFinding['reason'] = 'file_not_found';
@@ -170,13 +201,18 @@ export async function validateFindings(options: {
       continue;
     }
 
-    // Check against workspace snapshot if provided
     if (snapshot) {
       const entry = snapshot.manifest.get(relative);
       if (!entry || entry.kind !== 'F') {
         rejected.push({ raw, reason: 'file_not_found' });
         continue;
       }
+    }
+
+    const reach = await fileLineReach(judgement.resolved, endLine ?? startLine);
+    if (reach !== 'present') {
+      rejected.push({ raw, reason: reach === 'missing' ? 'file_not_found' : 'line_out_of_bounds' });
+      continue;
     }
 
     const ruleId = typeof item.ruleId === 'string' && item.ruleId.trim() ? item.ruleId.trim() : 'review/finding';

@@ -8,7 +8,7 @@ function coded(code: SupervisorErrorCode, message: string, details: Record<strin
   return Object.assign(new Error(message), supervisorError(code, message, details));
 }
 
-async function rootIsMissing(root: string, home: string | undefined): Promise<boolean> {
+export async function rootIsMissing(root: string, home: string | undefined): Promise<boolean> {
   const expanded = path.resolve(expandHome(root, home ?? process.env.HOME ?? ""));
   try {
     await lstat(expanded);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { extractFindingsJsonBlock, validateFindings } from '../../src/core/findings.js';
@@ -107,6 +107,9 @@ describe('validateFindings', () => {
         severity: 'error'
       }
     ];
+    await mkdir(path.join(workspace, 'src'));
+    await writeFile(path.join(workspace, 'src', 'index.ts'), 'line\n'.repeat(16));
+    await writeFile(path.join(workspace, 'src', 'main.ts'), 'line\n'.repeat(42));
 
     const result = await validateFindings({
       rawFindings,

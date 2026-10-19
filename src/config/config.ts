@@ -106,7 +106,8 @@ export function configFingerprint(config: SupervisorConfig): string {
     ...(config.paths?.vibe ? { vibePath: config.paths.vibe } : {}),
     ...(config.paths?.appServer ? { appServerPath: config.paths.appServer } : {}),
     ...(config.paths?.vibePinManifest ? { pinManifestPath: config.paths.vibePinManifest } : {}),
-    ...(config.paths?.antigravity ? { antigravityPath: config.paths.antigravity } : {})
+    ...(config.paths?.antigravity ? { antigravityPath: config.paths.antigravity } : {}),
+    ...(config.experimental?.antigravity ? { experimentalAntigravity: true } : {})
   };
   return createHash("sha256").update(JSON.stringify(semantic)).digest("hex");
 }
@@ -155,7 +156,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Super
   } catch (error) {
     if (error instanceof Error) {
       throw Object.assign(new Error(`Invalid supervisor configuration: ${error.message}`, { cause: error }), {
-        supervisor: supervisorError("VSUP_CONFIG_INVALID", `Invalid configuration file ${selection.configPath}: ${error.message} Supported fields are version, allowed_workspace_roots, excluded_globs, budgets, retention, limits (including max_tokens and max_cost_usd), and paths (vibe, app_server, vibe_pin_manifest); remove unsupported fields.`, { configPath: selection.configPath })
+        supervisor: supervisorError("VSUP_CONFIG_INVALID", `Invalid configuration file ${selection.configPath}: ${error.message} Supported fields are version, backend, allowed_workspace_roots, excluded_globs, budgets, retention, limits (including max_tokens and max_cost_usd), paths (vibe, app_server, vibe_pin_manifest, antigravity) and experimental (antigravity); remove unsupported fields.`, { configPath: selection.configPath })
       });
     }
     throw error;

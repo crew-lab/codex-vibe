@@ -31,7 +31,7 @@ async function getManager(ownerLock?: OwnerLock, configPath?: string, isolatedHo
   const preparationDataDir = resolved.dataDir;
   for (const lost of (await inspectWorkspaceRoots(config.allowedWorkspaceRoots)).unavailable) process.stderr.write(`Allowed workspace root ${lost.root} is unavailable and denied until it is restored: ${lost.reason}\n`);
   const { RunManager } = await import('./core/run-manager.js');
-  const manager = new RunManager(config, dataDir, [], ownerLock, { policy, preparationDataDir, ...(isolatedHome ? { sessionId: path.basename(isolatedHome) } : {}) }) as RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> };
+  const manager = new RunManager(config, dataDir, [], ownerLock, { policy, preparationDataDir, usageDataDir: resolved.dataDir, ...(isolatedHome ? { sessionId: path.basename(isolatedHome) } : {}) }) as RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> };
   await manager.initialize();
   return { manager, config, dataDir, policy, preparationDataDir };
 }

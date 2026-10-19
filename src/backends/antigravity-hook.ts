@@ -36,17 +36,78 @@ export const EDIT_ALLOWED_TOOLS = [
   'edit'
 ] as const;
 
-export const PATH_KEYS = [
-  'AbsolutePath',
-  'TargetFile',
-  'DirectoryPath',
-  'SearchPath',
-  'SearchDirectory',
-  'path',
-  'file_path',
-  'target_file',
-  'directory'
-] as const;
+export const TOOL_PATH_KEYS: Readonly<Record<string, readonly string[]>> = {
+  view_file: ['AbsolutePath', 'path', 'file_path'],
+  read_file: ['path', 'file_path', 'AbsolutePath', 'target_file'],
+  list_dir: ['DirectoryPath', 'path', 'directory'],
+  find_by_name: ['SearchDirectory', 'DirectoryPath', 'path', 'directory'],
+  grep_search: ['SearchPath', 'SearchDirectory', 'path', 'directory'],
+  write_to_file: ['TargetFile', 'path', 'file_path'],
+  write_file: ['path', 'file_path', 'TargetFile'],
+  replace_file_content: ['TargetFile', 'path', 'file_path'],
+  multi_replace_file_content: ['TargetFile', 'path', 'file_path'],
+  edit_file: ['target_file', 'TargetFile', 'path', 'file_path'],
+  edit: ['path', 'file_path', 'TargetFile']
+};
+
+export const PATH_LIKE_ARGUMENT = /(?:path|paths|file|files|filename|filenames|dir|dirs|directory|directories|folder|folders|uri|cwd|root|location)$/i;
+export const MAX_TOOL_ARGUMENT_CHARS = 1_048_576;
+export const MAX_HOOK_INPUT_BYTES = 4 * 1_048_576;
+
+export type ToolPathArguments =
+  | { readable: true; args: Record<string, unknown>; paths: string[] }
+  | { readable: false; args: unknown; reason: 'missing_file_path' | 'path_argument_unreadable' };
+
+export function parseToolArguments(raw: unknown): Record<string, unknown> | null {
+  let value = raw;
+  if (value === undefined || value === null) return {};
+  if (typeof value === 'string') {
+    if (value.length > MAX_TOOL_ARGUMENT_CHARS) return null;
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function pathKeysOf(tool: string): readonly string[] {
+  return Object.prototype.hasOwnProperty.call(TOOL_PATH_KEYS, tool) ? TOOL_PATH_KEYS[tool]! : [];
+}
+
+export function readToolPathArguments(tool: string, raw: unknown): ToolPathArguments {
+  const args = parseToolArguments(raw);
+  if (!args) return { readable: false, args: raw, reason: 'path_argument_unreadable' };
+  const known = pathKeysOf(tool);
+  for (const [key, value] of Object.entries(args)) {
+    if (known.includes(key)) {
+      if (typeof value !== 'string' || value.trim().length === 0) return { readable: false, args, reason: 'path_argument_unreadable' };
+    } else if (PATH_LIKE_ARGUMENT.test(key.replace(/[^A-Za-z0-9]/g, '')) && typeof value !== 'boolean' && typeof value !== 'number' && value !== null) {
+      return { readable: false, args, reason: 'path_argument_unreadable' };
+    }
+  }
+  const paths = known.flatMap((key) => (typeof args[key] === 'string' ? [(args[key] as string).trim()] : []));
+  if (paths.length === 0) return { readable: false, args, reason: 'missing_file_path' };
+  return { readable: true, args, paths };
+}
+
+export function primaryToolPath(tool: string, args: Record<string, unknown> | null): string | null {
+  if (!args) return null;
+  for (const key of pathKeysOf(tool)) {
+    const value = args[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+export function toolCallFingerprint(tool: string, args: unknown): string | null {
+  try {
+    return createHash('sha256').update(canonicalJson({ tool, args })).digest('hex');
+  } catch {
+    return null;
+  }
+}
 
 export interface StreamExecutedCall {
   callId?: string | null;
@@ -75,7 +136,6 @@ export async function verifyDirectoryDescendants(
   const dirSegments = relDir === '' ? [] : relDir.split(path.sep).filter(Boolean);
   const loweredDirSegments = dirSegments.map((s) => s.toLowerCase());
 
-  // 1. Workspace root handling
   if (relDir === '') {
     if (isRecursive) {
       if (excludedAnchors.length > 0) {
@@ -83,7 +143,6 @@ export async function verifyDirectoryDescendants(
       }
       return { allowed: false, reason: 'path_reserved' };
     }
-    // list_dir on root:
     if (excludedAnchors.length > 0) {
       return { allowed: false, reason: 'path_excluded' };
     }
@@ -103,19 +162,16 @@ export async function verifyDirectoryDescendants(
     return { allowed: true };
   }
 
-  // 2. Static check for recursive tools:
   if (isRecursive && excludedAnchors.length > 0) {
     const anchors = anchorsOf(excludedAnchors);
     for (const anchor of anchors) {
       const anchorPrefixLower = anchor.prefix.map((s) => s.toLowerCase());
-      // Case A: anchor prefix is inside or equals this directory
       if (
         anchorPrefixLower.length > loweredDirSegments.length &&
         loweredDirSegments.every((s, i) => s === anchorPrefixLower[i])
       ) {
         return { allowed: false, reason: 'path_excluded' };
       }
-      // Case B: anchor has globs that start with or lie inside this directory
       for (const glob of anchor.globs) {
         const globParts = glob.toLowerCase().split('/').filter(Boolean);
         if (anchorPrefixLower.length === 0) {
@@ -130,7 +186,6 @@ export async function verifyDirectoryDescendants(
     }
   }
 
-  // 3. Preparatory bounded traversal on disk
   const isExcluded = createExcludedMatcher(excludedAnchors);
   const maxDepth = isRecursive ? 4 : 1;
   const maxEntries = 500;
@@ -193,7 +248,6 @@ export async function verifyDirectoryDescendants(
     }
   }
 
-  // Recursive directory operations cannot be constrained during traversal by the host process.
   if (isRecursive) {
     return { allowed: false, reason: 'path_invalid' };
   }
@@ -216,31 +270,31 @@ export interface AntigravityPreToolHookOptions {
   maxModelCalls?: number;
 }
 
+function policyErrorResult(): EvaluateAntigravityToolCallResult {
+  const entry: ApprovalLedgerEntry = {
+    callbackId: `agy-hook-${randomUUID()}`,
+    relatedEntryId: null,
+    turnId: null,
+    tool: null,
+    path: null,
+    fingerprint: null,
+    decision: 'deny',
+    reason: 'policy_error'
+  };
+  return { decision: 'deny', reason: 'policy_error', entry, hookResponse: { decision: 'deny', reason: 'policy_error' } };
+}
+
 export async function evaluateAntigravityToolCall(
   options: AntigravityPreToolHookOptions,
   payload: unknown
 ): Promise<EvaluateAntigravityToolCallResult> {
   let raw: unknown = payload;
   if (typeof raw === 'string') {
+    if (Buffer.byteLength(raw) > MAX_HOOK_INPUT_BYTES) return policyErrorResult();
     try {
       raw = JSON.parse(raw);
     } catch {
-      const entry: ApprovalLedgerEntry = {
-        callbackId: `agy-hook-${randomUUID()}`,
-        relatedEntryId: null,
-        turnId: null,
-        tool: null,
-        path: null,
-        fingerprint: null,
-        decision: 'deny',
-        reason: 'policy_error'
-      };
-      return {
-        decision: 'deny',
-        reason: 'policy_error',
-        entry,
-        hookResponse: { decision: 'deny', reason: 'policy_error' }
-      };
+      return policyErrorResult();
     }
   }
 
@@ -251,158 +305,64 @@ export async function evaluateAntigravityToolCall(
   const toolNameRaw = toolCall?.name ?? obj.tool_name ?? obj.name ?? obj.tool;
   const toolName = typeof toolNameRaw === 'string' ? toolNameRaw : '';
   const rawArgs = toolCall?.args ?? obj.tool_input ?? obj.args ?? obj.input;
-  const args = (rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs))
-    ? (rawArgs as Record<string, unknown>)
-    : {};
   const rawCallId = toolCall?.id ?? toolCall?.call_id ?? obj.id ?? obj.call_id ?? obj.callId;
   const callId = typeof rawCallId === 'string' && rawCallId.trim().length > 0 ? rawCallId.trim() : null;
   const stepIdx = obj.stepIdx ?? obj.step_index ?? obj.turnId ?? obj.turn_id;
   const turnId = stepIdx !== undefined && stepIdx !== null ? String(stepIdx) : null;
   const numericStepIdx = typeof stepIdx === 'number' && Number.isFinite(stepIdx) ? Math.trunc(stepIdx) : undefined;
+  const fingerprint = toolCallFingerprint(toolName, parseToolArguments(rawArgs) ?? rawArgs ?? null);
+
+  const decide = (reason: string | null, recordedPath: string | null, tool: string | null = toolName): EvaluateAntigravityToolCallResult => {
+    const entry: ApprovalLedgerEntry = {
+      callbackId: callId ? `agy-call-${callId}` : `agy-hook-${randomUUID()}`,
+      relatedEntryId: callId,
+      turnId,
+      tool,
+      path: recordedPath === null ? null : recordedPath.slice(0, 512),
+      fingerprint,
+      decision: reason === null ? 'approve' : 'deny',
+      reason
+    };
+    return reason === null
+      ? { decision: 'allow', reason: null, entry, hookResponse: { decision: 'allow' } }
+      : { decision: 'deny', reason, entry, hookResponse: { decision: 'deny', reason } };
+  };
 
   if (
     numericStepIdx !== undefined &&
     ((options.maxTurns !== undefined && numericStepIdx > options.maxTurns) ||
       (options.maxModelCalls !== undefined && numericStepIdx > options.maxModelCalls))
   ) {
-    const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
-    const entry: ApprovalLedgerEntry = {
-      callbackId: callId ? `agy-call-${callId}` : `agy-hook-${randomUUID()}`,
-      relatedEntryId: callId,
-      turnId,
-      tool: toolName || null,
-      path: null,
-      fingerprint,
-      decision: 'deny',
-      reason: 'turn_limit_exceeded'
-    };
-    return {
-      decision: 'deny',
-      reason: 'turn_limit_exceeded',
-      entry,
-      hookResponse: { decision: 'deny', reason: 'turn_limit_exceeded' }
-    };
+    return decide('turn_limit_exceeded', null, toolName || null);
   }
 
   const allowedTools = options.mode === 'edit' ? EDIT_ALLOWED_TOOLS : REVIEW_ALLOWED_TOOLS;
   if (!(allowedTools as readonly string[]).includes(toolName)) {
-    const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
-    const entry: ApprovalLedgerEntry = {
-      callbackId: callId ? `agy-call-${callId}` : `agy-hook-${randomUUID()}`,
-      relatedEntryId: callId,
-      turnId,
-      tool: toolName || null,
-      path: null,
-      fingerprint,
-      decision: 'deny',
-      reason: 'tool_not_in_profile'
-    };
-    return {
-      decision: 'deny',
-      reason: 'tool_not_in_profile',
-      entry,
-      hookResponse: { decision: 'deny', reason: 'tool_not_in_profile' }
-    };
+    return decide('tool_not_in_profile', null, toolName || null);
   }
 
-  const candidatePaths: string[] = [];
-  for (const key of PATH_KEYS) {
-    const val = args[key];
-    if (typeof val === 'string' && val.trim().length > 0) {
-      candidatePaths.push(val.trim());
-    }
-  }
+  const pathArguments = readToolPathArguments(toolName, rawArgs);
+  if (!pathArguments.readable) return decide(pathArguments.reason, null);
+  const candidatePaths = pathArguments.paths;
 
   const isDirectoryReadTool = ['list_dir', 'find_by_name', 'grep_search'].includes(toolName);
   const isRecursiveTool = ['find_by_name', 'grep_search'].includes(toolName);
-
-  if (candidatePaths.length === 0) {
-    if (isDirectoryReadTool) {
-      candidatePaths.push(options.workerWorkspace);
-    } else {
-      const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
-      const entry: ApprovalLedgerEntry = {
-        callbackId: callId ? `agy-call-${callId}` : `agy-hook-${randomUUID()}`,
-        relatedEntryId: callId,
-        turnId,
-        tool: toolName,
-        path: null,
-        fingerprint,
-        decision: 'deny',
-        reason: 'missing_file_path'
-      };
-      return {
-        decision: 'deny',
-        reason: 'missing_file_path',
-        entry,
-        hookResponse: { decision: 'deny', reason: 'missing_file_path' }
-      };
-    }
-  }
 
   let realWorkspace: string;
   try {
     realWorkspace = await realpath(options.workerWorkspace);
   } catch {
-    const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
-    const entry: ApprovalLedgerEntry = {
-      callbackId: callId ? `agy-call-${callId}` : `agy-hook-${randomUUID()}`,
-      relatedEntryId: callId,
-      turnId,
-      tool: toolName,
-      path: candidatePaths[0] ?? null,
-      fingerprint,
-      decision: 'deny',
-      reason: 'path_unresolvable'
-    };
-    return {
-      decision: 'deny',
-      reason: 'path_unresolvable',
-      entry,
-      hookResponse: { decision: 'deny', reason: 'path_unresolvable' }
-    };
+    return decide('path_unresolvable', candidatePaths[0] ?? null);
   }
 
   for (const candidatePath of candidatePaths) {
     if (candidatePath.length === 0 || candidatePath.length > 4096 || candidatePath.includes('\0') || candidatePath.startsWith('~')) {
-      const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
-      const entry: ApprovalLedgerEntry = {
-        callbackId: callId ? `agy-call-${callId}` : `agy-hook-${randomUUID()}`,
-        relatedEntryId: callId,
-        turnId,
-        tool: toolName,
-        path: candidatePath.slice(0, 512),
-        fingerprint,
-        decision: 'deny',
-        reason: 'path_invalid'
-      };
-      return {
-        decision: 'deny',
-        reason: 'path_invalid',
-        entry,
-        hookResponse: { decision: 'deny', reason: 'path_invalid' }
-      };
+      return decide('path_invalid', candidatePath);
     }
 
     const rawSegments = candidatePath.split(/[\\/]+/).filter(Boolean);
     if (rawSegments.some((s) => s.toLowerCase() === '.gemini')) {
-      const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
-      const entry: ApprovalLedgerEntry = {
-        callbackId: callId ? `agy-call-${callId}` : `agy-hook-${randomUUID()}`,
-        relatedEntryId: callId,
-        turnId,
-        tool: toolName,
-        path: candidatePath.slice(0, 512),
-        fingerprint,
-        decision: 'deny',
-        reason: 'path_reserved'
-      };
-      return {
-        decision: 'deny',
-        reason: 'path_reserved',
-        entry,
-        hookResponse: { decision: 'deny', reason: 'path_reserved' }
-      };
+      return decide('path_reserved', candidatePath);
     }
 
     const absolute = path.isAbsolute(candidatePath) ? candidatePath : path.resolve(options.workerWorkspace, candidatePath);
@@ -410,184 +370,40 @@ export async function evaluateAntigravityToolCall(
     try {
       resolved = await realpath(absolute);
     } catch {
-      // Handled by judgeWorkspacePath
+      resolved = null;
     }
 
     if (resolved !== null && resolved === realWorkspace && isDirectoryReadTool) {
       const dirVerification = await verifyDirectoryDescendants(resolved, realWorkspace, options.excludedAnchors ?? [], isRecursiveTool);
-      if (!dirVerification.allowed) {
-        const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
-        const entry: ApprovalLedgerEntry = {
-          callbackId: callId ? `agy-call-${callId}` : `agy-hook-${randomUUID()}`,
-          relatedEntryId: callId,
-          turnId,
-          tool: toolName,
-          path: candidatePath.slice(0, 512),
-          fingerprint,
-          decision: 'deny',
-          reason: dirVerification.reason ?? 'path_excluded'
-        };
-        return {
-          decision: 'deny',
-          reason: dirVerification.reason ?? 'path_excluded',
-          entry,
-          hookResponse: { decision: 'deny', reason: dirVerification.reason ?? 'path_excluded' }
-        };
-      }
+      if (!dirVerification.allowed) return decide(dirVerification.reason ?? 'path_excluded', candidatePath);
       continue;
     }
 
     const judgement = await judgeWorkspacePath(options.workerWorkspace, candidatePath, options.excludedAnchors ?? []);
-    if (!judgement.allowed) {
-      const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
-      const entry: ApprovalLedgerEntry = {
-        callbackId: callId ? `agy-call-${callId}` : `agy-hook-${randomUUID()}`,
-        relatedEntryId: callId,
-        turnId,
-        tool: toolName,
-        path: candidatePath.slice(0, 512),
-        fingerprint,
-        decision: 'deny',
-        reason: judgement.reason
-      };
-      return {
-        decision: 'deny',
-        reason: judgement.reason,
-        entry,
-        hookResponse: { decision: 'deny', reason: judgement.reason }
-      };
-    }
+    if (!judgement.allowed) return decide(judgement.reason, candidatePath);
 
     if (isDirectoryReadTool) {
-      let stats: import('node:fs').Stats | null = null;
+      let stats: import('node:fs').Stats;
       try {
         stats = await lstat(judgement.resolved);
       } catch {
-        const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
-        const entry: ApprovalLedgerEntry = {
-          callbackId: callId ? `agy-call-${callId}` : `agy-hook-${randomUUID()}`,
-          relatedEntryId: callId,
-          turnId,
-          tool: toolName,
-          path: candidatePath.slice(0, 512),
-          fingerprint,
-          decision: 'deny',
-          reason: 'path_unresolvable'
-        };
-        return {
-          decision: 'deny',
-          reason: 'path_unresolvable',
-          entry,
-          hookResponse: { decision: 'deny', reason: 'path_unresolvable' }
-        };
+        return decide('path_unresolvable', candidatePath);
       }
-      if (!stats.isDirectory()) {
-        const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
-        const entry: ApprovalLedgerEntry = {
-          callbackId: callId ? `agy-call-${callId}` : `agy-hook-${randomUUID()}`,
-          relatedEntryId: callId,
-          turnId,
-          tool: toolName,
-          path: candidatePath.slice(0, 512),
-          fingerprint,
-          decision: 'deny',
-          reason: 'path_invalid'
-        };
-        return {
-          decision: 'deny',
-          reason: 'path_invalid',
-          entry,
-          hookResponse: { decision: 'deny', reason: 'path_invalid' }
-        };
-      }
+      if (!stats.isDirectory()) return decide('path_invalid', candidatePath);
       const dirVerification = await verifyDirectoryDescendants(judgement.resolved, realWorkspace, options.excludedAnchors ?? [], isRecursiveTool);
-      if (!dirVerification.allowed) {
-        const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
-        const entry: ApprovalLedgerEntry = {
-          callbackId: callId ? `agy-call-${callId}` : `agy-hook-${randomUUID()}`,
-          relatedEntryId: callId,
-          turnId,
-          tool: toolName,
-          path: candidatePath.slice(0, 512),
-          fingerprint,
-          decision: 'deny',
-          reason: dirVerification.reason ?? 'path_excluded'
-        };
-        return {
-          decision: 'deny',
-          reason: dirVerification.reason ?? 'path_excluded',
-          entry,
-          hookResponse: { decision: 'deny', reason: dirVerification.reason ?? 'path_excluded' }
-        };
-      }
+      if (!dirVerification.allowed) return decide(dirVerification.reason ?? 'path_excluded', candidatePath);
     } else {
-      let stats: import('node:fs').Stats | null = null;
-      try {
-        stats = await lstat(judgement.resolved);
-      } catch {
-        // Missing file is permitted for write tools
-      }
-      if (stats && stats.isDirectory()) {
-        const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
-        const entry: ApprovalLedgerEntry = {
-          callbackId: callId ? `agy-call-${callId}` : `agy-hook-${randomUUID()}`,
-          relatedEntryId: callId,
-          turnId,
-          tool: toolName,
-          path: candidatePath.slice(0, 512),
-          fingerprint,
-          decision: 'deny',
-          reason: 'path_invalid'
-        };
-        return {
-          decision: 'deny',
-          reason: 'path_invalid',
-          entry,
-          hookResponse: { decision: 'deny', reason: 'path_invalid' }
-        };
-      }
+      const stats = await lstat(judgement.resolved).catch(() => null);
+      if (stats && stats.isDirectory()) return decide('path_invalid', candidatePath);
     }
 
     const relSegments = judgement.relative.split(path.sep).filter(Boolean);
     if (relSegments.some((s) => s.toLowerCase() === '.gemini')) {
-      const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
-      const entry: ApprovalLedgerEntry = {
-        callbackId: callId ? `agy-call-${callId}` : `agy-hook-${randomUUID()}`,
-        relatedEntryId: callId,
-        turnId,
-        tool: toolName,
-        path: candidatePath.slice(0, 512),
-        fingerprint,
-        decision: 'deny',
-        reason: 'path_reserved'
-      };
-      return {
-        decision: 'deny',
-        reason: 'path_reserved',
-        entry,
-        hookResponse: { decision: 'deny', reason: 'path_reserved' }
-      };
+      return decide('path_reserved', candidatePath);
     }
   }
 
-  const fingerprint = createHash('sha256').update(canonicalJson({ tool: toolName, args })).digest('hex');
-  const recordedPath = candidatePaths[0] ? candidatePaths[0].slice(0, 512) : null;
-  const entry: ApprovalLedgerEntry = {
-    callbackId: callId ? `agy-call-${callId}` : `agy-hook-${randomUUID()}`,
-    relatedEntryId: callId,
-    turnId,
-    tool: toolName,
-    path: recordedPath,
-    fingerprint,
-    decision: 'approve',
-    reason: null
-  };
-  return {
-    decision: 'allow',
-    reason: null,
-    entry,
-    hookResponse: { decision: 'allow' }
-  };
+  return decide(null, candidatePaths[0] ?? null);
 }
 
 const PRE_TOOL_HOOK_SCRIPT = `#!/usr/bin/env node
@@ -599,20 +415,51 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const policyPath = path.join(__dirname, 'hook-policy.json');
 
-const REVIEW_ALLOWED_TOOLS = ['view_file', 'read_file', 'list_dir', 'find_by_name', 'grep_search'];
-const EDIT_ALLOWED_TOOLS = [
-  ...REVIEW_ALLOWED_TOOLS,
-  'write_to_file', 'write_file', 'replace_file_content', 'multi_replace_file_content', 'edit_file', 'edit'
-];
+const REVIEW_ALLOWED_TOOLS = ${JSON.stringify(REVIEW_ALLOWED_TOOLS)};
+const EDIT_ALLOWED_TOOLS = ${JSON.stringify(EDIT_ALLOWED_TOOLS)};
 
 const RESERVED_DIRECTORIES = ['.git', '.vibe', '.agents', '.gemini'];
 const RESERVED_FILES = ['.vibeignore'];
 const SENSITIVE_FILE_PATTERNS = ['.env', '.env.*', '.envrc', '.envrc.*', '*.pem', '*.key', '*.p12', '*.pfx'];
 
-const PATH_KEYS = [
-  'AbsolutePath', 'TargetFile', 'DirectoryPath', 'SearchPath', 'SearchDirectory',
-  'path', 'file_path', 'target_file', 'directory'
-];
+const TOOL_PATH_KEYS = ${JSON.stringify(TOOL_PATH_KEYS)};
+const PATH_LIKE_ARGUMENT = new RegExp(${JSON.stringify(PATH_LIKE_ARGUMENT.source)}, ${JSON.stringify(PATH_LIKE_ARGUMENT.flags)});
+const MAX_TOOL_ARGUMENT_CHARS = ${MAX_TOOL_ARGUMENT_CHARS};
+const MAX_HOOK_INPUT_BYTES = ${MAX_HOOK_INPUT_BYTES};
+
+function parseToolArguments(raw) {
+  let value = raw;
+  if (value === undefined || value === null) return {};
+  if (typeof value === 'string') {
+    if (value.length > MAX_TOOL_ARGUMENT_CHARS) return null;
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+}
+
+function pathKeysOf(tool) {
+  return Object.prototype.hasOwnProperty.call(TOOL_PATH_KEYS, tool) ? TOOL_PATH_KEYS[tool] : [];
+}
+
+function readToolPathArguments(tool, raw) {
+  const args = parseToolArguments(raw);
+  if (!args) return { readable: false, args: raw, reason: 'path_argument_unreadable' };
+  const known = pathKeysOf(tool);
+  for (const [key, value] of Object.entries(args)) {
+    if (known.includes(key)) {
+      if (typeof value !== 'string' || value.trim().length === 0) return { readable: false, args, reason: 'path_argument_unreadable' };
+    } else if (PATH_LIKE_ARGUMENT.test(key.replace(/[^A-Za-z0-9]/g, '')) && typeof value !== 'boolean' && typeof value !== 'number' && value !== null) {
+      return { readable: false, args, reason: 'path_argument_unreadable' };
+    }
+  }
+  const paths = known.flatMap((key) => (typeof args[key] === 'string' ? [args[key].trim()] : []));
+  if (paths.length === 0) return { readable: false, args, reason: 'missing_file_path' };
+  return { readable: true, args, paths };
+}
 
 const GLOBSTAR = '**';
 
@@ -865,7 +712,6 @@ async function verifyDirectoryDescendants(resolvedDir, realWorkspace, excludedAn
     }
   }
 
-  // Recursive directory operations cannot be constrained during traversal by the host process.
   if (isRecursive) {
     return { allowed: false, reason: 'path_invalid' };
   }
@@ -911,7 +757,8 @@ function recordAndExit(policy, entryData, callId) {
     fs.mkdirSync(path.dirname(policy.ledgerPath), { recursive: true });
     fs.appendFileSync(policy.ledgerPath, JSON.stringify(entry) + '\\n', 'utf8');
   } catch {
-    // Ignore ledger write failure
+    process.stdout.write(JSON.stringify({ decision: 'deny', reason: 'policy_error' }) + '\\n');
+    process.exit(0);
   }
   if (entryData.decision === 'approve') {
     process.stdout.write(JSON.stringify({ decision: 'allow' }) + '\\n');
@@ -931,7 +778,13 @@ async function main() {
   }
 
   const chunks = [];
+  let inputBytes = 0;
   for await (const chunk of process.stdin) {
+    inputBytes += chunk.length;
+    if (inputBytes > MAX_HOOK_INPUT_BYTES) {
+      process.stdout.write(JSON.stringify({ decision: 'deny', reason: 'policy_error' }) + '\\n');
+      process.exit(0);
+    }
     chunks.push(chunk);
   }
   const inputStr = Buffer.concat(chunks).toString('utf8');
@@ -948,7 +801,7 @@ async function main() {
   const toolNameRaw = toolCall?.name ?? obj.tool_name ?? obj.name ?? obj.tool;
   const toolName = typeof toolNameRaw === 'string' ? toolNameRaw : '';
   const rawArgs = toolCall?.args ?? obj.tool_input ?? obj.args ?? obj.input;
-  const args = (rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)) ? rawArgs : {};
+  const args = parseToolArguments(rawArgs) ?? rawArgs ?? null;
   const rawCallId = toolCall?.id ?? toolCall?.call_id ?? obj.id ?? obj.call_id ?? obj.callId;
   const callId = typeof rawCallId === 'string' && rawCallId.trim().length > 0 ? rawCallId.trim() : null;
   const stepIdx = obj.stepIdx ?? obj.step_index ?? obj.turnId ?? obj.turn_id;
@@ -960,7 +813,7 @@ async function main() {
     const existingLedger = await fs.promises.readFile(policy.ledgerPath, 'utf8');
     priorCalls = existingLedger.split('\\n').filter((line) => line.trim().length > 0).length;
   } catch {
-    // Ledger does not exist yet
+    priorCalls = 0;
   }
   const currentCallNumber = priorCalls + 1;
   const maxTurns = typeof policy.maxTurns === 'number' && Number.isFinite(policy.maxTurns) ? policy.maxTurns : undefined;
@@ -992,31 +845,21 @@ async function main() {
     }, callId);
   }
 
-  const candidatePaths = [];
-  for (const key of PATH_KEYS) {
-    const val = args[key];
-    if (typeof val === 'string' && val.trim().length > 0) {
-      candidatePaths.push(val.trim());
-    }
+  const pathArguments = readToolPathArguments(toolName, rawArgs);
+  if (!pathArguments.readable) {
+    return recordAndExit(policy, {
+      turnId,
+      tool: toolName,
+      path: null,
+      fingerprint: computeFingerprint(toolName, args),
+      decision: 'deny',
+      reason: pathArguments.reason
+    }, callId);
   }
+  const candidatePaths = pathArguments.paths;
 
   const isDirectoryReadTool = ['list_dir', 'find_by_name', 'grep_search'].includes(toolName);
   const isRecursiveTool = ['find_by_name', 'grep_search'].includes(toolName);
-
-  if (candidatePaths.length === 0) {
-    if (isDirectoryReadTool) {
-      candidatePaths.push(policy.workerWorkspace);
-    } else {
-      return recordAndExit(policy, {
-        turnId,
-        tool: toolName,
-        path: null,
-        fingerprint: computeFingerprint(toolName, args),
-        decision: 'deny',
-        reason: 'missing_file_path'
-      }, callId);
-    }
-  }
 
   let root;
   try {
@@ -1063,7 +906,7 @@ async function main() {
     try {
       resolved = await fs.promises.realpath(absolute);
     } catch {
-      // Handled by locate
+      resolved = null;
     }
 
     if (resolved !== null && resolved === root && isDirectoryReadTool) {
@@ -1196,7 +1039,7 @@ async function main() {
       try {
         stats = await fs.promises.lstat(located.resolved);
       } catch {
-        // Missing file permitted for write tools
+        stats = null;
       }
       if (stats && stats.isDirectory()) {
         return recordAndExit(policy, {
@@ -1345,7 +1188,6 @@ export async function readAntigravityHookLedger(
     let matchedIdx: number | null = null;
 
     if (call.callId) {
-      // An execution with a call ID MUST match an approval with that verified ID.
       for (const idx of unusedApprovalIndices) {
         const approval = approvedHookEntries[idx]!;
         if (approval.relatedEntryId === call.callId) {
@@ -1379,7 +1221,6 @@ export async function readAntigravityHookLedger(
         );
       }
     } else {
-      // If the execution has no call ID, require a complete canonical fingerprint.
       if (!call.fingerprint) {
         throw supervisorError(
           'VSUP_INTERNAL',
@@ -1389,8 +1230,6 @@ export async function readAntigravityHookLedger(
 
       for (const idx of unusedApprovalIndices) {
         const approval = approvedHookEntries[idx]!;
-        // An approval with a specific relatedEntryId cannot be claimed by a call without callId
-        // if an executed call with that callId exists.
         if (approval.relatedEntryId && executedCalls.some((c) => c.callId === approval.relatedEntryId)) {
           continue;
         }

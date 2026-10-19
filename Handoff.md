@@ -1,6 +1,36 @@
 # Current handoff
 
-Updated 2026-10-17. Status only: what the source, the archives and the installations are, what remains and who does it, what is open, and where the records are. The picture and the rules are in the [development strategy](docs/development-strategy.md); the sequenced work is in the [development plan](planning/development-plan.md); the boundaries are in [AGENTS.md](AGENTS.md).
+Updated 2026-10-19. Status only: what the source, the archives and the installations are, what remains and who does it, what is open, and where the records are. The picture and the rules are in the [development strategy](docs/development-strategy.md); the sequenced work is in the [development plan](planning/development-plan.md); the boundaries are in [AGENTS.md](AGENTS.md).
+
+### Test-suite stability under load — 2026-10-19
+
+With 101 test files the suite spawns many real processes, and at full parallelism (9 workers on 10 cores) process-timing tests failed intermittently. Fixed at their causes, not retried: `vitest.config.ts` caps workers at 4; the six app-server deadline tests use an 8-second deadline (the deadline also covers spawn, `initialize` and the startup read-back, which took over 3 seconds under load); the credential timeout test polls until the killed process is gone; and process-group verification on macOS now treats a group whose only members are zombies as gone (`src/process/managed.ts`, `darwinGroupHasRunningMembers`, the counterpart of the Linux `/proc` check), so a natural exit is no longer reported as `termination_unverified` while `launchd` has not yet reaped a killed helper. Three consecutive full runs passed (1,477 tests, about 110 s each).
+
+## Cold review of the Antigravity backend — 2026-10-19
+
+A reviewer with no design context read the Antigravity backend ([ADR 0008](docs/adr/0008-antigravity-execution-backend.md)) and found that several of its safety claims rest on agy 1.4.0 behaviour never observed through agy. The 16 findings:
+
+| # | Finding |
+|---|---|
+| F1 | The `PreToolUse` hook allowed directory paths it could not read, so their contents went unchecked. |
+| F2 | Reasoning was filtered by a denylist of field names; an unlisted field leaked. |
+| F3 | Google API keys were not redacted. |
+| F4 | `ANTIGRAVITY_HOME` was forwarded to the worker, defeating the private `HOME`. |
+| F5–F7 | Configured budgets were not enforced on Antigravity runs. |
+| F8–F9 | The binary was resolved through `PATH`, and the version probe ran with an unfiltered environment; what ran need not be what was hashed. |
+| F10 | The Mistral key reached agy's environment. |
+| F11 | Nothing verified per run that agy loaded and ran the hook; the gate could be silently absent. |
+| F12 | Egress: the no-inference verdict assumed agy honours `HTTPS_PROXY`, and the classifier missed Google Code Assist (`cloudcode-pa.googleapis.com`). |
+| F13 | Project configuration above the workspace (Git root `.gemini/`, `.agents/`, `.agent/`) was neither refused nor shown to be ignored. |
+| F14 | Stderr overflow was reported as a timeout. |
+| F15 | Leftover child processes could survive the run. |
+| F16 | SARIF line bounds were not validated. |
+
+Code fixes for F1–F10 and F14–F16 are on branch `claude/antigravity-fixes`. F11–F13 need agy itself: `prepare check` now runs [the Antigravity probes](docs/target-acceptance.md#antigravity-backend-probes) through agy with a fixed fake key and a scripted loopback model (hook invoked and deny honoured, hook failure modes deny, stream tool-event shape against the audit parser, proxy honoured with the extended classifier, project configuration above the workspace not loaded) and fails the receipt unless each passes. Five `UNVERIFIED` gates in `docs/acceptance.json` (`antigravity-hook-invoked-and-deny-honoured`, `antigravity-hook-failure-denies`, `antigravity-stream-tool-shape`, `antigravity-proxy-honoured`, `antigravity-project-config-not-loaded`) track them; the 2026-10-17 `antigravity-backend-no-inference-check` keeps its PASS, scoped to what it ran.
+
+**Owner decision 2026-10-19:** Antigravity ships in 2.1.0 as experimental and off by default: a configuration must set `experimental.antigravity = true`, or `backend = "antigravity"` is rejected. It is not for production until the probes pass on the target. Running agy headless under a consumer Google sign-in may be outside Antigravity's consumer terms; prefer an API key or enterprise authentication. The branch `explore_project_details` was fully merged and deleted from GitHub.
+
+**Target checks to run** (no hosted start, fake key only): on the 2.1.0 candidate with `backend = "antigravity"` and the opt-in set, `doctor` and then `prepare check`; read `agy_probes` in the saved report and record each gate's result per [the procedure](docs/target-acceptance.md#antigravity-backend-probes). Any failure is a candidate defect, not a configuration edit.
 
 ## Package/kit identity repair — 2026-10-15
 
@@ -149,7 +179,7 @@ The owner decided on 2026-10-17 to halt the exploratory feature run (deferred: w
 - **Release status.** The owner deleted the unpublished v2.0.0 draft on 2026-10-15. The earlier published major remains untouched. Pre-releases `v2.0.1` (tagged at `44dc6f8` with tested archive `7978719c…`) and `v2.0.2` (tag corrected to its true source commit `347bf79` with exact old-value lease `b275b1b`, preserving prior tag identity `v2.0.2-pre-correction-b275b1b` and tested archive `84bff941…`) are published on GitHub by the owner with their respective release notes, SBOMs, and preparation kits. Active unreleased development proceeds on the 2.1.0 line.
 - **The workflow candidate's evidence.** Source `91afad4`, frozen archive SHA-256 `d1fd22ec04e50048c052cdf013b4d235b525dffc2efb11596dd29f8253003f6a`, installed distribution identity `a3600f7632ea42a221d342734dd1b6cb17deaaf072211693a728e31c0437b053`, on macOS arm64 with Node 24.21.0 and the installed Vibe 2.26.1, 2026-10-15: release verification passed (1,260 tests in 87 files), the offline installed-package smoke passed, the no-inference conformance check passed once with a fixed fake key and no inference, installed readiness through the official SDK passed and rejected a wrong expected candidate, and the validation helper passed a real npm offline fixture. Zero hosted starts. The sanitized records are the evidence packet at commit `2e920d3`; `docs/acceptance.json` summarizes them under `evidence_builds` and the `workflow-candidate-*` entries.
 - **Installations.** Version 2.0.2 from frozen source `347bf79` is installed and selected with persistent Node 20.19.0, matched preparation PASS and installed SDK readiness. Native desktop readiness passed after restart on 2026-10-17 for both review and edit, with the exact installed candidate, matching preparation PASS, eligible workspace, free slot, no blockers and all five tools. Earlier installations, deliveries and rollback backups remain. No hosted allowance remains.
-- **Owner decisions on record:** only the latest release is supported; the push token's `workflow` scope is skipped, so verification is local; Antigravity is supported both as an execution backend (`backend = "antigravity"`) and as a verified MCP client alongside Mistral Vibe; the bounded workspace file listing in the prompt is in; ADR 0005's managed-configuration isolation and ADR 0006's bundled skills ("Let vibe have own skills"); a Vibe implementation request already authorizes its task-scoped preparation (installing or switching the candidate, the no-inference check, adding only the named task root, settings and rollback kept), while extra hosted starts, broader roots, publication, deployment and unrelated global changes need their own yes; the main chat coordinates and verifies, Vibe implements, and GPT-6 Luna/high is the fallback only after a verified rejection of the exported bytes.
+- **Owner decisions on record:** only the latest release is supported; the push token's `workflow` scope is skipped, so verification is local; Antigravity is supported both as an execution backend (`backend = "antigravity"`; since 2026-10-19 experimental, off unless `experimental.antigravity = true`, and not for production until its target probes pass) and as a verified MCP client alongside Mistral Vibe; the bounded workspace file listing in the prompt is in; ADR 0005's managed-configuration isolation and ADR 0006's bundled skills ("Let vibe have own skills"); a Vibe implementation request already authorizes its task-scoped preparation (installing or switching the candidate, the no-inference check, adding only the named task root, settings and rollback kept), while extra hosted starts, broader roots, publication, deployment and unrelated global changes need their own yes; the main chat coordinates and verifies, Vibe implements, and GPT-6 Luna/high is the fallback only after a verified rejection of the exported bytes.
 
 **Settled decisions** (delegated to Claude by the owner; each keeps what is built and tested):
 - Error codes: `invalid_api_key` → `VSUP_AUTH_REQUIRED`; `invalid_model` → `VSUP_BACKEND_ERROR` classified as configuration; `context_too_long`, `response_too_long` and a `length` stop → `VSUP_OUTPUT_LIMIT`; `rate_limit` → `VSUP_RATE_LIMITED`.
@@ -178,6 +208,8 @@ The owner decided on 2026-10-17 to halt the exploratory feature run (deferred: w
 | 12 | Decide the repository rename (`codex-vibe` → `vibe-supervisor`) and read the Mistral and OpenAI brand pages | Owner | Before the article goes out |
 | 13 | Read the 2.0 article draft (`marketing/article/devto-2.0.md`) with its [editor notes](marketing/article/editor-notes.md) and [story sources](marketing/sources.md); update it for the workflow features and publish after the release with the AI-Assisted label and the `[UPDATE AT PUBLISH]` markers filled, in the marketing strategy's [order](marketing/strategy.md#6-next-actions-in-order) | Owner reads and publishes; agent fills the markers from the evidence | Step 10 |
 | 14 | Done 2026-10-17: Checker repaired, Wave 4 & 5 delivered and verified (`d9c3726`); target zero-inference conformance check verified on local `agy 1.4.0`, closing `antigravity-backend-no-inference-check` (`3bb58cb`). Branch converged into main (`f64db99`) | Agents | Step G |
+| 15 | Review and merge `claude/antigravity-fixes` (F1–F10, F14–F16, the opt-in, the agy probes in `prepare check`) | Coordinator | — |
+| 16 | Run the [Antigravity probes](docs/target-acceptance.md#antigravity-backend-probes) on the 2.1.0 candidate and record the five `antigravity-*` gates; until then the backend stays experimental | Target agent | Step 15 and a 2.1.0 archive |
 
 **2.0.2.** Steps A to D were completed on the target and recorded on `origin/codex/package-kit-identity` (`1f906e8`, `a3c9631`, `6faee25`).
 

@@ -41,7 +41,8 @@ const BOOT_BOUND_SETTINGS: ReadonlyArray<readonly [string, (config: SupervisorCo
   ["paths.app_server", (config) => config.paths?.appServer ?? null],
   ["paths.vibe_pin_manifest", (config) => config.paths?.vibePinManifest ?? null],
   ["backend", (config) => config.backend ?? "app-server"],
-  ["paths.antigravity", (config) => config.paths?.antigravity ?? null]
+  ["paths.antigravity", (config) => config.paths?.antigravity ?? null],
+  ["experimental.antigravity", (config) => config.experimental?.antigravity ?? false]
 ];
 
 export function bootBoundDrift(boot: SupervisorConfig, current: SupervisorConfig): string[] {

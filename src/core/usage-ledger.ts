@@ -1,10 +1,11 @@
 import { constants as fsConstants } from 'node:fs';
 import { lstat, open, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import type { RootBudget, RunRecord } from '../contracts.js';
+import type { RootBudget, RunRecord, SupervisorConfig } from '../contracts.js';
 import { supervisorError } from '../contracts.js';
 import { runFromWire } from './serialization.js';
-import { isPathWithinRoot } from '../security/paths.js';
+import { isPathWithinRoot, resolveCanonicalWorkspaceRoot } from '../security/paths.js';
+import { rootIsMissing } from './exclusions.js';
 
 export const MAX_SESSION_DIRECTORIES = 128;
 export const MAX_RUNS_SCANNED = 10_000;
@@ -184,6 +185,27 @@ export function calculateRollingUsage(options: {
     modelCalls,
     runCount
   };
+}
+
+export async function canonicalBudgets(config: SupervisorConfig, home?: string): Promise<Map<string, RootBudget>> {
+  const budgets = new Map<string, RootBudget>();
+  for (const [root, budget] of Object.entries(config.budgets ?? {})) {
+    let canonical: string;
+    try {
+      canonical = await resolveCanonicalWorkspaceRoot(root, home);
+    } catch (error) {
+      if (await rootIsMissing(root, home)) continue;
+      const reason = error instanceof Error ? error.message : String(error);
+      const message = `The budget for allowed root ${root} could not be matched to a canonical root (${reason}); no run is started, because its budget could not be applied. Write the root as its canonical real directory or remove its budgets entry from the selected config.`;
+      throw Object.assign(new Error(message), supervisorError('VSUP_CONFIG_INVALID', message, { budget_root: root }));
+    }
+    if (budgets.has(canonical)) {
+      const message = `Two budgets entries resolve to the same root ${canonical}; keep one entry.`;
+      throw Object.assign(new Error(message), supervisorError('VSUP_CONFIG_INVALID', message, { budget_root: root }));
+    }
+    budgets.set(canonical, budget);
+  }
+  return budgets;
 }
 
 export async function checkBudgetAdmission(options: {

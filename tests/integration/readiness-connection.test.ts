@@ -110,14 +110,16 @@ if (promptVal === '/config' || promptVal === '/hooks' || promptVal === '/permiss
   }
   process.exit(0);
 }
-console.log('{"status":"ok"}');
-process.exit(0);
+const probe = require('node:child_process').spawnSync(process.execPath, [${JSON.stringify(path.join(repo, 'tests', 'fixtures', 'fake-agy.mjs'))}, ...args], { stdio: 'inherit' });
+process.exit(probe.status ?? 1);
 `, { mode: 0o755 });
 
     const configPath = path.join(customConfigDir, 'config.toml');
     await writeFile(configPath, `version = 1
 allowed_workspace_roots = [${JSON.stringify(workspace)}]
 backend = "antigravity"
+[experimental]
+antigravity = true
 [paths]
 antigravity = ${JSON.stringify(mockAgy)}
 `, { mode: 0o600 });
