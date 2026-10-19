@@ -16,7 +16,7 @@ This section is the one-page summary; the dated sections below are the record be
 | Item | State |
 |---|---|
 | Source | `main` at `2971fb2` (or later), version 2.1.0, unreleased; nothing merged since, no open pull requests. GitHub holds `main` only |
-| Releases | v2.0.1 and v2.0.2 published as pre-releases (the v2.0.2 tag corrected to `347bf79`); no release is marked latest. The older releases (v1.0.0 and the 0.9.0 pre-releases) were deleted 2026-10-19; their tags are kept |
+| Releases | v2.0.1 and v2.0.2 published as pre-releases (the v2.0.2 tag corrected to `347bf79`); no release is marked latest. The older releases (the 1.x release and the 0.9 pre-releases) were deleted 2026-10-19; their tags are kept |
 | Default engine (`app-server`, Vibe 2.26.1) | Proven on the target: conformance, native readiness, the disconnect. Worker answer quality is an owner-accepted limitation, not a passed gate |
 | Antigravity (`agy` 1.4.0) | Experimental, off unless `[experimental] antigravity = true`. Cold-reviewed; fixes for F1–F10 and F14–F16 on main; F11–F13 wait for the five agy preparation probes on the target |
 | 2.1 features | On main: tool-call counts and ceilings, `excluded_globs` (anchored per root, linear-time matching), `runs usefulness`, the approval ledger and pin in exports, findings with SARIF, the daily cost ledger and per-root budgets. Hosted gates for them are open |
