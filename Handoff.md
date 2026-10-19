@@ -15,7 +15,7 @@ This section is the one-page summary; the dated sections below are the record be
 
 | Item | State |
 |---|---|
-| Source | `main` at `212bd38` (or later), version 2.1.0, unreleased. GitHub holds `main` only |
+| Source | `main` at `2971fb2` (or later), version 2.1.0, unreleased; nothing merged since, no open pull requests. GitHub holds `main` only |
 | Releases | v2.0.1 and v2.0.2 published as pre-releases (the v2.0.2 tag corrected to `347bf79`); the earlier published major is still marked latest |
 | Default engine (`app-server`, Vibe 2.26.1) | Proven on the target: conformance, native readiness, the disconnect. Worker answer quality is an owner-accepted limitation, not a passed gate |
 | Antigravity (`agy` 1.4.0) | Experimental, off unless `[experimental] antigravity = true`. Cold-reviewed; fixes for F1–F10 and F14–F16 on main; F11–F13 wait for the five agy preparation probes on the target |
@@ -59,7 +59,7 @@ A reviewer with no design context read the Antigravity backend ([ADR 0008](docs/
 | F15 | Leftover child processes could survive the run. |
 | F16 | SARIF line bounds were not validated. |
 
-Code fixes for F1–F10 and F14–F16 are on branch `claude/antigravity-fixes`. F11–F13 need agy itself: `prepare check` now runs [the Antigravity probes](docs/target-acceptance.md#antigravity-backend-probes) through agy with a fixed fake key and a scripted loopback model (hook invoked and deny honoured, hook failure modes deny, stream tool-event shape against the audit parser, proxy honoured with the extended classifier, project configuration above the workspace not loaded) and fails the receipt unless each passes. Five `UNVERIFIED` gates in `docs/acceptance.json` (`antigravity-hook-invoked-and-deny-honoured`, `antigravity-hook-failure-denies`, `antigravity-stream-tool-shape`, `antigravity-proxy-honoured`, `antigravity-project-config-not-loaded`) track them; the 2026-10-17 `antigravity-backend-no-inference-check` keeps its PASS, scoped to what it ran.
+Code fixes for F1–F10 and F14–F16 are on main (`212bd38`); the fix branch is merged and deleted. F11–F13 need agy itself: `prepare check` now runs [the Antigravity probes](docs/target-acceptance.md#antigravity-backend-probes) through agy with a fixed fake key and a scripted loopback model (hook invoked and deny honoured, hook failure modes deny, stream tool-event shape against the audit parser, proxy honoured with the extended classifier, project configuration above the workspace not loaded) and fails the receipt unless each passes. Five `UNVERIFIED` gates in `docs/acceptance.json` (`antigravity-hook-invoked-and-deny-honoured`, `antigravity-hook-failure-denies`, `antigravity-stream-tool-shape`, `antigravity-proxy-honoured`, `antigravity-project-config-not-loaded`) track them; the 2026-10-17 `antigravity-backend-no-inference-check` keeps its PASS, scoped to what it ran.
 
 **Owner decision 2026-10-19:** Antigravity ships in 2.1.0 as experimental and off by default: a configuration must set `experimental.antigravity = true`, or `backend = "antigravity"` is rejected. It is not for production until the probes pass on the target. Running agy headless under a consumer Google sign-in may be outside Antigravity's consumer terms; prefer an API key or enterprise authentication. The branch `explore_project_details` was fully merged and deleted from GitHub.
 
