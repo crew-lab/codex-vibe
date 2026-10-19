@@ -6,7 +6,7 @@ The reasons behind it are in the [development strategy](development-strategy.md)
 
 ## 1. Where we are
 
-Revised 2026-10-17 after the 2.0.1 disconnect verification, the 2.0.2 target packaging and readiness, the 2.1 Wave 0–3 implementation, and Phase 1 of the Antigravity execution backend hardening; the hosted results are in [research/evidence/hosted-2.0.1-2026-10-16/](../research/evidence/hosted-2.0.1-2026-10-16/REPORT.md) and the packaging results in [research/evidence/package-kit-identity-2026-10-15/](../research/evidence/package-kit-identity-2026-10-15/REPORT.md).
+Revised 2026-10-19 for the 2.1.0 target briefs; earlier, on 2026-10-17, after the 2.0.1 disconnect verification, the 2.0.2 target packaging and readiness, the 2.1 Wave 0–3 implementation, and Phase 1 of the Antigravity execution backend hardening; the hosted results are in [research/evidence/hosted-2.0.1-2026-10-16/](../research/evidence/hosted-2.0.1-2026-10-16/REPORT.md) and the packaging results in [research/evidence/package-kit-identity-2026-10-15/](../research/evidence/package-kit-identity-2026-10-15/REPORT.md).
 
 | Item | State |
 |---|---|
@@ -14,7 +14,8 @@ Revised 2026-10-17 after the 2.0.1 disconnect verification, the 2.0.2 target pac
 | 2.0.2 archive | Packaged on the target under Node 20.19.0 from `347bf79` (archive `84bff9411b63188051a8ca7c025d362ac5a0f08b532f37dc0e9a01b9ba0f4437`, candidate/kit `eaa4032009dc7db754471b0be3c5de57f4d1d067baef0999d6664cfdc179c202`); side-by-side install, pin, `doctor`, `prepare check` PASS and native readiness passed; published as a pre-release |
 | Antigravity status (2026-10-19) | Experimental, off unless `experimental.antigravity = true`; cold-review fixes and the agy probes on main; not for production until the five `antigravity-*` target gates pass ([6.2](#62-antigravity-cold-review-and-target-probes-2026-10-19)) |
 | 2.0.1 archive | Packaged on the target from `44dc6f8` under Node 20.19.0: archive `7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e`, candidate and kit identity `8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4` |
-| Hosted allowance | Three starts authorized for the 2.0.1 sitting; all three used (review, edit, disconnect) |
+| Hosted allowance | Three starts authorized for the 2.0.1 sitting; all three used (review, edit, disconnect); none yet for 2.1.0 |
+| 2.1.0 target | Briefs for steps 1 and 2 (Antigravity opted in) and for step 3 are in the Handoff; step 3 waits for an allowance |
 | Target kit | `docs/target-acceptance.md` is the procedure; `package:rc` writes `preparation-kit-<version>/` beside the archive and installs the exact archive offline to prove the binding before it reports success |
 | Outreach | Drafts only: the dev.to article, the interest note's asks, the marketing calendar. Nothing posted |
 
@@ -43,27 +44,20 @@ Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily co
 
 ## 3. The critical path and your touchpoints
 
+The 2.0.x path is done: 2.0.1 and 2.0.2 are published as pre-releases from their target-tested archives, the disconnect passed, and every branch is merged. Section 4 keeps how that went. The 2.1.0 path, in the [Handoff](../Handoff.md)'s order:
+
 | # | Step | Who | Your touchpoint |
 |---|---|---|---|
-| 1 | Done: integration on main (`6c645e3`), pushed | — | — |
-| 2 | Done: the owner deleted the v2.0.0 draft (2026-10-15) | — | — |
-| 3 | Done: the reference package from `9d2bbde` on the preparing machine | — | — |
-| 4 | Done: populated pnpm validation passed on a public fixture after fixing the lockfile check | — | — |
-| 5 | Done on the target: 2.0.1 packaging from git (`44dc6f8`, archive `7978719c…`), installation, pin, `doctor`, one `prepare check` PASS, SDK and native readiness PASS; recorded in `docs/acceptance.json` | — | — |
-| 6 | Done, rejected: the hosted review (answer quality); the hosted edit (its contract). Neither retried | — | — |
-| 7 | Done on the target (`347bf79` on `origin/codex/package-kit-identity`): the MCP-client disconnect passed on the installed 2.0.1 archive | Target agent | — |
-| 8 | Review and merge `origin/codex/package-kit-identity` (`6faee25`, carrying both 2.0.1 disconnect and 2.0.2 target readiness) | Coordinator | Yes to the merge and `make push` |
-| 9 | Clean-account installation of the frozen archive (`docs/clean-account-checklist.md`) | You | Postponed by the owner 2026-10-19 |
-| 10 | Done 2026-10-16: worker answer quality is a documented limit; the tested archive from `44dc6f8` is published as v2.0.1 and main's later changes are 2.0.2 | — | — |
-| 11 | Repo readiness: description, topics | Coordinator prepares | **Run the `gh` command**; no rename (owner 2026-10-19) |
-| 12 | Publish v2.0.1 as a pre-release from the target-held tested assets, with the commands in the Handoff; mark it latest once step 9 is recorded | You | **Run `gh release create` on the target Mac** |
-| 13 | Done on the target (`1f906e8` on `origin/codex/package-kit-identity`): 2.0.2 packaged (`84bff941…`, candidate `eaa40320…`) under Node 20.19.0 | Target agent | — |
-| 14 | Done on the target (`1f906e8` & `a3c9631` on `origin/codex/package-kit-identity`): 2.0.2 identity check, side-by-side install, pin and `doctor`, one `prepare check`, installed SDK readiness, registration switch with rollback and native readiness PASS | Target agent | — |
-| 15 | Confirm the proposed carry-over in `docs/acceptance.json` (`6faee25`) and decide the optional hosted review for the reporting fix | You | **One decision; a new allowance only if you want the review** |
-| 16 | Publish v2.0.2 from its checked target-held assets | You | Done 2026-10-17 (pre-release) |
-| 17 | Phase 2 & 3 unification: merge `origin/claude/2.1-wave-1` and `origin/explore_project_details` after v2.0.2 is tagged | Agents, Coordinator | Scope reading for Antigravity; the wheel download |
+| 1 | Package 2.1.0 from main on the target under Node 20.19.0 with the offline cache; the target-built archive is the one published | Target agent | Send the Handoff's "Target brief: 2.1.0 steps 1 and 2" |
+| 2 | `pin-manifest`, `doctor` and `prepare check` for `app-server`, the excluded-glob read-back, and the five agy probes (Antigravity opted in by the owner 2026-10-19) | Target agent | The same brief; no hosted start |
+| — | Review and merge the evidence branch: private-path scan, `npm run verify:release`, archive and kit identity, each gate entry against its saved report | Coordinator | Yes to the merge |
+| 3 | One hosted review and one edit on 2.1.0 (Handoff "Target brief: 2.1.0 step 3") | Target agent | **A hosted allowance of two starts** |
+| 4 | Clean-account installation | You | Postponed by the owner 2026-10-19 |
+| 5 | Publish 2.1.0 from the target-held tested assets, a pre-release while step 4 is open; notes from the [draft](release-notes-2.1.0.md) with its markers filled | You | **Run `gh release create` on the target Mac** |
+| 6 | Outreach, after a release is marked latest | You | Section "Outreach and adjacent work" |
+| any | Repository description and topics (section 4.7); no rename (owner 2026-10-19) | You | **Run the `gh` command** |
 
-Open decisions that do not block the release are in section 4.12. Steps 7 and 9 can overlap; step 11 can happen any time before the first outreach post. Steps 13 to 16 follow the v2.0.1 publish and need no hosted start; the disconnect (step 7) runs on the installed 2.0.1 archive, so the registration moves to 2.0.2 only after it is recorded.
+Open decisions that do not block the release are in section 4.12. A failure in step 1 or 2 is a candidate defect: the fix comes back to main, and the sitting restarts on a rebuilt archive (section 4.5).
 
 ## 4. 2.0.1 to published
 
@@ -384,16 +378,16 @@ Ranked by demand evidence, fit with the boundaries and effort in the features re
 
 | # | Item | Status as of 2026-10-17 | Remaining | Size | Gate | ADR |
 |---|---|---|---|---|---|---|
-| 1 | Usage, ceilings and tool-call counts in every run record; `runs list` covers isolated sessions | **Done on `origin/claude/2.1-wave-1` (`0d7119a`) & `origin/explore_project_details`**: `usage.tool_calls` populated for both backends, `max_tokens`/`max_cost_usd`/`max_model_calls`, cross-session `runs list/show/tail` | Merge after 2.0.2 tag | S | Fixture + the 2.1 hosted review | No |
-| 2 | Recorded decisions and `runs usefulness` | **Done on `origin/claude/2.1-wave-1` (`0d7119a`)**: `runs usefulness [--config] [--since] [--json]` over assessments | Merge after 2.0.2 tag | S | Fixture + the 2.1 hosted close | No |
-| 3 | `excluded_globs` per allowed root, merged into the profile denylist, the handler and the listing, read back | **Done on `origin/claude/2.1-wave-1` (`0d7119a`) & `origin/explore_project_details`**: validation, session config, approvals (`path_excluded`), workspace listing, conformance `--excluded-glob`; wired into `AntigravityBackend` listing and `settings.json` `permissions.deny` | Merge after 2.0.2 tag | S | Fixture + the 2.1 hosted review | No |
-| 4 | Findings for reviews: `output: "findings"`, `findings.json`, `runs sarif` | **Done on `origin/explore_project_details`**: `output: "findings"` parameter, schema & contracts, snapshot & exclusion validation, `findings.json` artifact, SARIF 2.1.0 conversion with stable rule fingerprints, and `runs sarif <run-id>` CLI subcommand | Merge after 2.0.2 tag | M | Fixture + the 2.1 hosted review | No |
-| 5 | Daily cost ledger & usage aggregation | **Done on `origin/explore_project_details`**: `budgets.<root>.max_cost_usd_per_day`, rolling 24-hour usage aggregation across standard and isolated session runs (`src/core/usage-ledger.ts`), admission gating failing closed with `VSUP_BUDGET_EXCEEDED` and surfacing in readiness, and `runs usage [--since] [--root] [--json]` (`src/cli/runs/usage.ts`) | Merge after 2.0.2 tag | S | Fixture + the 2.1 hosted review | No |
-| 6 | Audit bundles with the approval ledger | **Done on `origin/claude/2.1-wave-1` (`0d7119a`) & `origin/explore_project_details`**: `approvals.json` saved per run (`truncated` boolean) and `pin` included in `runs export`; `approvals.json` ledger emitted for `AntigravityBackend` via `PreToolUse` hook | Merge after 2.0.2 tag | S | Fixture + one exported hosted run | No |
+| 1 | Usage, ceilings and tool-call counts in every run record; `runs list` covers isolated sessions | **Done on `origin/claude/2.1-wave-1` (`0d7119a`) & `origin/explore_project_details`**: `usage.tool_calls` populated for both backends, `max_tokens`/`max_cost_usd`/`max_model_calls`, cross-session `runs list/show/tail` | Merged to main; hosted gates in section 3 step 3 | S | Fixture + the 2.1 hosted review | No |
+| 2 | Recorded decisions and `runs usefulness` | **Done on `origin/claude/2.1-wave-1` (`0d7119a`)**: `runs usefulness [--config] [--since] [--json]` over assessments | Merged to main; hosted gates in section 3 step 3 | S | Fixture + the 2.1 hosted close | No |
+| 3 | `excluded_globs` per allowed root, merged into the profile denylist, the handler and the listing, read back | **Done on `origin/claude/2.1-wave-1` (`0d7119a`) & `origin/explore_project_details`**: validation, session config, approvals (`path_excluded`), workspace listing, conformance `--excluded-glob`; wired into `AntigravityBackend` listing and `settings.json` `permissions.deny` | Merged to main; hosted gates in section 3 step 3 | S | Fixture + the 2.1 hosted review | No |
+| 4 | Findings for reviews: `output: "findings"`, `findings.json`, `runs sarif` | **Done on `origin/explore_project_details`**: `output: "findings"` parameter, schema & contracts, snapshot & exclusion validation, `findings.json` artifact, SARIF 2.1.0 conversion with stable rule fingerprints, and `runs sarif <run-id>` CLI subcommand | Merged to main; hosted gates in section 3 step 3 | M | Fixture + the 2.1 hosted review | No |
+| 5 | Daily cost ledger & usage aggregation | **Done on `origin/explore_project_details`**: `budgets.<root>.max_cost_usd_per_day`, rolling 24-hour usage aggregation across standard and isolated session runs (`src/core/usage-ledger.ts`), admission gating failing closed with `VSUP_BUDGET_EXCEEDED` and surfacing in readiness, and `runs usage [--since] [--root] [--json]` (`src/cli/runs/usage.ts`) | Merged to main; hosted gates in section 3 step 3 | S | Fixture + the 2.1 hosted review | No |
+| 6 | Audit bundles with the approval ledger | **Done on `origin/claude/2.1-wave-1` (`0d7119a`) & `origin/explore_project_details`**: `approvals.json` saved per run (`truncated` boolean) and `pin` included in `runs export`; `approvals.json` ledger emitted for `AntigravityBackend` via `PreToolUse` hook | Merged to main; hosted gates in section 3 step 3 | S | Fixture + one exported hosted run | No |
 | 7 | Vibe candidate script and the wheel-derived shipped manifest | Frozen / deferred per owner decision 2026-10-17 | Deferred | M | Your yes to the wheel download; conformance check on the target | No |
 | 8 | Antigravity as a verified MCP client: docs, client-neutral skill wording, four gates | Reference config documented; hosted gates ride operational validation | Target validation | S docs + target | Your scope reading; an account on the target; three hosted runs | No |
 | 9 | Per-language task templates in the skill | Handled in skill guidance and task prompts | Complete | S | Review | No |
-| 10 | Antigravity execution backend hardening and 2.1 parity | **Phases 1, 2 & 3 Done on `origin/explore_project_details`**: Phase 1 `agy` CLI flag & permission hardening, private `HOME`/`TMPDIR` + `settings.json`, untrusted extension guard, watchdog & `boot_drift`, `stream-json` envelope parsing; Phase 2 `excluded_globs` wired into listing & `settings.json`, `usage.tool_calls` populated, `PreToolUse` hook enforcing `judgeWorkspacePath` and emitting `approvals.json`; Phase 3 revalidated against `agy 1.4.0` (binary SHA-256 pin, unified rule syntax, zero-inference `prepare check` with slash-command read-backs and synthetic hook evaluations, ADR 0008, acceptance gates); target no-inference conformance gate `antigravity-backend-no-inference-check` VERIFIED (`3bb58cb`) | Complete on `explore_project_details`, ready for merge after 2.0.2 release | M | Fixture + target acceptance | Yes (0008) |
+| 10 | Antigravity execution backend hardening and 2.1 parity | **Phases 1, 2 & 3 Done on `origin/explore_project_details`**: Phase 1 `agy` CLI flag & permission hardening, private `HOME`/`TMPDIR` + `settings.json`, untrusted extension guard, watchdog & `boot_drift`, `stream-json` envelope parsing; Phase 2 `excluded_globs` wired into listing & `settings.json`, `usage.tool_calls` populated, `PreToolUse` hook enforcing `judgeWorkspacePath` and emitting `approvals.json`; Phase 3 revalidated against `agy 1.4.0` (binary SHA-256 pin, unified rule syntax, zero-inference `prepare check` with slash-command read-backs and synthetic hook evaluations, ADR 0008, acceptance gates); target no-inference conformance gate `antigravity-backend-no-inference-check` VERIFIED (`3bb58cb`) | Merged to main; experimental until the agy probes pass | M | Fixture + target acceptance | Yes (0008) |
 
 **Status 2026-10-17.** Primitives 1, 2, 3 and 6 are implemented on branch `claude/2.1-wave-1` (waves 0 to 2 in `404b801`, `f6c852e` and `e4c1608`), and items 1, 3, 4, 5, 6, and 10 are implemented and verified on `explore_project_details` (1,441 tests passing).
 
@@ -442,24 +436,17 @@ The owner decided on 2026-10-17 to halt the exploratory feature run (deferred: w
 
 ### 6.2 Antigravity cold review and target probes (2026-10-19)
 
-A cold review found 16 issues in the Antigravity backend (listed in the [Handoff](../Handoff.md#cold-review-of-the-antigravity-backend--2026-10-19)). F1–F10 and F14–F16 are code fixes on `claude/antigravity-fixes`. F11–F13 (hook load not verified per run, proxy egress and the Code Assist host, project configuration above the workspace) and the hook's deny and failure semantics depend on agy itself, so `prepare check` now probes them through agy with a fixed fake key and a scripted loopback model (`src/preparation/antigravity-probes.ts`) and fails the receipt unless each passes. Five `UNVERIFIED` gates track them in `docs/acceptance.json`; the procedure is in [target acceptance](../docs/target-acceptance.md#antigravity-backend-probes).
+A cold review found 16 issues in the Antigravity backend (listed in the [Handoff](../Handoff.md#cold-review-of-the-antigravity-backend--2026-10-19)). F1–F10 and F14–F16 are code fixes, merged to main in `212bd38`. F11–F13 (hook load not verified per run, proxy egress and the Code Assist host, project configuration above the workspace) and the hook's deny and failure semantics depend on agy itself, so `prepare check` now probes them through agy with a fixed fake key and a scripted loopback model (`src/preparation/antigravity-probes.ts`) and fails the receipt unless each passes. Five `UNVERIFIED` gates track them in `docs/acceptance.json`; the procedure is in [target acceptance](../docs/target-acceptance.md#antigravity-backend-probes).
 
 **Owner decision 2026-10-19:** Antigravity ships in 2.1.0 as experimental and off by default (`experimental.antigravity = true` opts in; without it `backend = "antigravity"` is rejected), and is not for production until the five gates pass on the target.
 
-The 2.1.0 line from here:
-
-1. Review and merge `claude/antigravity-fixes` into main (coordinator: private-path scan, `npm run verify:release`).
-2. Package 2.1.0 on the target with `package:rc`.
-3. Target checks on that archive: pin, `doctor`, the app-server no-inference check, and with the opt-in set the Antigravity `prepare check` and its probes. A probe failure is a candidate defect and a new candidate.
-4. Clean-account installation (owner).
-5. Publish 2.1.0 from the tested archive. If the Antigravity gates are still open, the release notes say the backend is experimental and unproven.
+The fix branch was reviewed and merged on 2026-10-19 (`212bd38`). The rest of the 2.1.0 line is [section 3](#3-the-critical-path-and-your-touchpoints).
 
 Then 2.1.x for fixes and 2.2 below.
 
 ## 7. 2.2: wider, still one path
 
 - `allowed_write_paths` on edits: the handler denies writes outside the declared list and the run continues (features candidate 3).
-- A per-root cost ledger (`budgets.<root>.max_cost_usd_per_day`) surfaced as a readiness blocker, built on item 1's records.
 - Linux, claimed only after a Linux pin manifest, conformance check, one review, one edit and one disconnect are recorded.
 - MCPB bundle and registry entry; the Codex plugin in its current layout (section 4.11).
 - A `runs` watch view over item 1's numbers.
@@ -561,12 +548,12 @@ You send everything personally; agents only draft.
 | Now | Description and topics (section 4.7) | You |
 | Now | Rewrite the Mistral Discussion for 2.0 (add the managed-configuration refresh and the skill catalogue); draft three Bug Reports; write the private note for Mistral security; protocol feedback note; one-page brief; rewrite the Multica comment (it still describes the removed launcher), draft the Paperclip comment. Story facts come from `marketing/sources.md` on main, which cites commits now that the history is out of the tree | Agents draft |
 | Now | Send the private note to Mistral security; wait for a reply or two weeks | You |
-| 2.0.1 published | Publish the article (update it for the workflow features, apply its `[UPDATE AT PUBLISH]` list from the merged `docs/acceptance.json`; pick dev.to's AI-assisted label); post the Discussion and Bug Reports with the hosted results; Show and tell; Multica and Paperclip comments | You |
-| 2.0.1 + 1 week | Show HN with the article link; Reddit and LinkedIn | You |
-| 2.0.1 installable | Apply to the Codex open source fund | You |
-| 2.0.1 published | MCPB bundle and registry entry, awesome-list PR (agents build; you publish as org Owner) | Agents, you |
+| A release marked latest | Publish the article (update it for the workflow features, apply its `[UPDATE AT PUBLISH]` list from the merged `docs/acceptance.json`; pick dev.to's AI-assisted label); post the Discussion and Bug Reports with the hosted results; Show and tell; Multica and Paperclip comments | You |
+| Latest + 1 week | Show HN with the article link; Reddit and LinkedIn | You |
+| A release marked latest | Apply to the Codex open source fund | You |
+| A release marked latest | MCPB bundle and registry entry, awesome-list PR (agents build; you publish as org Owner) | Agents, you |
 | 2.1 | Antigravity forum reply with the gate evidence; the reviewdog channel once SARIF ships; the usefulness rate published monthly from `runs usefulness` | You |
-| After 2.0.1 | Ambassador application, with the advocacy record | You |
+| After a release is latest | Ambassador application, with the advocacy record | You |
 | Monthly | Blog series pieces; CFP submissions | Agents draft, you publish |
 
-The marketing calendar's weeks 3 to 4 ("2.0.1 work; history leaves the tree") are already done; its registry work (weeks 5 and 6) can start as soon as 2.0.1 is published. The independence line ("an independent project, not affiliated with Mistral AI or OpenAI") goes in every public asset. Security claims always carry "application policy, not an OS sandbox". Claims use exact version-bound outcomes and disclose unknown model and cost fields; research citations are refreshed when used.
+The marketing calendar's weeks 3 to 4 ("2.0.1 work; history leaves the tree") are already done; its registry work (weeks 5 and 6) can start as soon as a release is marked latest. The independence line ("an independent project, not affiliated with Mistral AI or OpenAI") goes in every public asset. Security claims always carry "application policy, not an OS sandbox". Claims use exact version-bound outcomes and disclose unknown model and cost fields; research citations are refreshed when used.

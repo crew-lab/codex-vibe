@@ -2,15 +2,16 @@
 
 ## 2.1.0 — unreleased
 
-Unreleased; source on main. Line 2.1 introduces the Google Antigravity execution backend (`agy 1.4.0`), full auditability via tool-call accounting and approval ledgers, root-anchored exclusion globs, daily cost budgets, SARIF v2.1.0 static analysis exports, and cross-session inspection. All record fields remain backwards-compatible (2.0 records load cleanly, and 2.0 supervisors ignore unknown fields). Pre-releases v2.0.1 and v2.0.2 are published on GitHub.
+Unreleased; source on main. Line 2.1 introduces an experimental, opt-in Google Antigravity execution backend (`agy 1.4.0`), full auditability via tool-call accounting and approval ledgers, root-anchored exclusion globs, daily cost budgets, structured review findings with SARIF 2.1.0 export, and cross-session inspection. All record fields remain backwards-compatible (2.0 records load cleanly, and 2.0 supervisors ignore unknown fields). Pre-releases v2.0.1 and v2.0.2 are published on GitHub.
 
 ### Execution backends & Google Antigravity ([ADR 0008](docs/adr/0008-antigravity-execution-backend.md))
 
-- Added: Google Antigravity execution backend (`backend = "antigravity"`, `paths.antigravity`), supporting the `agy 1.4.0` CLI alongside the default `vibe-app-server` engine.
+- Added: Google Antigravity execution backend (`backend = "antigravity"`, `paths.antigravity`), supporting the `agy 1.4.0` CLI alongside the default `vibe-app-server` engine. Experimental and off by default: `backend = "antigravity"` is rejected unless the configuration also sets `[experimental] antigravity = true`. Its tool gate is a hook agy itself must honour; it is not for production until the five Antigravity probes pass on the target.
 - Added: Pre-seeded per-run CLI configuration (`$HOME/.gemini/antigravity-cli/settings.json`) with `toolPermission = "strict"`, `enableTerminalSandbox = true`, `allowNonWorkspaceAccess = false`, unified permission syntax, and refusal of shell, commands, web, browser, and MCP.
 - Added: Deterministic supervisor-owned `PreToolUse` hook (`pre-tool-hook.mjs` + `hooks.json`) enforcing mode profiles and workspace path containment (`judgeWorkspacePath`), and outputting an audited `ApprovalLedgerEntry` ledger (`hook-ledger.jsonl`).
-- Added: Zero-inference preparation check for Antigravity (`vibe-supervisor prepare check`) validating settings and hooks, running zero-inference slash command read-backs (`/config`, `/hooks`, `/permissions`, `/skills` through a refusing loopback proxy), executing 6 synthetic hook checks, and issuing a preparation receipt bound to the `agy` binary SHA-256 digest.
+- Added: Zero-inference preparation check for Antigravity (`vibe-supervisor prepare check`) validating settings and hooks, running zero-inference slash command read-backs (`/config`, `/hooks`, `/permissions`, `/skills` through a refusing loopback proxy), executing synthetic hook evaluations, running five probes through agy itself with a fixed fake key and a scripted loopback model (hook invoked and deny honoured, hook failure modes deny, stream tool-event shape, proxy honoured, project configuration above the workspace not loaded), and issuing a preparation receipt bound to the `agy` binary SHA-256 digest. Any probe that does not pass fails the receipt.
 - Added: Untrusted workspace extensions guard (`assertNoProjectAntigravityExtensions`) rejecting projects with `.gemini`, `.agents/hooks.json`, `.agents/mcp_config.json`, or `.agents/plugins`.
+- Fixed (cold review before release): an unreadable path argument now denies for every tool; only known visible-answer stream shapes are kept and other text is withheld and counted; Google API keys are redacted; agy gets an exact environment without `ANTIGRAVITY_HOME` or `MISTRAL_API_KEY`; one executable resolver binds the receipt to the spawned binary, re-hashed before spawn, and the version probe runs without secrets; budgets use canonical roots and count every session; output overflow fails as an output limit instead of a timeout; leftover helper processes are terminated and verified.
 
 ### Access control & exclusions
 
@@ -21,15 +22,21 @@ Unreleased; source on main. Line 2.1 introduces the Google Antigravity execution
 
 - Added: Audited tool-call counts in every run record and event stream (`usage.tool_calls` holding `executed`, `denied_by_handler`, and `denied_by_policy`).
 - Added: Limits enforcement in run records (`limits.max_tokens`, `limits.max_cost_usd`, and `limits.max_model_calls` backstop).
-- Added: Daily cost ledger (`daily_cost_ledger.json`) and per-root spending limits (`budgets.<root>.max_cost_usd_per_day`), enforcing 24-hour rolling ceilings across standard and isolated session runs and surfacing budget blockers in `vibe_status`.
+- Added: Daily cost ledger (`daily_cost_ledger.json`) and per-root spending limits (`budgets.<root>.max_cost_usd_per_day`), enforcing 24-hour rolling ceilings across standard and isolated session runs and surfacing budget blockers in `vibe_status`. A USD budget is rejected with `backend = "antigravity"`, which reports no cost.
 - Added: `vibe-supervisor runs usage [--since <YYYY-MM-DD>] [--root <path>] [--json]` CLI command.
 
 ### Verification, auditing & standardized exports
 
 - Added: Run approval ledger saved as `artifacts/approvals.json` (up to 4,096 entries) and included in `runs export`, with sanitization of out-of-workspace paths to `<outside-workspace>` and digest verification (`source_sha256`, `exported_sha256`).
-- Added: SARIF v2.1.0 export (`vibe-supervisor runs sarif <run-id> --out <file>` and `--sarif` for `runs export/verify`), converting tool denials, policy violations, and contract check failures into standard SARIF static analysis findings.
+- Added: structured review findings: `vibe_review_start` takes `output: "findings"`, the worker is asked to end with a JSON findings block, and the supervisor validates each finding (path inside the workspace and not excluded, line bounds within the file) and saves `artifacts/findings.json` with the rejected entries counted.
+- Added: SARIF 2.1.0 export of those findings (`vibe-supervisor runs sarif <run-id> [--output <file>]`), with stable per-finding fingerprints.
 - Added: `vibe-supervisor runs usefulness [--since YYYY-MM-DD] [--json]` calculating decided edit run acceptance rates.
-- Added: Multi-session run enumeration (`runs list`, `runs show`, `runs tail` scanning up to 128 isolated session directories).
+- Added: Multi-session run enumeration (`runs list` scanning up to 128 isolated session directories; `runs show` and `runs tail` read the data root's runs).
+
+### Fixed
+
+- Fixed: under `serve --isolated`, readiness and starts looked for the preparation receipt in the per-connection session directory instead of the selected configuration's directory, so an installed candidate with a passing `prepare check` reported not eligible.
+- Fixed: on macOS a process group whose only members were zombies counted as running, so a naturally exited worker could be reported as `worker_termination_unverified`.
 
 ### Releases
 
