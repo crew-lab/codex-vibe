@@ -35,6 +35,27 @@ This section is the one-page summary; the dated sections below are the record be
 
 **Open risks.** Real `agy` tool argument names may differ from the hook's list, in which case those calls are denied until it matches; the agy probes need `agy` to accept a local model endpoint; running `agy` headless under a consumer sign-in may be outside Antigravity's consumer terms, so prefer API-key or enterprise authentication.
 
+### Target brief: 2.1.0 steps 1 and 2 — 2026-10-19
+
+The owner's yes to this brief is authorizations 1 to 3 of the [target acceptance procedure](docs/target-acceptance.md#authorizations) for the 2.1.0 candidate: build and install side by side, the pin manifest, and the no-inference checks. It is not a hosted allowance: no `turn/start`, no hosted start, no switch of the Codex registration. Part B runs only when the owner's message handing over this brief says Antigravity is opted in.
+
+Prompt for the target agent:
+
+```text
+Fetch main and read Handoff.md, section "Target brief: 2.1.0 steps 1 and 2", and docs/target-acceptance.md. Follow the procedure's steps 1 to 4 for the 2.1.0 candidate, with these specifics. Stop at the first failure; no retries, no configuration edits to make a check pass, no hosted start.
+
+Part A, default engine:
+1. Build from main at 1bc05ac (git checkout --detach 1bc05ac, confirm git rev-parse HEAD) under exactly Node 20.19.0 and npm 10.8.2: npm ci, npm run verify:release, then package:rc with the offline cache populated with the locked versions. Keep the verify:release output for gate node-floor-20.19.0. Record the archive SHA-256 and the kit's SHA256SUMS.
+2. Install the archive into a new private prefix beside the current 2.0.2 install. Give the candidate its own configuration directory, pin manifest path and data directory: prepare check rewrites the receipt beside the pin manifest first, so sharing the 2.0.2 configuration would fail the registered install's receipt. Do not switch the Codex registration; 2.0.2 stays registered and is the rollback.
+3. pin-manifest and doctor --json on the candidate configuration; review the manifest as the procedure says.
+4. prepare check --kit with the candidate's kit (check its SHA256SUMS first) and read the saved report against every criterion in step 4 of the procedure.
+5. For gate hosted-excluded-glob-readback-and-denial, read-back half only: run the installed package's scripts/v2-conformance-check.mjs once more with --config of the candidate configuration, --placeholder-key, --observe-network, --excluded-glob 'secrets/**' and --output into the evidence folder, and confirm denylist_matches_expected is true for every profile tool in both modes. The denial half needs the hosted review and stays open.
+
+Part B, Antigravity, only if the owner opted in: a second candidate configuration with backend = "antigravity", [experimental] antigravity = true and paths.antigravity naming the agy 1.4.0 binary, no real Google credential or sign-in in its environment. Run doctor --json and prepare check --kit as in "Antigravity backend probes" of the procedure, and record each of the five antigravity-* gates from agy_probes. An inconclusive probe leaves its gate open; a fail is a candidate defect for the preparing machine.
+
+Recording: an evidence folder outside the shipped tree, placeholders from AGENTS.md, grep -rn '/Users/\|/home/' before committing. Add the 2.1.0 candidate (source, archive, candidate and kit identity, Node and npm) to evidence_builds in docs/acceptance.json and move only the gates whose evidence is complete, per "Stop rules and recording". Commit on a new branch from main and push it with make push-branch BRANCH=<name>. Do not merge to main, publish, or start any hosted run. Report the archive hash, each gate's result and every finding.
+```
+
 ### Test-suite stability under load — 2026-10-19
 
 With 101 test files the suite spawns many real processes, and at full parallelism (9 workers on 10 cores) process-timing tests failed intermittently. Fixed at their causes, not retried: `vitest.config.ts` caps workers at 4; the six app-server deadline tests use an 8-second deadline (the deadline also covers spawn, `initialize` and the startup read-back, which took over 3 seconds under load); the credential timeout test polls until the killed process is gone; and process-group verification on macOS now treats a group whose only members are zombies as gone (`src/process/managed.ts`, `darwinGroupHasRunningMembers`, the counterpart of the Linux `/proc` check), so a natural exit is no longer reported as `termination_unverified` while `launchd` has not yet reaped a killed helper. Three consecutive full runs passed (1,477 tests, about 110 s each).
