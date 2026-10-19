@@ -92,7 +92,7 @@ Expectation [I]: a is the only rung with evidence of maintainers answering (issu
 ## 4. Guardrails
 
 - **No affiliation claims.** The independence line ("an independent project, not affiliated with Mistral AI or OpenAI") in every post; "for Codex" and "a client of Vibe's app-server" as descriptions, never as endorsements; no vendor logos.
-- **Naming.** Rename the repository to `vibe-supervisor` before the first outreach post, not at 2.0.1: every post links to the repository, and `codex-vibe` names two vendors' products; GitHub redirects the old name. Mistral's brand page welcomes partners using the brand "with the same care we do", states the marks are Mistral's property and sets no rule for third-party product names, so the package name stays descriptive and lowercase [V]. OpenAI's brand page returned HTTP 403 again [U].
+- **Naming.** The owner decided on 2026-10-19 to keep the repository name `codex-vibe`; the earlier suggestion to rename it to `vibe-supervisor` is dropped. Mistral's brand page welcomes partners using the brand "with the same care we do", states the marks are Mistral's property and sets no rule for third-party product names, so the package name stays descriptive and lowercase [V]. OpenAI's brand page returned HTTP 403 again [U].
 - **Responsible disclosure.** Mistral asks that anything possibly security-related go privately to `security@mistral.ai` before any public issue or discussion [V]. Three findings are candidates: the crash when a client omits `approval` from `callbackKinds`; untrusted `workspaceRoots` still loading project state; `self.sleep` and `subagent.*` running without a callback. None is a vulnerability in Vibe's threat model as we read it (the client is trusted in all three), so: one short private note listing them with hashes, asking whether any should stay out of the public Discussion, then a reply or two weeks before posting. The missing version field, the method name and the ignored budgets are documentation mismatches and can be public.
 - **Tone.** Contribution, not critique: "a headless client must declare, deny and read back", not "Vibe does not enforce". Each finding carries its file and hash and "corrections welcome". No claim about Mistral's intentions beyond what an ADR says.
 - **Not shared.** Credentials, session histories, account identifiers, unredacted target evidence (the placeholders in AGENTS.md, "Recording target evidence", apply), cost figures without conditions, any number not in a recorded evidence file.
@@ -102,7 +102,7 @@ Expectation [I]: a is the only rung with evidence of maintainers answering (issu
 
 | # | Action | Who | Needs 2.0.0 |
 |---|---|---|---|
-| 1 | Rename the repository to `vibe-supervisor`; set the description and topics | Owner-only | No |
+| 1 | Set the description and topics (no rename, owner 2026-10-19) | Owner-only | No |
 | 2 | Rewrite the Mistral Discussion for 2.0; draft the three Bug Reports in the form's fields; write the private disclosure note | Agent-doable; owner reads | No |
 | 3 | Write the protocol feedback note, the one-page brief and the issue template | Agent-doable | No |
 | 4 | Rewrite the Multica comment; draft the Paperclip comment | Agent-doable | No |
