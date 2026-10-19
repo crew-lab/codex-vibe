@@ -2,7 +2,7 @@
 
 One plan for everything from here: landing the integrated 2.0.1 and 2.0.2 on main, packaging and proving them on the target, publishing them as the first 2.x releases, hardening and unifying the Antigravity execution backend, the 2.1 and 2.2 lines, the outreach that rides on them, and what never gets built. Written 2026-10-15 and revised on 2026-10-16 after the target sitting and on 2026-10-17 to reflect the 2.0.2 target evidence (`origin/codex/package-kit-identity`), the 2.1 Wave 0–3 implementation (`origin/claude/2.1-wave-1`), and the hardened Antigravity execution backend (`origin/explore_project_details`, since merged into main and deleted). Revised 2026-10-19 for the Antigravity cold review and the owner's decision to ship that backend in 2.1.0 as experimental and off by default ([6.2](#62-antigravity-cold-review-and-target-probes-2026-10-19)). Not shipped.
 
-The reasons behind it are in the [development strategy](../docs/development-strategy.md); the live status is in the [Handoff](../Handoff.md); the evidence behind each choice is in [marketing/strategy.md](../marketing/strategy.md), [marketing/interest.md](../marketing/interest.md), [research/features-2026-10-14.md](../research/features-2026-10-14.md) and [research/antigravity-2026-10-14.md](../research/antigravity-2026-10-14.md). Two companions hold the long parts: the [release notes template](release-notes-2.0.0.md) (written for 2.0.0, reused for 2.0.1) and the [2.1 design sketches](2.1-designs.md).
+The reasons behind it are in the [development strategy](../docs/development-strategy.md); the live status is in the [Handoff](../Handoff.md); the evidence behind each choice is in [marketing/strategy.md](../marketing/strategy.md), [marketing/interest.md](../marketing/interest.md), [research/features-2026-10-14.md](../research/features-2026-10-14.md) and [research/antigravity-2026-10-14.md](../research/antigravity-2026-10-14.md). The [2.1 design sketches](2.1-designs.md) hold the long parts; published release notes live on their GitHub releases.
 
 ## 1. Where we are
 
@@ -10,17 +10,15 @@ Revised 2026-10-17 after the 2.0.1 disconnect verification, the 2.0.2 target pac
 
 | Item | State |
 |---|---|
-| Main (`b275b1b`) | 2.0.2, unreleased: the one-version cleanup, the integrated workflow line (`6c645e3`), the target's packaging repair (`44dc6f8`) and reporting repair (`2a49abd`). No `docs/history/`, `docs/reviews/`, ADR 0003 or `v1-*` files; `tests/unit/no-legacy-references.test.ts` guards it. `npm run verify:release`: 89 files, 1,305 tests |
-| Target 2.0.2 (`origin/codex/package-kit-identity`, `6faee25`) | Records `VERIFIED` for 2.0.1 `mcp-client-disconnect-hosted` (`347bf79`); packages 2.0.2 on target under Node 20.19.0 (`1f906e8`: archive `84bff9411b63188051a8ca7c025d362ac5a0f08b532f37dc0e9a01b9ba0f4437`, candidate/kit `eaa4032009dc7db754471b0be3c5de57f4d1d067baef0999d6664cfdc179c202`), passes side-by-side install, pin, `doctor`, one `prepare check` PASS, and native desktop 2.0.2 readiness (`a3c9631`); adds carry-over assessment and `docs/clean-account-checklist.md` (`6faee25`) |
-| 2.1 Wave 0–3 (`origin/claude/2.1-wave-1`, `0d7119a`) | Implements 2.1 Wave 0–3 and cold-review fixes for items 1 (`usage.tool_calls`, ceilings, cross-session `runs list/show/tail`), 2 (`runs usefulness`), 3 (`excluded_globs`), and 6 (`approvals.json` ledger + `pin` in exports) |
-| Antigravity Backend (`origin/explore_project_details`) | `vibe-supervisor` 2.0.2 with hardened `AntigravityBackend` (`src/backends/antigravity.ts`, `agy 1.4.0` compatible): removes invalid flags and bypasses, enforces isolated `HOME`/`TMPDIR` with `$HOME/.gemini/antigravity-cli/settings.json` (`toolPermission: "strict"`, `enableTerminalSandbox: true`, `allowNonWorkspaceAccess: false`, unified `permissions.allow`/`deny`), registers `PreToolUse` command hook `pre-tool-hook.mjs` in `hooks.json`, blocks untrusted extensions, wires watchdog activity and `boot_drift` detection, parses structured `stream-json` envelope metadata, and passes zero-inference `prepare check` with slash-command read-backs and synthetic hook evaluations. `npm run verify:release` passes |
-| Antigravity status (2026-10-19) | Merged into main; `explore_project_details` deleted from GitHub. Cold-review fixes and the agy probes on `claude/antigravity-fixes`. Experimental, off unless `experimental.antigravity = true`, not for production until the five `antigravity-*` target gates pass ([6.2](#62-antigravity-cold-review-and-target-probes-2026-10-19)) |
+| Main (2026-10-19) | 2.1.0, unreleased: the 2.0.2 line plus 2.1 Waves 0–5 and the experimental Antigravity backend with its cold-review fixes and agy probes; every branch above it is merged and deleted. `npm run verify:release`: 101 files, 1,477 tests; CI green |
+| 2.0.2 archive | Packaged on the target under Node 20.19.0 from `347bf79` (archive `84bff9411b63188051a8ca7c025d362ac5a0f08b532f37dc0e9a01b9ba0f4437`, candidate/kit `eaa4032009dc7db754471b0be3c5de57f4d1d067baef0999d6664cfdc179c202`); side-by-side install, pin, `doctor`, `prepare check` PASS and native readiness passed; published as a pre-release |
+| Antigravity status (2026-10-19) | Experimental, off unless `experimental.antigravity = true`; cold-review fixes and the agy probes on main; not for production until the five `antigravity-*` target gates pass ([6.2](#62-antigravity-cold-review-and-target-probes-2026-10-19)) |
 | 2.0.1 archive | Packaged on the target from `44dc6f8` under Node 20.19.0: archive `7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e`, candidate and kit identity `8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4` |
 | Hosted allowance | Three starts authorized for the 2.0.1 sitting; all three used (review, edit, disconnect) |
 | Target kit | `docs/target-acceptance.md` is the procedure; `package:rc` writes `preparation-kit-<version>/` beside the archive and installs the exact archive offline to prove the binding before it reports success |
 | Outreach | Drafts only: the dev.to article, the interest note's asks, the marketing calendar. Nothing posted |
 
-**Owner decision 2026-10-16:** worker answer quality is a documented limit; no further hosted allowance for the review and edit. v2.0.1 is published from the tested archive (`7978719c…`, tag at `44dc6f8`) as a pre-release while the clean-account installation is open; main's later changes go into 2.0.2. Notes: [release-notes-2.0.1.md](release-notes-2.0.1.md); the publish commands are in the Handoff.
+**Owner decision 2026-10-16:** worker answer quality is a documented limit; no further hosted allowance for the review and edit. v2.0.1 is published from the tested archive (`7978719c…`, tag at `44dc6f8`) as a pre-release while the clean-account installation is open; main's later changes go into 2.0.2. The notes are on the GitHub release; the publish commands are in the Handoff.
 
 ## 2. Delivered
 
@@ -62,7 +60,7 @@ Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily co
 | 13 | Done on the target (`1f906e8` on `origin/codex/package-kit-identity`): 2.0.2 packaged (`84bff941…`, candidate `eaa40320…`) under Node 20.19.0 | Target agent | — |
 | 14 | Done on the target (`1f906e8` & `a3c9631` on `origin/codex/package-kit-identity`): 2.0.2 identity check, side-by-side install, pin and `doctor`, one `prepare check`, installed SDK readiness, registration switch with rollback and native readiness PASS | Target agent | — |
 | 15 | Confirm the proposed carry-over in `docs/acceptance.json` (`6faee25`) and decide the optional hosted review for the reporting fix | You | **One decision; a new allowance only if you want the review** |
-| 16 | Publish v2.0.2 from its checked target-held assets with [release-notes-2.0.2.md](release-notes-2.0.2.md) | You | **Run `gh release create`** |
+| 16 | Publish v2.0.2 from its checked target-held assets | You | Done 2026-10-17 (pre-release) |
 | 17 | Phase 2 & 3 unification: merge `origin/claude/2.1-wave-1` and `origin/explore_project_details` after v2.0.2 is tagged | Agents, Coordinator | Scope reading for Antigravity; the wheel download |
 
 Open decisions that do not block the release are in section 4.12. Steps 7 and 9 can overlap; step 11 can happen any time before the first outreach post. Steps 13 to 16 follow the v2.0.1 publish and need no hosted start; the disconnect (step 7) runs on the installed 2.0.1 archive, so the registration moves to 2.0.2 only after it is recorded.
@@ -292,7 +290,7 @@ REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner) && gh repo edit "$RE
 
 ### 4.8 Release (coordinator prepares, you publish)
 
-**Release notes.** The coordinator copies [the template](release-notes-2.0.0.md) to `release/2.0.1/release-notes.md` (outside the tree), changes the version to 2.0.1, adds the 2.0.1 changelog entry's features (acceptance contracts, reports, the preparation kit and how to run `prepare check`, validation copies, the two target repairs), fills every `[FILL]` from the merged `docs/acceptance.json` and the evidence, says that v2.0.0 was not released and why, and deletes the template's instructions block.
+**Release notes.** The coordinator wrote `release/2.0.1/release-notes.md` (outside the tree) for 2.0.1, adds the 2.0.1 changelog entry's features (acceptance contracts, reports, the preparation kit and how to run `prepare check`, validation copies, the two target repairs), fills every `[FILL]` from the merged `docs/acceptance.json` and the evidence, says that v2.0.0 was not released and why, and deletes the template's instructions block.
 
 **Three more assets**, after the evidence branch is merged: the kit as one archive, the evidence summary and the asset checksums.
 
