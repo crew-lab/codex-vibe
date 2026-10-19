@@ -6,7 +6,7 @@ license: MIT
 
 # Vibe Supervisor
 
-The supervisor exposes five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. It runs exactly Vibe 2.26.1 through its pinned `vibe-app-server`, verified against a pin manifest before each run; other versions and any file drift fail closed. Each owning server/storage instance accepts one active run; a competing start is rejected immediately. A run is one-shot: there are no interactive permission grants, follow-up prompts, or restart recovery. If the supervisor restarts during work, the run is marked failed and its task is never replayed. Completed means execution ended; the coordinator still owns acceptance and cleanup.
+The supervisor exposes five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. It runs exactly Vibe 2.26.1 through its pinned `vibe-app-server`, verified against a pin manifest before each run; other versions and any file drift fail closed. Each owning server/storage instance accepts one active run; a competing start is rejected immediately. A run is one-shot: there are no interactive permission grants, follow-up prompts, or restart recovery. If the supervisor restarts during work, the run is marked failed and its task is never replayed. Completed means execution ended; the coordinator still owns acceptance and cleanup. The Antigravity backend is experimental and opt-in (`experimental.antigravity = true`); use it only when the configuration selects it, and see [security](../../docs/security.md#antigravity-backend-experimental).
 
 Vibe's pinned bundled plugin skill catalogue is permitted. User/project/registry skill entries are refused. Skill instructions never grant extra tool or path permissions. Shell and network tools are disabled. The supervisor's policy is not an OS sandbox. Reviews are read-only (`read_file`) over an allowlisted workspace, with a bounded workspace file listing in the prompt and no search tool; edits can read, write and edit inside the worktree, need a Git repository root and explicit `base_ref`, and run in a detached supervisor-owned worktree. The worker's patch is exported for review and is never applied, committed, merged, or pushed automatically.
 
@@ -41,6 +41,8 @@ Every delegation starts with a native workspace readiness call on the connection
 
 Collect the desired outcome, concrete acceptance criteria, canonical allowed workspace, exact file scope, exclusions, and explicit Git base for edits. Never put credentials in task text. Check the real connected tool schemas and do not invoke fields or tools absent from that catalog. One started run owns the instance's active slot until backend close verifies termination. If close reports termination unverified, keep the run inspectable and do not start another run on that slot. Do not queue, retry automatically, or replay a task after restart or failure.
 
+Files matched by the root's `excluded_globs` or the fixed secret denylist are refused to the worker; leave them out of the file scope. A root with a daily budget refuses a start with `VSUP_BUDGET_EXCEEDED` once its 24-hour spending reaches the ceiling; do not move the task to another root to get around it.
+
 Start one review or edit with bounded turns, deadline, output limits, wait, and the readiness receipt. Use cursor-based `vibe_status` calls on the same connection, then read `vibe_result`. Do not raise limits or rotate accounts after a failure. Write the task text from a template below.
 
 ## Write the task from a template
@@ -71,11 +73,11 @@ No shell, network or test execution.
 Final answer: what changed, then an inventory of changed and scratch files.
 ```
 
-Match the limits to the template: a review of two or three files fits `max_turns` 12; raise turns only with the number of files to read. Record whether the answer was accepted, so the template can be improved.
+Match the limits to the template: a review of two or three files fits `max_turns` 12; raise turns only with the number of files to read. Record whether the answer was accepted, so the template can be improved; `vibe-supervisor runs usefulness` summarizes the recorded assessments.
 
 ## Check the result
 
-For a review, check the final answer, stop reason, warnings, and integrity result. For an edit, inspect the full transcript and fresh exported patch, changed and residual files, and hashes while the worktree remains available. Verify the exact candidate in a separate disposable copy; do not run commands or tests inside the worker worktree or original source checkout. Accept only the reviewed delta. Coordinator verification does not turn an unsuccessful Vibe run into a Vibe success.
+For a review, check the final answer, stop reason, warnings, integrity result and `usage.tool_calls` (a review that read nothing answered from nothing); `vibe-supervisor runs sarif <run-id>` exports its findings as SARIF. For an edit, inspect the full transcript and fresh exported patch, changed and residual files, and hashes while the worktree remains available. Verify the exact candidate in a separate disposable copy; do not run commands or tests inside the worker worktree or original source checkout. Accept only the reviewed delta. Coordinator verification does not turn an unsuccessful Vibe run into a Vibe success.
 
 Close the run after verification. Request cleanup only when the exported artifact is current. A pristine worktree can be removed after ownership checks; a dirty or uncertain one is retained with its path and reason for review. Keep the exported patch available and do not force-delete retained data. Report the server version, source/base, actual checks, stop reason, authentication outcome if observed, and any unresolved cleanup or acceptance gate. macOS Apple silicon is the supported platform; a clean-account installation is not yet verified. A run proves execution, not that the answer is correct.
 
