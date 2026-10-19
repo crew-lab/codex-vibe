@@ -27,7 +27,7 @@ This section is the one-page summary; the dated sections below are the record be
 | # | Step | Who |
 |---|---|---|
 | 1 | Package 2.1.0 from main on the target (offline cache filled with the locked versions; the target-built archive is the one published) | Target agent |
-| 2 | `doctor` and `prepare check` for `app-server`; with Antigravity opted in, the five agy probes (hook invoked and deny honoured, failure modes deny, stream shape, proxy honoured, project config not loaded) | Target agent; owner opts in |
+| 2 | `doctor` and `prepare check` for `app-server`, and the five agy probes (hook invoked and deny honoured, failure modes deny, stream shape, proxy honoured, project config not loaded); Antigravity opted in by the owner 2026-10-19 | Target agent |
 | 3 | One hosted review and one edit on 2.1.0 to record the 2.1 hosted gates (usage, exclusions, export, assessment); a new hosted allowance | Owner authorizes; target agent runs |
 | 4 | Clean-account installation of the 2.1.0 archive ([checklist](docs/clean-account-checklist.md)); postponed by the owner 2026-10-19 | Owner |
 | 5 | Publish 2.1.0 and mark it latest; a pre-release while step 4 is open | Owner |
@@ -37,7 +37,7 @@ This section is the one-page summary; the dated sections below are the record be
 
 ### Target brief: 2.1.0 steps 1 and 2 — 2026-10-19
 
-The owner's yes to this brief is authorizations 1 to 3 of the [target acceptance procedure](docs/target-acceptance.md#authorizations) for the 2.1.0 candidate: build and install side by side, the pin manifest, and the no-inference checks. It is not a hosted allowance: no `turn/start`, no hosted start, no switch of the Codex registration. Part B runs only when the owner's message handing over this brief says Antigravity is opted in.
+The owner's yes to this brief is authorizations 1 to 3 of the [target acceptance procedure](docs/target-acceptance.md#authorizations) for the 2.1.0 candidate: build and install side by side, the pin manifest, and the no-inference checks. It is not a hosted allowance: no `turn/start`, no hosted start, no switch of the Codex registration. Part B runs only when the owner's message handing over this brief says Antigravity is opted in; the owner opted in on 2026-10-19, so both parts run.
 
 Prompt for the target agent:
 
