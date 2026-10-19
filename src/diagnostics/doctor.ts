@@ -14,7 +14,7 @@ import { nodeVersionAtLeast } from '../runtime/node-version.js';
 
 export interface DoctorCheck { name: string; ok: boolean; status?: 'ok' | 'missing' | 'unverified'; version?: string; message: string; stderr_tail?: string }
 export interface DoctorDependencies { backend?: SupervisorBackend }
-export interface DoctorReport { ok: boolean; generatedAt: string; provenance: { backend: BackendKind; executable: string; application_entrypoint: string; runtime_module: string; app_version: string; vibe_version?: string; config_path: string; config_source: 'explicit' | 'environment' | 'default'; config_fingerprint: string; data_directory: string; storage_mode: 'selected-template' }; checks: DoctorCheck[] }
+export interface DoctorReport { ok: boolean; generatedAt: string; provenance: { backend: BackendKind; backend_experimental: boolean; executable: string; application_entrypoint: string; runtime_module: string; app_version: string; vibe_version?: string; config_path: string; config_source: 'explicit' | 'environment' | 'default'; config_fingerprint: string; data_directory: string; storage_mode: 'selected-template' }; checks: DoctorCheck[] }
 
 export function nodeRuntimeCheck(version: string): DoctorCheck {
   const ok = nodeVersionAtLeast(version, '20.19.0');
@@ -75,7 +75,7 @@ async function antigravityCheck(config: SupervisorConfig, injected: SupervisorBa
       ok: true,
       status: 'ok',
       ...(capabilities.version ? { version: capabilities.version } : {}),
-      message: `Antigravity CLI (agy) matches pinned version${sha256}.`
+      message: `Experimental backend: Antigravity CLI (agy) matches pinned version${sha256}; not for production until the target probes pass.`
     };
   }
   const code = typeof capabilities.details?.code === 'string' ? ` [${capabilities.details.code}]` : '';
@@ -155,6 +155,7 @@ export async function runDoctor(config: SupervisorConfig, provenance?: { configP
   const vibeVersion = checks.find((check) => check.name === 'vibe')?.version;
   return { ok: !requiredFailure, generatedAt: new Date().toISOString(), provenance: {
     backend: config.backend ?? 'app-server',
+    backend_experimental: config.backend === 'antigravity',
     executable: process.execPath,
     application_entrypoint: fileURLToPath(new URL('../cli.js', import.meta.url)),
     runtime_module: fileURLToPath(import.meta.url),

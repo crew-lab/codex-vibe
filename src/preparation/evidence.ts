@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { SupervisorConfig } from '../contracts.js';
 import { canonical, digest } from '../acceptance/schema.js';
-import { executableSearchPath, getDataDir } from '../config/config.js';
+import { getDataDir } from '../config/config.js';
+import { resolveExecutableFile } from '../security/executable.js';
 import { readOwnedFile } from '../reporting/private-files.js';
 import { APP_VERSION } from '../version.js';
 
@@ -27,21 +28,6 @@ export async function candidateIdentity(root = packageRoot): Promise<string> {
   return digest(canonical(files));
 }
 
-async function resolveAntigravityBinaryPath(cmd: string): Promise<string> {
-  if (path.isAbsolute(cmd)) return realpath(cmd);
-  const extensions = process.platform === 'win32' ? (process.env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';') : [''];
-  for (const directory of executableSearchPath()) {
-    for (const ext of extensions) {
-      try {
-        return await realpath(path.join(directory, `${cmd}${ext}`));
-      } catch {
-        // continue searching PATH
-      }
-    }
-  }
-  throw new Error(`Antigravity executable not found: ${cmd}`);
-}
-
 export function receiptPath(config: SupervisorConfig, dataDirOverride?: string): string {
   if (config.backend === 'antigravity') {
     const dir = dataDirOverride ?? getDataDir();
@@ -60,7 +46,7 @@ export async function preparationIdentity(config: SupervisorConfig, candidate?: 
   candidate ??= await candidateIdentity();
   const policy = { ...config, allowedWorkspaceRoots: [] };
   if (config.backend === 'antigravity') {
-    const resolvedBinary = await resolveAntigravityBinaryPath(config.paths?.antigravity ?? 'agy');
+    const resolvedBinary = await resolveExecutableFile(config.paths?.antigravity ?? 'agy');
     const pinSha256 = digest(await readFile(resolvedBinary));
     return digest(canonical({ backend: 'antigravity', candidate, pin_sha256: pinSha256, policy, platform: process.platform, arch: process.arch, node: process.version }));
   }

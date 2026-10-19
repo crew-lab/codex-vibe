@@ -95,6 +95,28 @@ Then close it: in a Codex testing thread, `vibe_close` with the run id and `clea
 
 INCONCLUSIVE (the run settled before the close) and NOT_STARTED (readiness, observer or start refused) are recorded as they are. Neither may be retried without a new authorization. FAIL stops the sitting and goes to the preparing machine as a candidate defect. Copy both outputs into the evidence folder with machine paths replaced by placeholders; the client record never contains the readiness receipt and the observer never records command lines or environment.
 
+## Antigravity backend probes
+
+For a candidate configured with `backend = "antigravity"`. The backend is experimental and not for production until all five gates below pass on that candidate; the 2026-10-17 `antigravity-backend-no-inference-check` does not stand in for them. The probes are no-inference: they run under authorization 3 (or the task-scoped preparation a Vibe implementation request already covers), never spend a hosted start, and never use a real Google credential or sign-in.
+
+`prepare check` runs them through the pinned `agy` itself after the existing read-backs and synthetic hook cases, and records them under `agy_probes` in its saved report. Each run gets a private `HOME` and `TMPDIR`, the supervisor-written settings, the fixed fake key `GEMINI_API_KEY`, and `HTTPS_PROXY` pointing at the refusing loopback proxy (`NO_PROXY` covers loopback only):
+
+1. **Scripted model.** A loopback listener stands in for the model and agy is pointed at it through `GOOGLE_GEMINI_BASE_URL`, `GEMINI_API_BASE_URL` and `CODE_ASSIST_ENDPOINT`. It answers the first `generateContent` request with one call to `view_file` (or `read_file`) on a probe file in the workspace holding a random nonce, and every later request with `done` and zero usage. The nonce appearing in a later request means the read ran. `agy_probes.scripted_model` lists the paths agy requested and the functions it declared. If agy honours none of the variables, every probe below is `inconclusive` with reason `scripted_model_unreached`, the receipt fails, and another no-inference driver is needed before these gates can move.
+2. **Hook invoked, deny honoured** (`antigravity-hook-invoked-and-deny-honoured`). A control run with the supervisor's policy hook must end `executed` with a hook-ledger entry; the same probe with a hook that always answers `{"decision":"deny"}` must end `denied` with the hook invoked. `hook_payload_fields` records the top-level fields agy sent the hook.
+3. **Hook failures deny** (`antigravity-hook-failure-denies`). Three hooks, each registered with a 2-second timeout: one sleeps 30 seconds and then answers allow, one answers allow and exits 3, one prints text that is not JSON. Each must end `denied` with the hook invoked; any `executed` fails the receipt.
+4. **Stream tool shape** (`antigravity-stream-tool-shape`). For the control and deny-all runs the report records the field names and the `event`, `type`, `step_type`, `state` and `status` values of agy's stream-json tool events, never their values otherwise, and the backend's audit parser must count exactly one executed probe call in the first and none in the second.
+5. **Proxy honoured** (`antigravity-proxy-honoured`). One run without the scripted endpoint: agy must send at least one request through the proxy, and at least one recorded host must classify as inference (any `googleapis.com` host except `play.googleapis.com`, including `generativelanguage` and Code Assist `cloudcode-pa`, or a known provider). The proxy answers 403, so nothing reaches Google. If agy ignored the proxy, its request went to Google directly with the fake key, which Google rejects; record that.
+6. **Project configuration not loaded** (`antigravity-project-config-not-loaded`). The workspace is placed two levels under a directory with `.git`, and both the Git root and the intermediate directory carry `.gemini/settings.json`, `.gemini/config.json`, `.gemini/config/hooks.json`, `.agents/hooks.json`, `.agents/mcp_config.json`, `.agents/skills`, `.agents/rules`, `.agents/workflows`, `.agent/skills`, `.agent/rules`, `.agent/workflows`, `GEMINI.md` and `AGENTS.md`, each with a unique `vsup-planted-…` marker. A control probe and the five read-backs run there. `loaded` must be empty: no marker in a read-back or in any request to the scripted model, no planted hook or MCP command run, and `/config` still strict.
+
+Run it as step 4 does, then read the saved report named by `report_sha256` in the `preparation-reports` directory beside `preparation-receipt.json` in the supervisor's data directory:
+
+```sh
+vibe-supervisor doctor --config "$CONFIG" --json
+vibe-supervisor prepare check --kit "$KIT" --config "$CONFIG"
+```
+
+Record for each gate its `result`, the evidence object and every `fail` finding. A gate moves only on its own `pass`; an `inconclusive` probe or a `not_run` result leaves it open. The report holds no machine path (paths become `<private-path>`), but run the `grep` below before copying it into the evidence folder. Any failure here is a deterministic stop: it is a candidate defect for the preparing machine (the backend's audit parser, the hook, or admission refusing planted layouts), never a configuration edit to make the probe pass.
+
 ## Stop rules and recording
 
 - Stop at the first failure of a deterministic requirement: any `fail` finding, a refused start, a failed or unverified edit, an unexpected process or directory left behind. No retries, no raised limits, no extra runs, and no configuration edits to make a check pass; report to the preparing machine. A preparation failure is infrastructure evidence: it never triggers a fallback implementer or a replay of a task.
@@ -115,3 +137,8 @@ INCONCLUSIVE (the run settled before the close) and NOT_STARTED (readiness, obse
 | `mcp-client-disconnect-hosted` | the disconnect procedure passes |
 | `node-floor-20.19.0` | step 1 on exactly Node 20.19.0 |
 | `validation-populated-pnpm-dependencies` | `validation prepare` on a representative pnpm project with a populated store, per [validation workspaces](validation-workspace.md); no hosted run needed |
+| `antigravity-hook-invoked-and-deny-honoured` | `agy_probes.hook_invoked_and_deny_honoured.result` `pass` on the candidate ([probes](#antigravity-backend-probes), item 2) |
+| `antigravity-hook-failure-denies` | `agy_probes.hook_failure_denies.result` `pass`, all three failure modes `denied` (item 3) |
+| `antigravity-stream-tool-shape` | `agy_probes.stream_tool_shape.result` `pass`, with the recorded field names (item 4) |
+| `antigravity-proxy-honoured` | `agy_probes.proxy_honoured.result` `pass`, with the recorded hosts (item 5) |
+| `antigravity-project-config-not-loaded` | `agy_probes.project_config_not_loaded.result` `pass`, `loaded` empty (item 6) |

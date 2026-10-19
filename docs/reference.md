@@ -105,7 +105,8 @@ The configuration is strict TOML. The starter allowlist is empty. Keys the super
 | Key | Meaning |
 |---|---|
 | `version` | Required schema version `1`. |
-| `backend` | Optional `"app-server"` (default) or `"antigravity"`. Boot-bound. |
+| `backend` | Optional `"app-server"` (default) or `"antigravity"`. `"antigravity"` is accepted only with `experimental.antigravity = true`. Boot-bound. |
+| `experimental.antigravity` | Optional boolean, default `false`. Opts in to the experimental Antigravity backend ([ADR 0008](adr/0008-antigravity-execution-backend.md)); without it `backend = "antigravity"` is rejected. The backend is not for production until its [target probes](target-acceptance.md#antigravity-backend-probes) pass; see [security](security.md#antigravity-backend-experimental). |
 | `allowed_workspace_roots` | Up to 100 absolute or home-relative canonical workspace roots. Defaults to empty. |
 | `excluded_globs` | Optional table from an `allowed_workspace_roots` entry, written exactly as listed there, to up to 100 workspace-relative globs that no run admitted under that root may read or write. Narrows access only; see [Excluded paths](#excluded-paths). Defaults to none. |
 | `budgets` | Optional table from an `allowed_workspace_roots` entry, written exactly as listed there, configuring per-root daily spending ceilings (`max_cost_usd_per_day`). See [Workspace budgets](#workspace-budgets). Defaults to none. |

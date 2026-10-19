@@ -33,7 +33,7 @@ import { PRIVATE_DIRECTORY_NAMES } from "../backends/app-server/session-config.j
 import { turnBackstop } from "../backends/app-server/usage.js";
 import { approvalsToWire, eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire, usageToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
-import { checkBudgetAdmission } from "./usage-ledger.js";
+import { canonicalBudgets, checkBudgetAdmission } from "./usage-ledger.js";
 import { changedSinceSnapshot, parseManifest, serializeManifest, snapshotWorkspace } from "./workspace-snapshot.js";
 import type { ManifestEntry, WorkspaceSnapshot } from "./workspace-snapshot.js";
 import { extractFindingsJsonBlock, validateFindings } from "./findings.js";
@@ -137,6 +137,7 @@ export interface RunManagerOptions {
   sessionId?: string;
   recoveryWorkerWindowMs?: number;
   preparationDataDir?: string;
+  usageDataDir?: string;
 }
 
 type StartOptions = {
@@ -168,6 +169,7 @@ export class RunManager {
   private readonly unreadableRecords = new Set<string>();
   private readonly policy: PolicySource;
   private readonly preparationDataDir: string | undefined;
+  private readonly usageDataDir: string;
   private readonly sessionId: string | undefined;
   private readonly recoveryWorkerWindowMs: number;
   private workerWindowEndsAt: number | undefined;
@@ -177,6 +179,7 @@ export class RunManager {
     this.ownerLock = preAcquiredLock;
     this.policy = options.policy ?? fixedPolicy(config);
     this.preparationDataDir = options.preparationDataDir ?? (this.policy.configPath ? path.dirname(this.policy.configPath) : path.resolve(dataDir));
+    this.usageDataDir = path.resolve(options.usageDataDir ?? dataDir);
     this.sessionId = options.sessionId;
     this.recoveryWorkerWindowMs = options.recoveryWorkerWindowMs ?? RECOVERY_WORKER_WINDOW_MS;
     this.runRoot = path.join(path.resolve(dataDir), "runs");
@@ -385,6 +388,7 @@ export class RunManager {
     if (mode === "edit") await withDeadline(assertEditAtRepositoryRoot(source), deadline - Date.now(), "Git workspace validation exceeded its preparation deadline.");
     assertSimpleGlobRoot(source);
     await withDeadline(assertNoProjectVibeExtensions(source), deadline - Date.now(), "Project extension validation exceeded its preparation deadline.");
+    const rootBudget = (await withDeadline(canonicalBudgets(policy.config), deadline - Date.now(), "Budget lookup exceeded its preparation deadline.")).get(admitted.root);
     if ((policy.config.backend ?? this.activeBackendKind) === "antigravity") {
       await withDeadline(assertNoProjectAntigravityExtensions(source), deadline - Date.now(), "Project extension validation exceeded its preparation deadline.");
       if (policy.config.limits.maxCostUsd !== undefined) {
@@ -401,12 +405,18 @@ export class RunManager {
           { reason: "token_ceiling_unsupported", ceiling_tokens: policy.config.limits.maxTokens }
         );
       }
+      if (rootBudget?.maxCostUsdPerDay !== undefined) {
+        throw codedError(
+          "VSUP_BACKEND_ERROR",
+          "Antigravity CLI does not report USD pricing in headless stream-json output, so budgets.<root>.max_cost_usd_per_day cannot be enforced.",
+          { reason: "price_unavailable", admitted_root: admitted.root, max_cost_usd_per_day: rootBudget.maxCostUsdPerDay }
+        );
+      }
     }
-    const rootBudget = policy.config.budgets?.[admitted.root];
     if (rootBudget?.maxCostUsdPerDay !== undefined) {
       const budgetCheck = await withDeadline(
         checkBudgetAdmission({
-          dataDir: this.dataDir,
+          dataDir: this.usageDataDir,
           admittedRoot: admitted.root,
           budget: rootBudget
         }),
@@ -495,6 +505,8 @@ export class RunManager {
       session_id: this.sessionId ?? null,
       policy_path: this.policy.configPath,
       policy_revision: policy?.revision ?? null,
+      backend: this.activeBackendKind,
+      backend_experimental: this.activeBackendKind === "antigravity",
       restart_required: (policy?.bootDrift.length ?? 0) > 0,
       boot_drift: policy?.bootDrift ?? [],
       operation: input.operation,

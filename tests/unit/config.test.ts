@@ -171,7 +171,7 @@ describe("app-server keys", () => {
   it("accepts supported backends and rejects unknown backends", () => {
     for (const value of ["acp", "other", "", 1, null]) expect(() => validateConfig({ version: 1, backend: value, paths: appServer.paths }), String(value)).toThrow(/backend/);
     expect(validateConfig({ ...appServer, backend: "app-server" }).backend).toBe("app-server");
-    expect(validateConfig({ version: 1, backend: "antigravity" }).backend).toBe("antigravity");
+    expect(validateConfig({ version: 1, backend: "antigravity", experimental: { antigravity: true } }).backend).toBe("antigravity");
   });
 
   it("maps paths.antigravity and validates it like the other executable paths", () => {
@@ -238,7 +238,7 @@ describe("app-server keys", () => {
       validateConfig({ ...appServer, paths: { vibe_pin_manifest: "/data/other.json" } }),
       validateConfig({ ...appServer, limits: { max_tokens: 10 } }),
       validateConfig({ ...appServer, limits: { max_cost_usd: 1 } }),
-      validateConfig({ ...appServer, backend: "antigravity" }),
+      validateConfig({ ...appServer, backend: "antigravity", experimental: { antigravity: true } }),
       validateConfig({ ...appServer, paths: { ...appServer.paths, antigravity: "/opt/bin/agy" } })
     ];
     for (const variant of variants) expect(configFingerprint(variant)).not.toBe(revision);
@@ -247,7 +247,7 @@ describe("app-server keys", () => {
       ["paths.vibe_pin_manifest"],
       ["limits.max_tokens"],
       ["limits.max_cost_usd"],
-      ["backend"],
+      ["backend", "experimental.antigravity"],
       ["paths.antigravity"]
     ]);
     expect(bootBoundDrift(base, validateConfig(appServer))).toEqual([]);

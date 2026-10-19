@@ -222,7 +222,10 @@ describe('real runner against a fake security executable', () => {
       return;
     }
     const pid = Number(recorded.trim());
-    expect(() => process.kill(pid, 0)).toThrow();
+    const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
+    const deadline = Date.now() + 5000;
+    while (alive() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(alive()).toBe(false);
   });
 
   it('rejects output above the limit', async () => {

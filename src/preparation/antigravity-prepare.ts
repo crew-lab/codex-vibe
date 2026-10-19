@@ -20,6 +20,14 @@ import { publicValue } from '../reporting/export.js';
 import { denylistAnchors, workspaceAnchors } from '../security/globs.js';
 import { createPrivateDir, createPrivateFile } from '../security/paths.js';
 import { candidateIdentity, preparationIdentity, receiptPath } from './evidence.js';
+import {
+  isInferenceHost,
+  NO_INFERENCE_GOOGLE_API_KEY,
+  notRunProbeReport,
+  probeReportPassed,
+  runAgyProbes,
+  type AgyProbeReport
+} from './antigravity-probes.js';
 
 export interface AntigravityProfilePrepareResult {
   settings_valid: boolean;
@@ -30,7 +38,7 @@ export interface AntigravityProfilePrepareResult {
 }
 
 export interface AntigravityPreparationReport {
-  schema_version: 1;
+  schema_version: 2;
   backend: 'antigravity';
   result: 'pass' | 'fail';
   checked_at: string;
@@ -50,6 +58,7 @@ export interface AntigravityPreparationReport {
     verdict: 'none-observed-control-validated' | 'failed';
     total_tokens: number;
   };
+  agy_probes: AgyProbeReport;
   findings: Array<{ level: 'info' | 'fail'; code: string; message: string }>;
 }
 
@@ -64,6 +73,7 @@ interface PreparationRefusingProxy {
   port: number;
   attempts: ProxyAttempt[];
   setRun(run: string): void;
+  attemptsFor(run: string): ProxyAttempt[];
   runControl(): Promise<boolean>;
   close(): Promise<void>;
 }
@@ -106,7 +116,7 @@ async function startPreparationRefusingProxy(): Promise<PreparationRefusingProxy
       const newline = buffered.indexOf('\n');
       if (newline < 0 && buffered.length < 4096) return;
       answered = true;
-      if (attempts.length < 100) {
+      if (attempts.length < 500) {
         attempts.push({ run: currentRun, ...describe(buffered.slice(0, newline < 0 ? 4096 : newline).trim()) });
       }
       socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
@@ -149,6 +159,7 @@ async function startPreparationRefusingProxy(): Promise<PreparationRefusingProxy
     port,
     attempts,
     setRun(run: string) { currentRun = run; },
+    attemptsFor(run: string) { return attempts.filter((attempt) => attempt.run === run); },
     runControl,
     async close() {
       for (const s of sockets) s.destroy();
@@ -207,7 +218,7 @@ async function runCliSlashCommandReadback(
           PATH: process.env.PATH,
           HOME: childHome,
           TMPDIR: childTmp,
-          GEMINI_API_KEY: 'vibe-supervisor-no-inference-key',
+          GEMINI_API_KEY: NO_INFERENCE_GOOGLE_API_KEY,
           HTTPS_PROXY: `http://127.0.0.1:${proxyPort}`,
           HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
           ALL_PROXY: `http://127.0.0.1:${proxyPort}`,
@@ -323,6 +334,7 @@ export async function runAntigravityPreparationCheck(
     }
   };
 
+  let probeReport: AgyProbeReport = notRunProbeReport();
   const proxy = await startPreparationRefusingProxy();
   const controlPassed = await proxy.runControl();
   if (!controlPassed) {
@@ -409,7 +421,6 @@ export async function runAntigravityPreparationCheck(
         });
       }
 
-      // Run zero-inference CLI read-back if the binary is available and matches version
       if (resolved.resolvedPath && resolved.version === SUPPORTED_ANTIGRAVITY_VERSION) {
         proxy.setRun(`subject-${mode}`);
         const configReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/config', workspace, childHome, childTmp, proxy.port);
@@ -531,7 +542,6 @@ export async function runAntigravityPreparationCheck(
         });
       }
 
-      // Run 6 synthetic PreToolUse checks against pre-tool-hook.mjs
       const syntheticCases: Array<{
         tool: string;
         args: Record<string, unknown>;
@@ -605,19 +615,36 @@ export async function runAntigravityPreparationCheck(
       profileResults[mode].synthetic_checks_passed =
         allSyntheticPassed && ledger.approvals.records.length === syntheticCases.length;
     }
+
+    const executablePath = resolved.resolvedPath;
+    if (executablePath && resolved.version === SUPPORTED_ANTIGRAVITY_VERSION) {
+      const probes = await runAgyProbes({
+        executablePath,
+        root: tempRoot,
+        proxy,
+        readback: (slashCommand, cwd, childHome, childTmp) =>
+          runCliSlashCommandReadback(executablePath, slashCommand, cwd, childHome, childTmp, proxy.port)
+      });
+      probeReport = probes.report;
+      findings.push(...probes.findings);
+    } else {
+      findings.push({
+        level: 'fail',
+        code: 'agy_probes_not_run',
+        message: 'The hook, stream-shape, proxy and project-configuration probes need the pinned agy executable and did not run.'
+      });
+    }
   } finally {
     await proxy.close().catch(() => undefined);
     await rm(tempRoot, { recursive: true, force: true }).catch(() => undefined);
   }
 
-  const subjectAttempts = proxy.attempts.filter((a) => !a.run.startsWith('control'));
+  const subjectAttempts = proxy.attempts.filter((a) => a.run.startsWith('subject-') || a.run.startsWith('probe-'));
   let networkVerdict: 'none-observed-control-validated' | 'failed';
   if (!controlPassed) {
     networkVerdict = 'failed';
   } else {
-    const inferenceHosts = subjectAttempts.filter((a) =>
-      /generativelanguage|aiplatform|anthropic|openai|mistral/i.test(a.host)
-    );
+    const inferenceHosts = subjectAttempts.filter((a) => isInferenceHost(a.host));
     if (inferenceHosts.length > 0) {
       networkVerdict = 'failed';
       findings.push({
@@ -657,10 +684,10 @@ export async function runAntigravityPreparationCheck(
     resolved.version === SUPPORTED_ANTIGRAVITY_VERSION &&
     Boolean(resolved.sha256);
   const noInferencePassed = totalTokensObserved === 0 && networkVerdict === 'none-observed-control-validated';
-  const passed = executablePassed && allProfilesPassed && noInferencePassed;
+  const passed = executablePassed && allProfilesPassed && noInferencePassed && probeReportPassed(probeReport);
 
   const rawReport: AntigravityPreparationReport = {
-    schema_version: 1,
+    schema_version: 2,
     backend: 'antigravity',
     result: passed ? 'pass' : 'fail',
     checked_at: new Date().toISOString(),
@@ -677,6 +704,7 @@ export async function runAntigravityPreparationCheck(
       verdict: networkVerdict,
       total_tokens: totalTokensObserved
     },
+    agy_probes: probeReport,
     findings
   };
 

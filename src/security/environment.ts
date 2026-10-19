@@ -20,6 +20,15 @@ export function buildChildEnvironment(
   return child;
 }
 
+export function exactChildEnvironment(values: Readonly<Record<string, string | undefined>>): NodeJS.ProcessEnv {
+  const child: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (value !== undefined) child[key] = value;
+  }
+  child[CHILD_MARKER] = '1';
+  return child;
+}
+
 export function assertNotSupervisorChild(env: NodeJS.ProcessEnv = process.env): void {
   if (isSupervisorChild(env)) {
     const error = new Error('Supervisor cannot start recursively from a supervised child');

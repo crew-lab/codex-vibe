@@ -10,12 +10,15 @@ const patterns: readonly RegExp[] = [
   /\b(?:[a-z0-9]+_)*api_key\s*[:=]\s*["']?[^\s,;"']{6,}["']?/gi,
   /\bx-api-key\s*[:=]\s*["']?[^\s,;"']{6,}["']?/gi,
   /\b(?<keep>api\s+key\s*(?:[:=]|\bis\b)\s*)["']?[A-Za-z0-9_-]{16,}["']?/gi,
+  /(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}/g,
+  /(?<keep>[?&](?:key|api_key|apikey|access_token)=)[^&\s#"'<>]+/gi,
 ];
 
 const highConfidencePatterns: readonly RegExp[] = [
   /\bBearer\s+[A-Za-z0-9._~+\/-]{20,}=*/,
   /\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/,
   /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/,
+  /(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}/,
   /-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/,
 ];
 
@@ -110,6 +113,15 @@ function safeCut(text: string, sentinels: readonly string[], wanted: number): nu
 
 export function environmentSecrets(env: NodeJS.ProcessEnv = process.env): string[] {
   return env.MISTRAL_API_KEY ? [env.MISTRAL_API_KEY] : [];
+}
+
+export const GOOGLE_CREDENTIAL_VARIABLES = ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'ANTIGRAVITY_API_KEY'] as const;
+
+export function googleCredentialSecrets(env: Readonly<Record<string, string | undefined>> = process.env): string[] {
+  return GOOGLE_CREDENTIAL_VARIABLES.flatMap((name) => {
+    const value = env[name];
+    return value && value.length >= 4 ? [value] : [];
+  });
 }
 
 export function redactedTail(bytes: Uint8Array, maxBytes = 1024, sentinels: readonly string[] = [], truncated?: 'head' | 'tail'): string {

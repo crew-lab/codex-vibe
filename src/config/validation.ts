@@ -66,8 +66,21 @@ const baseSchema = z.object({
     z.object({
       max_cost_usd_per_day: z.number().positive().max(1_000_000).optional()
     }).strict()
-  ).optional()
+  ).optional(),
+  experimental: z.object({
+    antigravity: z.boolean().optional()
+  }).strict().optional()
 }).strict().superRefine((value, context) => {
+  if (value.backend === "antigravity" && value.experimental?.antigravity !== true) {
+    context.addIssue({ code: "custom", path: ["backend"], message: `"antigravity" is an experimental backend and is off by default; set [experimental] antigravity = true to opt in after following docs/target-acceptance.md, or remove backend to use the default app-server.` });
+  }
+  if (value.backend === "antigravity") {
+    for (const [root, budget] of Object.entries(value.budgets ?? {})) {
+      if (budget.max_cost_usd_per_day !== undefined) {
+        context.addIssue({ code: "custom", path: ["budgets", root, "max_cost_usd_per_day"], message: "cannot be enforced with backend = \"antigravity\", because Antigravity reports no USD cost; remove it or use the app-server backend." });
+      }
+    }
+  }
   for (const root of Object.keys(value.excluded_globs ?? {})) {
     if (!value.allowed_workspace_roots.includes(root)) {
       context.addIssue({ code: "custom", path: ["excluded_globs", root], message: "must equal an entry of allowed_workspace_roots, written the same way; an exclusion never grants access." });
@@ -131,6 +144,7 @@ export function validateConfig(input: unknown, home = process.env.HOME ?? proces
     allowedWorkspaceRoots: parsed.allowed_workspace_roots,
     ...(excludedGlobs === undefined ? {} : { excludedGlobs }),
     ...(budgets === undefined ? {} : { budgets }),
+    ...(parsed.experimental?.antigravity === undefined ? {} : { experimental: { antigravity: parsed.experimental.antigravity } }),
     retention: { days: parsed.retention.days },
     limits: {
       reviewTimeoutSeconds: parsed.limits.review_timeout_seconds,

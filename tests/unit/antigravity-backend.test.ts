@@ -16,10 +16,16 @@ import { RunManager } from '../../src/core/run-manager.js';
 import type { BackendCallbacks, StartRunInput, SupervisorError, UsageState } from '../../src/contracts.js';
 import { runDoctor } from '../../src/diagnostics/doctor.js';
 import { runAntigravityPreparationCheck } from '../../src/preparation/antigravity-prepare.js';
+import { AGY_PROBE_PROMPT } from '../../src/preparation/antigravity-probes.js';
 import { exportReport, OUTSIDE_WORKSPACE } from '../../src/reporting/export.js';
 import { APP_VERSION } from '../../src/version.js';
 
 const canonicalTmp = await realpath(tmpdir());
+const fakeAgyFixture = path.resolve(import.meta.dirname, '..', 'fixtures', 'fake-agy.mjs');
+const delegateAgyProbes = `if (promptVal === ${JSON.stringify(AGY_PROBE_PROMPT)}) {
+  const probe = require('node:child_process').spawnSync(process.execPath, [${JSON.stringify(fakeAgyFixture)}, ...args], { stdio: 'inherit' });
+  process.exit(probe.status ?? 1);
+}`;
 const roots: string[] = [];
 
 const passedPreparation: AntigravityBackendOptions = {
@@ -853,6 +859,7 @@ if (promptVal === '/config' || promptVal === '/hooks' || promptVal === '/permiss
   }
   process.exit(0);
 }
+${delegateAgyProbes}
 
 const hooksJsonPath = path.join(process.env.HOME, '.gemini', 'config', 'hooks.json');
 const hooksConfig = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
@@ -1013,6 +1020,7 @@ if (promptVal === '/config' || promptVal === '/hooks' || promptVal === '/permiss
   }
   process.exit(0);
 }
+${delegateAgyProbes}
 process.exit(1);
 `);
 
