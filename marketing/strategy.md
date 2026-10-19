@@ -1,6 +1,6 @@
 # Marketing strategy
 
-Written 2026-10-14 for the owner. This directory is outside the package `files`, so nothing here ships. Claims about the tool come from the repository as of this date (README, Handoff, [development strategy](../docs/development-strategy.md), [security](../docs/security.md), [compatibility](../docs/compatibility.md), the usefulness log and the outreach drafts in `docs/history/`); external facts were checked read-only on 2026-10-14 and are listed at the end with what could not be verified. Nothing has been posted, submitted or sent.
+Written 2026-10-14 for the owner. This directory is outside the package `files`, so nothing here ships. Claims about the tool come from the repository as of this date (README, Handoff, [development strategy](../planning/development-strategy.md), [security](../docs/security.md), [compatibility](../docs/compatibility.md), the usefulness log and the outreach drafts in `docs/history/`); external facts were checked read-only on 2026-10-14 and are listed at the end with what could not be verified. Nothing has been posted, submitted or sent.
 
 The rule for every asset is the one the article evidence file already sets: a number appears only with its conditions, "sandbox" and "the first" are never written, and a rejected run is reported as plainly as an accepted one. The honesty is the marketing.
 
@@ -60,7 +60,7 @@ The repository is a portfolio piece about judgment rather than volume: 174 commi
 - *Constraints.* No OS sandbox; a worker that runs as the user; a provider that changed its engine mid-project; a two-machine rule (the preparing machine never runs Vibe, the target machine never changes code); a few hosted runs per sitting.
 - *Organization.* A human owner setting scope and authorizing every hosted run, push and release; orchestrated agents (Claude on the preparing machine, Codex on the target) on disjoint files; a cold review with no design context before every merge; wire facts read from the tagged source with hashes; fail-closed gates that stay open until evidence exists; two independent 2.0 implementations compared, each catching the other's errors.
 - *Outcome.* The product got smaller as it got better (rc.15 and rc.16 removed about 770 net lines); the evidence record states what is unverified; the usefulness log reports rejected runs beside accepted ones.
-- *Lessons.* The article's eight-item checklist plus the agent-process rules in the [development strategy](../docs/development-strategy.md#lessons-from-building-20): agents never stage files in Git, checks are chained with `&&`, fakes prove the client not the vendor, grep audits miss behaviour.
+- *Lessons.* The article's eight-item checklist plus the agent-process rules in the [development strategy](../planning/development-strategy.md#lessons-from-building-20): agents never stage files in Git, checks are chained with `&&`, fakes prove the client not the vendor, grep audits miss behaviour.
 
 **Portfolio page** (company or personal site, not the repository): name, one line, the problem, the three distinctive points, the limits in the same font size, the release tag, the acceptance record, the article and the case study. No star count; the evidence is the credential.
 
