@@ -6,6 +6,7 @@ import path from 'node:path';
 import { extractEnvelopeMeta, writeIsolatedSettings } from '../backends/antigravity.js';
 import { writeAntigravityPreToolHook } from '../backends/antigravity-hook.js';
 import { createPrivateDir } from '../security/paths.js';
+import { assertNoProjectAntigravityExtensions } from '../security/workspace-guard.js';
 
 export const AGY_PROBE_PROMPT = 'vibe-supervisor no-inference preparation probe. Read the probe file in the workspace, then reply done.';
 export const NO_INFERENCE_GOOGLE_API_KEY = ['AIza', 'Sy', 'VibeSupervisor', 'NoInference', 'Probe000'].join('');
@@ -21,8 +22,8 @@ export type ProbeHookVariant = 'deny_all' | HookFailureVariant | 'planted';
 export type ProbeCheckResult = 'pass' | 'fail' | 'not_run';
 export type ToolProbeOutcome = 'executed' | 'denied' | 'inconclusive';
 
-const PROBE_TOOL_PREFERENCE = ['view_file', 'read_file'] as const;
-const PROBE_PATH_KEYS = ['AbsolutePath', 'TargetFile', 'path', 'file_path', 'target_file'] as const;
+export const PROBE_TOOL_PREFERENCE = ['view_file', 'read_file'] as const;
+export const PROBE_PATH_KEYS = ['AbsolutePath', 'Path', 'path', 'file_path', 'TargetFile', 'target_file'] as const;
 const NON_INFERENCE_GOOGLEAPIS_HOSTS = new Set(['play.googleapis.com']);
 const INFERENCE_HOST_PATTERNS = [
   /(^|\.)generativelanguage\./,
@@ -877,12 +878,24 @@ export async function runAgyProbes(options: {
 
     const projectRoot = path.join(root, 'planted-project');
     const parentDir = path.join(projectRoot, 'packages');
-    const plantedWorkspace = path.join(parentDir, 'app');
     const markerDir = path.join(root, 'planted-markers');
     await mkdir(markerDir, { recursive: true });
     await createGitRoot(projectRoot);
     await plantProjectConfig(projectRoot, 'git-root', hookScript, markerDir);
     await plantProjectConfig(parentDir, 'parent', hookScript, markerDir);
+    const unisolated = path.join(parentDir, 'unisolated');
+    await mkdir(unisolated, { recursive: true });
+    const admissionRejection = await assertNoProjectAntigravityExtensions(unisolated).catch((err) => err);
+    const admissionRefused = admissionRejection instanceof Error;
+    if (!admissionRefused) {
+      findings.push({
+        level: 'fail',
+        code: 'project_config_admission_not_refused',
+        message: 'assertNoProjectAntigravityExtensions did not refuse unisolated subfolder inside ancestor planted configuration.'
+      });
+    }
+    const plantedWorkspace = path.join(parentDir, 'app');
+    await createGitRoot(plantedWorkspace);
     const plantedRun = await runToolProbe(context, 'planted', plantedWorkspace, { kind: 'policy' });
     const loaded = new Set<string>();
     for (const request of model.requests.filter((item) => item.run === 'probe-planted')) {
@@ -915,7 +928,7 @@ export async function runAgyProbes(options: {
     const configFindings = evaluateProjectConfig(loadedList, readbacksOk, plantedRun.evidence);
     findings.push(...configFindings);
     report.project_config_not_loaded = {
-      result: configFindings.length === 0 ? 'pass' : 'fail',
+      result: configFindings.length === 0 && admissionRefused ? 'pass' : 'fail',
       loaded: loadedList,
       readbacks_ok: readbacksOk,
       run: plantedRun.evidence

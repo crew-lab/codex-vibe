@@ -108,6 +108,8 @@ describe('Antigravity preparation probe classification', () => {
   it('chooses the probe read from the declared functions, including the Code Assist request wrapper', () => {
     const gemini = { tools: [{ functionDeclarations: [{ name: 'list_dir' }, { name: 'view_file', parameters: { properties: { AbsolutePath: {} } } }] }] };
     expect(chooseProbeCall(gemini, '/w/p.txt')).toEqual({ name: 'view_file', args: { AbsolutePath: '/w/p.txt' } });
+    const readFileCapitalPath = { tools: [{ functionDeclarations: [{ name: 'read_file', parameters: { properties: { Path: {} } } }] }] };
+    expect(chooseProbeCall(readFileCapitalPath, '/w/p.txt')).toEqual({ name: 'read_file', args: { Path: '/w/p.txt' } });
     const wrapped = { model: 'm', request: { tools: [{ functionDeclarations: [{ name: 'read_file', parametersJsonSchema: { properties: { path: {} } } }] }] } };
     expect(chooseProbeCall(wrapped, '/w/p.txt')).toEqual({ name: 'read_file', args: { path: '/w/p.txt' } });
     expect(declaredFunctionNames(wrapped)).toEqual(['read_file']);
@@ -232,7 +234,7 @@ describe('Antigravity preparation probes through a fake agy', () => {
     expect(probes.stream_tool_shape).toMatchObject({ result: 'pass', executed: { parser_probe_calls: 1 }, denied: { parser_probe_calls: 0 } });
     expect(probes.proxy_honoured).toMatchObject({ result: 'pass', inference_hosts: ['generativelanguage.googleapis.com'] });
     expect(probes.project_config_not_loaded).toMatchObject({ result: 'pass', loaded: [], readbacks_ok: true, run: { outcome: 'executed' } });
-    expect(probes.scripted_model.declared_tools).toEqual(['view_file', 'list_dir']);
+    expect(probes.scripted_model.declared_tools).toEqual(['view_file', 'read_file', 'list_dir']);
     expect(out.report.network_observation.verdict).toBe('none-observed-control-validated');
   }, 90_000);
 

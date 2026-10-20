@@ -490,19 +490,30 @@ export async function writeIsolatedSettings(
   const allowRules = mode === 'review'
     ? [
         `read_file(${workerWorkspace})`,
-        `read_file(${workerWorkspace}/**)`
+        `read_file(${workerWorkspace}/**)`,
+        `view_file(${workerWorkspace})`,
+        `view_file(${workerWorkspace}/**)`
       ]
     : [
         `read_file(${workerWorkspace})`,
         `read_file(${workerWorkspace}/**)`,
+        `view_file(${workerWorkspace})`,
+        `view_file(${workerWorkspace}/**)`,
         `write_file(${workerWorkspace})`,
-        `write_file(${workerWorkspace}/**)`
+        `write_file(${workerWorkspace}/**)`,
+        `write_to_file(${workerWorkspace})`,
+        `write_to_file(${workerWorkspace}/**)`
       ];
 
   const denyRules = [
     ...UNIFIED_TOOL_DENIES,
-    ...(mode === 'review' ? ['write_file(*)'] : []),
-    ...allProtectedGlobs.flatMap((glob) => [`read_file(${glob})`, `write_file(${glob})`])
+    ...(mode === 'review' ? ['write_file(*)', 'write_to_file(*)'] : []),
+    ...allProtectedGlobs.flatMap((glob) => [
+      `read_file(${glob})`,
+      `view_file(${glob})`,
+      `write_file(${glob})`,
+      `write_to_file(${glob})`
+    ])
   ];
 
   const settings = {

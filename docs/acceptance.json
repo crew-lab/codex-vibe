@@ -467,7 +467,7 @@
     {
       "name": "antigravity-hook-invoked-and-deny-honoured",
       "status": "UNVERIFIED",
-      "build": "2.1.0 (unreleased), branch claude/antigravity-fixes",
+      "build": "2.1.0 (unreleased)",
       "evidence_required": "prepare check on the target with the pinned agy 1.4.0 reports agy_probes.hook_invoked_and_deny_honoured.result pass: through agy itself, driven by the supervisor's scripted loopback model and a fixed fake key, the control probe with the supervisor policy hook records a ledger entry and returns the probe file's nonce to the model (the read ran), and the same probe with a deny-all hook records the hook's invocation and never returns the nonce (the read did not run).",
       "prior_evidence": "The hook script itself is exercised directly by prepare check's six synthetic cases and by fixture tests; the probe runner and its classification are covered against a fake agy (tests/unit/antigravity-prepare.test.ts). Nothing yet shows agy 1.4.0 calling the hook or honouring its answer.",
       "carry_over": "Nothing to carry. If agy does not honour the scripted-model endpoint variables the probe is inconclusive and the gate stays open; another no-inference driver is then needed.",
@@ -476,7 +476,7 @@
     {
       "name": "antigravity-hook-failure-denies",
       "status": "UNVERIFIED",
-      "build": "2.1.0 (unreleased), branch claude/antigravity-fixes",
+      "build": "2.1.0 (unreleased)",
       "evidence_required": "prepare check on the target reports agy_probes.hook_failure_denies.result pass: with a hook that times out (sleeps past its 2-second timeout, then answers allow), one that answers allow but exits 3, and one that prints unparseable output, agy invokes each and the probe file's nonce never reaches the model. Any executed outcome fails the receipt.",
       "prior_evidence": "Fake-agy tests show the classification fails a receipt when a failed hook is treated as allow. agy's behaviour on a failed hook is undocumented and unobserved.",
       "carry_over": "Nothing to carry.",
@@ -485,7 +485,7 @@
     {
       "name": "antigravity-stream-tool-shape",
       "status": "UNVERIFIED",
-      "build": "2.1.0 (unreleased), branch claude/antigravity-fixes",
+      "build": "2.1.0 (unreleased)",
       "evidence_required": "prepare check on the target reports agy_probes.stream_tool_shape.result pass and records the field names and kind values of agy's stream-json tool events for one executed and one denied probe call; the backend's audit parser (extractEnvelopeMeta) counts exactly one executed probe call in the executed stream and none in the denied stream.",
       "prior_evidence": "The parser handles the shapes the fixtures assume (step_update with tool_name and state). agy 1.4.0's real tool-event shape has not been recorded.",
       "carry_over": "Nothing to carry. A mismatch means the audit parser must change before the gate can pass, which is a new candidate.",
@@ -494,7 +494,7 @@
     {
       "name": "antigravity-proxy-honoured",
       "status": "UNVERIFIED",
-      "build": "2.1.0 (unreleased), branch claude/antigravity-fixes",
+      "build": "2.1.0 (unreleased)",
       "evidence_required": "prepare check on the target reports agy_probes.proxy_honoured.result pass: an agy run with the fixed fake key and no scripted endpoint sends at least one request through HTTPS_PROXY to the refusing proxy, and at least one recorded host is classified as an inference host (Gemini API, Google Code Assist cloudcode-pa or another googleapis.com service other than play.googleapis.com telemetry). The recorded host list is kept.",
       "prior_evidence": "The earlier no-inference check showed agy's updater and telemetry requests through the proxy, not its inference traffic, and its classifier did not cover cloudcode-pa.googleapis.com. The classifier now treats every googleapis.com host except play.googleapis.com as inference.",
       "carry_over": "Nothing to carry.",
@@ -503,9 +503,9 @@
     {
       "name": "antigravity-project-config-not-loaded",
       "status": "UNVERIFIED",
-      "build": "2.1.0 (unreleased), branch claude/antigravity-fixes",
+      "build": "2.1.0 (unreleased)",
       "evidence_required": "prepare check on the target reports agy_probes.project_config_not_loaded.result pass: with project configuration planted at a Git root and an intermediate directory above the workspace (.gemini/settings.json, .gemini/config.json, .gemini/config/hooks.json, .agents/hooks.json, .agents/mcp_config.json, .agents/skills, .agents/rules, .agents/workflows, .agent/skills, .agent/rules, .agent/workflows, GEMINI.md, AGENTS.md, each carrying a unique marker), no marker appears in the zero-inference read-backs or in any request agy sends to the scripted model, no planted hook or MCP command runs, and /config still reads back strict settings.",
-      "prior_evidence": "Admission refuses .gemini and .agents inside the workspace and its cwd only; nothing checks the directories above it. agy's discovery rules above the workspace are unobserved.",
+      "prior_evidence": "Admission refuses .gemini, .agent, .agents, GEMINI.md, and AGENTS.md inside the workspace and all ancestor directories up to a proven Git boundary, verified by unit tests. The probe verifies admission refusal of unisolated subdirectories and boundary isolation of isolated Git roots.",
       "carry_over": "Nothing to carry. If agy loads any of it, the backend needs a fix (refusing such layouts at admission or isolating discovery) and a new candidate.",
       "result": "Not run."
     }

@@ -15,12 +15,12 @@ This section is the one-page summary; the dated sections below are the record be
 
 | Item | State |
 |---|---|
-| Source | `main` at `b88b880` (or later), version 2.1.0, unreleased; nothing merged since, no open pull requests. GitHub holds `main` only |
+| Source | `main` at `b88b880` (or later), version 2.1.0, unreleased; branch `review/antigravity-prep-repairs` fixes preparation hook invocation and ancestor project configuration admission refusal & Git boundary isolation |
 | Releases | v2.0.1 and v2.0.2 published as pre-releases (the v2.0.2 tag corrected to `347bf79`); no release is marked latest. The older releases (the 1.x release and the 0.9 pre-releases) were deleted 2026-10-19; their tags are kept |
 | Default engine (`app-server`, Vibe 2.26.1) | Proven on the target: conformance, native readiness, the disconnect. Worker answer quality is an owner-accepted limitation, not a passed gate |
-| Antigravity (`agy` 1.4.0) | Experimental, off unless `[experimental] antigravity = true`. Cold-reviewed; fixes for F1–F10 and F14–F16 on main; F11–F13 wait for the five agy preparation probes on the target |
+| Antigravity (`agy` 1.4.0) | Experimental, off unless `[experimental] antigravity = true`. Cold-reviewed; fixes for F1–F10 and F14–F16 on main; preparation repairs for hook invocation tool preference and ancestor admission refusal on `review/antigravity-prep-repairs`; F11–F13 wait for the five agy preparation probes on the target |
 | 2.1 features | On main: tool-call counts and ceilings, `excluded_globs` (anchored per root, linear-time matching), `runs usefulness`, the approval ledger and pin in exports, findings with SARIF, the daily cost ledger and per-root budgets. Hosted gates for them are open |
-| Checks | `npm run verify:release` green on `b88b880` (101 files, 1,478 tests) |
+| Checks | `npm run verify:release` green on `review/antigravity-prep-repairs` (101 files, 1,491 tests) |
 
 **What remains, in order.**
 
@@ -106,6 +106,18 @@ Code fixes for F1–F10 and F14–F16 are on main (`212bd38`); the fix branch is
 **Owner decision 2026-10-19:** Antigravity ships in 2.1.0 as experimental and off by default: a configuration must set `experimental.antigravity = true`, or `backend = "antigravity"` is rejected. It is not for production until the probes pass on the target. Running agy headless under a consumer Google sign-in may be outside Antigravity's consumer terms; prefer an API key or enterprise authentication. The branch `explore_project_details` was fully merged and deleted from GitHub.
 
 **Target checks to run** (no hosted start, fake key only): on the 2.1.0 candidate with `backend = "antigravity"` and the opt-in set, `doctor` and then `prepare check`; read `agy_probes` in the saved report and record each gate's result per [the procedure](docs/target-acceptance.md#antigravity-backend-probes). Any failure is a candidate defect, not a configuration edit.
+
+### Antigravity preparation repairs on candidate 081b563 — 2026-10-20
+
+Candidate `081b563` packaged and passed release verification (101 files, 1,478 tests), but isolated preparation failed on target:
+1. Hook was not invoked because headless `agy 1.4.0` in print mode rejected `view_file` as an unknown tool, and `TOOL_PATH_KEYS` only checked lowercase parameter names rather than PascalCase `Path`.
+2. Ancestor `.agents` configuration above the workspace was detected.
+
+Fixed on branch `review/antigravity-prep-repairs`:
+- `src/security/workspace-guard.ts`: `assertNoProjectAntigravityExtensions` recursively inspects workspace root and all ancestor directories for `.gemini`, `.agent`, `.agents`, `GEMINI.md`, and `AGENTS.md` (no root exemption). Traversal stops strictly at proven Git boundaries (verified `.git` directory with `HEAD` file, or verified `.git` worktree file with valid `gitdir:` pointing to an existing directory).
+- `src/backends/antigravity-hook.ts`: PascalCase `'Path'` added to `TOOL_PATH_KEYS` strictly for observed file tools (`read_file`, `write_file`, `edit_file`, `edit`). Dual `hooks.json` written to both `.gemini/config/hooks.json` and `.gemini/antigravity-cli/hooks.json`.
+- `src/backends/antigravity.ts`: `writeIsolatedSettings` writes rules supporting both dialects (`view_file`/`read_file` and `write_to_file`/`write_file`).
+- `src/preparation/antigravity-probes.ts`: `PROBE_TOOL_PREFERENCE = ['view_file', 'read_file']`, `chooseProbeCall` selects schema-declared path property, and `project_config_not_loaded` probe verifies both admission refusal of unisolated descendant folders and boundary isolation of isolated Git roots.
 
 ## Package/kit identity repair — 2026-10-15
 
