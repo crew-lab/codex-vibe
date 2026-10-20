@@ -318,6 +318,8 @@ process.exit(0);
     expect(settings.permissions.deny).toContain('execute_url(*)');
     expect(settings.permissions.deny).toContain('write_file(*)');
 
+    await backend.close(result.handle);
+
     // Verify private childHome and childTmp were cleaned up after completion
     await expect(lstat(path.join(runDir, 'antigravity-home'))).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(lstat(path.join(runDir, 'antigravity-tmp'))).rejects.toMatchObject({ code: 'ENOENT' });
@@ -1520,5 +1522,67 @@ process.exit(0);
     );
     expect(cleanListEval.decision).toBe('allow');
     expect(cleanListEval.reason).toBeNull();
+  });
+
+  it('synchronizes process termination, reaper shutdown, and private directory cleanup via backend.close', async () => {
+    const root = await makeRoot();
+    const workspace = path.join(root, 'workspace');
+    const runDir = path.join(root, 'run');
+    await mkdir(workspace);
+    await mkdir(runDir);
+
+    const script = path.join(root, 'mock-agy.sh');
+    await writeExecutable(script, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.4.0');
+  process.exit(0);
+}
+console.log(JSON.stringify({ type: 'message', message: { role: 'assistant', content: [{ type: 'text', text: 'Completed task.' }] } }));
+console.log(JSON.stringify({ type: 'result', status: 'SUCCESS', num_turns: 1 }));
+process.exit(0);
+`);
+
+    const backend = new AntigravityBackend(
+      {
+        backend: 'antigravity',
+        allowed_workspace_roots: [workspace],
+        paths: { antigravity: script },
+        experimental: { antigravity: true }
+      } as unknown as SupervisorConfig,
+      passedPreparation
+    );
+
+    let finalState: string | undefined;
+    const callbacks: BackendCallbacks = {
+      onEvent() {},
+      onState(state) {
+        finalState = state;
+      }
+    };
+
+    const input: StartRunInput = {
+      runId: '33333333-4444-5555-8666-777777777777',
+      mode: 'review',
+      task: 'Review synchronization contract',
+      cwd: workspace,
+      workerWorkspace: workspace,
+      runDirectory: runDir,
+      exclusions: [],
+      limits: { timeoutSeconds: 30, maxTurns: 5, maxEventBytes: 10240, maxTranscriptBytes: 10240, maxArtifactBytes: 10240 }
+    };
+
+    const result = await backend.start(input, callbacks);
+    const handle = result.handle as AntigravityHandle;
+
+    await handle.opaque.process.done;
+    await waitFor(() => finalState, (state) => state === 'completed');
+
+    await backend.close(result.handle);
+
+    await expect(lstat(path.join(runDir, 'antigravity-home'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(lstat(path.join(runDir, 'antigravity-tmp'))).rejects.toMatchObject({ code: 'ENOENT' });
+
+    await expect(backend.close(result.handle)).resolves.toBeUndefined();
   });
 });

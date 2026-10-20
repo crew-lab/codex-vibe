@@ -642,8 +642,8 @@ export class AntigravityBackend implements SupervisorBackend {
       throw supervisorError('VSUP_INVALID_STATE', 'Matching candidate conformance is required before dispatch. Run prepare check with the version-matched kit.', { preparation });
     }
 
-    if (input.limits.maxCostUsd !== undefined || this.config.limits.maxCostUsd !== undefined) {
-      const ceiling = input.limits.maxCostUsd ?? this.config.limits.maxCostUsd;
+    if (input.limits.maxCostUsd !== undefined || this.config.limits?.maxCostUsd !== undefined) {
+      const ceiling = input.limits.maxCostUsd ?? this.config.limits?.maxCostUsd;
       throw supervisorError(
         'VSUP_BACKEND_ERROR',
         'Antigravity CLI does not report USD pricing in headless stream-json output, so max_cost_usd cannot be enforced.',
@@ -651,8 +651,8 @@ export class AntigravityBackend implements SupervisorBackend {
       );
     }
 
-    if (input.limits.maxTokens !== undefined || this.config.limits.maxTokens !== undefined) {
-      const ceiling = input.limits.maxTokens ?? this.config.limits.maxTokens;
+    if (input.limits.maxTokens !== undefined || this.config.limits?.maxTokens !== undefined) {
+      const ceiling = input.limits.maxTokens ?? this.config.limits?.maxTokens;
       throw supervisorError(
         'VSUP_BACKEND_ERROR',
         'Antigravity CLI only reports token usage in the terminal result envelope after execution, so max_tokens cannot be enforced during execution.',
