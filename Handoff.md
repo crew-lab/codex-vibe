@@ -15,12 +15,12 @@ This section is the one-page summary; the dated sections below are the record be
 
 | Item | State |
 |---|---|
-| Source | Remote `main` at `035679b` (version 2.1.0, unreleased); cleanup-test race repair staged locally on `explore_project_details` awaiting review push and coordinator merge; GitHub holds `main` only |
+| Source | `main` at `b88b880` (or later), version 2.1.0, unreleased; nothing merged since, no open pull requests. GitHub holds `main` only |
 | Releases | v2.0.1 and v2.0.2 published as pre-releases (the v2.0.2 tag corrected to `347bf79`); no release is marked latest. The older releases (the 1.x release and the 0.9 pre-releases) were deleted 2026-10-19; their tags are kept |
 | Default engine (`app-server`, Vibe 2.26.1) | Proven on the target: conformance, native readiness, the disconnect. Worker answer quality is an owner-accepted limitation, not a passed gate |
 | Antigravity (`agy` 1.4.0) | Experimental, off unless `[experimental] antigravity = true`. Cold-reviewed; fixes for F1–F10 and F14–F16 on main; F11–F13 wait for the five agy preparation probes on the target |
 | 2.1 features | On main: tool-call counts and ceilings, `excluded_globs` (anchored per root, linear-time matching), `runs usefulness`, the approval ledger and pin in exports, findings with SARIF, the daily cost ledger and per-root budgets. Hosted gates for them are open |
-| Checks | `npm run verify:release` green on remote `main` (`035679b`, 101 files, 1,477 tests); staged review branch passes 101 files, 1,478 tests |
+| Checks | `npm run verify:release` green on `b88b880` (101 files, 1,478 tests) |
 
 **What remains, in order.**
 
@@ -45,7 +45,7 @@ Prompt for the target agent:
 Fetch main and read Handoff.md, section "Target brief: 2.1.0 steps 1 and 2", and docs/target-acceptance.md. Follow the procedure's steps 1 to 4 for the 2.1.0 candidate, with these specifics. Stop at the first failure; no retries, no configuration edits to make a check pass, no hosted start.
 
 Part A, default engine:
-1. Build from main at the frozen review commit (once pushed and merged; currently staged on explore_project_details ahead of remote main 035679b) under exactly Node 20.19.0 and npm 10.8.2: npm ci, npm run verify:release, then package:rc with the offline cache populated with the locked versions. Keep the verify:release output for gate node-floor-20.19.0. Record the archive SHA-256 and the kit's SHA256SUMS.
+1. Build from main at b88b880 (git checkout --detach b88b880, confirm git rev-parse HEAD) under exactly Node 20.19.0 and npm 10.8.2: npm ci, npm run verify:release, then package:rc with the offline cache populated with the locked versions. Keep the verify:release output for gate node-floor-20.19.0. Record the archive SHA-256 and the kit's SHA256SUMS.
 2. Install the archive into a new private prefix beside the current 2.0.2 install. Give the candidate its own configuration directory, pin manifest path and data directory: prepare check rewrites the receipt beside the pin manifest first, so sharing the 2.0.2 configuration would fail the registered install's receipt. Do not switch the Codex registration; 2.0.2 stays registered and is the rollback.
 3. pin-manifest and doctor --json on the candidate configuration; review the manifest as the procedure says.
 4. prepare check --kit with the candidate's kit (check its SHA256SUMS first) and read the saved report against every criterion in step 4 of the procedure.
