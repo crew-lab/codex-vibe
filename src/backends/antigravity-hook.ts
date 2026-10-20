@@ -38,16 +38,16 @@ export const EDIT_ALLOWED_TOOLS = [
 
 export const TOOL_PATH_KEYS: Readonly<Record<string, readonly string[]>> = {
   view_file: ['AbsolutePath', 'path', 'file_path'],
-  read_file: ['path', 'file_path', 'AbsolutePath', 'target_file'],
+  read_file: ['Path', 'path', 'file_path', 'AbsolutePath', 'target_file'],
   list_dir: ['DirectoryPath', 'path', 'directory'],
   find_by_name: ['SearchDirectory', 'DirectoryPath', 'path', 'directory'],
   grep_search: ['SearchPath', 'SearchDirectory', 'path', 'directory'],
   write_to_file: ['TargetFile', 'path', 'file_path'],
-  write_file: ['path', 'file_path', 'TargetFile'],
+  write_file: ['Path', 'path', 'file_path', 'TargetFile'],
   replace_file_content: ['TargetFile', 'path', 'file_path'],
   multi_replace_file_content: ['TargetFile', 'path', 'file_path'],
-  edit_file: ['target_file', 'TargetFile', 'path', 'file_path'],
-  edit: ['path', 'file_path', 'TargetFile']
+  edit_file: ['Path', 'target_file', 'TargetFile', 'path', 'file_path'],
+  edit: ['Path', 'path', 'file_path', 'TargetFile']
 };
 
 export const PATH_LIKE_ARGUMENT = /(?:path|paths|file|files|filename|filenames|dir|dirs|directory|directories|folder|folders|uri|cwd|root|location)$/i;
@@ -1120,6 +1120,7 @@ export async function writeAntigravityPreToolHook(
   };
   const hooksJsonContent = JSON.stringify(hooksConfig, null, 2) + '\n';
   await writeFile(path.join(configDir, 'hooks.json'), hooksJsonContent, { mode: 0o600 });
+  await writeFile(path.join(cliDir, 'hooks.json'), hooksJsonContent, { mode: 0o600 });
 }
 
 export async function readAntigravityHookLedger(

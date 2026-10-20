@@ -123,6 +123,7 @@ if (!base) {
 const systemText = modes.has('load-project-config') ? plantedText(process.cwd()) : '';
 const declarations = [
   { name: 'view_file', parameters: { type: 'object', properties: { AbsolutePath: { type: 'string' } } } },
+  { name: 'read_file', parameters: { type: 'object', properties: { Path: { type: 'string' } } } },
   { name: 'list_dir', parameters: { type: 'object', properties: { DirectoryPath: { type: 'string' } } } }
 ];
 const contents = [{ role: 'user', parts: [{ text: prompt }] }];
@@ -133,7 +134,7 @@ if (call) {
   const allowed = hookAllows(call);
   let response;
   if (allowed) {
-    response = { output: fs.readFileSync(call.args.AbsolutePath, 'utf8') };
+    response = { output: fs.readFileSync(call.args.AbsolutePath ?? call.args.Path ?? call.args.path, 'utf8') };
     if (modes.has('unparsed-shape')) emit({ event: 'tool_activity', activity: { name: call.name, phase: 'finished' } });
     else emit({ event: 'step_update', step_update: { step_index: 1, step_type: 'tool_call', tool_name: call.name, state: 'DONE', args: call.args } });
   } else {

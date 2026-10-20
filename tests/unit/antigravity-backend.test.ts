@@ -6,10 +6,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AntigravityBackend,
   SUPPORTED_ANTIGRAVITY_VERSION,
+  writeIsolatedSettings,
   type AntigravityBackendOptions,
   type AntigravityHandle
 } from '../../src/backends/antigravity.js';
-import { evaluateAntigravityToolCall, readAntigravityHookLedger } from '../../src/backends/antigravity-hook.js';
+import {
+  evaluateAntigravityToolCall,
+  readAntigravityHookLedger,
+  writeAntigravityPreToolHook
+} from '../../src/backends/antigravity-hook.js';
 import * as reaperModule from '../../src/process/reaper.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { RunManager } from '../../src/core/run-manager.js';
@@ -601,7 +606,7 @@ exit 0
       limits: { timeoutSeconds: 30, maxTurns: 5, maxEventBytes: 10240, maxTranscriptBytes: 10240, maxArtifactBytes: 10240 }
     };
 
-    await expect(backend.start(input, { onEvent() {}, onState() {} })).rejects.toThrow(/\.agents\/hooks\.json/);
+    await expect(backend.start(input, { onEvent() {}, onState() {} })).rejects.toThrow(/\.agents/);
   });
 
   it('filters excluded files from review prompt workspace listing and populates unified settings.json permissions.deny', async () => {
@@ -1584,5 +1589,220 @@ process.exit(0);
     await expect(lstat(path.join(runDir, 'antigravity-tmp'))).rejects.toMatchObject({ code: 'ENOENT' });
 
     await expect(backend.close(result.handle)).resolves.toBeUndefined();
+  });
+
+  it('evaluates tool calls using PascalCase Path parameter for file tools and enforces mode profiles', async () => {
+    const root = await makeRoot();
+    const workspace = path.join(root, 'workspace');
+    await mkdir(workspace, { recursive: true });
+    const targetFile = path.join(workspace, 'file.txt');
+    await writeFile(targetFile, 'content\n');
+
+    const reviewRead = await evaluateAntigravityToolCall(
+      { mode: 'review', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'read_file', args: { Path: targetFile } } }
+    );
+    expect(reviewRead.decision).toBe('allow');
+    expect(reviewRead.reason).toBeNull();
+    expect(reviewRead.entry.decision).toBe('approve');
+
+    const reviewWrite = await evaluateAntigravityToolCall(
+      { mode: 'review', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'write_file', args: { Path: targetFile, content: 'new' } } }
+    );
+    expect(reviewWrite.decision).toBe('deny');
+    expect(reviewWrite.reason).toBe('tool_not_in_profile');
+
+    const reviewEdit = await evaluateAntigravityToolCall(
+      { mode: 'review', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'edit_file', args: { Path: targetFile } } }
+    );
+    expect(reviewEdit.decision).toBe('deny');
+    expect(reviewEdit.reason).toBe('tool_not_in_profile');
+
+    const editRead = await evaluateAntigravityToolCall(
+      { mode: 'edit', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'read_file', args: { Path: targetFile } } }
+    );
+    expect(editRead.decision).toBe('allow');
+    expect(editRead.reason).toBeNull();
+
+    const editWrite = await evaluateAntigravityToolCall(
+      { mode: 'edit', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'write_file', args: { Path: targetFile, content: 'new' } } }
+    );
+    expect(editWrite.decision).toBe('allow');
+    expect(editWrite.reason).toBeNull();
+
+    const editFileCall = await evaluateAntigravityToolCall(
+      { mode: 'edit', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'edit_file', args: { Path: targetFile } } }
+    );
+    expect(editFileCall.decision).toBe('allow');
+    expect(editFileCall.reason).toBeNull();
+
+    const editCall = await evaluateAntigravityToolCall(
+      { mode: 'edit', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'edit', args: { Path: targetFile } } }
+    );
+    expect(editCall.decision).toBe('allow');
+    expect(editCall.reason).toBeNull();
+  });
+
+  it('enforces workspace containment, exclusions, reserved segments, and mode restrictions on calls with PascalCase Path', async () => {
+    const root = await makeRoot();
+    const workspace = path.join(root, 'workspace');
+    const outside = path.join(root, 'outside');
+    await mkdir(workspace, { recursive: true });
+    await mkdir(outside, { recursive: true });
+
+    const outsideFile = path.join(outside, 'escaped.txt');
+    await writeFile(outsideFile, 'secret\n');
+
+    const gitDir = path.join(workspace, '.git');
+    await mkdir(gitDir, { recursive: true });
+    const gitFile = path.join(gitDir, 'config');
+    await writeFile(gitFile, '[core]\n');
+
+    const geminiDir = path.join(workspace, '.gemini');
+    await mkdir(geminiDir, { recursive: true });
+    const geminiFile = path.join(geminiDir, 'settings.json');
+    await writeFile(geminiFile, '{}\n');
+
+    const secretDir = path.join(workspace, 'private');
+    await mkdir(secretDir, { recursive: true });
+    const secretFile = path.join(secretDir, 'key.pem');
+    await writeFile(secretFile, 'pem-data\n');
+    const excludedFile = path.join(secretDir, 'plain.txt');
+    await writeFile(excludedFile, 'plain-data\n');
+
+    const outsideCall = await evaluateAntigravityToolCall(
+      { mode: 'edit', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'read_file', args: { Path: outsideFile } } }
+    );
+    expect(outsideCall.decision).toBe('deny');
+    expect(outsideCall.reason).toBe('path_outside_workspace');
+
+    const gitCall = await evaluateAntigravityToolCall(
+      { mode: 'edit', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'write_file', args: { Path: gitFile } } }
+    );
+    expect(gitCall.decision).toBe('deny');
+    expect(gitCall.reason).toBe('path_reserved');
+
+    const geminiCall = await evaluateAntigravityToolCall(
+      { mode: 'edit', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'edit_file', args: { Path: geminiFile } } }
+    );
+    expect(geminiCall.decision).toBe('deny');
+    expect(geminiCall.reason).toBe('path_reserved');
+
+    const secretCall = await evaluateAntigravityToolCall(
+      { mode: 'edit', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'read_file', args: { Path: secretFile } } }
+    );
+    expect(secretCall.decision).toBe('deny');
+    expect(secretCall.reason).toBe('path_secret');
+
+    const excludedCall = await evaluateAntigravityToolCall(
+      {
+        mode: 'edit',
+        workerWorkspace: workspace,
+        excludedAnchors: [{ root: workspace, globs: ['private/**'] }]
+      },
+      { toolCall: { name: 'read_file', args: { Path: excludedFile } } }
+    );
+    expect(excludedCall.decision).toBe('deny');
+    expect(excludedCall.reason).toBe('path_excluded');
+
+    const writeOutsideCall = await evaluateAntigravityToolCall(
+      { mode: 'edit', workerWorkspace: workspace, excludedAnchors: [] },
+      { toolCall: { name: 'write_file', args: { Path: outsideFile } } }
+    );
+    expect(writeOutsideCall.decision).toBe('deny');
+    expect(writeOutsideCall.reason).toBe('path_outside_workspace');
+  });
+
+  it('writeIsolatedSettings generates rules for both view_file/read_file and write_to_file/write_file across review and edit modes', async () => {
+    const root = await makeRoot();
+    const workspace = path.join(root, 'workspace');
+    await mkdir(workspace, { recursive: true });
+
+    const reviewHome = path.join(root, 'review-home');
+    await writeIsolatedSettings(reviewHome, 'review', workspace, [
+      { prefix: ['sub'], globs: ['restricted/**'] }
+    ]);
+    const reviewSettingsRaw = await readFile(
+      path.join(reviewHome, '.gemini', 'antigravity-cli', 'settings.json'),
+      'utf8'
+    );
+    const reviewSettings = JSON.parse(reviewSettingsRaw);
+
+    expect(reviewSettings.permissions.allow).toContain(`read_file(${workspace})`);
+    expect(reviewSettings.permissions.allow).toContain(`read_file(${workspace}/**)`);
+    expect(reviewSettings.permissions.allow).toContain(`view_file(${workspace})`);
+    expect(reviewSettings.permissions.allow).toContain(`view_file(${workspace}/**)`);
+    expect(reviewSettings.permissions.allow).not.toContain(`write_file(${workspace})`);
+    expect(reviewSettings.permissions.allow).not.toContain(`write_to_file(${workspace})`);
+
+    expect(reviewSettings.permissions.deny).toContain('write_file(*)');
+    expect(reviewSettings.permissions.deny).toContain('write_to_file(*)');
+    expect(reviewSettings.permissions.deny).toContain('read_file(.git/**)');
+    expect(reviewSettings.permissions.deny).toContain('view_file(.git/**)');
+    expect(reviewSettings.permissions.deny).toContain('write_file(.git/**)');
+    expect(reviewSettings.permissions.deny).toContain('write_to_file(.git/**)');
+    expect(reviewSettings.permissions.deny).toContain('read_file(sub/restricted/**)');
+    expect(reviewSettings.permissions.deny).toContain('view_file(sub/restricted/**)');
+    expect(reviewSettings.permissions.deny).toContain('write_file(sub/restricted/**)');
+    expect(reviewSettings.permissions.deny).toContain('write_to_file(sub/restricted/**)');
+
+    const editHome = path.join(root, 'edit-home');
+    await writeIsolatedSettings(editHome, 'edit', workspace);
+    const editSettingsRaw = await readFile(
+      path.join(editHome, '.gemini', 'antigravity-cli', 'settings.json'),
+      'utf8'
+    );
+    const editSettings = JSON.parse(editSettingsRaw);
+
+    expect(editSettings.permissions.allow).toContain(`read_file(${workspace})`);
+    expect(editSettings.permissions.allow).toContain(`read_file(${workspace}/**)`);
+    expect(editSettings.permissions.allow).toContain(`view_file(${workspace})`);
+    expect(editSettings.permissions.allow).toContain(`view_file(${workspace}/**)`);
+    expect(editSettings.permissions.allow).toContain(`write_file(${workspace})`);
+    expect(editSettings.permissions.allow).toContain(`write_file(${workspace}/**)`);
+    expect(editSettings.permissions.allow).toContain(`write_to_file(${workspace})`);
+    expect(editSettings.permissions.allow).toContain(`write_to_file(${workspace}/**)`);
+
+    expect(editSettings.permissions.deny).not.toContain('write_file(*)');
+    expect(editSettings.permissions.deny).not.toContain('write_to_file(*)');
+  });
+
+  it('writeAntigravityPreToolHook writes identical hooks.json configurations to both config and cli directories', async () => {
+    const root = await makeRoot();
+    const workspace = path.join(root, 'workspace');
+    await mkdir(workspace, { recursive: true });
+    const childHome = path.join(root, 'child-home');
+
+    await writeAntigravityPreToolHook(childHome, {
+      mode: 'review',
+      workerWorkspace: workspace,
+      excludedAnchors: []
+    });
+
+    const configHooksPath = path.join(childHome, '.gemini', 'config', 'hooks.json');
+    const cliHooksPath = path.join(childHome, '.gemini', 'antigravity-cli', 'hooks.json');
+
+    const configContent = await readFile(configHooksPath, 'utf8');
+    const cliContent = await readFile(cliHooksPath, 'utf8');
+    expect(configContent).toBe(cliContent);
+
+    const configJson = JSON.parse(configContent);
+    expect(configJson['supervisor-policy-gate']?.enabled).toBe(true);
+    expect(configJson['supervisor-policy-gate']?.PreToolUse?.[0]?.matcher).toBe('*');
+
+    const configStat = await lstat(configHooksPath);
+    const cliStat = await lstat(cliHooksPath);
+    expect(configStat.mode & 0o777).toBe(0o600);
+    expect(cliStat.mode & 0o777).toBe(0o600);
   });
 });
