@@ -1,6 +1,10 @@
 import path from 'node:path';
-import { lstat, readFile, realpath, stat } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { lstat, realpath } from 'node:fs/promises';
+import { promisify } from 'node:util';
 import { WorkspacePathError } from './paths.js';
+
+const execFileAsync = promisify(execFile);
 
 export function assertSimpleGlobRoot(root: string): void {
   if (/[\*?\[\]]/.test(root)) throw new WorkspacePathError(`Workspace path contains glob characters (* ? [ ]) and cannot be safely encoded for Vibe: ${root}`);
@@ -35,27 +39,40 @@ export async function assertNoProjectVibeExtensions(root: string): Promise<void>
 
 const ANTIGRAVITY_INSPECTION_TARGETS = ['.gemini', '.agent', '.agents', 'GEMINI.md', 'AGENTS.md'] as const;
 
+const GIT_PROBE_TIMEOUT_MS = 5000;
+
+function gitProbeEnvironment(): NodeJS.ProcessEnv {
+  return {
+    PATH: process.env.PATH ?? '',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_OPTIONAL_LOCKS: '0',
+    GIT_TERMINAL_PROMPT: '0',
+    LC_ALL: 'C'
+  };
+}
+
+async function gitTopLevel(directory: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync('git', ['rev-parse', '--show-toplevel'], {
+      cwd: directory,
+      env: gitProbeEnvironment(),
+      timeout: GIT_PROBE_TIMEOUT_MS,
+      maxBuffer: 64 * 1024
+    });
+    const reported = stdout.trim();
+    return reported ? await realpath(reported) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function isProvenGitBoundary(directory: string): Promise<boolean> {
   try {
-    const gitPath = path.join(directory, '.git');
-    const gitInfo = await lstat(gitPath);
-    if (gitInfo.isDirectory()) {
-      const headInfo = await stat(path.join(gitPath, 'HEAD')).catch(() => null);
-      return headInfo !== null && headInfo.isFile();
-    }
-    if (gitInfo.isFile()) {
-      const content = await readFile(gitPath, 'utf8');
-      const match = /^gitdir:\s*(\S.*)$/m.exec(content);
-      if (!match) return false;
-      const rawGitDir = match[1]?.trim();
-      if (!rawGitDir) return false;
-      const resolvedGitDir = path.resolve(directory, rawGitDir);
-      const realGitDir = await realpath(resolvedGitDir).catch(() => null);
-      if (!realGitDir) return false;
-      const targetInfo = await stat(realGitDir).catch(() => null);
-      return targetInfo !== null && targetInfo.isDirectory();
-    }
-    return false;
+    const gitInfo = await lstat(path.join(directory, '.git'));
+    if (gitInfo.isSymbolicLink() || !(gitInfo.isDirectory() || gitInfo.isFile())) return false;
+    const [topLevel, canonicalDirectory] = await Promise.all([gitTopLevel(directory), realpath(directory)]);
+    return topLevel !== null && topLevel === canonicalDirectory;
   } catch {
     return false;
   }

@@ -20,7 +20,7 @@ This section is the one-page summary; the dated sections below are the record be
 | Default engine (`app-server`, Vibe 2.26.1) | Proven on the target: conformance, native readiness, the disconnect. Worker answer quality is an owner-accepted limitation, not a passed gate |
 | Antigravity (`agy` 1.4.0) | Experimental, off unless `[experimental] antigravity = true`. Cold-reviewed; fixes for F1–F10 and F14–F16 on main; preparation repairs for hook invocation tool preference and ancestor admission refusal on `review/antigravity-prep-repairs`; F11–F13 wait for the five agy preparation probes on the target |
 | 2.1 features | On main: tool-call counts and ceilings, `excluded_globs` (anchored per root, linear-time matching), `runs usefulness`, the approval ledger and pin in exports, findings with SARIF, the daily cost ledger and per-root budgets. Hosted gates for them are open |
-| Checks | `npm run verify:release` green on `review/antigravity-prep-repairs` (101 files, 1,491 tests) |
+| Checks | `npm run verify:release` green on `review/antigravity-prep-repairs` (101 files, 1,494 tests) |
 
 **What remains, in order.**
 
@@ -114,7 +114,7 @@ Candidate `081b563` packaged and passed release verification (101 files, 1,478 t
 2. Ancestor `.agents` configuration above the workspace was detected.
 
 Fixed on branch `review/antigravity-prep-repairs`:
-- `src/security/workspace-guard.ts`: `assertNoProjectAntigravityExtensions` recursively inspects workspace root and all ancestor directories for `.gemini`, `.agent`, `.agents`, `GEMINI.md`, and `AGENTS.md` (no root exemption). Traversal stops strictly at proven Git boundaries (verified `.git` directory with `HEAD` file, or verified `.git` worktree file with valid `gitdir:` pointing to an existing directory).
+- `src/security/workspace-guard.ts`: `assertNoProjectAntigravityExtensions` recursively inspects workspace root and all ancestor directories for `.gemini`, `.agent`, `.agents`, `GEMINI.md`, and `AGENTS.md` (no root exemption). Traversal stops strictly at proven Git boundaries: `git rev-parse --show-toplevel` must report the directory itself, validated against real repositories and real detached worktrees; a `.git` pointing at an empty directory is refused. The probe requires the `WorkspacePathError` naming the planted ancestor configuration.
 - `src/backends/antigravity-hook.ts`: PascalCase `'Path'` added to `TOOL_PATH_KEYS` strictly for observed file tools (`read_file`, `write_file`, `edit_file`, `edit`). Dual `hooks.json` written to both `.gemini/config/hooks.json` and `.gemini/antigravity-cli/hooks.json`.
 - `src/backends/antigravity.ts`: `writeIsolatedSettings` writes rules supporting both dialects (`view_file`/`read_file` and `write_to_file`/`write_file`).
 - `src/preparation/antigravity-probes.ts`: `PROBE_TOOL_PREFERENCE = ['view_file', 'read_file']`, `chooseProbeCall` selects schema-declared path property, and `project_config_not_loaded` probe verifies both admission refusal of unisolated descendant folders and boundary isolation of isolated Git roots.

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -52,10 +53,18 @@ describe('project Vibe state is untrusted', () => {
   });
 });
 
+function git(cwd: string, ...args: string[]): void {
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', ...args], {
+    cwd,
+    stdio: 'ignore',
+    env: { PATH: process.env.PATH ?? '', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' }
+  });
+}
+
 async function createGitRepository(dir: string): Promise<void> {
-  const gitDir = path.join(dir, '.git');
-  await mkdir(gitDir, { recursive: true });
-  await writeFile(path.join(gitDir, 'HEAD'), 'ref: refs/heads/main\n');
+  await mkdir(dir, { recursive: true });
+  git(dir, 'init', '-q');
+  git(dir, 'commit', '-q', '--allow-empty', '-m', 'init');
 }
 
 describe('project Antigravity state is untrusted', () => {
@@ -141,22 +150,42 @@ describe('project Antigravity state is untrusted', () => {
     await expect(assertNoProjectAntigravityExtensions(brokenRepo)).rejects.toThrow(WorkspacePathError);
   });
 
-  it('recognizes detached Git worktree with valid gitdir as a proven boundary and stops traversal', async () => {
+  it('refuses a .git pointer to an empty directory that Git itself rejects', async () => {
     await writeFile(path.join(root, 'AGENTS.md'), 'agent instructions');
-    const commonGitDir = path.join(root, 'common-git-dir');
-    await mkdir(commonGitDir, { recursive: true });
+    const emptyGitDir = path.join(root, 'empty-git-dir');
+    await mkdir(emptyGitDir, { recursive: true });
+    const pointed = path.join(root, 'pointed');
+    await mkdir(pointed, { recursive: true });
+    await writeFile(path.join(pointed, '.git'), `gitdir: ${emptyGitDir}\n`);
+    await expect(assertNoProjectAntigravityExtensions(pointed)).rejects.toThrow(WorkspacePathError);
 
+    const emptyDotGit = path.join(root, 'empty-dot-git');
+    await mkdir(path.join(emptyDotGit, '.git'), { recursive: true });
+    await expect(assertNoProjectAntigravityExtensions(emptyDotGit)).rejects.toThrow(WorkspacePathError);
+  });
+
+  it('recognizes a real detached Git worktree as a boundary and stops traversal', async () => {
+    await writeFile(path.join(root, 'AGENTS.md'), 'agent instructions');
+    const main = path.join(root, 'main-repo');
+    await createGitRepository(main);
     const worktreeDir = path.join(root, 'worktree');
-    await mkdir(worktreeDir, { recursive: true });
-    await writeFile(path.join(worktreeDir, '.git'), `gitdir: ${commonGitDir}\n`);
-
+    git(main, 'worktree', 'add', '-q', '--detach', worktreeDir);
     await expect(assertNoProjectAntigravityExtensions(worktreeDir)).resolves.toBeUndefined();
 
-    const relativeWorktreeDir = path.join(root, 'worktree-relative');
-    await mkdir(relativeWorktreeDir, { recursive: true });
-    await writeFile(path.join(relativeWorktreeDir, '.git'), 'gitdir: ../common-git-dir\n');
+    const nested = path.join(worktreeDir, 'packages', 'app');
+    await mkdir(nested, { recursive: true });
+    await expect(assertNoProjectAntigravityExtensions(nested)).resolves.toBeUndefined();
+  });
 
-    await expect(assertNoProjectAntigravityExtensions(relativeWorktreeDir)).resolves.toBeUndefined();
+  it('still refuses configuration inside a real repository or worktree', async () => {
+    const main = path.join(root, 'main-repo');
+    await createGitRepository(main);
+    const worktreeDir = path.join(root, 'worktree');
+    git(main, 'worktree', 'add', '-q', '--detach', worktreeDir);
+    await writeFile(path.join(worktreeDir, 'GEMINI.md'), 'instructions');
+    await expect(assertNoProjectAntigravityExtensions(worktreeDir)).rejects.toThrow(/GEMINI\.md/);
+    await mkdir(path.join(main, '.agents'));
+    await expect(assertNoProjectAntigravityExtensions(main)).rejects.toThrow(/\.agents/);
   });
 
   it('fails closed when customization paths cannot be inspected', async () => {
