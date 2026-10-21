@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { runAntigravityPreparationCheck } from '../../src/preparation/antigravity-prepare.js';
+import { WorkspacePathError } from '../../src/security/paths.js';
 import {
+  admissionRefusedForPlantedConfiguration,
   chooseProbeCall,
   classifyToolProbe,
   declaredFunctionNames,
@@ -114,6 +116,17 @@ describe('Antigravity preparation probe classification', () => {
     expect(chooseProbeCall(wrapped, '/w/p.txt')).toEqual({ name: 'read_file', args: { path: '/w/p.txt' } });
     expect(declaredFunctionNames(wrapped)).toEqual(['read_file']);
     expect(chooseProbeCall({ tools: [{ functionDeclarations: [{ name: 'run_command' }] }] }, '/w/p.txt')).toBeNull();
+  });
+
+  it('accepts only the WorkspacePathError that names the planted ancestor configuration', () => {
+    const workspace = '/w/planted/packages/unisolated';
+    const ancestor = '/w/planted/packages';
+    const genuine = new WorkspacePathError(`Workspace ${workspace} contains project Antigravity configuration in ancestor directory ${ancestor} at .agents; this profile cannot prove it inactive.`);
+    expect(admissionRefusedForPlantedConfiguration(genuine, workspace, ancestor)).toBe(true);
+    expect(admissionRefusedForPlantedConfiguration(new Error('EACCES'), workspace, ancestor)).toBe(false);
+    expect(admissionRefusedForPlantedConfiguration(new WorkspacePathError(`Workspace ${workspace} path /x could not be inspected: EACCES`), workspace, ancestor)).toBe(false);
+    expect(admissionRefusedForPlantedConfiguration(new WorkspacePathError(`Workspace ${workspace} contains project Antigravity configuration in ancestor directory /other at .agents`), workspace, ancestor)).toBe(false);
+    expect(admissionRefusedForPlantedConfiguration(null, workspace, ancestor)).toBe(false);
   });
 
   it('wraps the scripted reply for the Code Assist path and reports zero usage', () => {

@@ -5,7 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { extractEnvelopeMeta, writeIsolatedSettings } from '../backends/antigravity.js';
 import { writeAntigravityPreToolHook } from '../backends/antigravity-hook.js';
-import { createPrivateDir } from '../security/paths.js';
+import { WorkspacePathError, createPrivateDir } from '../security/paths.js';
 import { assertNoProjectAntigravityExtensions } from '../security/workspace-guard.js';
 
 export const AGY_PROBE_PROMPT = 'vibe-supervisor no-inference preparation probe. Read the probe file in the workspace, then reply done.';
@@ -760,6 +760,11 @@ async function plantProjectConfig(directory: string, location: string, hookScrip
   }
 }
 
+export function admissionRefusedForPlantedConfiguration(rejection: unknown, workspace: string, plantedAncestor: string): boolean {
+  if (!(rejection instanceof WorkspacePathError)) return false;
+  return rejection.message.includes(`Workspace ${path.resolve(workspace)} contains project Antigravity configuration in ancestor directory ${path.resolve(plantedAncestor)} at `);
+}
+
 async function createGitRoot(directory: string): Promise<void> {
   await mkdir(path.join(directory, '.git', 'objects'), { recursive: true });
   await mkdir(path.join(directory, '.git', 'refs', 'heads'), { recursive: true });
@@ -885,13 +890,15 @@ export async function runAgyProbes(options: {
     await plantProjectConfig(parentDir, 'parent', hookScript, markerDir);
     const unisolated = path.join(parentDir, 'unisolated');
     await mkdir(unisolated, { recursive: true });
-    const admissionRejection = await assertNoProjectAntigravityExtensions(unisolated).catch((err) => err);
-    const admissionRefused = admissionRejection instanceof Error;
+    const admissionRejection = await assertNoProjectAntigravityExtensions(unisolated).then(() => null, (error: unknown) => error);
+    const admissionRefused = admissionRefusedForPlantedConfiguration(admissionRejection, unisolated, parentDir);
     if (!admissionRefused) {
       findings.push({
         level: 'fail',
         code: 'project_config_admission_not_refused',
-        message: 'assertNoProjectAntigravityExtensions did not refuse unisolated subfolder inside ancestor planted configuration.'
+        message: admissionRejection === null
+          ? 'Admission accepted a workspace beneath planted ancestor Antigravity configuration.'
+          : 'Admission rejected the workspace beneath planted ancestor configuration for a reason other than the planted configuration.'
       });
     }
     const plantedWorkspace = path.join(parentDir, 'app');
