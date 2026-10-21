@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "candidate": "2.1.0",
-  "scope": "One-shot review and isolated edit with vibe-app-server 2.26.1 as the default engine (one process per run; backend = \"app-server\"), with Google Antigravity (agy 1.4.0 CLI) as an optional, experimental second execution backend (backend = \"antigravity\", paths.antigravity), not for production until the antigravity-* target probe gates pass; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work. Around the five tools: optional frozen acceptance contracts checked against the exact exported patch, append-only coordinator assessments, sanitized run reports, a version-matched preparation pass that gates ordinary dispatch, and owned validation copies.",
+  "scope": "One-shot review and isolated edit with vibe-app-server 2.26.1 as the default engine (one process per run; backend = \"app-server\"), with Google Antigravity (supported agy versions 1.4.0, 1.4.3, 1.4.4; backend = \"antigravity\", paths.antigravity) as an optional, experimental second execution backend, not for production until the antigravity-* target probe gates pass; one active run per owning server/storage instance; five MCP tools; restart does not resume or replay work. Around the five tools: optional frozen acceptance contracts checked against the exact exported patch, append-only coordinator assessments, sanitized run reports, a version-matched preparation pass that gates ordinary dispatch, and owned validation copies.",
   "deterministic": [
     {
       "name": "lint-typecheck-build-tests-acceptance-secret-scan-sbom",
@@ -460,16 +460,16 @@
       "name": "antigravity-backend-hosted-review-edit",
       "status": "UNVERIFIED",
       "build": "2.1.0 (unreleased)",
-      "evidence_required": "One hosted review and one hosted edit run through AntigravityBackend on agy 1.4.0 with isolated HOME/TMPDIR: review verifies read-only workspace bounds and prompt listing; edit executes in a detached worktree; every tool call passes through the PreToolUse hook and is recorded in approvals.json; stream-json envelopes parse status, usage and denied actions; and artifacts export cleanly with runs export without leaking machine paths.",
+      "evidence_required": "One hosted review and one hosted edit run through AntigravityBackend on a supported agy version with isolated HOME/TMPDIR: review verifies read-only workspace bounds and prompt listing; edit executes in a detached worktree; every tool call passes through the PreToolUse hook and is recorded in approvals.json; stream-json envelopes parse status, usage and denied actions; and artifacts export cleanly with runs export without leaking machine paths.",
       "prior_evidence": "Fixture and integration tests cover stream-json envelope parsing, watchdog progress, mode-specific permissions, detached worktree editing, hook ledger export, and untrusted extension guards (tests/unit/antigravity-backend.test.ts).",
-      "carry_over": "Nothing to carry. Requires authorized hosted runs on the target machine with agy 1.4.0."
+      "carry_over": "Nothing to carry. Requires authorized hosted runs on the target machine with a supported agy version."
     },
     {
       "name": "antigravity-hook-invoked-and-deny-honoured",
       "status": "UNVERIFIED",
       "build": "2.1.0 (unreleased)",
-      "evidence_required": "prepare check on the target with the pinned agy 1.4.0 reports agy_probes.hook_invoked_and_deny_honoured.result pass: through agy itself, driven by the supervisor's scripted loopback model and a fixed fake key, the control probe with the supervisor policy hook records a ledger entry and returns the probe file's nonce to the model (the read ran), and the same probe with a deny-all hook records the hook's invocation and never returns the nonce (the read did not run).",
-      "prior_evidence": "The hook script itself is exercised directly by prepare check's six synthetic cases and by fixture tests; the probe runner and its classification are covered against a fake agy (tests/unit/antigravity-prepare.test.ts). Nothing yet shows agy 1.4.0 calling the hook or honouring its answer.",
+      "evidence_required": "prepare check on the target with a supported agy version reports agy_probes.hook_invoked_and_deny_honoured.result pass: through agy itself, driven by the supervisor's scripted loopback model and a fixed fake key, the control probe with the supervisor policy hook records a ledger entry and returns the probe file's nonce to the model (the read ran), and the same probe with a deny-all hook records the hook's invocation and never returns the nonce (the read did not run).",
+      "prior_evidence": "The hook script itself is exercised directly by prepare check's six synthetic cases and by fixture tests; the probe runner and its classification are covered against a fake agy (tests/unit/antigravity-prepare.test.ts). Nothing yet shows real agy calling the hook or honouring its answer.",
       "carry_over": "Nothing to carry. If agy does not honour the scripted-model endpoint variables the probe is inconclusive and the gate stays open; another no-inference driver is then needed.",
       "result": "Not run. Until it passes, backend = \"antigravity\" is experimental and not for production."
     },
@@ -487,7 +487,7 @@
       "status": "UNVERIFIED",
       "build": "2.1.0 (unreleased)",
       "evidence_required": "prepare check on the target reports agy_probes.stream_tool_shape.result pass and records the field names and kind values of agy's stream-json tool events for one executed and one denied probe call; the backend's audit parser (extractEnvelopeMeta) counts exactly one executed probe call in the executed stream and none in the denied stream.",
-      "prior_evidence": "The parser handles the shapes the fixtures assume (step_update with tool_name and state). agy 1.4.0's real tool-event shape has not been recorded.",
+      "prior_evidence": "The parser handles the shapes the fixtures assume (step_update with tool_name and state). Real agy tool-event shape has not been recorded.",
       "carry_over": "Nothing to carry. A mismatch means the audit parser must change before the gate can pass, which is a new candidate.",
       "result": "Not run."
     },

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AntigravityBackend,
   SUPPORTED_ANTIGRAVITY_VERSION,
+  SUPPORTED_ANTIGRAVITY_VERSIONS,
   writeIsolatedSettings,
   type AntigravityBackendOptions,
   type AntigravityHandle
@@ -69,8 +70,8 @@ async function waitFor<T>(read: () => Promise<T> | T, done: (value: T) => boolea
   return value;
 }
 
-describe('AntigravityBackend (agy 1.4.0)', () => {
-  it('probes executable version 1.4.0, binary sha256, runtimeCheck, requires preparation receipt by default, and rejects unsupported versions', async () => {
+describe('AntigravityBackend (agy supported versions)', () => {
+  it('probes executable version, binary sha256, runtimeCheck, requires preparation receipt by default, and rejects unsupported versions', async () => {
     const root = await makeRoot();
     const counter = path.join(root, 'count');
     const script = path.join(root, 'mock-agy.sh');
@@ -95,15 +96,14 @@ exit 1
       const probeResult = await backend.probe();
       expect(probeResult.available).toBe(true);
       expect(probeResult.backend).toBe('antigravity');
-      expect(probeResult.version).toBe('1.4.0');
+      expect(probeResult.version).toBe(SUPPORTED_ANTIGRAVITY_VERSION);
       expect(typeof probeResult.details?.sha256).toBe('string');
 
       const runtimeCheck = await backend.runtimeCheck();
       expect(runtimeCheck.executable_found).toBe(true);
-      expect(runtimeCheck.pinned_version).toBe('1.4.0');
+      expect(runtimeCheck.pinned_version).toBe(SUPPORTED_ANTIGRAVITY_VERSION);
       expect(runtimeCheck.version_verified).toBe(false);
 
-      // Without preparation-receipt.json, preparationCheck MUST return missing (never fallback to passed)
       const prep = await backend.preparationCheck();
       expect(prep.status).toBe('missing');
 
@@ -130,7 +130,29 @@ exit 1
       else process.env.VIBE_SUPERVISOR_HOME = prevHome;
     }
 
-    // Unsupported version fails closed
+    for (const ver of SUPPORTED_ANTIGRAVITY_VERSIONS) {
+      const verScript = path.join(root, `mock-agy-${ver}.sh`);
+      await writeExecutable(verScript, `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "${ver}"
+  exit 0
+fi
+exit 1
+`);
+      const verBackend = new AntigravityBackend({
+        ...DEFAULT_CONFIG,
+        backend: 'antigravity',
+        paths: { antigravity: verScript }
+      });
+      const verProbe = await verBackend.probe();
+      expect(verProbe.available).toBe(true);
+      expect(verProbe.version).toBe(ver);
+
+      const verRuntime = await verBackend.runtimeCheck();
+      expect(verRuntime.executable_found).toBe(true);
+      expect(verRuntime.pinned_version).toBe(ver);
+    }
+
     const wrongScript = path.join(root, 'mock-agy-old.sh');
     await writeExecutable(wrongScript, `#!/bin/sh
 if [ "$1" = "--version" ]; then

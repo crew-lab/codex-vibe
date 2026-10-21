@@ -6,8 +6,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { digest } from '../acceptance/schema.js';
 import {
+  isSupportedAntigravityVersion,
   resolveAntigravityExecutable,
   SUPPORTED_ANTIGRAVITY_VERSION,
+  SUPPORTED_ANTIGRAVITY_VERSIONS,
   writeIsolatedSettings
 } from '../backends/antigravity.js';
 import {
@@ -299,11 +301,11 @@ export async function runAntigravityPreparationCheck(
       code: 'executable_unavailable',
       message: resolved.error ?? `Antigravity CLI (${configuredCmd}) could not be resolved or probed.`
     });
-  } else if (resolved.version !== SUPPORTED_ANTIGRAVITY_VERSION) {
+  } else if (!isSupportedAntigravityVersion(resolved.version)) {
     findings.push({
       level: 'fail',
       code: 'version_mismatch',
-      message: `Antigravity CLI version ${resolved.version} does not match pinned version ${SUPPORTED_ANTIGRAVITY_VERSION}.`
+      message: `Antigravity CLI version ${resolved.version} does not match supported pinned versions (${SUPPORTED_ANTIGRAVITY_VERSIONS.join(', ')}).`
     });
   } else {
     findings.push({
@@ -421,7 +423,7 @@ export async function runAntigravityPreparationCheck(
         });
       }
 
-      if (resolved.resolvedPath && resolved.version === SUPPORTED_ANTIGRAVITY_VERSION) {
+      if (resolved.resolvedPath && resolved.version && isSupportedAntigravityVersion(resolved.version)) {
         proxy.setRun(`subject-${mode}`);
         const configReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/config', workspace, childHome, childTmp, proxy.port);
         const hooksReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/hooks', workspace, childHome, childTmp, proxy.port);
@@ -538,7 +540,7 @@ export async function runAntigravityPreparationCheck(
         findings.push({
           level: 'fail',
           code: `${mode}_cli_unavailable`,
-          message: `Antigravity CLI executable is unavailable or version does not match ${SUPPORTED_ANTIGRAVITY_VERSION}.`
+          message: `Antigravity CLI executable is unavailable or version does not match supported versions (${SUPPORTED_ANTIGRAVITY_VERSIONS.join(', ')}).`
         });
       }
 
@@ -617,7 +619,7 @@ export async function runAntigravityPreparationCheck(
     }
 
     const executablePath = resolved.resolvedPath;
-    if (executablePath && resolved.version === SUPPORTED_ANTIGRAVITY_VERSION) {
+    if (executablePath && resolved.version && isSupportedAntigravityVersion(resolved.version)) {
       const probes = await runAgyProbes({
         executablePath,
         root: tempRoot,
@@ -681,7 +683,7 @@ export async function runAntigravityPreparationCheck(
   );
   const executablePassed =
     Boolean(resolved.resolvedPath) &&
-    resolved.version === SUPPORTED_ANTIGRAVITY_VERSION &&
+    Boolean(resolved.version && isSupportedAntigravityVersion(resolved.version)) &&
     Boolean(resolved.sha256);
   const noInferencePassed = totalTokensObserved === 0 && networkVerdict === 'none-observed-control-validated';
   const passed = executablePassed && allProfilesPassed && noInferencePassed && probeReportPassed(probeReport);
@@ -697,7 +699,7 @@ export async function runAntigravityPreparationCheck(
       resolved_path: resolved.resolvedPath ? '<private-path>' : null,
       sha256: resolved.sha256,
       version: resolved.version,
-      expected_version: SUPPORTED_ANTIGRAVITY_VERSION
+      expected_version: resolved.version && isSupportedAntigravityVersion(resolved.version) ? resolved.version : SUPPORTED_ANTIGRAVITY_VERSION
     },
     profiles: profileResults,
     network_observation: {

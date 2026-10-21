@@ -38,7 +38,13 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-export const SUPPORTED_ANTIGRAVITY_VERSION = '1.4.0';
+export const SUPPORTED_ANTIGRAVITY_VERSIONS = ['1.4.0', '1.4.3', '1.4.4'] as const;
+export type SupportedAntigravityVersion = (typeof SUPPORTED_ANTIGRAVITY_VERSIONS)[number];
+export const SUPPORTED_ANTIGRAVITY_VERSION = '1.4.4';
+
+export function isSupportedAntigravityVersion(version: string | null | undefined): version is SupportedAntigravityVersion {
+  return typeof version === 'string' && (SUPPORTED_ANTIGRAVITY_VERSIONS as readonly string[]).includes(version);
+}
 
 export const ANTIGRAVITY_FORWARDED_VARIABLES = ['PATH', 'LANG', ...GOOGLE_CREDENTIAL_VARIABLES] as const;
 
@@ -566,7 +572,7 @@ export class AntigravityBackend implements SupervisorBackend {
       };
     }
     this.probedSha256 = resolved.sha256 ?? undefined;
-    if (resolved.version !== SUPPORTED_ANTIGRAVITY_VERSION) {
+    if (!resolved.version || !isSupportedAntigravityVersion(resolved.version)) {
       return {
         available: false,
         backend: this.kind,
@@ -574,8 +580,8 @@ export class AntigravityBackend implements SupervisorBackend {
         version: resolved.version,
         details: {
           code: 'VSUP_VIBE_VERSION_UNSUPPORTED',
-          error: `Unsupported Antigravity CLI version ${resolved.version}; exact version ${SUPPORTED_ANTIGRAVITY_VERSION} is required.`,
-          expected_version: SUPPORTED_ANTIGRAVITY_VERSION,
+          error: `Unsupported Antigravity CLI version ${resolved.version}; supported versions: ${SUPPORTED_ANTIGRAVITY_VERSIONS.join(', ')}.`,
+          expected_version: SUPPORTED_ANTIGRAVITY_VERSIONS.join(', '),
           actual_version: resolved.version
         }
       };
@@ -597,14 +603,15 @@ export class AntigravityBackend implements SupervisorBackend {
     const cmd = executable(this.config);
     const resolved = await resolveAntigravityExecutable(cmd);
     this.probedSha256 = resolved.sha256 ?? undefined;
-    const versionVerified = resolved.version === SUPPORTED_ANTIGRAVITY_VERSION;
+    const versionVerified = Boolean(resolved.version && isSupportedAntigravityVersion(resolved.version));
+    const pinnedVersion = versionVerified && resolved.version ? resolved.version : SUPPORTED_ANTIGRAVITY_VERSION;
     return {
       executable: cmd,
       resolved_executable: resolved.resolvedPath,
       executable_found: Boolean(resolved.resolvedPath && versionVerified),
-      pinned_version: SUPPORTED_ANTIGRAVITY_VERSION,
+      pinned_version: pinnedVersion,
       version_verified: false,
-      note: `Antigravity CLI (agy) execution backend pinned to ${SUPPORTED_ANTIGRAVITY_VERSION}${resolved.sha256 ? ` (sha256: ${resolved.sha256})` : ''}.`
+      note: `Antigravity CLI (agy) execution backend pinned to ${SUPPORTED_ANTIGRAVITY_VERSIONS.join(', ')}${resolved.sha256 ? ` (sha256: ${resolved.sha256})` : ''}.`
     };
   }
 
@@ -621,11 +628,11 @@ export class AntigravityBackend implements SupervisorBackend {
         ...(resolved.error ? { error: resolved.error } : {})
       });
     }
-    if (resolved.version !== SUPPORTED_ANTIGRAVITY_VERSION) {
+    if (!isSupportedAntigravityVersion(resolved.version)) {
       throw supervisorError(
         'VSUP_VIBE_VERSION_UNSUPPORTED',
-        `Antigravity CLI version ${resolved.version} is not supported; exact version ${SUPPORTED_ANTIGRAVITY_VERSION} is required.`,
-        { expected_version: SUPPORTED_ANTIGRAVITY_VERSION, actual_version: resolved.version }
+        `Antigravity CLI version ${resolved.version} is not supported; exact version in [${SUPPORTED_ANTIGRAVITY_VERSIONS.join(', ')}] is required.`,
+        { expected_version: SUPPORTED_ANTIGRAVITY_VERSIONS.join(', '), actual_version: resolved.version }
       );
     }
     const executablePath = resolved.resolvedPath;
