@@ -8,6 +8,7 @@ import { redactSecrets } from '../security/redaction.js';
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256 = /^[0-9a-f]{64}$/i;
 const MAX_RECORD_BYTES = 8192;
+export const MAX_GRANT_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
 type GrantInput = { requestSha256: string; ownerReference: string; expiresAt: string };
 type IssuedGrant = { authorization_id: string; attempt_id: string; request_sha256: string; expires_at: string };
@@ -19,6 +20,10 @@ function fail(code: SupervisorErrorCode, message: string): Error {
 
 function invalid(): Error {
   return fail('VSUP_AUTHORIZATION_INVALID', 'The dispatch authorization is invalid or unavailable.');
+}
+
+function unregistered(): Error {
+  return fail('VSUP_AUTHORIZATION_INVALID', 'No dispatch authorization is registered under this data directory; register the task with task authorize using the same configuration as the server.');
 }
 
 function storage(): Error {
@@ -37,6 +42,7 @@ export class DispatchGrants {
 
   async issue(input: GrantInput): Promise<IssuedGrant> {
     if (!input || !SHA256.test(input.requestSha256) || typeof input.ownerReference !== 'string' || input.ownerReference.length < 1 || input.ownerReference.length > 256 || /[\u0000-\u001f\u007f]/.test(input.ownerReference) || redactSecrets(input.ownerReference) !== input.ownerReference || !validTimestamp(input.expiresAt) || Date.parse(input.expiresAt) <= Date.now()) throw invalid();
+    if (Date.parse(input.expiresAt) - Date.now() > MAX_GRANT_LIFETIME_MS) throw fail('VSUP_AUTHORIZATION_INVALID', 'A dispatch authorization must expire within 24 hours of registration.');
     try {
       await this.ensureRoot();
       const authorizationId = uuid();
@@ -56,9 +62,10 @@ export class DispatchGrants {
   async consume(input: { authorizationId: string; attemptId: string; requestSha256: string; runId: string }): Promise<void> {
     if (!input || !UUID_V4.test(input.authorizationId) || !UUID_V4.test(input.attemptId) || !UUID_V4.test(input.runId) || !SHA256.test(input.requestSha256)) throw invalid();
     try {
+      await lstat(this.root).catch((error: NodeJS.ErrnoException) => { throw error.code === 'ENOENT' ? unregistered() : error; });
       await this.ensureRoot();
       const file = path.join(this.root, `${input.authorizationId}.json`);
-      const record = await this.readGrant(file);
+      const record = await this.readGrant(file).catch((error: NodeJS.ErrnoException) => { throw error.code === 'ENOENT' ? invalid() : error; });
       if (record.grant_id !== input.authorizationId || record.attempt_id !== input.attemptId || record.request_sha256 !== input.requestSha256.toLowerCase() || Date.parse(record.expires_at) <= Date.now()) throw invalid();
       const attempts = path.join(this.root, 'consumed');
       await mkdir(attempts, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'EEXIST') throw error; });
@@ -79,7 +86,6 @@ export class DispatchGrants {
     } catch (error) {
       const code = (error as NodeJS.ErrnoException)?.code;
       if (code === 'VSUP_AUTHORIZATION_INVALID' || code === 'VSUP_ATTEMPT_CONSUMED') throw error;
-      if (code === 'ENOENT') throw invalid();
       throw storage();
     }
   }
@@ -120,7 +126,7 @@ export class DispatchGrants {
       const raw: unknown = JSON.parse(bounded.subarray(0, bytesRead).toString('utf8'));
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalid();
       const row = raw as Record<string, unknown>;
-      if (Object.keys(row).sort().join(',') !== 'attempt_id,expires_at,grant_id,issued_at,owner_reference,request_sha256' || typeof row.grant_id !== 'string' || !UUID_V4.test(row.grant_id) || typeof row.attempt_id !== 'string' || !UUID_V4.test(row.attempt_id) || typeof row.request_sha256 !== 'string' || !SHA256.test(row.request_sha256) || typeof row.owner_reference !== 'string' || row.owner_reference.length < 1 || row.owner_reference.length > 256 || /[\u0000-\u001f\u007f]/.test(row.owner_reference) || redactSecrets(row.owner_reference) !== row.owner_reference || !validTimestamp(String(row.issued_at)) || !validTimestamp(String(row.expires_at)) || Date.parse(String(row.expires_at)) <= Date.parse(String(row.issued_at))) throw invalid();
+      if (Object.keys(row).sort().join(',') !== 'attempt_id,expires_at,grant_id,issued_at,owner_reference,request_sha256' || typeof row.grant_id !== 'string' || !UUID_V4.test(row.grant_id) || typeof row.attempt_id !== 'string' || !UUID_V4.test(row.attempt_id) || typeof row.request_sha256 !== 'string' || !SHA256.test(row.request_sha256) || typeof row.owner_reference !== 'string' || row.owner_reference.length < 1 || row.owner_reference.length > 256 || /[\u0000-\u001f\u007f]/.test(row.owner_reference) || redactSecrets(row.owner_reference) !== row.owner_reference || !validTimestamp(String(row.issued_at)) || !validTimestamp(String(row.expires_at)) || Date.parse(String(row.expires_at)) <= Date.parse(String(row.issued_at)) || Date.parse(String(row.expires_at)) - Date.parse(String(row.issued_at)) > MAX_GRANT_LIFETIME_MS) throw invalid();
       return row as GrantRecord;
     } finally { await handle.close(); }
   }

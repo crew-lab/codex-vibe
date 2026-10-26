@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DispatchGrants } from '../../src/core/dispatch-grants.js';
+import { DispatchGrants, MAX_GRANT_LIFETIME_MS } from '../../src/core/dispatch-grants.js';
 
 const roots: string[] = [];
 const digest = 'a'.repeat(64);
@@ -34,6 +34,20 @@ describe('DispatchGrants', () => {
     const expired = await grants.issue({ ...input(), expiresAt: new Date(Date.now() + 10).toISOString() });
     await new Promise((resolve) => setTimeout(resolve, 20));
     await expect(grants.consume({ authorizationId: expired.authorization_id, attemptId: expired.attempt_id, requestSha256: digest, runId: expired.attempt_id })).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID' });
+  });
+
+  it('refuses an authorization that would outlive 24 hours', async () => {
+    const root = await fixture(); const grants = new DispatchGrants(root);
+    await expect(grants.issue(input(new Date(Date.now() + MAX_GRANT_LIFETIME_MS + 60_000).toISOString()))).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID', message: expect.stringContaining('24 hours') });
+    await expect(grants.issue(input(new Date(Date.now() + MAX_GRANT_LIFETIME_MS - 60_000).toISOString()))).resolves.toMatchObject({ request_sha256: digest });
+  });
+
+  it('says when nothing was ever registered under the data directory, apart from an unknown authorization', async () => {
+    const root = await fixture();
+    const unknown = { authorizationId: '00000000-0000-4000-8000-000000000000', attemptId: '00000000-0000-4000-8000-000000000001', requestSha256: digest, runId: '00000000-0000-4000-8000-000000000002' };
+    await expect(new DispatchGrants(root).consume(unknown)).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID', message: expect.stringContaining('No dispatch authorization is registered') });
+    await new DispatchGrants(root).issue(input());
+    await expect(new DispatchGrants(root).consume(unknown)).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID', message: 'The dispatch authorization is invalid or unavailable.' });
   });
 
   it('allows only one consumer across separate processes', async () => {
