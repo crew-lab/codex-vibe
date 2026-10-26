@@ -64,6 +64,8 @@ The 2.0.x path is done, and 2.1.0 is published as a pre-release. The 2.1.1 path,
 | 4 | Clean-account installation; then a release may be marked latest | You | Postponed by the owner 2026-10-19 |
 | 5 | The five Antigravity probes on a 2.1.x candidate | Target agent | Opt-in and a sitting of its own |
 | 6 | Outreach, after a release is marked latest | You | Section "Outreach and adjacent work" |
+| next | `allowed_write_paths` on edits ([section 7](#7-22-wider-still-one-path)): built on its own branch, merged after 2.1.1 is published | Coordinator | Yes to the merge |
+| next | The review search sidecar ([design](2.1-designs.md#5-search-sidecar-for-reviews)), re-read against Vibe 3.0.2's tagged source | Coordinator | **Approve ADR 0007**; needs `nested-run-typescript-shape-and-gating` evidence from the 2.1.1 hosted review |
 | any | Repository description and topics (section 4.7); no rename (owner 2026-10-19) | You | **Run the `gh` command** |
 
 Open decisions that do not block the release are in section 4.12. A failure in step 1 or 2 is a candidate defect: the fix comes back to main, and the sitting restarts on a rebuilt archive (section 4.5).
