@@ -438,6 +438,40 @@ describe('app-server backend: approvals and the event audit', () => {
     harness.expectCleanedUp();
   });
 
+  it('stops after three denied web fetch and search requests', async () => {
+    const harness = new Harness({
+      name: 'three-web-denials',
+      steps: [
+        { op: 'call', tool: 'web.fetch', mode: 'never', generic: true, input: {} },
+        { op: 'call', tool: 'web_search', mode: 'never', generic: true, input: {} },
+        { op: 'call', tool: 'web.fetch', mode: 'never', generic: true, input: {} },
+        { op: 'say', text: 'This text should not make the denied requests safe.' }
+      ]
+    });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal).message).toContain('three consecutive denied shell or network requests');
+    expect(harness.eventsOfType('tool_denied')).toHaveLength(3);
+    harness.expectCleanedUp();
+  });
+
+  it('does not count repeated denials of a non-network tool toward the shell and network stop', async () => {
+    const harness = new Harness({
+      name: 'three-search-replace-denials',
+      steps: [
+        { op: 'call', tool: 'file_system.search_replace', mode: 'never', generic: true, input: {} },
+        { op: 'call', tool: 'file_system.search_replace', mode: 'never', generic: true, input: {} },
+        { op: 'call', tool: 'file_system.search_replace', mode: 'never', generic: true, input: {} },
+        { op: 'say', text: 'The review found no issues.' }
+      ]
+    });
+    const terminal = await harness.run();
+
+    expect(harness.eventsOfType('tool_denied')).toHaveLength(3);
+    expect(terminal.update?.error?.details?.reason).not.toBe('repeated_unsafe_denials');
+  });
+
   it('fails the run when an off-profile tool was executed', async () => {
     const harness = new Harness('off-profile-executed');
     const terminal = await harness.run();
@@ -1054,85 +1088,6 @@ describe('app-server backend: session handoff', () => {
     expect(terminal.state).toBe('failed');
     expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'readback_mismatch', fields: ['config.tools.read_file.permission'] } });
     expect(harness.fixtureEvents('interrupt').length).toBeLessThanOrEqual(1);
-    harness.expectCleanedUp();
-  });
-});
-
-describe('app-server backend: correctable same-session turns', () => {
-  it('continues the live session with a correction-only prompt and no new process', async () => {
-    const harness = new Harness('allowed-call');
-    harness.input.sessionMode = 'correctable';
-    const started = await harness.start();
-    harness.handle = started.handle;
-
-    const first = await waitFor(() => harness.states, (states) => states.some((item) => item.state === 'awaiting_validation'));
-    expect(first.at(-1)?.state).toBe('awaiting_validation');
-    await harness.backend.continue(started.handle, 'Fix the typo in the candidate.');
-    const second = await waitFor(() => harness.states, (states) => states.filter((item) => item.state === 'awaiting_validation').length === 2);
-
-    const turns = harness.frames('turn/start');
-    expect(turns).toHaveLength(2);
-    expect((turns[0]?.params as Json).sessionId).toBe((turns[1]?.params as Json).sessionId);
-    expect(harness.log().filter((entry) => entry.kind === 'start')).toHaveLength(1);
-    const secondPrompt = (((turns[1]?.params as Json).message as Array<{ text: string }>)[0]?.text) ?? '';
-    expect(secondPrompt).toContain('Apply only this correction');
-    expect(secondPrompt).toContain('Fix the typo in the candidate.');
-    expect(secondPrompt).not.toContain('Review the repository.');
-    expect(harness.eventsOfType('tool_call')).toHaveLength(2);
-    expect(second.filter((item) => item.state === 'awaiting_validation')).toHaveLength(2);
-
-    await harness.backend.close(started.handle);
-    harness.expectCleanedUp();
-  });
-
-  it('refuses continuation when the verified pin identity changes during validation', async () => {
-    let checks = 0;
-    const harness = new Harness('allowed-call', {
-      options: {
-        pin: {
-          verify: async (executable) => ({
-            executable,
-            vibeVersion: '3.0.2',
-            manifestSha256: 'a'.repeat(64),
-            recordSha256: (checks++ === 0 ? 'b' : 'c').repeat(64)
-          })
-        }
-      }
-    });
-    harness.input.sessionMode = 'correctable';
-    const started = await harness.start();
-    harness.handle = started.handle;
-    await waitFor(() => harness.states, (states) => states.some((item) => item.state === 'awaiting_validation'));
-
-    await expect(harness.backend.validateContinuation(started.handle)).rejects.toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED' });
-    expect(harness.frames('turn/start')).toHaveLength(1);
-    await harness.backend.close(started.handle);
-    harness.expectCleanedUp();
-  });
-
-  it('keeps the original deadline active while awaiting validation and cleans up on expiry', async () => {
-    const harness = new Harness('allowed-call', { limits: { timeoutSeconds: 4 } });
-    harness.input.sessionMode = 'correctable';
-    const started = await harness.start();
-    harness.handle = started.handle;
-    await waitFor(() => harness.states, (states) => states.some((item) => item.state === 'awaiting_validation'));
-    const failed = await waitFor(() => harness.states, (states) => states.some((item) => item.state === 'failed'), 6000);
-
-    expect(failed.find((item) => item.state === 'failed')?.update?.error).toMatchObject({ code: 'VSUP_TIMEOUT' });
-    harness.expectCleanedUp();
-  });
-
-  it('fails and cleans up if the app-server disconnects while awaiting validation', async () => {
-    const harness = new Harness('allowed-call');
-    harness.input.sessionMode = 'correctable';
-    const started = await harness.start();
-    harness.handle = started.handle;
-    await waitFor(() => harness.states, (states) => states.some((item) => item.state === 'awaiting_validation'));
-    if (harness.pid === undefined) throw new Error('The fake app-server did not report its process id');
-    process.kill(harness.pid, 'SIGKILL');
-    const failed = await waitFor(() => harness.states, (states) => states.some((item) => item.state === 'failed'));
-
-    expect(failed.find((item) => item.state === 'failed')?.update?.error).toMatchObject({ code: 'VSUP_BACKEND_CRASHED' });
     harness.expectCleanedUp();
   });
 });

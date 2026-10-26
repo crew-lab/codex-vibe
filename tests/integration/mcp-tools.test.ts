@@ -153,7 +153,7 @@ describe('MCP stdio tool surface', () => {
     const input = new PassThrough(); const output = new PassThrough();
     const manager = {
       reviewStart: vi.fn(async () => ({})), editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})),
-      result: vi.fn(async () => ({})), close: vi.fn(async () => ({})), vibeContinue: vi.fn(async () => ({})),
+      result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
     } satisfies RunManagerTools;
     const server = createSupervisorMcpServer(manager, { config });
     await server.connect(new StdioServerTransport(input, output));
@@ -172,7 +172,7 @@ describe('MCP stdio tool surface', () => {
     const input = new PassThrough(); const output = new PassThrough();
     const manager: RunManagerTools & { initialize(): Promise<void>; shutdown(): Promise<{ timedOut: boolean }> } = {
       reviewStart: vi.fn(async () => ({})), editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})),
-      result: vi.fn(async () => ({})), close: vi.fn(async () => ({})), vibeContinue: vi.fn(async () => ({})),
+      result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
       initialize: vi.fn(async () => {}), shutdown: vi.fn(async () => ({ timedOut: false })),
     };
     const config = TEST_CONFIG;

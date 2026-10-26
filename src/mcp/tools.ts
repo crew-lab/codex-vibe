@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/server';
-import { supervisorError, type SupervisorError, type SupervisorErrorCode, type ReviewStartToolInput, type EditStartToolInput, type StatusToolInput, type ResultToolInput, type CloseToolInput, type ContinueToolInput, type WaitOptions } from '../contracts.js';
+import { supervisorError, type SupervisorError, type SupervisorErrorCode, type ReviewStartToolInput, type EditStartToolInput, type StatusToolInput, type ResultToolInput, type CloseToolInput, type WaitOptions } from '../contracts.js';
 import { toolSchemas, type ToolName } from './schemas.js';
 import { sanitizeForPersistence } from '../persistence/atomic.js';
 import { describeFailure } from '../diagnostics/background.js';
@@ -11,7 +11,6 @@ export interface RunManagerTools {
   status(input: StatusToolInput, options?: WaitOptions): Promise<unknown>;
   result(input: ResultToolInput): Promise<unknown>;
   close(input: CloseToolInput): Promise<unknown>;
-  vibeContinue?(input: ContinueToolInput, options?: WaitOptions): Promise<unknown>;
 }
 
 export interface ToolRegistrationOptions {
