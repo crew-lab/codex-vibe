@@ -1,3 +1,41 @@
+# Current state — 2026-10-26
+
+**Source.** `codex/stability-2.1.1` (version 2.1.1, unreleased) sits on `codex/publish-vibe-stability`, the branch of [crew-lab/codex-vibe#10](https://github.com/crew-lab/codex-vibe/pull/10). Neither is merged; `main` is still `9c38ea0`. Merge PR 10 first, then the 2.1.1 branch.
+
+**Releases.** v2.1.0 (archive `9f949d43…`, candidate `7641d294…`), v2.0.2 and v2.0.1 are pre-releases; none is latest. v2.1.0 was built before the fixes below: in it, a deadline or cancel that lands while a completed run is being finalized can kill the server and turn the run into a failure.
+
+**2.1.1 changes** ([changelog](CHANGELOG.md)): that finalization fix (`92b9c3c`, already on PR 10); review authorizations bound to file content instead of timestamps, so ignored build output or a touched file no longer spends an attempt; web fetch and search tools count toward the three-denial stop; `task authorize --expires-at` capped at 24 hours, with a distinct error when the data directory holds no authorization; the unreachable correction code removed. `npm run verify:release` passed on Node 20.19.0. The 2.1.0 target evidence does not transfer: 2.1.1 is a new candidate.
+
+**What remains, in order.**
+
+| # | Step | Who |
+|---|---|---|
+| 1 | Review and merge PR 10, then the 2.1.1 branch | Owner |
+| 2 | Package 2.1.1 from the merged `main`, install beside 2.1.0, pin manifest, `prepare check` ([brief below](#target-brief-211-packaging-and-no-inference-checks--2026-10-26)) | Target agent, on the owner's yes to authorizations 1–3 |
+| 3 | Native readiness on the 2.1.1 candidate, then one hosted review and one edit, each through `task authorize` | Target agent; hosted runs need a new allowance of two starts |
+| 4 | Publish 2.1.1 as a pre-release from the target-built archive; add a known-issue line to the v2.1.0 release notes | Owner |
+| 5 | Still open: clean-account installation (postponed), broader real-task qualification, the five Antigravity probes | Owner / target agent |
+
+The target briefs dated 2026-10-19 further down describe older source and must not be sent.
+
+### Target brief: 2.1.1 packaging and no-inference checks — 2026-10-26
+
+Send only after step 1 is merged and the owner says yes to authorizations 1 to 3 of the [target acceptance procedure](docs/target-acceptance.md#authorizations) for 2.1.1. It is not a hosted allowance.
+
+```text
+Fetch main and read Handoff.md, section "Current state — 2026-10-26", and docs/target-acceptance.md. Follow the procedure's steps 1 to 4 for the 2.1.1 candidate. Stop at the first failure; no retries, no configuration edits to make a check pass, no hosted start, no task authorize.
+
+1. Build from the main commit that contains version 2.1.1 (git checkout --detach <commit>, confirm git rev-parse HEAD) under exactly Node 20.19.0 and npm 10.8.2: npm ci, npm run verify:release, then package:rc with the offline cache populated with the locked versions. Record the archive SHA-256 and the kit's SHA256SUMS.
+2. Install the archive into a new private prefix beside the 2.1.0 install, with its own configuration directory, pin manifest path and data directory. Keep the 2.1.0 registration as the rollback; switch the Codex registration to 2.1.1 only after step 4 passes.
+3. Use the same Vibe 3.0.2 install the 2.1.0 sitting used. vibe --version must print 3.0.2. Run pin-manifest and doctor --json on the candidate configuration and review the manifest as the procedure says.
+4. prepare check --kit with the candidate's kit (check its SHA256SUMS first) and read the saved report against every criterion in step 4 of the procedure.
+5. Switch the registration, restart Codex and run vibe_status for review and for edit with expected_candidate set to the kit manifest's candidate_sha256 (procedure step 5). Record the response without the receipt.
+
+Recording: an evidence folder outside the shipped tree, the placeholders from AGENTS.md, grep -rn '/Users/\|/home/' before committing. Add the 2.1.1 candidate to evidence_builds in docs/acceptance.json and move only the gates whose evidence is complete. Commit on a new branch from main and push it with make push-branch BRANCH=<name>. Do not merge to main or publish. Report the archive hash, the candidate hash, each gate's result and every finding.
+```
+
+---
+
 # Publication checkpoint — 2026-10-26
 
 The 2.1.0 stability source is consolidated on `codex/publish-vibe-stability` from base `9c38ea0`. This checkpoint supersedes the uncommitted/pending statements in the historical sections below. Only exact Vibe 3.0.2 is supported; the public surface is five one-shot tools and each dispatch requires a single-use registered attempt.
@@ -14,9 +52,9 @@ The current implementation uses exactly Vibe 3.0.2 and five one-shot MCP tools. 
 
 This work is isolated from the existing dirty checkouts. The local changes are uncommitted and unpushed. Packaging, installed preparation and actual Desktop readiness are separate checks, recorded only after they run. The experimental Antigravity backend remains independent.
 
-# Current handoff
+# Handoff as of 2026-10-19
 
-Updated 2026-10-19. Status only: what the source, the archives and the installations are, what remains and who does it, what is open, and where the records are. The picture and the rules are in the [development strategy](planning/development-strategy.md); the sequenced work is in the [development plan](planning/development-plan.md); the boundaries are in [AGENTS.md](AGENTS.md).
+Historical; the current state is at the top. Updated 2026-10-19. Status only: what the source, the archives and the installations are, what remains and who does it, what is open, and where the records are. The picture and the rules are in the [development strategy](planning/development-strategy.md); the sequenced work is in the [development plan](planning/development-plan.md); the boundaries are in [AGENTS.md](AGENTS.md).
 
 ## Historical goals and state at a glance — 2026-10-19
 
@@ -51,7 +89,9 @@ This section is the one-page summary; the dated sections below are the record be
 
 **Open risks.** Real `agy` tool argument names may differ from the hook's list, in which case those calls are denied until it matches; the agy probes need `agy` to accept a local model endpoint; running `agy` headless under a consumer sign-in may be outside Antigravity's consumer terms, so prefer API-key or enterprise authentication.
 
-### Target brief: 2.1.0 steps 1 and 2 — 2026-10-19
+### Target brief: 2.1.0 steps 1 and 2 — 2026-10-19 (superseded)
+
+Superseded on 2026-10-26 by the 2.1.1 brief at the top; kept as a record.
 
 The owner's yes to this brief is authorizations 1 to 3 of the [target acceptance procedure](docs/target-acceptance.md#authorizations) for the 2.1.0 candidate: build and install side by side, the pin manifest, and the no-inference checks. It is not a hosted allowance: no `turn/start`, no hosted start, no switch of the Codex registration. Part B runs only when the owner's message handing over this brief says Antigravity is opted in; the owner opted in on 2026-10-19, so both parts run.
 
@@ -72,7 +112,9 @@ Part B, Antigravity, only if the owner opted in: a second candidate configuratio
 Recording: an evidence folder outside the shipped tree, placeholders from AGENTS.md, grep -rn '/Users/\|/home/' before committing. Add the 2.1.0 candidate (source, archive, candidate and kit identity, Node and npm) to evidence_builds in docs/acceptance.json and move only the gates whose evidence is complete, per "Stop rules and recording". Commit on a new branch from main and push it with make push-branch BRANCH=<name>. Do not merge to main, publish, or start any hosted run. Report the archive hash, each gate's result and every finding.
 ```
 
-### Target brief: 2.1.0 step 3 — 2026-10-19
+### Target brief: 2.1.0 step 3 — 2026-10-19 (superseded)
+
+Superseded on 2026-10-26: a 2.1.1 hosted brief is written once the step 2 evidence is merged.
 
 Not authorized yet. It runs only after the owner gives a hosted allowance of two starts in chat, and only after the steps 1 and 2 evidence branch is merged with Part A passing. That yes is authorization 1's registration switch, authorization 3 for one more `prepare check` (the receipt binds the whole configuration except the roots, so adding the exclusion makes the step 2 receipt stale), and authorization 4 of the [procedure](docs/target-acceptance.md#authorizations) for the 2.1.0 candidate. It covers no Antigravity hosted run (gate `antigravity-backend-hosted-review-edit` stays open), no disconnect and no retry. The two runs carry the gates `native-readiness-on-candidate`, `hosted-usage-recorded`, `hosted-excluded-glob-readback-and-denial` (denial half), `hosted-run-exported`, `hosted-close-acceptance-recorded`, `nested-run-typescript-shape-and-gating`, the handler half of `permission-ask-visible-in-effective-config`, the observations for `thinking-off-effect` and `execution-provenance-on-hosted-run`, and a new attempt at `hosted-review-edit-confirmation`.
 
