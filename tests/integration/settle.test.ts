@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -63,7 +64,7 @@ describe('one-shot settlement', () => {
   it('records startup failure and releases the reserved capacity', async () => {
     const context = await setup(); context.backend.startFailure = true;
     try {
-      const started = await context.manager.reviewStart({ task: 'fail start', cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: 'fail start', cwd: context.source });
       const status = await waitFor(() => context.manager.status({ run_id: started.run_id }), (value) => value.state === 'failed');
       expect(status.error).toMatchObject({ code: 'VSUP_BACKEND_CRASHED' });
       await waitFor(async () => activeSlots(context.manager), (value) => value === 0);
@@ -74,7 +75,7 @@ describe('one-shot settlement', () => {
   it('releases a completed process immediately and ignores a late failure callback', async () => {
     const context = await setup();
     try {
-      const started = await context.manager.reviewStart({ task: 'complete', cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: 'complete', cwd: context.source });
       await waitFor(() => state(context.manager, started.run_id), (value) => value === 'running');
       const callbacks = context.backend.callbacks.get(started.run_id)!;
       await callbacks.onState('completed', { result: { summary: 'done' } });
@@ -91,13 +92,13 @@ describe('one-shot settlement', () => {
     const context = await setup();
     context.backend.completeInsideStart = true;
     try {
-      const first = await context.manager.reviewStart({ task: 'complete during start', cwd: context.source });
+      const first = await authorizedReviewStart(context.manager, { task: 'complete during start', cwd: context.source });
       expect(await waitFor(() => state(context.manager, first.run_id), (value) => value === 'completed')).toBe('completed');
       expect(await waitFor(async () => context.backend.closed.slice(), (closed) => closed.includes(first.run_id))).toEqual([first.run_id]);
       await waitFor(async () => activeSlots(context.manager), (slots) => slots === 0);
 
       context.backend.completeInsideStart = false;
-      const second = await context.manager.reviewStart({ task: 'next run', cwd: context.source });
+      const second = await authorizedReviewStart(context.manager, { task: 'next run', cwd: context.source });
       expect(await waitFor(() => state(context.manager, second.run_id), (value) => value === 'running')).toBe('running');
       await context.backend.callbacks.get(second.run_id)?.onState('completed', { result: { summary: 'done' } });
       expect(context.backend.closed).toEqual([first.run_id, second.run_id]);
@@ -107,7 +108,7 @@ describe('one-shot settlement', () => {
   it('turns backend failure into a bounded failed result and releases the worker once', async () => {
     const context = await setup();
     try {
-      const started = await context.manager.reviewStart({ task: 'fail', cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: 'fail', cwd: context.source });
       await waitFor(() => state(context.manager, started.run_id), (value) => value === 'running');
       await context.backend.callbacks.get(started.run_id)?.onState('failed', { error: supervisorError('VSUP_BACKEND_CRASHED', 'crashed') });
       expect(await state(context.manager, started.run_id)).toBe('failed');
@@ -120,9 +121,9 @@ describe('one-shot settlement', () => {
   it('rejects a simultaneous second start without creating or queueing a run', async () => {
     const context = await setup();
     try {
-      const first = await context.manager.reviewStart({ task: 'first', cwd: context.source });
+      const first = await authorizedReviewStart(context.manager, { task: 'first', cwd: context.source });
       await waitFor(() => state(context.manager, first.run_id), (value) => value === 'running');
-      await expect(context.manager.reviewStart({ task: 'second', cwd: context.source })).rejects.toMatchObject({ code: 'VSUP_LIMIT_EXCEEDED' });
+      await expect(authorizedReviewStart(context.manager, { task: 'second', cwd: context.source })).rejects.toMatchObject({ code: 'VSUP_LIMIT_EXCEEDED' });
       expect(await context.manager.runsList()).toHaveLength(1);
       expect(context.backend.callbacks.size).toBe(1);
       await context.backend.callbacks.get(first.run_id)?.onState('completed', { result: { summary: 'done' } });
@@ -131,7 +132,7 @@ describe('one-shot settlement', () => {
 
   it('settles shutdown as interrupted failure and closes the owned worker exactly once', async () => {
     const context = await setup();
-    const started = await context.manager.reviewStart({ task: 'active', cwd: context.source });
+    const started = await authorizedReviewStart(context.manager, { task: 'active', cwd: context.source });
     await waitFor(() => state(context.manager, started.run_id), (value) => value === 'running');
     await context.manager.shutdown();
     expect(await state(context.manager, started.run_id)).toBe('failed');
@@ -143,7 +144,7 @@ describe('one-shot settlement', () => {
   it('retains the active slot and live handle when close cannot prove worker termination, then permits a safe retry', async () => {
     const context = await setup();
     try {
-      const started = await context.manager.reviewStart({ task: 'active worker', cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: 'active worker', cwd: context.source });
       await waitFor(() => state(context.manager, started.run_id), (value) => value === 'running');
       context.backend.cancelFailure = true;
 
@@ -151,7 +152,7 @@ describe('one-shot settlement', () => {
       expect(failedClose).toMatchObject({ state: 'running', worker_termination_unverified: true, error: { code: 'VSUP_BACKEND_ERROR' } });
       expect(activeSlots(context.manager)).toBe(1);
       expect(context.backend.closed).toEqual([]);
-      await expect(context.manager.reviewStart({ task: 'must not overlap', cwd: context.source })).rejects.toMatchObject({ code: 'VSUP_LIMIT_EXCEEDED' });
+      await expect(authorizedReviewStart(context.manager, { task: 'must not overlap', cwd: context.source })).rejects.toMatchObject({ code: 'VSUP_LIMIT_EXCEEDED' });
 
       context.backend.cancelFailure = false;
       const retried = await context.manager.close({ run_id: started.run_id });
@@ -165,7 +166,7 @@ describe('one-shot settlement', () => {
   it('does not release the slot when backend close fails after cancellation, and retries close on the same handle', async () => {
     const context = await setup();
     try {
-      const started = await context.manager.reviewStart({ task: 'close fails', cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: 'close fails', cwd: context.source });
       await waitFor(() => state(context.manager, started.run_id), (value) => value === 'running');
       context.backend.closeFailure = true;
 
@@ -173,7 +174,7 @@ describe('one-shot settlement', () => {
       expect(failedClose).toMatchObject({ state: 'failed', worker_termination_unverified: true, error: { code: 'VSUP_BACKEND_ERROR' } });
       expect(activeSlots(context.manager)).toBe(1);
       expect(context.backend.closed).toEqual([started.run_id, started.run_id]);
-      await expect(context.manager.reviewStart({ task: 'must not overlap', cwd: context.source })).rejects.toMatchObject({ code: 'VSUP_LIMIT_EXCEEDED' });
+      await expect(authorizedReviewStart(context.manager, { task: 'must not overlap', cwd: context.source })).rejects.toMatchObject({ code: 'VSUP_LIMIT_EXCEEDED' });
 
       context.backend.closeFailure = false;
       const retried = await context.manager.close({ run_id: started.run_id });
@@ -185,7 +186,7 @@ describe('one-shot settlement', () => {
 
   it('keeps shutdown ownership when termination is unverified and drains after a later owned-handle retry', async () => {
     const context = await setup();
-    const started = await context.manager.reviewStart({ task: 'shutdown with live worker', cwd: context.source });
+    const started = await authorizedReviewStart(context.manager, { task: 'shutdown with live worker', cwd: context.source });
     await waitFor(() => state(context.manager, started.run_id), (value) => value === 'running');
     context.backend.cancelFailure = true;
     const result = await context.manager.shutdown(25);
@@ -205,7 +206,7 @@ describe('one-shot settlement', () => {
     const limits = { ...TEST_CONFIG.limits, maxTranscriptBytes: 8 };
     const context = await setup(limits);
     try {
-      const started = await context.manager.reviewStart({ task: 'overflow', cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: 'overflow', cwd: context.source });
       await waitFor(() => state(context.manager, started.run_id), (value) => value === 'running');
       await context.backend.callbacks.get(started.run_id)?.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: 'this is too long' } });
       expect(await waitFor(() => state(context.manager, started.run_id), (value) => value === 'failed')).toBe('failed');
@@ -218,7 +219,7 @@ describe('one-shot settlement', () => {
   it('verifies worker termination before it finalizes artifacts', async () => {
     const context = await setup();
     try {
-      const started = await context.manager.reviewStart({ task: 'limit', cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: 'limit', cwd: context.source });
       await waitFor(() => state(context.manager, started.run_id), (value) => value === 'running');
       const closedAtFinalize: boolean[] = [];
       const internals = context.manager as unknown as { finalizeArtifacts: (...args: unknown[]) => Promise<unknown> };

@@ -1,3 +1,4 @@
+import { authorizedEditStart, authorizedReviewStart } from "../support/authorized-start.js";
 import { chmod, mkdtemp, mkdir, readFile, realpath, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
@@ -62,7 +63,7 @@ async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean): 
 }
 
 async function runningReview(manager: RunManager, source: string, task = "review") {
-  const started = await manager.reviewStart({ task, cwd: source });
+  const started = await authorizedReviewStart(manager, { task, cwd: source });
   await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
   return started.run_id;
 }
@@ -78,7 +79,6 @@ async function integrityEvents(manager: RunManager, runId: string): Promise<Reco
 
 const CHANGED_WITH_WRITE = "Possible read-only boundary violation: the review worker issued a write-capable tool call and the source workspace changed. Inspect the changed paths before trusting the review.";
 const CHANGED_PLAIN = "The source workspace changed during this read-only review. The changes may be your own edits or a read-only boundary violation; inspect the changed paths before trusting the review.";
-const UNVERIFIED = "The source workspace could not be snapshotted (too large or unreadable); review integrity was NOT checked, so a read-only boundary violation would go undetected.";
 
 describe("review integrity", () => {
   async function prepared(backend = new FakeBackend()) {
@@ -161,23 +161,14 @@ describe("review integrity", () => {
     } finally { await manager.shutdown(); }
   });
 
-  it("reports unverified when the workspace cannot be snapshotted", async () => {
+  it("refuses authorization when the workspace cannot be snapshotted", async () => {
     if (process.getuid?.() === 0) return;
     const { source, manager, backend } = await prepared();
     const locked = join(source, "locked");
     await mkdir(locked); await writeFile(join(locked, "secret.txt"), "secret\n"); await chmod(locked, 0o000);
     try {
-      const runId = await runningReview(manager, source);
-      await backend.callbacks?.onState("completed", { result: { summary: "Review done" } });
-      const full = await manager.result({ run_id: runId, detail: "full" });
-      expect(full.state).toBe("completed");
-      expect(full.integrity).toMatchObject({ status: "unverified", write_tool_observed: false, reason: expect.any(String) });
-      expect((full.integrity as Record<string, unknown>).changed_paths).toBeUndefined();
-      expect(full.warnings).toContain(UNVERIFIED);
-      const events = await integrityEvents(manager, runId);
-      expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({ severity: "warning", data: { status: "unverified" } });
-      expect((await manager.result({ run_id: runId })).integrity).toMatchObject({ status: "unverified" });
+      await expect(authorizedReviewStart(manager, { task: "review", cwd: source })).rejects.toMatchObject({ code: "VSUP_AUTHORIZATION_INVALID" });
+      expect(backend.callbacks).toBeUndefined();
     } finally { await chmod(locked, 0o700).catch(() => undefined); await manager.shutdown(); }
   });
 
@@ -236,7 +227,7 @@ describe("review integrity", () => {
     const backend = new FakeBackend();
     const { source, manager } = await setupGit(backend);
     try {
-      const started = await manager.editStart({ task: "edit", cwd: source });
+      const started = await authorizedEditStart(manager, { task: "edit", cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
       await backend.callbacks?.onState("completed", { result: { summary: "Done" } });
       expect((await manager.result({ run_id: started.run_id, detail: "full" })).integrity).toBeUndefined();
@@ -304,7 +295,7 @@ describe("result cap shaping", () => {
     const { source, manager } = await setup(backend);
     try {
       const summary = `START${"s".repeat(9000)}END`;
-      const started = manager.reviewStart({ task: "review", cwd: source, wait_seconds: 30 });
+      const started = authorizedReviewStart(manager, { task: "review", cwd: source, wait_seconds: 30 });
       await waitFor(async () => backend.callbacks, (value) => value !== undefined);
       await backend.callbacks?.onState("completed", { result: { summary, warnings: ["note"] } });
       const result = await started;
@@ -337,7 +328,7 @@ describe("result cap shaping", () => {
     backend.beforeReturn = async (input) => { await writeFile(join(input.workerWorkspace, "mid.txt"), "y".repeat(3000) + "\n"); };
     const { source, manager } = await setupGit(backend);
     try {
-      const started = await manager.editStart({ task: "edit", cwd: source });
+      const started = await authorizedEditStart(manager, { task: "edit", cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
       await backend.callbacks?.onState("completed", { result: { summary: "z".repeat(6000) } });
       const compact = await manager.result({ run_id: started.run_id });
@@ -353,7 +344,7 @@ describe("result cap shaping", () => {
     backend.beforeReturn = async (input) => { await writeFile(join(input.workerWorkspace, "mid.txt"), "y".repeat(3000) + "\n"); };
     const { source, manager } = await setupGit(backend);
     try {
-      const started = await manager.editStart({ task: "edit", cwd: source });
+      const started = await authorizedEditStart(manager, { task: "edit", cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
       await backend.callbacks?.onState("completed", { result: { summary: "short" } });
       const compact = await manager.result({ run_id: started.run_id });

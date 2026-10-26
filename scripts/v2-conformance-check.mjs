@@ -239,7 +239,6 @@ async function main(argv) {
   const startedAt = new Date();
   const dist = await loadDist(options.dist);
   const { pin, protocol, readback, sessionConfig, jsonrpc, managed, reaper, environment, failure, supported, appServer } = dist;
-  const pinned = supported.SUPPORTED_VIBE;
   if (options.excludedGlobs.length > 0) {
     const validation = await import(pathToFileURL(path.join(options.dist, 'config/validation.js')).href);
     for (const glob of options.excludedGlobs) {
@@ -253,6 +252,7 @@ async function main(argv) {
     const loaded = await import(pathToFileURL(path.join(options.dist, 'config/config.js')).href).then((module) => module.loadResolvedConfig({ configPath: options.config }));
     config = loaded.config;
   }
+  const pinned = supported.selectedVibeVersion(config.vibeVersion);
   const manifestPath = options.manifest ?? config.paths?.vibePinManifest;
   if (!manifestPath) throw new UsageError('No manifest: pass --manifest <path> or set paths.vibe_pin_manifest in --config.');
   let executable;
@@ -314,7 +314,7 @@ async function main(argv) {
       if (manifest.version !== pinned) addFinding('manifest-version-mismatch', 'fail', `The manifest records Vibe ${manifest.version}; this candidate pins ${pinned}.`);
       for (let index = 0; index < options.pinRuns; index++) {
         const started = performance.now();
-        const verified = await pin.verifyPinnedInstall({ executable, manifestPath });
+        const verified = await pin.verifyPinnedInstall({ executable, manifestPath, expectedVersion: pinned });
         result.verify_runs_ms.push(Math.round(performance.now() - started));
         if (index === 0) {
           pairs.push([verified.environmentRoot, '<vibe-tool-env>']);
@@ -333,7 +333,7 @@ async function main(argv) {
     if (first !== undefined) {
       const tampered = { ...manifest, files: { ...manifest.files, [first]: '0'.repeat(64) } };
       try {
-        await pin.verifyPinnedInstall({ executable, manifest: tampered });
+        await pin.verifyPinnedInstall({ executable, manifest: tampered, expectedVersion: pinned });
         result.tamper_control = { rejected: false };
         addFinding('tamper-control-accepted', 'fail', 'A manifest with one altered file hash was accepted against the installed files.');
       } catch (error) {
@@ -491,7 +491,7 @@ async function main(argv) {
       if (!control) {
         const firstRuntime = await stage('runtime/read', async () => call(protocol.buildRuntimeRead(sessionId), protocol.parseRuntimeReadResult));
         const firstEffective = await stage('config/effective/read', async () => call(protocol.buildConfigEffectiveRead(sessionId), protocol.parseConfigEffectiveReadResult));
-        const configRead = await stage('config/read', async () => call(protocol.buildConfigRead(sessionId), protocol.parseConfigReadResult));
+        const configRead = await stage('config/read', async () => call(protocol.buildConfigRead(sessionId), (val) => protocol.parseConfigReadResult(val, { vibeVersion: pinned })));
         lap('readback_before_thinking');
         const before = readback.compareReadback(plan.expectation, { sessionStart: started, runtime: firstRuntime.value, effective: firstEffective.value }, { checkThinking: false });
         if ((configRead.value.hooksCount ?? 0) !== 0) before.push({ path: 'config/read.hooksCount', expected: 0, actual: configRead.value.hooksCount });

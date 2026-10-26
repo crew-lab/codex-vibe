@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { chmod, mkdtemp, mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -87,7 +88,7 @@ describe('RunManager regressions', () => {
     const { source, data } = await makeParent();
     const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
-      const started = await manager.reviewStart({ task: 'review', cwd: source });
+      const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
       await writeFile(path.join(data, 'runs', started.run_id, 'worker-diagnostics.json'), JSON.stringify({ planted: 'outside-content' }), { mode: 0o600 });
       await backend.callbacks.get(started.run_id)?.onState('completed', { result: { summary: 'done' } });
@@ -105,7 +106,7 @@ describe('RunManager regressions', () => {
     await writeFile(path.join(source, 'file.txt'), 'original\n');
     const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
-      const started = await manager.reviewStart({ task: 'review', cwd: source });
+      const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
       await writeFile(path.join(source, 'file.txt'), 'modified by someone else, longer content\n');
       await backend.callbacks.get(started.run_id)?.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: 'partial findings' } });
@@ -127,7 +128,7 @@ describe('RunManager regressions', () => {
     const { source, data } = await makeParent();
     const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
-      const started = await manager.reviewStart({ task: 'review', cwd: source });
+      const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
       const callbacks = backend.callbacks.get(started.run_id);
       await callbacks?.onState('completed', { result: { summary: 'done' } });
@@ -149,7 +150,7 @@ describe('RunManager regressions', () => {
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
     const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
-    const started = await manager.reviewStart({ task: 'review', cwd: source });
+    const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
     await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
     await backend.callbacks.get(started.run_id)?.onState('completed', { result: { summary: 'done' } });
     const runDirectory = path.join(data, 'runs', started.run_id);
@@ -172,7 +173,7 @@ describe('RunManager regressions', () => {
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
     const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
-    const started = await manager.reviewStart({ task: 'review', cwd: source });
+    const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
     await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
     await backend.callbacks.get(started.run_id)?.onState('completed', { result: { summary: 'done' } });
     const runDirectory = path.join(data, 'runs', started.run_id);
@@ -187,27 +188,17 @@ describe('RunManager regressions', () => {
     } finally { collector.stop(); await manager.shutdown(); }
   }, 30_000);
 
-  it.skipIf(process.getuid?.() === 0)('proceeds with a warning when the source workspace cannot be snapshotted', async () => {
+  it.skipIf(process.getuid?.() === 0)('refuses unreadable source before registering a dispatch grant', async () => {
     const backend = new FakeBackend();
     const { source, data } = await makeParent();
     const locked = path.join(source, 'locked');
     await mkdir(locked); await writeFile(path.join(locked, 'secret.txt'), 'secret\n'); await chmod(locked, 0o000); unreadable.push(locked);
     const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
-      const started = await manager.reviewStart({ task: 'review', cwd: source });
-      const running = await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running' || value.state === 'failed');
-      expect(running.state, JSON.stringify(running.error)).toBe('running');
-      await backend.callbacks.get(started.run_id)?.onState('completed', { result: { summary: 'done', warnings: ['backend warning'] } });
-      const result = await manager.result({ run_id: started.run_id });
-      expect(result.state).toBe('completed');
-      const warnings = result.warnings as string[];
-      expect(warnings).toContain('backend warning');
-      expect(warnings.some((warning) => /could not be snapshotted/.test(warning))).toBe(true);
-      const onDisk = JSON.parse(await readFile(path.join(data, 'runs', started.run_id, 'result.json'), 'utf8')) as { warnings: string[] };
-      expect(onDisk.warnings.some((warning) => /could not be snapshotted/.test(warning))).toBe(true);
-      expect(warnings.some((warning) => /changed during|could not be verified/.test(warning))).toBe(false);
+      await expect(authorizedReviewStart(manager, { task: 'review', cwd: source })).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID' });
+      expect(backend.callbacks.size).toBe(0);
     } finally { await manager.shutdown(); }
-  }, 30_000);
+  });
 
   it('fails the run when saving the record right after a successful snapshot fails', async () => {
     const backend = new FakeBackend();
@@ -216,7 +207,7 @@ describe('RunManager regressions', () => {
     const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     persistFault.armed = true; persistFault.fired = false;
     try {
-      const started = await manager.reviewStart({ task: 'review', cwd: source });
+      const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
       const status = await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'failed' || value.state === 'running');
       expect(persistFault.fired).toBe(true);
       expect(status.state).toBe('failed');
@@ -243,7 +234,7 @@ describe('RunManager regressions', () => {
     const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [source], limits: { ...TEST_CONFIG.limits, maxArtifactBytes: 10 } };
     const manager = new RunManager(config, data, [backend]);
     try {
-      const started = await manager.reviewStart({ task: 'review', cwd: source });
+      const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
       await backend.callbacks.get(started.run_id)?.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: 'findings exceed the artifact limit' } });
       await backend.callbacks.get(started.run_id)?.onState('completed', { result: { summary: 'done' } });
@@ -264,7 +255,7 @@ describe('RunManager regressions', () => {
       const backend = new FakeBackend();
       const { source, data } = await makeParent();
       const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source], ...overrides }, data, [backend]);
-      const started = await manager.reviewStart({ task: 'review', cwd: source });
+      const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
       return { backend, manager, runId: started.run_id, data };
     }
@@ -334,7 +325,7 @@ describe('RunManager regressions', () => {
       const { source, data } = await makeParent();
       const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
       try {
-        const started = await manager.reviewStart({ task: 'review', cwd: source, timeout_seconds: 30 });
+        const started = await authorizedReviewStart(manager, { task: 'review', cwd: source, timeout_seconds: 30 });
         await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running', 5_000);
         await vi.advanceTimersByTimeAsync(31_000);
         const failed = await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'failed', 5_000);

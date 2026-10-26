@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -54,7 +55,7 @@ describe('event storage degradation', () => {
     const backend = new FakeBackend();
     const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
-      const started = await manager.reviewStart({ task: 'review', cwd: source });
+      const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
       const callbacks = backend.callbacks.get(started.run_id);
       fault.events = true;
@@ -75,7 +76,7 @@ describe('event storage degradation', () => {
     const backend = new FakeBackend();
     const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
-      const started = await manager.reviewStart({ task: 'review', cwd: source });
+      const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
       const callbacks = backend.callbacks.get(started.run_id);
       fault.events = true;

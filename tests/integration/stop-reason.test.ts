@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -86,7 +87,7 @@ async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean, t
 }
 
 async function runningReview(manager: RunManager, source: string) {
-  const started = await manager.reviewStart({ task: "review", cwd: source });
+  const started = await authorizedReviewStart(manager, { task: "review", cwd: source });
   await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
   return started.run_id;
 }
@@ -167,7 +168,9 @@ describe("stop reason reporting", () => {
     await client.connect(new StdioClientHarness(input, output));
     try {
       backend.completeOnStart = { stopReason: "turn_limit" };
-      const waited = await client.callTool({ name: "vibe_review_start", arguments: { task: "review", cwd: source, wait_seconds: 5 } });
+      const request = { task: "review", cwd: source, wait_seconds: 5 };
+      const grant = await manager.authorizeDispatch("review", request, "stop-reason-test-owner", new Date(Date.now() + 60 * 60 * 1000).toISOString());
+      const waited = await client.callTool({ name: "vibe_review_start", arguments: { ...request, authorization_id: grant.authorization_id, attempt_id: grant.attempt_id } });
       const envelope = structured(waited) as { state: string; result: Record<string, unknown> };
       expect(envelope.state).toBe("completed");
       expect(envelope.result.stop_reason).toBe("turn_limit");

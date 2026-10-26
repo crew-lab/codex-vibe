@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
-import { candidateIdentity } from '../../dist/preparation/evidence.js';
+import { candidateIdentity } from '../../src/preparation/evidence.js';
 
 const exec = promisify(execFile);
 const { finalizePackage, reportAfterValidation, validateKitForTest } = await import('../../scripts/finalize-package.mjs');

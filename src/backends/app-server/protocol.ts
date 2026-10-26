@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { z } from 'zod';
+import { VIBE_3_CANDIDATE } from './supported-vibe.js';
 
 export const CLIENT_ENTRYPOINT = 'programmatic';
 export const MAX_PAGE_LIMIT = 500;
@@ -611,15 +612,22 @@ export function parseConfigEffectiveReadResult(value: unknown): { config: Record
   return parseWith(z.object({ config: plainRecord }), value, 'config/effective/read result');
 }
 
+export interface ConfigReadOptions {
+  vibeVersion?: string;
+}
+
 export interface ConfigReadResult {
   harnessSelectionSource: string | null;
   hooksCount: number | null;
   skillsCount: number | null;
 }
 
-export function parseConfigReadResult(value: unknown): ConfigReadResult {
-  const raw = parseWith(z.object({ harnessSelectionSource: z.string().nullable(), hooksCount: nonNegativeInt.nullish(), skillsCount: nonNegativeInt.nullish() }), value, 'config/read result');
-  return { harnessSelectionSource: raw.harnessSelectionSource, hooksCount: raw.hooksCount ?? null, skillsCount: raw.skillsCount ?? null };
+export function parseConfigReadResult(value: unknown, options?: ConfigReadOptions | string): ConfigReadResult {
+  const version = (typeof options === 'string' ? options : options?.vibeVersion) ?? VIBE_3_CANDIDATE;
+  const isVibe3 = version === VIBE_3_CANDIDATE;
+  const harnessSchema = isVibe3 ? z.string().nullable().optional() : z.string().nullable();
+  const raw = parseWith(z.object({ harnessSelectionSource: harnessSchema, hooksCount: nonNegativeInt.nullish(), skillsCount: nonNegativeInt.nullish() }), value, 'config/read result');
+  return { harnessSelectionSource: raw.harnessSelectionSource ?? null, hooksCount: raw.hooksCount ?? null, skillsCount: raw.skillsCount ?? null };
 }
 
 export function parseConfigModelWriteResult(value: unknown): { status: string | null } {

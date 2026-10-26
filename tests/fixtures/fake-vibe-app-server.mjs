@@ -908,7 +908,7 @@ const handlers = {
     state.initialized = true;
     state.clientCallbackKinds = params.capabilities?.callbackKinds ?? [];
     record('event', { name: 'initialize', callbackKinds: state.clientCallbackKinds });
-    return { serverInfo: { name: scenario.serverName ?? 'vibe-app-server', version: scenario.serverVersion ?? '2.26.1' }, processId: process.pid };
+    return { serverInfo: { name: scenario.serverName ?? 'vibe-app-server', version: scenario.serverVersion ?? '3.0.2' }, processId: process.pid };
   },
   'session/start'(params) {
     if (state.session) throw new RpcError('conflict', 'A session is already open on this connection');
@@ -941,16 +941,22 @@ const handlers = {
     if (params.sessionId) requireSession(params);
     if (!state.session) throw new RpcError('invalid_params', 'config/read needs a session in this fixture', { errorCount: 1, issues: [{ path: ['sessionId'], message: 'Field required' }] });
     const runtime = scenario.runtime ?? {};
-    return {
+    const serverVersion = scenario.serverVersion ?? '3.0.2';
+    const result = {
       config: runtimeSnapshot().config,
-      startupIssue: null,
       strippedHistoryImages: 0,
       skillsCount: (runtime.skills ?? []).filter((skill) => skill.scope !== 'builtin').length,
       hooksCount: runtime.hooksCount ?? 0,
       mcpServersTotal: (runtime.mcpSources ?? []).length,
-      mcpServersEnabled: (runtime.mcpSources ?? []).length,
-      harnessSelectionSource: Object.hasOwn(scenario, 'harnessSelectionSource') ? scenario.harnessSelectionSource : 'default'
+      mcpServersEnabled: (runtime.mcpSources ?? []).length
     };
+    if (serverVersion !== '3.0.2') {
+      result.startupIssue = null;
+      result.harnessSelectionSource = Object.hasOwn(scenario, 'harnessSelectionSource') ? scenario.harnessSelectionSource : 'default';
+    } else if (Object.hasOwn(scenario, 'harnessSelectionSource')) {
+      result.harnessSelectionSource = scenario.harnessSelectionSource;
+    }
+    return result;
   },
   'config/model/write'(params) {
     requireSession(params);

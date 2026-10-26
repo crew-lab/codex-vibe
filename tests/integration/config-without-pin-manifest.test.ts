@@ -53,7 +53,7 @@ describe('a configuration without paths.vibe_pin_manifest does not block its own
 
     expect(result.stderr).toBe('');
     expect(result.code).toBe(0);
-    expect(parsePinManifest(await readFile(output, 'utf8')).version).toBe('2.26.1');
+    expect(parsePinManifest(await readFile(output, 'utf8')).version).toBe('3.0.2');
   });
 
   it('pin-manifest asks for --output when neither the configuration nor the command line names one', async () => {
@@ -122,7 +122,9 @@ describe('a configuration without paths.vibe_pin_manifest does not block its own
     clients.push(client);
     await client.connect(transport);
 
-    const started = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: box.workspace, wait_seconds: 0 } }, { timeout: 20_000 });
+    const request = { task: 'review', cwd: box.workspace, wait_seconds: 0 };
+    const identifiers = { authorization_id: '11111111-1111-4111-8111-111111111111', attempt_id: '22222222-2222-4222-8222-222222222222' };
+    const started = await client.callTool({ name: 'vibe_review_start', arguments: { ...request, ...identifiers } }, { timeout: 20_000 });
     const text = (started.content as Array<{ type: string; text?: string }>).find((part) => part.type === 'text')?.text ?? '';
     expect(started.isError).toBe(true);
     expect(text).toContain('VSUP_CONFIG_INVALID');

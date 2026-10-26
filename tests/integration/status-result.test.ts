@@ -1,3 +1,4 @@
+import { authorizedEditStart, authorizedReviewStart } from "../support/authorized-start.js";
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -45,7 +46,7 @@ async function harness(git = false) {
 }
 
 async function running(manager: RunManager, source: string, mode: 'review' | 'edit' = 'review') {
-  const started = mode === 'review' ? await manager.reviewStart({ task: 'review', cwd: source }) : await manager.editStart({ task: 'edit', cwd: source });
+  const started = mode === 'review' ? await authorizedReviewStart(manager, { task: 'review', cwd: source }) : await authorizedEditStart(manager, { task: 'edit', cwd: source });
   for (let attempt = 0; attempt < 500 && (await manager.status({ run_id: started.run_id })).state !== 'running'; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
   return started.run_id;
 }

@@ -1,3 +1,11 @@
+# Current stability implementation — 2026-10-24
+
+The immediate path is exactly Vibe 3.0.2, five MCP tools and one-shot execution. Local administrative dispatch grants bind each owner-authorized task to one durable attempt across isolated sessions. Continuation and Antigravity qualification remain separate deferred streams. See [ADR 0010](../docs/adr/0010-dispatch-attempt-authorization.md) for the implemented dispatch contract.
+
+Execution order: independently review the combined source, pass deterministic release verification, freeze archive and kit, verify the installed identity, run one matched no-inference preparation check, and verify the actual Desktop-connected five-tool surface. Hosted inference is paused; another hosted trial requires a fresh owner instruction and reviewed contract. No edit candidate from the historical four-start fixture sitting was accepted.
+
+All dated plans below are historical context. They neither restore obsolete version support nor authorize installation, hosted trials, publication or a retry. Candidate, runtime, archive, preparation and connected-server identities remain separate. Clean-account qualification remains pending until an account is available.
+
 # Development strategy
 
 How vibe-supervisor is developed, verified and released from 2.0 on: the picture, the release line and the rules. [Handoff.md](../Handoff.md) holds the current status (what is done, what remains, who acts, what is open) and the [development plan](development-plan.md) holds the sequenced work; neither is repeated here.

@@ -1,3 +1,4 @@
+import { authorizedEditStart, authorizedReviewStart } from "../support/authorized-start.js";
 import { access, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
@@ -24,9 +25,12 @@ class FakeBackend implements SupervisorBackend {
   gate: Promise<void> | undefined;
   releaseStart: (() => void) | undefined;
   beforeReturn: ((input: StartRunInput) => Promise<void>) | undefined;
+  input: StartRunInput | undefined;
+  continuations = 0;
   async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     this.starts += 1;
+    this.input = input;
     this.callbacks = callbacks;
     this.handle = { runId: input.runId, backend: this.kind, opaque: {} };
     if (this.gate) await this.gate;
@@ -35,6 +39,15 @@ class FakeBackend implements SupervisorBackend {
   }
   async cancel() { this.cancelCalls += 1; }
   async close() {}
+  async validateContinuation() {}
+  async continue(_handle: BackendRunHandle, message: string) {
+    this.continuations += 1;
+    const input = this.input;
+    if (!input || !this.callbacks) throw new Error("fake run not started");
+    await this.callbacks.onState("running");
+    await writeFile(join(input.workerWorkspace, "generated.txt"), `revision ${this.continuations}: ${message}\n`);
+    await this.callbacks.onState("awaiting_validation", { result: { summary: `revision ${this.continuations}`, stopReason: "end_turn" }, usage: { modelCalls: this.continuations, tokensUsed: this.continuations * 10 } });
+  }
 }
 
 async function setup(backend = new FakeBackend()) {
@@ -57,10 +70,18 @@ async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean): 
 }
 
 describe("RunManager core lifecycle", () => {
+  it("rejects correctable sessions at the stable dispatch boundary", async () => {
+    const { source, manager, backend } = await setup();
+    try {
+      await expect(authorizedEditStart(manager, { task: "edit", cwd: source, session_mode: "correctable" })).rejects.toMatchObject({ code: "VSUP_INVALID_ARGUMENT" });
+      expect(backend.starts).toBe(0);
+    } finally { await manager.shutdown(); }
+  });
+
   it("starts asynchronously, persists events and finalizes a completed result", async () => {
     const { source, manager, backend } = await setup();
     try {
-      const started = await manager.reviewStart({ task: "review", cwd: source });
+      const started = await authorizedReviewStart(manager, { task: "review", cwd: source });
       expect(started.state).toBe("starting");
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
       await backend.callbacks?.onEvent({ source: "vibe", type: "agent_message", severity: "info", data: { text: "Done." } });
@@ -75,7 +96,7 @@ describe("RunManager core lifecycle", () => {
 
   it("persists the creator version through results, close and restart", async () => {
     const { source, data, manager, backend } = await setup();
-    const started = await manager.reviewStart({ task: "review", cwd: source });
+    const started = await authorizedReviewStart(manager, { task: "review", cwd: source });
     try {
       expect(started.supervisor_version).toBe(APP_VERSION);
       await waitFor(() => manager.status({ run_id: started.run_id }), value => value.state === "running");
@@ -139,8 +160,8 @@ describe("RunManager core lifecycle", () => {
   it("rejects an allow_shell input because the field no longer exists", async () => {
     const { source, manager } = await setup();
     try {
-      await expect(manager.editStart({ task: "edit", cwd: source, allow_shell: true } as never)).rejects.toMatchObject({ code: "VSUP_INVALID_ARGUMENT" });
-      await expect(manager.editStart({ task: "edit", cwd: source, allow_shell: false } as never)).rejects.toMatchObject({ code: "VSUP_INVALID_ARGUMENT" });
+      await expect(authorizedEditStart(manager, { task: "edit", cwd: source, allow_shell: true } as never)).rejects.toMatchObject({ code: "VSUP_INVALID_ARGUMENT" });
+      await expect(authorizedEditStart(manager, { task: "edit", cwd: source, allow_shell: false } as never)).rejects.toMatchObject({ code: "VSUP_INVALID_ARGUMENT" });
     } finally { await manager.shutdown(); }
   });
 
@@ -148,7 +169,7 @@ describe("RunManager core lifecycle", () => {
     const backend = new FakeBackend();
     const { source, manager } = await setup(backend);
     try {
-      const started = await manager.reviewStart({ task: "cancel me", cwd: source });
+      const started = await authorizedReviewStart(manager, { task: "cancel me", cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
       await expect(manager.cancel({ run_id: started.run_id })).resolves.toMatchObject({ state: "cancelled" });
       expect(backend.cancelCalls).toBe(1);
@@ -159,7 +180,7 @@ describe("RunManager core lifecycle", () => {
     const { source, data, manager, backend } = await setup();
     let runId = "";
     try {
-      const started = await manager.reviewStart({ task: "persist me", cwd: source }); runId = started.run_id;
+      const started = await authorizedReviewStart(manager, { task: "persist me", cwd: source }); runId = started.run_id;
       await waitFor(() => manager.status({ run_id: runId }), (value) => value.state === "running");
       await backend.callbacks?.onEvent({ source: "vibe", type: "agent_message", severity: "info", data: { text: "Saved transcript." } });
       await backend.callbacks?.onState("completed", { result: { summary: "Saved result" } });
@@ -187,7 +208,7 @@ describe("RunManager core lifecycle", () => {
     backend.beforeReturn = async (input) => { await writeFile(join(input.workerWorkspace, "generated.txt"), "new output\n"); };
     const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
-      const started = await manager.editStart({ task: "edit", cwd: source });
+      const started = await authorizedEditStart(manager, { task: "edit", cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
       await backend.callbacks?.onState("completed", { result: { summary: "Generated" } });
       const result = await manager.result({ run_id: started.run_id });
@@ -201,6 +222,16 @@ describe("RunManager core lifecycle", () => {
       await expect(access(worker)).resolves.toBeUndefined();
     } finally { await manager.shutdown(); }
   });
+
+  it("rejects candidate correction workflows before backend launch", async () => {
+    const backend = new FakeBackend();
+    const { source, data } = await setup(backend);
+    const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source], experimental: { correctable: true } }, data, [backend]);
+    try {
+      await expect(authorizedEditStart(manager, { task: "edit", cwd: source, session_mode: "correctable" })).rejects.toMatchObject({ code: "VSUP_INVALID_ARGUMENT" });
+      expect(backend.starts).toBe(0);
+    } finally { await manager.shutdown(); }
+  });
 });
 
 describe("RunManager worker death after the supervisor deadline", () => {
@@ -210,7 +241,7 @@ describe("RunManager worker death after the supervisor deadline", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const { source, manager, backend } = await setup();
     try {
-      const started = await manager.reviewStart({ task: "review", cwd: source });
+      const started = await authorizedReviewStart(manager, { task: "review", cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
       vi.setSystemTime(Date.now() + (TEST_CONFIG.limits.reviewTimeoutSeconds + 1) * 1000);
       await backend.callbacks?.onState("failed", { error: supervisorError("VSUP_BACKEND_CRASHED", "Vibe exited null") });
@@ -224,7 +255,7 @@ describe("RunManager worker death after the supervisor deadline", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const { source, manager, backend } = await setup();
     try {
-      const started = await manager.reviewStart({ task: "review", cwd: source });
+      const started = await authorizedReviewStart(manager, { task: "review", cwd: source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
       vi.setSystemTime(Date.now() + 60_000);
       await backend.callbacks?.onState("failed", { error: supervisorError("VSUP_BACKEND_CRASHED", "Vibe exited null") });

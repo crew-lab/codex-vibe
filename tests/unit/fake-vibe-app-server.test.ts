@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { CLIENT_ENTRYPOINT } from '../../src/backends/app-server/protocol.js';
+import { CLIENT_ENTRYPOINT, parseConfigReadResult } from '../../src/backends/app-server/protocol.js';
 
 const root = path.resolve(import.meta.dirname, '..', '..');
 const fixture = path.join(root, 'tests', 'fixtures', 'fake-vibe-app-server.mjs');
@@ -192,7 +192,7 @@ describe('fake vibe-app-server handshake and strictness', () => {
     expect(at(early, 'error.code')).toBe('not_initialized');
     const result = await client.handshake();
     expect(Object.keys(result).sort()).toEqual(['processId', 'serverInfo']);
-    expect(result.serverInfo).toEqual({ name: 'vibe-app-server', version: '2.26.1' });
+    expect(result.serverInfo).toEqual({ name: 'vibe-app-server', version: '3.0.2' });
     expect(result.processId).toBe(client.child.pid);
     expect(at(await client.call('initialize', { clientInfo: { name: 'a', version: '1' } }), 'error.code')).toBe('invalid_request');
     expect(at(await client.call('shell/run', {}), 'error.code')).toBe('method_not_found');
@@ -267,7 +267,7 @@ describe('fake vibe-app-server handshake and strictness', () => {
       child.stdout.once('data', (chunk: string) => resolve(chunk));
       child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { clientInfo: { name: 'a', version: '1' } } })}\n`);
     });
-    expect(JSON.parse(line).result.serverInfo.version).toBe('2.26.1');
+    expect(JSON.parse(line).result.serverInfo.version).toBe('3.0.2');
     child.kill('SIGKILL');
   });
 });
@@ -316,8 +316,27 @@ describe('fake vibe-app-server session and read-back', () => {
     expect('auto_approve' in (effective.config as Json)).toBe(false);
     expect(JSON.stringify(effective)).not.toContain(secretValue);
     const selection = await client.ok('config/read', { sessionId: 'fake-session-0001' });
-    expect(selection.harnessSelectionSource).toBe('default');
+    expect(selection.harnessSelectionSource).toBeUndefined();
     expect(selection.hooksCount).toBe(0);
+  });
+
+  it('serves Vibe 3.0.2 config/read response without harnessSelectionSource', async () => {
+    const client = new FakeClient({ name: 'vibe3-config-read', serverVersion: '3.0.2' });
+    await client.open();
+    const selection = await client.ok('config/read', { sessionId: 'fake-session-0001' });
+    expect(selection.harnessSelectionSource).toBeUndefined();
+    expect(selection.startupIssue).toBeUndefined();
+    expect(selection.hooksCount).toBe(0);
+    expect(selection.skillsCount).toBe(0);
+    expect(selection.strippedHistoryImages).toBe(0);
+    expect(selection.mcpServersTotal).toBe(0);
+    expect(selection.mcpServersEnabled).toBe(0);
+    expect(parseConfigReadResult(selection, { vibeVersion: '3.0.2' })).toEqual({
+      harnessSelectionSource: null,
+      hooksCount: 0,
+      skillsCount: 0
+    });
+    expect(parseConfigReadResult(selection)).toEqual({ harnessSelectionSource: null, hooksCount: 0, skillsCount: 0 });
   });
 
   it('treats autoApprove as bypass in both read-backs', async () => {

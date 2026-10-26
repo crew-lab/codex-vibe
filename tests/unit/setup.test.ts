@@ -36,7 +36,7 @@ async function sandbox(options: { withVibe?: boolean } = {}): Promise<Sandbox> {
   const data = path.join(root, 'data'); const home = path.join(root, 'home'); const bin = path.join(root, 'bin'); const workspace = path.join(root, 'work');
   await Promise.all([mkdir(home), mkdir(bin), mkdir(workspace)]);
   if (options.withVibe !== false) {
-    await writeFile(path.join(bin, 'vibe'), '#!/usr/bin/env python3\nprint("vibe 2.26.1")\n');
+    await writeFile(path.join(bin, 'vibe'), '#!/usr/bin/env python3\nprint("vibe 3.0.2")\n');
     await chmod(path.join(bin, 'vibe'), 0o755);
   }
   vi.stubEnv('VIBE_SUPERVISOR_HOME', data); vi.stubEnv('HOME', home);

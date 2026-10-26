@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -43,7 +44,7 @@ async function startRunning(timeoutSeconds?: number, backend: CompletingCancelBa
   const parent = await mkdtemp(path.join(canonicalTmp, 'vsup-requested-')); roots.push(parent);
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data'); await mkdir(source);
   const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
-  const started = await manager.reviewStart({ task: 'review', cwd: source, ...(timeoutSeconds ? { timeout_seconds: timeoutSeconds } : {}) });
+  const started = await authorizedReviewStart(manager, { task: 'review', cwd: source, ...(timeoutSeconds ? { timeout_seconds: timeoutSeconds } : {}) });
   await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
   return { manager, runId: started.run_id, data };
 }

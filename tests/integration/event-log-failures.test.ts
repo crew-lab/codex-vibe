@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -34,7 +35,7 @@ async function running(maxEventBytes = TEST_CONFIG.limits.maxEventBytes) {
   const source = path.join(parent, 'source'); const data = path.join(parent, 'data'); await mkdir(source); await writeFile(path.join(source, 'file.txt'), 'content\n');
   const backend = new FakeBackend();
   const manager = new RunManager({ ...TEST_CONFIG, limits: { ...TEST_CONFIG.limits, maxEventBytes }, allowedWorkspaceRoots: [source] }, data, [backend]);
-  const started = await manager.reviewStart({ task: 'review', cwd: source });
+  const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
   for (let attempt = 0; attempt < 500 && (await manager.status({ run_id: started.run_id })).state !== 'running'; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
   await pendingWrites(manager, started.run_id);
   const directory = path.join(data, 'runs', started.run_id);

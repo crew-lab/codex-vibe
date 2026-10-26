@@ -13,7 +13,7 @@ const { assertNoProjectVibeExtensions, assertSimpleGlobRoot } = await load('secu
 const { preparationGit: boundedGit, resolveBaseCommit, resolveGitRoot } = await load('git/worktree.js');
 const { loadResolvedConfig, resolveConfigSelection } = await load('config/config.js');
 const { APP_VERSION } = await load('version.js');
-const { SUPPORTED_VIBE } = await load('backends/app-server/supported-vibe.js');
+const { selectedVibeVersion } = await load('backends/app-server/supported-vibe.js');
 
 const git = (cwd, args, codes = [0]) =>
   boundedGit(cwd, args, { PATH: process.env.PATH, HOME: process.env.HOME, LANG: process.env.LANG }, codes);
@@ -383,7 +383,7 @@ export async function baselineCommand(args) {
     } catch { const error = new BaselinePreparationError('config'); if (selectedConfigPath) error.config_path = selectedConfigPath; throw error; }
     let raw;
     try { raw = JSON.parse(await readPrivateInput(path.resolve(file))); } catch { throw new BaselinePreparationError('input'); }
-    const localProvenance = { executable: process.execPath, application_version: APP_VERSION, compiled_runtime: path.resolve(distRoot), config_path: resolved.configPath, config_source: resolved.source, config_fingerprint: resolved.fingerprint, data_directory: resolved.dataDir, vibe_configured_path: resolved.config.paths?.vibe ?? null, vibe_supported_version: SUPPORTED_VIBE };
+    const localProvenance = { executable: process.execPath, application_version: APP_VERSION, compiled_runtime: path.resolve(distRoot), config_path: resolved.configPath, config_source: resolved.source, config_fingerprint: resolved.fingerprint, data_directory: resolved.dataDir, vibe_configured_path: resolved.config.paths?.vibe ?? null, vibe_supported_version: selectedVibeVersion(resolved.config.vibeVersion) };
     return await prepareReviewedBaseline(raw, resolved.config.allowedWorkspaceRoots, create, expectedManifest, localProvenance);
   } catch (error) { if (error instanceof BaselinePreparationError) throw error; throw new BaselinePreparationError('unexpected'); }
 }

@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -168,7 +169,7 @@ describe("run manager records the 2.1 contract fields", () => {
     };
     const manager = new RunManager(config, data, [backend]);
     try {
-      const started = await manager.reviewStart({ task: "review", cwd: source, max_turns: 12 });
+      const started = await authorizedReviewStart(manager, { task: "review", cwd: source, max_turns: 12 });
       await waitFor(async () => (await manager.status({ run_id: started.run_id })).state === "running");
       expect(backend.input?.exclusions).toEqual([{ root: source, globs: ["*.tfvars", "dumps/*.sql"] }]);
       expect(backend.input?.limits).toMatchObject({ maxTurns: 12, maxTokens: 200000, maxCostUsd: 0.5, maxModelCalls: 17 });
@@ -205,7 +206,7 @@ describe("run manager records the 2.1 contract fields", () => {
   }
 
   async function startError(manager: RunManager, input: { task: string; cwd: string; context_files?: string[] }): Promise<{ code?: string; message?: string }> {
-    try { await manager.reviewStart(input); }
+    try { await authorizedReviewStart(manager, input); }
     catch (error) { return error as { code?: string; message?: string }; }
     throw new Error("expected the start to be refused");
   }
@@ -216,7 +217,7 @@ describe("run manager records the 2.1 contract fields", () => {
     const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [outer, source], excludedGlobs: { [outer]: ["project/secrets/**", "*.tfvars"], [source]: ["dumps/*.sql"] } };
     const manager = new RunManager(config, data, [backend]);
     try {
-      const started = await manager.reviewStart({ task: "review", cwd: source });
+      const started = await authorizedReviewStart(manager, { task: "review", cwd: source });
       await waitFor(async () => (await manager.status({ run_id: started.run_id })).state === "running");
       expect(backend.input?.exclusions).toEqual([{ root: outer, globs: ["project/secrets/**", "*.tfvars"] }, { root: source, globs: ["dumps/*.sql"] }]);
       const meta = JSON.parse(await readFile(join(data, "runs", started.run_id, "meta.json"), "utf8")) as Record<string, unknown>;
@@ -237,7 +238,7 @@ describe("run manager records the 2.1 contract fields", () => {
         expect(error.message, file).toContain("excluded_globs");
       }
       expect(backend.input).toBeUndefined();
-      const started = await manager.reviewStart({ task: "review", cwd: source, context_files: ["notes.md"] });
+      const started = await authorizedReviewStart(manager, { task: "review", cwd: source, context_files: ["notes.md"] });
       expect(started.state).toBeDefined();
     } finally { await manager.shutdown(); }
   });
@@ -277,7 +278,7 @@ describe("run manager records the 2.1 contract fields", () => {
     const backend = new RecordingBackend();
     const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
-      const started = await manager.reviewStart({ task: "review", cwd: source });
+      const started = await authorizedReviewStart(manager, { task: "review", cwd: source });
       await waitFor(async () => (await manager.status({ run_id: started.run_id })).state === "running");
       expect(backend.input?.exclusions).toEqual([]);
       expect(backend.input?.limits.maxTokens).toBeUndefined();

@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -90,7 +91,7 @@ async function flushEventLog(manager: RunManager, runId: string): Promise<void> 
 const SECRET_TEXT = 'findings-that-must-not-appear-in-storage-errors';
 
 async function runningWithTranscript(h: Awaited<ReturnType<typeof harness>>, task = 'review') {
-  const started = await h.manager.reviewStart({ task, cwd: h.source });
+  const started = await authorizedReviewStart(h.manager, { task, cwd: h.source });
   await waitFor(() => h.manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
   await h.backend.callbacks.get(started.run_id)?.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: SECRET_TEXT } });
   return started.run_id;
@@ -102,7 +103,7 @@ describe('storage faults', () => {
     const h = await harness();
     try {
       const runId = await runningWithTranscript(h);
-      await expect(h.manager.reviewStart({ task: 'follow', cwd: h.source })).rejects.toMatchObject({ code: 'VSUP_LIMIT_EXCEEDED' });
+      await expect(authorizedReviewStart(h.manager, { task: 'follow', cwd: h.source })).rejects.toMatchObject({ code: 'VSUP_LIMIT_EXCEEDED' });
       fault.remaining = 1; fault.when = (wire) => wire.state === 'running' && wire.result !== undefined;
       await h.backend.callbacks.get(runId)?.onState('completed', { result: { summary: 'done' } });
       const status = await h.manager.status({ run_id: runId });
@@ -113,7 +114,7 @@ describe('storage faults', () => {
       expect(JSON.parse(await readFile(path.join(h.data, 'runs', runId, 'meta.json'), 'utf8')).state).toBe('failed');
       expect(JSON.parse(await readFile(path.join(h.data, 'runs', runId, 'result.json'), 'utf8')).state).toBe('failed');
       expect(activeSlots(h.manager)).toBe(0);
-      const follow = await h.manager.reviewStart({ task: 'follow', cwd: h.source });
+      const follow = await authorizedReviewStart(h.manager, { task: 'follow', cwd: h.source });
       expect((await waitFor(() => h.manager.status({ run_id: follow.run_id }), (value) => value.state === 'running')).state).toBe('running');
       await h.manager.cancel({ run_id: follow.run_id });
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -135,7 +136,7 @@ describe('storage faults', () => {
       expect(activeSlots(h.manager)).toBe(0);
       expect(JSON.parse(await readFile(path.join(h.data, 'runs', runId, 'meta.json'), 'utf8')).state).toBe('running');
       fault.remaining = 0;
-      const next = await h.manager.reviewStart({ task: 'next', cwd: h.source });
+      const next = await authorizedReviewStart(h.manager, { task: 'next', cwd: h.source });
       const running = await waitFor(() => h.manager.status({ run_id: next.run_id }), (value) => value.state === 'running');
       expect(running.state).toBe('running');
       expect(running.warnings).toBeUndefined();
@@ -149,10 +150,10 @@ describe('storage faults', () => {
     const h = await harness();
     try {
       fault.remaining = 1; fault.when = (wire) => wire.state === 'starting' && !wire.workspace_snapshot_sha256;
-      await expect(h.manager.reviewStart({ task: 'review', cwd: h.source })).rejects.toMatchObject({ code: 'VSUP_STORAGE_ERROR', details: { code: 'ENOSPC' } });
+      await expect(authorizedReviewStart(h.manager, { task: 'review', cwd: h.source })).rejects.toMatchObject({ code: 'VSUP_STORAGE_ERROR', details: { code: 'ENOSPC' } });
       expect(await h.manager.runsList()).toEqual([]);
       expect(activeSlots(h.manager)).toBe(0);
-      const started = await h.manager.reviewStart({ task: 'review', cwd: h.source });
+      const started = await authorizedReviewStart(h.manager, { task: 'review', cwd: h.source });
       expect((await waitFor(() => h.manager.status({ run_id: started.run_id }), (value) => value.state === 'running')).state).toBe('running');
     } finally { await h.manager.shutdown(); }
   }, 30_000);
@@ -161,7 +162,7 @@ describe('storage faults', () => {
     const h = await harness();
     try {
       fault.code = code; fault.remaining = 1; fault.when = (wire) => wire.state === 'starting' && !wire.workspace_snapshot_sha256;
-      await expect(h.manager.reviewStart({ task: 'review', cwd: h.source })).rejects.toMatchObject({ code: 'VSUP_STORAGE_ERROR', details: { code } });
+      await expect(authorizedReviewStart(h.manager, { task: 'review', cwd: h.source })).rejects.toMatchObject({ code: 'VSUP_STORAGE_ERROR', details: { code } });
     } finally { fault.code = 'ENOSPC'; await h.manager.shutdown(); }
   }, 30_000);
 
@@ -170,7 +171,7 @@ describe('storage faults', () => {
     const h = await harness();
     try {
       const runId = await runningWithTranscript(h);
-      await expect(h.manager.reviewStart({ task: 'follow', cwd: h.source })).rejects.toMatchObject({ code: 'VSUP_LIMIT_EXCEEDED' });
+      await expect(authorizedReviewStart(h.manager, { task: 'follow', cwd: h.source })).rejects.toMatchObject({ code: 'VSUP_LIMIT_EXCEEDED' });
       await waitForLaunchManifest(h.manager, runId);
       await flushEventLog(h.manager, runId);
       const runDirectory = path.join(h.data, 'runs', runId);
@@ -182,7 +183,7 @@ describe('storage faults', () => {
       expect(status.error).toMatchObject({ code: 'VSUP_STORAGE_ERROR', details: { code: 'EACCES' } });
       expect(JSON.stringify(status.error)).not.toContain(SECRET_TEXT);
       expect(activeSlots(h.manager)).toBe(0);
-      const follow = await h.manager.reviewStart({ task: 'follow', cwd: h.source });
+      const follow = await authorizedReviewStart(h.manager, { task: 'follow', cwd: h.source });
       expect((await waitFor(() => h.manager.status({ run_id: follow.run_id }), (value) => value.state === 'running')).state).toBe('running');
       await h.manager.cancel({ run_id: follow.run_id });
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -196,7 +197,7 @@ describe('storage faults', () => {
     const manager = h.manager;
     const failing = vi.spyOn(manager as unknown as { appendEvent(...args: unknown[]): Promise<void> }, 'appendEvent').mockRejectedValue(Object.assign(new Error('write failed'), { code: 'ENOSPC' }));
     try {
-      const started = await manager.reviewStart({ task: 'review', cwd: h.source });
+      const started = await authorizedReviewStart(manager, { task: 'review', cwd: h.source });
       await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
       await h.backend.callbacks.get(started.run_id)?.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: 'progress' } });
       await h.backend.callbacks.get(started.run_id)?.onState('completed');

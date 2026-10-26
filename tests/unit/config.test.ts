@@ -7,6 +7,7 @@ import { configFingerprint, getConfigPath, getDataDir, loadConfig, loadResolvedC
 import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
 import { bootBoundDrift } from "../../src/config/policy.js";
 import { validateConfig } from "../../src/config/validation.js";
+import { selectedVibeVersion } from "../../src/backends/app-server/supported-vibe.js";
 
 const manifestPaths = { vibe_pin_manifest: "/data/vibe-pin-manifest.json" } as const;
 const base = { version: 1, paths: manifestPaths } as const;
@@ -205,6 +206,17 @@ describe("app-server keys", () => {
     for (const value of [0, -0.01, "1", 1_000_001]) expect(() => validateConfig({ ...appServer, limits: { max_cost_usd: value } }), String(value)).toThrow(/max_cost_usd/);
   });
 
+  it("uses Vibe 3.0.2 and rejects older pins and obsolete selectors", () => {
+    expect(selectedVibeVersion(undefined)).toBe("3.0.2");
+    expect(selectedVibeVersion("3.0.2")).toBe("3.0.2");
+    expect(() => selectedVibeVersion("2.26.1")).toThrow(/only 3\.0\.2/);
+    expect(validateConfig(appServer)).not.toHaveProperty("vibeVersion");
+    expect(validateConfig({ ...appServer, vibe_version: "3.0.2" })).toMatchObject({ vibeVersion: "3.0.2" });
+    expect(() => validateConfig({ ...appServer, vibe_version: "2.26.1" })).toThrow(/vibe_version/);
+    expect(() => validateConfig({ ...appServer, experimental: { vibe3: true } })).toThrow(/vibe3/);
+    expect(() => validateConfig({ ...appServer, experimental: { correctable: true } })).toThrow(/correctable/);
+  });
+
   it("loads the new keys from TOML and reports a missing manifest as a stable configuration error", async () => {
     const root = await mkdtemp(join(canonicalTmp, "vsup-config-")); roots.push(root);
     const manifest = join(root, "vibe-pin-manifest.json");
@@ -239,7 +251,8 @@ describe("app-server keys", () => {
       validateConfig({ ...appServer, limits: { max_tokens: 10 } }),
       validateConfig({ ...appServer, limits: { max_cost_usd: 1 } }),
       validateConfig({ ...appServer, backend: "antigravity", experimental: { antigravity: true } }),
-      validateConfig({ ...appServer, paths: { ...appServer.paths, antigravity: "/opt/bin/agy" } })
+      validateConfig({ ...appServer, paths: { ...appServer.paths, antigravity: "/opt/bin/agy" } }),
+      validateConfig({ ...appServer, vibe_version: "3.0.2" })
     ];
     for (const variant of variants) expect(configFingerprint(variant)).not.toBe(revision);
     expect(variants.map((variant) => bootBoundDrift(base, variant))).toEqual([
@@ -248,7 +261,8 @@ describe("app-server keys", () => {
       ["limits.max_tokens"],
       ["limits.max_cost_usd"],
       ["backend", "experimental.antigravity"],
-      ["paths.antigravity"]
+      ["paths.antigravity"],
+      []
     ]);
     expect(bootBoundDrift(base, validateConfig(appServer))).toEqual([]);
   });

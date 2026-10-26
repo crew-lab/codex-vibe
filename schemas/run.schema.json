@@ -811,6 +811,29 @@
         "reason"
       ],
       "additionalProperties": false
+    },
+    "dispatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_id",
+        "attempt_id",
+        "request_sha256"
+      ],
+      "properties": {
+        "grant_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "attempt_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "request_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
     }
   },
   "$defs": {

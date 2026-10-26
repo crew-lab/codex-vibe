@@ -1,3 +1,9 @@
+# Current Vibe 3.0.2 qualification
+
+The current implementation uses exactly Vibe 3.0.2 and five one-shot MCP tools. Each start requires a locally registered, single-use dispatch authorization and attempt. See [ADR 0010](adr/0010-dispatch-attempt-authorization.md). Continuation is deferred. The previous six-tool archive and its evidence remain historical; they do not qualify this changed source. Hosted inference remains paused.
+
+Grant registration is administrative and starts no worker. It may run while a server owns its session directory. A preparation PASS is still required for ordinary inference; it does not authorize a task or prove hosted acceptance.
+
 # Version-matched preparation kit
 
 Each candidate ships a separate preparation-kit-VERSION directory with the conformance procedure, exact no-inference script, candidate identity and checksums. Keep this directory with its candidate archive.

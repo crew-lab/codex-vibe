@@ -1,3 +1,4 @@
+import { authorizeCli } from '../support/authorize-cli.js';
 import { writeFakePreparation } from "../unit/support/fake-preparation.js";
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
@@ -80,7 +81,10 @@ async function launch(box: Box, mode: Mode) {
   strays.add(pid);
   const closeInput = () => { (transport as unknown as { _process?: { stdin?: { end(): void } | null } })._process?.stdin?.end(); };
   const call = async (name: string, args: Record<string, unknown>) => {
-    const result = await client.callTool({ name, arguments: args }, { timeout: 20_000 });
+    const start = name === 'vibe_review_start' || name === 'vibe_edit_start';
+    const operation = name === 'vibe_edit_start' ? 'edit' : 'review';
+    const identifiers = start ? await authorizeCli(cli, path.join(box.data, 'config.toml'), operation, args) : {};
+    const result = await client.callTool({ name, arguments: { ...args, ...identifiers } }, { timeout: 20_000 });
     const text = (result.content as { type: string; text?: string }[]).find((part) => part.type === 'text')?.text ?? '{}';
     return (result.structuredContent ?? JSON.parse(text)) as Reply & Record<string, unknown>;
   };

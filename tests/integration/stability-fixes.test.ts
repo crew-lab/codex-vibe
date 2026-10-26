@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, mkdtemp, readFile, realpath, rm, stat, utimes, writeFile } from 'node:fs/promises';
@@ -135,7 +136,7 @@ describe('shutdown deadline', () => {
     const backend = new IdleBackend();
     const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [source] };
     const manager = new RunManager(config, data, [backend]);
-    const started = await manager.reviewStart({ task: 'review', cwd: source });
+    const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
     await waitFor(() => backend.callbacks.has(started.run_id), Boolean);
     await waitFor(async () => (await manager.status({ run_id: started.run_id })).state, (state) => state === 'running');
     const releaseChain = stick(manager, started.run_id);

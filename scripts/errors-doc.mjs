@@ -6,6 +6,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const errorsDocPath = path.join(root, 'docs', 'errors.md');
 
 export const MEANINGS = {
+  VSUP_AUTHORIZATION_INVALID: 'No unexpired locally registered grant matches the exact dispatch inputs, or those inputs could not be bound safely.',
+  VSUP_ATTEMPT_CONSUMED: 'This authorization-bound dispatch attempt was reserved previously and cannot be reused, including after a failure or restart.',
   VSUP_CONFIG_INVALID: 'The selected configuration file is missing, unsafe (symlinked, foreign-owned, group/world-writable or over 1 MiB), cannot be parsed, or has a missing or invalid field.',
   VSUP_VIBE_NOT_FOUND: 'The Vibe executable, the vibe-app-server executable or the interpreter named on the first line of its script is missing.',
   VSUP_VIBE_VERSION_UNSUPPORTED: 'The installed Vibe is not the pinned version, or its installed files do not match the pin manifest (details.reason names the failed check).',

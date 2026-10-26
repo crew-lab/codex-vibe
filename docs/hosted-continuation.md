@@ -1,3 +1,7 @@
+# Historical hosted continuation procedure
+
+This document preserves an earlier source-based probe design. It is not an execution instruction for the current five-tool Vibe 3.0.2 candidate; continuation and hosted inference remain deferred. See [ADR 0010](adr/0010-dispatch-attempt-authorization.md).
+
 # Hosted acceptance preparation after the rejected review
 
 The 2026-10-16 review completed but its final answer reversed the two negative-number results. The original exported evidence and candidate remain unchanged. These local repairs do not convert that answer into a pass, transfer evidence to another candidate or authorize any hosted start.

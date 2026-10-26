@@ -5,6 +5,7 @@ import type { Transport, JSONRPCMessage } from '@modelcontextprotocol/server';
 import { PassThrough } from 'node:stream';
 import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { createSupervisorMcpServer } from '../../src/mcp/server.js';
+import { createIsolatedRunRouter } from '../../src/core/isolated-run-router.js';
 import type { RunManagerTools } from '../../src/mcp/tools.js';
 
 function errorText(result: unknown): string {
@@ -41,6 +42,7 @@ const clients: Client[] = [];
 afterEach(async () => { await Promise.all(clients.splice(0).map((client) => client.close().catch(() => {}))); });
 
 describe('MCP stdio tool surface', () => {
+  const startIds = { authorization_id: '123e4567-e89b-42d3-a456-426614174000', attempt_id: '123e4567-e89b-42d3-a456-426614174001' };
   it('serves five strict tools and routes valid calls through the manager', async () => {
     const input = new PassThrough(); const output = new PassThrough();
     const manager = {
@@ -63,7 +65,7 @@ describe('MCP stdio tool surface', () => {
     expect(tools.find((tool) => tool.name === 'vibe_result')?.annotations?.readOnlyHint).toBe(true);
     expect(tools.find((tool) => tool.name === 'vibe_edit_start')?.annotations?.destructiveHint).toBe(true);
 
-    const result = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp' } });
+    const result = await client.callTool({ name: 'vibe_review_start', arguments: { ...startIds, task: 'review', cwd: '/tmp' } });
     expect(result.isError).toBeUndefined();
     expect(structured(result)).toMatchObject({ state: 'running', received_task: 'review' });
     expect(manager.reviewStart).toHaveBeenCalledOnce();
@@ -82,10 +84,10 @@ describe('MCP stdio tool surface', () => {
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '0.0.1' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
-    const error = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp' } });
+    const error = await client.callTool({ name: 'vibe_review_start', arguments: { ...startIds, task: 'review', cwd: '/tmp' } });
     expect(error.isError).toBe(true);
     expect(JSON.parse(errorText(error))).toEqual({ error: { code: 'VSUP_NOT_FOUND', message: 'run missing', remediation: expect.stringMatching(/.+/), retryable: false } });
-    const malformed = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp', extra: true } });
+    const malformed = await client.callTool({ name: 'vibe_review_start', arguments: { ...startIds, task: 'review', cwd: '/tmp', extra: true } });
     expect(malformed.isError).toBe(true);
     expect(JSON.stringify(malformed)).toContain('Unrecognized key');
   });
@@ -100,7 +102,7 @@ describe('MCP stdio tool surface', () => {
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '0.0.1' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
-    const failed = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp' } });
+    const failed = await client.callTool({ name: 'vibe_review_start', arguments: { ...startIds, task: 'review', cwd: '/tmp' } });
     expect(failed.isError).toBe(true);
     expect((failed.content as unknown[]).length).toBe(1);
     expect(JSON.parse(errorText(failed))).toEqual({ error: {
@@ -143,17 +145,17 @@ describe('MCP stdio tool surface', () => {
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '0.0.1' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
-    const failed = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: '/tmp' } });
+    const failed = await client.callTool({ name: 'vibe_review_start', arguments: { ...startIds, task: 'review', cwd: '/tmp' } });
     expect(errorText(failed)).toContain('VSUP_STORAGE_ERROR');
   });
 
-  async function listTools() {
+  async function listTools(config = { ...TEST_CONFIG }) {
     const input = new PassThrough(); const output = new PassThrough();
     const manager = {
       reviewStart: vi.fn(async () => ({})), editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})),
-      result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
+      result: vi.fn(async () => ({})), close: vi.fn(async () => ({})), vibeContinue: vi.fn(async () => ({})),
     } satisfies RunManagerTools;
-    const server = createSupervisorMcpServer(manager, { config: { ...TEST_CONFIG } });
+    const server = createSupervisorMcpServer(manager, { config });
     await server.connect(new StdioServerTransport(input, output));
     const client = new Client({ name: 'mcp-test-client', version: '0.0.1' }); clients.push(client);
     await client.connect(new StdioClientHarness(input, output));
@@ -166,11 +168,28 @@ describe('MCP stdio tool surface', () => {
     expect(tools.map((tool) => tool.name).sort()).toEqual(base);
   });
 
+  it('registers exactly five tools when served through isolated router', async () => {
+    const input = new PassThrough(); const output = new PassThrough();
+    const manager: RunManagerTools & { initialize(): Promise<void>; shutdown(): Promise<{ timedOut: boolean }> } = {
+      reviewStart: vi.fn(async () => ({})), editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})),
+      result: vi.fn(async () => ({})), close: vi.fn(async () => ({})), vibeContinue: vi.fn(async () => ({})),
+      initialize: vi.fn(async () => {}), shutdown: vi.fn(async () => ({ timedOut: false })),
+    };
+    const config = TEST_CONFIG;
+    const router = createIsolatedRunRouter(manager, { sessions: '/tmp', currentHome: '/tmp', config });
+    const server = createSupervisorMcpServer(router, { config });
+    await server.connect(new StdioServerTransport(input, output));
+    const client = new Client({ name: 'mcp-isolated-test-client', version: '0.0.1' }); clients.push(client);
+    await client.connect(new StdioClientHarness(input, output));
+    const tools = (await client.listTools()).tools;
+    expect(tools.map((tool) => tool.name).sort()).toEqual(['vibe_close', 'vibe_edit_start', 'vibe_result', 'vibe_review_start', 'vibe_status']);
+  });
+
   it('rejects the removed inputs and never exposes vibe_cancel', async () => {
     const { client, tools } = await listTools();
     expect(tools.map((tool) => tool.name)).not.toContain('vibe_cancel');
     for (const extra of [{ allow_shell: false }, { backend: 'acp' }]) {
-      const rejected = await client.callTool({ name: 'vibe_edit_start', arguments: { task: 'edit', cwd: '/tmp', ...extra } });
+      const rejected = await client.callTool({ name: 'vibe_edit_start', arguments: { ...startIds, task: 'edit', cwd: '/tmp', ...extra } });
       expect(rejected.isError).toBe(true);
     }
     const summary = await client.callTool({ name: 'vibe_result', arguments: { run_id: '123e4567-e89b-42d3-a456-426614174000', detail: 'summary' } });

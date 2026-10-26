@@ -1,3 +1,4 @@
+import { authorizedEditStart, authorizedReviewStart } from "../support/authorized-start.js";
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -67,7 +68,7 @@ const exists = (file: string) => access(file).then(() => true, () => false);
 const runDir = (data: string, runId: string) => path.join(data, "runs", runId);
 
 async function runningEdit(context: Awaited<ReturnType<typeof setup>>) {
-  const started = await context.manager.editStart({ task: "edit", cwd: context.source });
+  const started = await authorizedEditStart(context.manager, { task: "edit", cwd: context.source });
   await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
   const worktree = path.join(context.data, "worktrees", started.run_id);
   await writeFile(path.join(worktree, "generated.txt"), "new output\n");
@@ -209,7 +210,7 @@ describe("close under concurrency and failure", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
       expect(await exists(worktree)).toBe(true);
       expect((context.manager as unknown as { activeSlots: number }).activeSlots).toBe(1);
-      await expect(context.manager.reviewStart({ task: "must not overlap", cwd: context.source })).rejects.toMatchObject({ code: "VSUP_LIMIT_EXCEEDED" });
+      await expect(authorizedReviewStart(context.manager, { task: "must not overlap", cwd: context.source })).rejects.toMatchObject({ code: "VSUP_LIMIT_EXCEEDED" });
       release();
       expect(await first).toMatchObject({ state: "closed", worktree_removed: false });
       expect(await second).toMatchObject({ state: "closed", worktree_removed: false });
@@ -222,7 +223,7 @@ describe("close under concurrency and failure", () => {
   it.each(["throws", "rejects"] as const)("retains the worker and slot when backend close %s, then closes after a safe retry", async (failure) => {
     const context = await setup();
     try {
-      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: "review", cwd: context.source });
       await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
       context.backend.closeFailure = failure;
       await context.backend.callbacks.get(started.run_id)?.onState("completed", { result: { summary: "done" } });
@@ -231,7 +232,7 @@ describe("close under concurrency and failure", () => {
       const unverified = await context.manager.close({ run_id: started.run_id, cleanup_worktree: true });
       expect(unverified).toMatchObject({ run_id: started.run_id, state: "failed", worktree_removed: false, worker_termination_unverified: true, error: { code: "VSUP_BACKEND_ERROR" } });
       expect((context.manager as unknown as { activeSlots: number }).activeSlots).toBe(1);
-      await expect(context.manager.reviewStart({ task: "must not overlap", cwd: context.source })).rejects.toMatchObject({ code: "VSUP_LIMIT_EXCEEDED" });
+      await expect(authorizedReviewStart(context.manager, { task: "must not overlap", cwd: context.source })).rejects.toMatchObject({ code: "VSUP_LIMIT_EXCEEDED" });
       expect(JSON.parse(await readFile(path.join(runDir(context.data, started.run_id), "meta.json"), "utf8"))).toMatchObject({ state: "failed" });
 
       context.backend.closeFailure = "none";
@@ -249,7 +250,7 @@ describe("frozen patch assessment", () => {
     const context = await setup();
     try {
       const contract = acceptanceContractSchema.parse({ schema_version: 1, allowed_changed_paths: ["tracked.txt"], checks: [{ id: "disclosure", kind: "text_contains", path: "tracked.txt", value: "Developing BMS practice." }], required_validations: ["build"] });
-      const started = await context.manager.editStart({ task: "edit", cwd: context.source, acceptance_contract: contract });
+      const started = await authorizedEditStart(context.manager, { task: "edit", cwd: context.source, acceptance_contract: contract });
       await waitFor(() => stateOf(context.manager, started.run_id), value => value === "running");
       await writeFile(path.join(context.data, "worktrees", started.run_id, "tracked.txt"), "Developing BMS practice.\n");
       await context.backend.callbacks.get(started.run_id)?.onState("completed", { result: { summary: "Disclosure omitted", stopReason: "end_turn" } });
@@ -279,7 +280,7 @@ describe("run report execution lifecycle", () => {
     backend.announceRunning = true;
     const context = await setup(backend);
     try {
-      const started = await context.manager.reviewStart({ task: "review lifecycle", cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: "review lifecycle", cwd: context.source });
       await waitFor(() => stateOf(context.manager, started.run_id), (state) => state === "running");
       const callbacks = backend.callbacks.get(started.run_id)!;
       const directory = runDir(context.data, started.run_id);

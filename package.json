@@ -21,7 +21,8 @@
     "SECURITY.md",
     "CHANGELOG.md",
     "LICENSE",
-    "scripts/v2-conformance-check.mjs"
+    "scripts/v2-conformance-check.mjs",
+    "scripts/runtime-install.mjs"
   ],
   "scripts": {
     "lint": "eslint .",

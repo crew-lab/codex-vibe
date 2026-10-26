@@ -25,6 +25,7 @@ export function fixedPolicy(config: SupervisorConfig): PolicySource {
 
 const BOOT_BOUND_SETTINGS: ReadonlyArray<readonly [string, (config: SupervisorConfig) => unknown]> = [
   ["version", (config) => config.version],
+  ["vibe_version", (config) => config.vibeVersion ?? "3.0.2"],
   ["retention.days", (config) => config.retention.days],
   ["limits.review_timeout_seconds", (config) => config.limits.reviewTimeoutSeconds],
   ["limits.edit_timeout_seconds", (config) => config.limits.editTimeoutSeconds],
@@ -42,7 +43,7 @@ const BOOT_BOUND_SETTINGS: ReadonlyArray<readonly [string, (config: SupervisorCo
   ["paths.vibe_pin_manifest", (config) => config.paths?.vibePinManifest ?? null],
   ["backend", (config) => config.backend ?? "app-server"],
   ["paths.antigravity", (config) => config.paths?.antigravity ?? null],
-  ["experimental.antigravity", (config) => config.experimental?.antigravity ?? false]
+  ["experimental.antigravity", (config) => config.experimental?.antigravity ?? false],
 ];
 
 export function bootBoundDrift(boot: SupervisorConfig, current: SupervisorConfig): string[] {

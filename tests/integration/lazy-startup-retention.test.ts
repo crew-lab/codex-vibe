@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -149,8 +150,8 @@ describe('automatic retention', () => {
     const backend = new FakeBackend();
     const manager = new RunManager(configFor(source), data, [backend]);
     await manager.initialize();
-    const live = await manager.reviewStart({ task: 'live', cwd: source });
-    await waitUntil(() => backend.callbacks.has(live.run_id));
+    const live = await authorizedReviewStart(manager, { task: 'live', cwd: source });
+    await waitUntil(async () => (await manager.status({ run_id: live.run_id })).state === "running");
     try {
       const remaining = await sweepAfter(manager, data, control);
       expect(remaining.has(control)).toBe(false);

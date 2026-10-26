@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { chmod, mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -439,7 +440,7 @@ describe('usage ledger and budget aggregation', () => {
 
     // Verify start throws VSUP_BUDGET_EXCEEDED
     await expect(
-      manager.reviewStart({ task: 'check security', cwd: workspace })
+      authorizedReviewStart(manager, { task: 'check security', cwd: workspace })
     ).rejects.toMatchObject({
       code: 'VSUP_BUDGET_EXCEEDED',
       details: {

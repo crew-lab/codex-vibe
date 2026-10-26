@@ -324,7 +324,7 @@ describe('verification of the installed wheel', () => {
   });
 
   it('fails on an unlisted file inside a covered directory', async () => {
-    for (const planted of ['vibe/planted.py', 'vibe/app_server/sitecustomize.py', 'vibe/legacy.pyc', 'mistral_vibe-2.26.1.dist-info/entry_points.txt']) {
+    for (const planted of ['vibe/planted.py', 'vibe/app_server/sitecustomize.py', 'vibe/legacy.pyc', `mistral_vibe-${SUPPORTED_VIBE}.dist-info/entry_points.txt`]) {
       await put(path.join(env.site, planted), 'import os\n');
       const error = await expectReason(verifyPinnedInstall({ executable: env.shim, manifest }), 'file-extra');
       expect(error.details).toEqual({ extra: { paths: [planted], total: 1 } });

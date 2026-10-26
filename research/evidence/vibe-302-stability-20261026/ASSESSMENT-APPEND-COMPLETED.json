@@ -1,0 +1,64 @@
+{
+  "run_id": "5e3ae55e-794d-42fb-8d02-b0fe6b3139b0",
+  "status": "corrective-assessment-appended",
+  "metadata_sha256": "1893af45afe961fd2bc4506733c649ef3ccc064c935d0b5b414bfd0b2ced1a64",
+  "assessments": [
+    {
+      "decision": "rejected",
+      "reason": "Validation failed: treeAudit=true, semantic=false, workerTests=false",
+      "patch_sha256": "07783e2d421274113b13bbd3a9ac8f16f70fefd1f34f2826028b2547616f4e19",
+      "contract_sha256": "8896e601218112a5b1f410ad1f2aab801b37ba31ccda46e7a398e14c033a7d6a",
+      "validations": [
+        {
+          "id": "complete-diff",
+          "status": "passed"
+        },
+        {
+          "id": "fixture-semantics",
+          "status": "failed"
+        },
+        {
+          "id": "worker-tests",
+          "status": "failed"
+        }
+      ],
+      "assessed_at": "2026-10-24T20:54:15.947Z"
+    },
+    {
+      "decision": "accepted",
+      "reason": "Corrective assessment after independent offline reconstruction: all nine semantic checks and nine worker tests pass; only the two allowed additions are present and base bytes are unchanged. Original rejection is retained; its verifier field and reporter parser were incorrect. No hosted replay.",
+      "patch_sha256": "07783e2d421274113b13bbd3a9ac8f16f70fefd1f34f2826028b2547616f4e19",
+      "contract_sha256": "8896e601218112a5b1f410ad1f2aab801b37ba31ccda46e7a398e14c033a7d6a",
+      "validations": [
+        {
+          "id": "fixture-semantics",
+          "status": "passed",
+          "evidence_sha256": "d0ac892282ddb387281df745aa1b38ebc6d5f15d074d0afd07c117a802572f21",
+          "reference": "CORRECTED-VERIFICATION.json"
+        },
+        {
+          "id": "worker-tests",
+          "status": "passed",
+          "evidence_sha256": "d0ac892282ddb387281df745aa1b38ebc6d5f15d074d0afd07c117a802572f21",
+          "reference": "CORRECTED-VERIFICATION.json"
+        },
+        {
+          "id": "complete-diff",
+          "status": "passed",
+          "evidence_sha256": "d0ac892282ddb387281df745aa1b38ebc6d5f15d074d0afd07c117a802572f21",
+          "reference": "CORRECTED-VERIFICATION.json"
+        }
+      ],
+      "assessed_at": "2026-10-25T09:27:07.735Z"
+    }
+  ],
+  "original_rejection_preserved": true,
+  "hosted_starts_added": 0,
+  "lock_release": {
+    "verified_supervisor_pid": 6775,
+    "signal": "SIGTERM",
+    "manual_lock_deletion": false
+  },
+  "worktree_removed": false,
+  "worktree_retention_reason": "Verified cleanup was not requested; worker changes preserved."
+}

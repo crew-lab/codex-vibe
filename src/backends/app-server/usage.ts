@@ -12,6 +12,7 @@ export interface UsageSummary {
   tokensUsed: number;
   modelCalls: number | null;
   costAmount: number | null;
+  priceAvailability: 'available' | 'unavailable';
   contextSize: number | null;
 }
 
@@ -46,6 +47,10 @@ export function tokenCost(promptTokens: number, completionTokens: number, cached
   return ((promptTokens - cached) * input + cached * cachedPrice + completionTokens * output) / TOKENS_PER_PRICE_UNIT;
 }
 
+function pricesAvailable(prices: TokenPrices): boolean {
+  return finiteNonNegative(prices.inputPerMillion) !== null && finiteNonNegative(prices.outputPerMillion) !== null;
+}
+
 export function turnBackstop(maxTurns: number, margin = DEFAULT_TURN_BACKSTOP_MARGIN): number {
   if (!Number.isInteger(maxTurns) || maxTurns < 1) throw new RangeError('maxTurns must be a positive integer');
   return maxTurns + margin;
@@ -67,12 +72,14 @@ export function usageFromStats(baseline: AgentStats | null, current: AgentStats,
     cachedInputPerMillion: current.cachedInputPricePerMillion
   });
   const contextSize = contextWindow !== null && Number.isFinite(contextWindow) && contextWindow > 0 ? contextWindow : null;
-  return { promptTokens, completionTokens, cachedTokens, tokensUsed: promptTokens + completionTokens, modelCalls, costAmount, contextSize };
+  return { promptTokens, completionTokens, cachedTokens, tokensUsed: promptTokens + completionTokens, modelCalls, costAmount, priceAvailability: pricesAvailable({ inputPerMillion: current.inputPricePerMillion, outputPerMillion: current.outputPricePerMillion, cachedInputPerMillion: current.cachedInputPricePerMillion }) ? 'available' : 'unavailable', contextSize };
 }
 
 export function toUsageState(summary: UsageSummary): UsageState {
   return {
-    promptTokens: summary.promptTokens, completionTokens: summary.completionTokens, cachedTokens: summary.cachedTokens, modelCalls: summary.modelCalls, costSource: "runtime-stats-prices",
+    promptTokens: summary.promptTokens, completionTokens: summary.completionTokens, cachedTokens: summary.cachedTokens, modelCalls: summary.modelCalls,
+    priceAvailability: summary.priceAvailability, priceSource: 'runtime/read', costAvailability: summary.costAmount === null ? 'unavailable' : 'available',
+    ...(summary.costAmount === null ? {} : { costSource: "runtime-stats-prices" as const }),
     tokensUsed: summary.tokensUsed,
     ...(summary.contextSize === null ? {} : { contextSize: summary.contextSize }),
     ...(summary.costAmount === null ? {} : { cost: { amount: summary.costAmount, currency: USAGE_CURRENCY, authoritative: false as const } })
@@ -126,7 +133,7 @@ const ZERO_STATS: AgentStats = {
   contextTokens: null
 };
 
-const EMPTY_SUMMARY: UsageSummary = { promptTokens: 0, completionTokens: 0, cachedTokens: null, tokensUsed: 0, modelCalls: null, costAmount: null, contextSize: null };
+const EMPTY_SUMMARY: UsageSummary = { promptTokens: 0, completionTokens: 0, cachedTokens: null, tokensUsed: 0, modelCalls: null, costAmount: null, priceAvailability: 'unavailable', contextSize: null };
 
 interface Carried {
   promptTokens: number;
@@ -196,6 +203,7 @@ export class UsageTracker {
       tokensUsed: this.carried.promptTokens + this.carried.completionTokens + segment.tokensUsed,
       modelCalls: addNullable(this.carried.modelCalls, segment.modelCalls),
       costAmount: cost,
+      priceAvailability: segment.priceAvailability,
       contextSize: segment.contextSize
     };
   }

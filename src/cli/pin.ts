@@ -5,6 +5,7 @@ import { loadResolvedConfig } from '../config/config.js';
 import { DEFAULT_CONFIG } from '../config/defaults.js';
 import { supervisorError, type SupervisorConfig } from '../contracts.js';
 import { createPrivateFile } from '../security/paths.js';
+import { selectedVibeVersion } from '../backends/app-server/supported-vibe.js';
 import { fail } from './fail.js';
 
 export const PIN_MANIFEST_USAGE = 'Usage: vibe-supervisor pin-manifest [--config <path>] [--executable <path>] [--output <path>] [--force]';
@@ -64,7 +65,7 @@ export async function pinManifestCommand(args: string[]): Promise<void> {
   try { executable = await resolveAppServerExecutable(config, options.executable); }
   catch { throw Object.assign(new Error('The vibe-app-server executable could not be located.'), { supervisor: supervisorError('VSUP_VIBE_NOT_FOUND', 'The vibe-app-server executable could not be located; pass --executable <path> or set paths.vibe or paths.app_server.') }); }
   let manifest;
-  try { manifest = await generatePinManifest({ executable }); }
+  try { manifest = await generatePinManifest({ executable, expectedVersion: selectedVibeVersion(config.vibeVersion) }); }
   catch (error) {
     if (error instanceof PinCheckError) {
       const detail = Object.keys(error.details).length > 0 ? ` ${JSON.stringify(error.details)}` : '';

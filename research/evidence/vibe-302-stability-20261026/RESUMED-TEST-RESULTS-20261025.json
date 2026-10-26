@@ -1,0 +1,37 @@
+{
+  "date": "2026-10-25",
+  "node": "20.19.0",
+  "candidate": "7641d294df5f432b1b99633c052b5e2311e16131e9ad9e8dc828ccf8511f9154",
+  "native_readiness": {
+    "eligible": true,
+    "preparation": "passed",
+    "blockers": [],
+    "active_slot_busy": false,
+    "restart_required": false
+  },
+  "runner_regressions": {
+    "passed": 9
+  },
+  "saved_patch": {
+    "semantic_checks_passed": 9,
+    "worker_tests_passed": 9,
+    "exact_two_additions": true,
+    "base_unchanged": true
+  },
+  "supervisor_regressions": {
+    "passed": 51,
+    "files": 5,
+    "initial_attempt": {
+      "passed": 50,
+      "failed": 1,
+      "failure": "Loopback listener EPERM in restricted environment"
+    },
+    "readiness_rerun": {
+      "passed": 2,
+      "reason": "Enabled loopback listener for fake-worker test; no source changes"
+    }
+  },
+  "new_hosted_starts": 0,
+  "source_changes": false,
+  "publication_performed": false
+}

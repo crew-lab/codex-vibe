@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -43,7 +44,7 @@ describe('an event flush that hits ENOSPC', () => {
     const backend = new FakeBackend();
     const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
-      const started = await manager.reviewStart({ task: 'review', cwd: source });
+      const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
       for (let attempt = 0; attempt < 500 && (await manager.status({ run_id: started.run_id })).state !== 'running'; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
       const callbacks = backend.callbacks.get(started.run_id)!;
       fault.events = true;
@@ -65,7 +66,7 @@ describe('an event flush that hits ENOSPC', () => {
     const backend = new FakeBackend();
     const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
     try {
-      const started = await manager.reviewStart({ task: 'review', cwd: source });
+      const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
       for (let attempt = 0; attempt < 500 && (await manager.status({ run_id: started.run_id })).state !== 'running'; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
       fault.events = true;
       await backend.callbacks.get(started.run_id)!.onEvent({ source: 'vibe', type: 'message', severity: 'info', data: { text: 'progress' } });

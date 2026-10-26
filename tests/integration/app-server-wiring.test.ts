@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { readFile, stat, writeFile } from 'node:fs/promises';
@@ -98,7 +99,7 @@ describe('backend selection by configuration', () => {
     const data = path.join(base, 'data');
     const backend = new FakeBackend();
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), data, [backend]));
-    const started = await manager.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 0 });
+    const started = await authorizedReviewStart(manager, { task: 'Review.', cwd: source, wait_seconds: 0 });
     expect(started.backend).toBe('app-server');
     await waitFor(() => backend.starts, (value) => value === 1);
     const callbacks = backend.callbacks.get(started.run_id)!;
@@ -118,7 +119,7 @@ describe('backend selection by configuration', () => {
     const source = makeWorkspace(base);
     const data = path.join(base, 'data');
     const first = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), data, [new FakeBackend()]));
-    const started = await first.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 0 });
+    const started = await authorizedReviewStart(first, { task: 'Review.', cwd: source, wait_seconds: 0 });
     await first.shutdown();
     const second = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), data, [new FakeBackend()]));
     await second.initialize();
@@ -135,7 +136,7 @@ describe('backend selection by configuration', () => {
     chmodSync(executable, 0o755);
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source], paths: { appServer: executable, vibePinManifest: path.join(base, 'manifest.json') } }), path.join(base, 'data')));
     const ready = await manager.status({ workspace: source, operation: 'review', wait_seconds: 0 });
-    expect(ready).toMatchObject({ workspace_eligible: true, eligible: false, preparation: { status: "missing" }, runtime: { executable_found: true, resolved_executable: executable, pinned_version: '2.26.1', version_verified: false } });
+    expect(ready).toMatchObject({ workspace_eligible: true, eligible: false, preparation: { status: "missing" }, runtime: { executable_found: true, resolved_executable: executable, pinned_version: '3.0.2', version_verified: false } });
 
     const absent = scratch();
     const absentSource = makeWorkspace(absent);
@@ -156,7 +157,7 @@ describe('backend selection by configuration', () => {
     const { selectedConfigPolicy } = await import('../../src/config/policy.js');
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), data, [new FakeBackend()], undefined, { policy: selectedConfigPolicy(configPath) }));
     write('/unused/other-manifest.json');
-    await expect(manager.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 0 })).rejects.toMatchObject({ code: 'VSUP_RESTART_REQUIRED' });
+    await expect(authorizedReviewStart(manager, { task: 'Review.', cwd: source, wait_seconds: 0 })).rejects.toMatchObject({ code: 'VSUP_RESTART_REQUIRED' });
   });
 });
 
@@ -173,7 +174,7 @@ describe('stop reasons from the app-server backend', () => {
     const source = makeWorkspace(base);
     const backend = new FakeBackend();
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), path.join(base, 'data'), [backend]));
-    const started = await manager.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 0 });
+    const started = await authorizedReviewStart(manager, { task: 'Review.', cwd: source, wait_seconds: 0 });
     await waitFor(() => backend.starts, (value) => value === 1);
     await backend.callbacks.get(started.run_id)!.onState('completed', { result: { stopReason, summary: '', warnings: ['backend warning'] } });
     const result = await manager.result({ run_id: started.run_id, detail: 'full', include_transcript: false }) as { state: string; stop_reason: string; summary: string; warnings: string[] };
@@ -189,7 +190,7 @@ describe('stop reasons from the app-server backend', () => {
     const source = makeWorkspace(base);
     const backend = new FakeBackend();
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), path.join(base, 'data'), [backend]));
-    const started = await manager.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 0 });
+    const started = await authorizedReviewStart(manager, { task: 'Review.', cwd: source, wait_seconds: 0 });
     await waitFor(() => backend.starts, (value) => value === 1);
     await backend.callbacks.get(started.run_id)!.onState('completed', { result: { stopReason: 'turn_limit', summary: 'Partial findings.' } });
     expect(await manager.result({ run_id: started.run_id, detail: 'full', include_transcript: false })).toMatchObject({ stop_reason: 'turn_limit', summary: 'Partial findings.' });
@@ -200,7 +201,7 @@ describe('stop reasons from the app-server backend', () => {
     const source = makeWorkspace(base);
     const backend = new FakeBackend();
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source] }), path.join(base, 'data'), [backend]));
-    const started = await manager.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 0 });
+    const started = await authorizedReviewStart(manager, { task: 'Review.', cwd: source, wait_seconds: 0 });
     await waitFor(() => backend.starts, (value) => value === 1);
     await backend.callbacks.get(started.run_id)!.onEvent({ source: 'vibe', type: 'tool_denied', severity: 'warning', data: { tool: 'file_system.write_file', outcome: 'permission_denied_by_policy', reason: 'permission_denied_by_policy', entry_id: 'e1', path: '/secret/not-shown' } });
     const status = await manager.status({ run_id: started.run_id, after_seq: 0, max_events: 10, wait_seconds: 0 }) as { events: { type: string; text?: string }[] };
@@ -358,8 +359,11 @@ async function buildStack(scenario: string, options: { config?: Partial<Supervis
   return { base, source, data, logFile, wrapper, manager, backend, client };
 }
 
-async function call(client: Client, name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const result = await client.callTool({ name, arguments: args });
+async function call(client: Client, name: string, args: Record<string, unknown>, manager?: RunManager): Promise<Record<string, unknown>> {
+  const start = name === 'vibe_review_start' || name === 'vibe_edit_start';
+  const operation = name === 'vibe_edit_start' ? 'edit' : 'review';
+  const grant = start && manager ? await manager.authorizeDispatch(operation, args as never, 'wiring-test-owner', new Date(Date.now() + 60 * 60 * 1000).toISOString()) : undefined;
+  const result = await client.callTool({ name, arguments: grant ? { ...args, authorization_id: grant.authorization_id, attempt_id: grant.attempt_id } : args });
   const text = (result.content as { text: string }[])[0]!.text;
   if (result.isError) throw new Error(text);
   return JSON.parse(text) as Record<string, unknown>;
@@ -368,7 +372,7 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
 describe('end to end through the MCP surface with the fake app-server', () => {
   it('runs a review to completion, reports usage and events, and closes without private state', async () => {
     const stack = await buildStack('allowed-call');
-    const finished = await call(stack.client, 'vibe_review_start', { task: 'Review the repository.', cwd: stack.source, wait_seconds: 30 });
+    const finished = await call(stack.client, 'vibe_review_start', { task: 'Review the repository.', cwd: stack.source, wait_seconds: 30 }, stack.manager);
     expect(finished).toMatchObject({ state: 'completed', backend: 'app-server', mode: 'review', result: { summary: 'The review found no issues.', stop_reason: 'end_turn' } });
     const runId = finished.run_id as string;
     const runDirectory = path.join(stack.data, 'runs', runId);
@@ -399,7 +403,7 @@ describe('end to end through the MCP surface with the fake app-server', () => {
 
   it('surfaces a refused write as a tool_denied event and still completes the review', async () => {
     const stack = await buildStack('off-profile-denied');
-    const finished = await call(stack.client, 'vibe_review_start', { task: 'Review.', cwd: stack.source, wait_seconds: 30 });
+    const finished = await call(stack.client, 'vibe_review_start', { task: 'Review.', cwd: stack.source, wait_seconds: 30 }, stack.manager);
     expect(finished).toMatchObject({ state: 'completed', backend: 'app-server', result: { summary: 'The write was refused.' } });
     const status = await call(stack.client, 'vibe_status', { run_id: finished.run_id, after_seq: 0, max_events: 50, wait_seconds: 0 }) as { events: { type: string; text?: string }[] };
     const denied = status.events.find((event) => event.type === 'tool_denied');
@@ -410,7 +414,7 @@ describe('end to end through the MCP surface with the fake app-server', () => {
 
   it('maps a server-side limit stop to turn_limit with the incomplete-result warning', async () => {
     const stack = await buildStack('limit');
-    const finished = await call(stack.client, 'vibe_review_start', { task: 'Review.', cwd: stack.source, wait_seconds: 30 });
+    const finished = await call(stack.client, 'vibe_review_start', { task: 'Review.', cwd: stack.source, wait_seconds: 30 }, stack.manager);
     expect(finished).toMatchObject({ state: 'completed', backend: 'app-server' });
     const result = await call(stack.client, 'vibe_result', { run_id: finished.run_id, detail: 'full', include_transcript: false }) as { stop_reason: string; warnings: string[] };
     expect(result.stop_reason).toBe('turn_limit');
@@ -419,7 +423,7 @@ describe('end to end through the MCP surface with the fake app-server', () => {
 
   it('refuses to start when the pin check fails, before any server is launched', async () => {
     const stack = await buildStack('allowed-call', { backend: { preparation: { check: async () => ({ status: "passed" as const, candidate_sha256: null, version: "fixture", reason: "Fake ACP fixture evidence only" }) }, pin: { verify: async () => { throw new PinCheckError('file-mismatch', 'Installed files differ from the pinned digests.'); } } } });
-    const finished = await call(stack.client, 'vibe_review_start', { task: 'Review.', cwd: stack.source, wait_seconds: 30 });
+    const finished = await call(stack.client, 'vibe_review_start', { task: 'Review.', cwd: stack.source, wait_seconds: 30 }, stack.manager);
     expect(finished).toMatchObject({ state: 'failed', error: { code: 'VSUP_VIBE_VERSION_UNSUPPORTED' } });
     expect(existsSync(stack.logFile)).toBe(false);
   }, 60_000);
@@ -448,10 +452,10 @@ describe('doctor with the app-server backend', () => {
     const { backend, launched } = wrapperBackend(base, config, async (executable) => { verified.push(executable); });
     const report = await runDoctor(config, undefined, { backend });
     const vibe = report.checks.find((check) => check.name === 'vibe');
-    expect(vibe).toMatchObject({ ok: true, status: 'ok', version: '2.26.1', message: expect.stringContaining('matches the pinned manifest') });
+    expect(vibe).toMatchObject({ ok: true, status: 'ok', version: '3.0.2', message: expect.stringContaining('matches the pinned manifest') });
     expect(verified).toEqual([path.join(base, 'vibe-app-server')]);
     expect(launched()).toBe(false);
-    expect(report.provenance).toMatchObject({ backend: 'app-server', vibe_version: '2.26.1' });
+    expect(report.provenance).toMatchObject({ backend: 'app-server', vibe_version: '3.0.2' });
     expect(report.ok).toBe(true);
   });
 
@@ -506,7 +510,7 @@ describe('pin-manifest command', () => {
     await runCli(['pin-manifest', '--config', env.configPath]);
     expect(output.err()).toBe('');
     expect(process.exitCode).toBeUndefined();
-    expect(output.out()).toContain('Wrote the pin manifest for Vibe 2.26.1');
+    expect(output.out()).toContain('Wrote the pin manifest for Vibe 3.0.2');
     expect(output.out()).toContain(env.manifest);
     expect((await stat(env.manifest)).mode & 0o777).toBe(0o600);
     const written = await readFile(env.manifest, 'utf8');
@@ -519,7 +523,7 @@ describe('pin-manifest command', () => {
     const { loadConfig } = await import('../../src/config/config.js');
     const config = await loadConfig({ configPath: env.configPath });
     const report = await runDoctor(config, { configPath: env.configPath, dataDir: env.data });
-    expect(report.checks.find((check) => check.name === 'vibe')).toMatchObject({ ok: true, status: 'ok', version: '2.26.1' });
+    expect(report.checks.find((check) => check.name === 'vibe')).toMatchObject({ ok: true, status: 'ok', version: '3.0.2' });
 
     await writeFile(path.join(env.site, 'vibe', 'app_server', '__init__.py'), 'def main():\n    return 1\n');
     const tampered = await runDoctor(config, { configPath: env.configPath, dataDir: env.data });
@@ -537,7 +541,7 @@ describe('pin-manifest command', () => {
     expect(readFileSync(env.manifest, 'utf8')).toBe('previous');
     process.exitCode = undefined;
     await runCli(['pin-manifest', '--config', env.configPath, '--force']);
-    expect(parsePinManifest(readFileSync(env.manifest, 'utf8')).version).toBe('2.26.1');
+    expect(parsePinManifest(readFileSync(env.manifest, 'utf8')).version).toBe('3.0.2');
   });
 
   it('takes an explicit executable and output path', async () => {

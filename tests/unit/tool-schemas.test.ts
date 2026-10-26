@@ -11,30 +11,40 @@ describe("MCP tool input schemas", () => {
   });
 
   it("leaves turn and timeout limits to the configured defaults", () => {
-    const review = toolSchemas.vibe_review_start.parse({ task: "Inspect", cwd: "/repo" });
+    const review = toolSchemas.vibe_review_start.parse({ authorization_id: runId, attempt_id: runId, task: "Inspect", cwd: "/repo" });
     expect(review).toMatchObject({ context_files: [], output: "text" });
     expect(review.max_turns).toBeUndefined();
     expect(review.timeout_seconds).toBeUndefined();
-    expect(toolSchemas.vibe_review_start.parse({ task: "Inspect", cwd: "/repo", output: "findings" })).toMatchObject({ output: "findings" });
-    const edit = toolSchemas.vibe_edit_start.parse({ task: "Change", cwd: "/repo" });
+    expect(toolSchemas.vibe_review_start.parse({ authorization_id: runId, attempt_id: runId, task: "Inspect", cwd: "/repo", output: "findings" })).toMatchObject({ output: "findings" });
+    const edit = toolSchemas.vibe_edit_start.parse({ authorization_id: runId, attempt_id: runId, task: "Change", cwd: "/repo" });
     expect(edit).toMatchObject({ base_ref: "HEAD" });
+    expect(() => toolSchemas.vibe_edit_start.parse({ authorization_id: runId, attempt_id: runId, task: "Change", cwd: "/repo", session_mode: "correctable" })).toThrow();
+    expect(() => toolSchemas.vibe_edit_start.parse({ authorization_id: runId, attempt_id: runId, task: "Change", cwd: "/repo", max_corrections: 1 })).toThrow();
     expect(edit.max_turns).toBeUndefined();
     expect(edit.timeout_seconds).toBeUndefined();
-    expect(toolSchemas.vibe_review_start.parse({ task: "Inspect", cwd: "/repo", max_turns: 3, timeout_seconds: 60 })).toMatchObject({ max_turns: 3, timeout_seconds: 60 });
+    expect(toolSchemas.vibe_review_start.parse({ authorization_id: runId, attempt_id: runId, task: "Inspect", cwd: "/repo", max_turns: 3, timeout_seconds: 60 })).toMatchObject({ max_turns: 3, timeout_seconds: 60 });
+  });
+
+  it("requires UUIDv4 authorization and attempt identifiers on each start", () => {
+    for (const schema of [toolSchemas.vibe_review_start, toolSchemas.vibe_edit_start]) {
+      expect(() => schema.parse({ task: "Inspect", cwd: "/repo" })).toThrow();
+      expect(() => schema.parse({ authorization_id: "123e4567-e89b-12d3-a456-426614174000", attempt_id: runId, task: "Inspect", cwd: "/repo" })).toThrow();
+      expect(() => schema.parse({ authorization_id: runId, attempt_id: "123e4567-e89b-12d3-a456-426614174000", task: "Inspect", cwd: "/repo" })).toThrow();
+    }
   });
 
   it("rejects unknown fields and invalid bounds before dispatch", () => {
-    expect(() => toolSchemas.vibe_edit_start.parse({ task: "x", cwd: "/repo", isolation: "same-working-tree" })).toThrow();
-    expect(() => toolSchemas.vibe_review_start.parse({ task: "x", cwd: "/repo", context_files: Array(51).fill("x") })).toThrow();
-    expect(() => toolSchemas.vibe_review_start.parse({ task: "x", cwd: "/repo", max_turns: 51 })).toThrow();
-    expect(() => toolSchemas.vibe_edit_start.parse({ task: "x", cwd: "/repo", timeout_seconds: 29 })).toThrow();
+    expect(() => toolSchemas.vibe_edit_start.parse({ authorization_id: runId, attempt_id: runId, task: "x", cwd: "/repo", isolation: "same-working-tree" })).toThrow();
+    expect(() => toolSchemas.vibe_review_start.parse({ authorization_id: runId, attempt_id: runId, task: "x", cwd: "/repo", context_files: Array(51).fill("x") })).toThrow();
+    expect(() => toolSchemas.vibe_review_start.parse({ authorization_id: runId, attempt_id: runId, task: "x", cwd: "/repo", max_turns: 51 })).toThrow();
+    expect(() => toolSchemas.vibe_edit_start.parse({ authorization_id: runId, attempt_id: runId, task: "x", cwd: "/repo", timeout_seconds: 29 })).toThrow();
   });
 
   it("rejects the removed allow_shell, backend and detail summary inputs", () => {
-    expect(() => toolSchemas.vibe_edit_start.parse({ task: "x", cwd: "/repo", allow_shell: false })).toThrow();
-    expect(() => toolSchemas.vibe_edit_start.parse({ task: "x", cwd: "/repo", allow_shell: true })).toThrow();
-    expect(() => toolSchemas.vibe_review_start.parse({ task: "x", cwd: "/repo", backend: "acp" })).toThrow();
-    expect(() => toolSchemas.vibe_edit_start.parse({ task: "x", cwd: "/repo", backend: "auto" })).toThrow();
+    expect(() => toolSchemas.vibe_edit_start.parse({ authorization_id: runId, attempt_id: runId, task: "x", cwd: "/repo", allow_shell: false })).toThrow();
+    expect(() => toolSchemas.vibe_edit_start.parse({ authorization_id: runId, attempt_id: runId, task: "x", cwd: "/repo", allow_shell: true })).toThrow();
+    expect(() => toolSchemas.vibe_review_start.parse({ authorization_id: runId, attempt_id: runId, task: "x", cwd: "/repo", backend: "acp" })).toThrow();
+    expect(() => toolSchemas.vibe_edit_start.parse({ authorization_id: runId, attempt_id: runId, task: "x", cwd: "/repo", backend: "auto" })).toThrow();
     expect(() => toolSchemas.vibe_result.parse({ run_id: runId, detail: "summary" })).toThrow();
     expect(toolSchemas.vibe_result.parse({ run_id: runId, detail: "full" })).toMatchObject({ detail: "full" });
     expect(toolSchemas.vibe_result.parse({ run_id: runId })).toMatchObject({ detail: "compact" });

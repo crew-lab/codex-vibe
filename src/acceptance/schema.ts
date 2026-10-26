@@ -27,7 +27,7 @@ export const acceptanceContractSchema = z.object({
 });
 export type AcceptanceContract = z.infer<typeof acceptanceContractSchema>;
 export const validationSchema = z.object({ id, status: z.enum(['passed', 'failed', 'incomplete']), evidence_sha256: sha256.optional(), reference: z.string().max(1000).optional() }).strict();
-export const assessmentSchema = z.object({ decision: z.enum(['accepted', 'rejected', 'deferred']), reason: z.string().min(1).max(2000), patch_sha256: sha256, contract_sha256: sha256, validations: z.array(validationSchema).max(100).default([]) }).strict().refine((value) => new Set(value.validations.map((item) => item.id)).size === value.validations.length, 'Duplicate validation ID');
+export const assessmentSchema = z.object({ decision: z.enum(['accepted', 'rejected', 'deferred']), reason: z.string().min(1).max(2000), patch_sha256: sha256, contract_sha256: sha256, candidate_revision: z.number().int().min(1).max(3).optional(), validations: z.array(validationSchema).max(100).default([]) }).strict().refine((value) => new Set(value.validations.map((item) => item.id)).size === value.validations.length, 'Duplicate validation ID');
 export type AssessmentInput = z.infer<typeof assessmentSchema>;
 export interface Assessment extends AssessmentInput { assessed_at: string }
 export interface CheckResult { id: string; status: 'passed' | 'failed' | 'incomplete'; reason: string; path?: string | undefined }

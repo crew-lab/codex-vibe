@@ -1,3 +1,4 @@
+import { authorizedEditStart, authorizedReviewStart } from "../support/authorized-start.js";
 import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
@@ -82,7 +83,7 @@ async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean): 
 }
 
 async function runningRun(manager: RunManager, source: string) {
-  const started = await manager.reviewStart({ task: "review", cwd: source });
+  const started = await authorizedReviewStart(manager, { task: "review", cwd: source });
   await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === "running");
   return started.run_id;
 }
@@ -201,8 +202,8 @@ describe("vibe_status wait_seconds", () => {
     expect(toolSchemas.vibe_status.parse({ run_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479" })).toMatchObject({ wait_seconds: 0, max_events: 10 });
     expect(() => toolSchemas.vibe_status.parse({ run_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479", wait_seconds: 301 })).toThrow();
     expect(() => toolSchemas.vibe_status.parse({ run_id: "f47ac10b-58cc-4372-a567-0e02b2c3d479", wait_seconds: -1 })).toThrow();
-    expect(() => toolSchemas.vibe_review_start.parse({ task: "x", cwd: "/r", wait_seconds: 301 })).toThrow();
-    expect(toolSchemas.vibe_edit_start.parse({ task: "x", cwd: "/r", wait_seconds: 300 })).toMatchObject({ wait_seconds: 300 });
+    expect(() => toolSchemas.vibe_review_start.parse({ task: "x", cwd: "/r", authorization_id: "123e4567-e89b-42d3-a456-426614174001", attempt_id: "123e4567-e89b-42d3-a456-426614174002", wait_seconds: 301 })).toThrow();
+    expect(toolSchemas.vibe_edit_start.parse({ task: "x", cwd: "/r", authorization_id: "123e4567-e89b-42d3-a456-426614174001", attempt_id: "123e4567-e89b-42d3-a456-426614174002", wait_seconds: 300 })).toMatchObject({ wait_seconds: 300 });
   });
 });
 
@@ -212,7 +213,7 @@ describe("start tools with wait_seconds", () => {
     backend.beforeReturn = async () => { setTimeout(() => { void backend.callbacks?.onState("completed", { result: { summary: "Finished" } }); }, 60); };
     const { source, manager } = await setup(backend);
     try {
-      const started = await manager.reviewStart({ task: "review", cwd: source, wait_seconds: 30 });
+      const started = await authorizedReviewStart(manager, { task: "review", cwd: source, wait_seconds: 30 });
       expect(started.state).toBe("completed");
       expect(started).toMatchObject({ run_id: expect.any(String), worker_workspace: source, result: { summary: "Finished", state: "completed" } });
     } finally { await manager.shutdown(); }
@@ -221,7 +222,7 @@ describe("start tools with wait_seconds", () => {
   it("does not wait or attach a result when wait_seconds is 0", async () => {
     const { source, manager } = await setup();
     try {
-      const started = await manager.reviewStart({ task: "review", cwd: source });
+      const started = await authorizedReviewStart(manager, { task: "review", cwd: source });
       expect(started.state).toBe("starting");
       expect(started.result).toBeUndefined();
     } finally { await manager.shutdown(); }
@@ -235,7 +236,7 @@ describe("start tools with wait_seconds", () => {
     };
     const { source, data, manager } = await setupGit(backend);
     try {
-      const started = await manager.editStart({ task: "edit", cwd: source, wait_seconds: 30 });
+      const started = await authorizedEditStart(manager, { task: "edit", cwd: source, wait_seconds: 30 });
       expect(started.worker_workspace).toBe(join(data, "worktrees", started.run_id));
       expect(started.state).toBe("completed");
       expect(started.result).toMatchObject({ changed_files: ["generated.txt"], changed_files_total: 1 });
@@ -248,7 +249,7 @@ describe("vibe_result detail", () => {
     const backend = new FakeBackend();
     backend.beforeReturn = async (input) => { for (const [name, text] of Object.entries(files)) await writeFile(join(input.workerWorkspace, name), text); };
     const context = await setupGit(backend);
-    const started = await context.manager.editStart({ task: "edit", cwd: context.source });
+    const started = await authorizedEditStart(context.manager, { task: "edit", cwd: context.source });
     await waitFor(() => context.manager.status({ run_id: started.run_id }), (value) => value.state === "running");
     await backend.callbacks?.onEvent({ source: "vibe", type: "agent_message", severity: "info", data: { text: "x".repeat(10_000) } });
     await backend.callbacks?.onState("completed", { result: { summary: "Done" } });
