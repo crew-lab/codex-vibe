@@ -2,12 +2,12 @@ import { captureVerification, verifySaved } from "../acceptance/verify.js";
 import { contractDigest, verificationSummary, type AcceptanceContract, type AssessmentInput } from "../acceptance/schema.js";
 import { readOwnedFile } from "../reporting/private-files.js";
 import { createHash, randomUUID } from "node:crypto";
-import { open, readFile, readdir, realpath, rename, rm, lstat, unlink, writeFile, chmod } from "node:fs/promises";
+import { open, readFile, readdir, realpath, rename, rm, lstat, unlink } from "node:fs/promises";
 import path from "node:path";
 import type {
   ApprovalLedgerSnapshot, BackendCallbacks, BackendKind, ExclusionScope, BackendRunHandle, BackendStateUpdate,
   ReviewStartToolInput, EditStartToolInput, StatusToolInput,
-  ResultToolInput, WaitOptions, CloseToolInput, ContinueToolInput, StartRunInput, RunLimits, RunMode, RunRecord, RunState, SupervisorBackend,
+  ResultToolInput, WaitOptions, CloseToolInput, StartRunInput, RunLimits, RunMode, RunRecord, RunState, SupervisorBackend,
   ReviewIntegrity, RuntimeCheck, SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent,
   FindingsArtifact
 } from "../contracts.js";
@@ -83,9 +83,6 @@ interface Runtime {
   logUnavailable?: { kind: "content" | "filesystem"; reason: string; code?: string };
   persistChain: Promise<void>;
   closeChain: Promise<void>;
-  continuationChain: Promise<void>;
-  candidateRevision: number;
-  correctionCount: number;
   preparedInputDirectory?: string;
   waiters: Set<() => void>;
 }
@@ -722,10 +719,6 @@ export class RunManager {
     return next;
   }
 
-  async vibeContinue(_value: ContinueToolInput, _wait?: WaitOptions): Promise<Record<string, unknown>> {
-    throw codedError("VSUP_INVALID_STATE", "Continuation is deferred; the stable Supervisor accepts one-shot runs only.");
-  }
-
   private async recordAssessment(runtime: Runtime, input: AssessmentInput): Promise<void> {
     if (runtime.record.mode !== "edit" || !COORDINATOR_ACTION_STATES.has(runtime.record.state) || (runtime.record.sessionMode === "correctable" && runtime.record.state !== "awaiting_validation")) throw codedError("VSUP_INVALID_STATE", "Assess only the latest exported candidate of an edit.");
     const record = runtime.record;
@@ -749,7 +742,7 @@ export class RunManager {
     const acceptedLatest = record.state === "awaiting_validation" && record.sessionMode === "correctable" && record.assessments?.some((assessment) => assessment.decision === "accepted" && assessment.candidate_revision === record.candidateRevision && assessment.patch_sha256 === record.candidatePatchSha256);
     if (acceptedLatest) await this.setState(runtime, "completed", { executionState: "completed", finishedAt: new Date().toISOString() });
     this.clearProgress(runtime);
-    if (!isTerminal(record.state) && record.state !== "completed") {
+    if (!isTerminal(record.state)) {
       const outcome = this.requestOutcome(runtime, { state: "cancelled" });
       try { await this.cancelBackendSession(runtime); }
       catch (error) { return this.unverifiedWorkerOutcome(runtime, error); }
@@ -1058,7 +1051,7 @@ export class RunManager {
   }
 
   private makeRuntime(record: RunRecord, directory: string, task: string, contextFiles: string[], lazy = false): Runtime {
-    return { record, directory, task, contextFiles, events: [], eventSeq: 0, eventBytes: 0, ...(lazy ? {} : { loading: Promise.resolve() }), transcript: "", serial: Promise.resolve(), slot: false, cancelRequested: false, started: false, closedHandles: new Set(), transcriptOverflow: false, persistChain: Promise.resolve(), closeChain: Promise.resolve(), continuationChain: Promise.resolve(), candidateRevision: 0, correctionCount: 0, waiters: new Set() };
+    return { record, directory, task, contextFiles, events: [], eventSeq: 0, eventBytes: 0, ...(lazy ? {} : { loading: Promise.resolve() }), transcript: "", serial: Promise.resolve(), slot: false, cancelRequested: false, started: false, closedHandles: new Set(), transcriptOverflow: false, persistChain: Promise.resolve(), closeChain: Promise.resolve(), waiters: new Set() };
   }
 
   private async loadDefaultBackends(): Promise<void> {
@@ -1120,8 +1113,6 @@ export class RunManager {
         cwd: runtime.record.sourceWorkspace, workerWorkspace, runDirectory: runtime.directory,
         ...(baseRef ? { baseRef } : {}), ...(contextFiles.length ? { contextFiles } : {}),
         ...(runtime.record.output ? { output: runtime.record.output } : {}),
-        ...(runtime.record.sessionMode ? { sessionMode: runtime.record.sessionMode } : {}),
-        ...(runtime.record.maxCorrections === undefined ? {} : { maxCorrections: runtime.record.maxCorrections }),
         ...(preparedContextFiles ? { preparedContextManifestSha256: runtime.record.preparedContextManifestSha256, preparedContextFiles } : {}),
         exclusions: runtime.record.exclusions ?? [],
         limits
@@ -1421,32 +1412,6 @@ export class RunManager {
   private async finalizeArtifacts(runtime: Runtime, resultState: RunState = runtime.record.state): Promise<void> {
     try { await this.writeArtifacts(runtime, resultState); }
     catch (error) { throw asStorageError(error, runtime.directory); }
-  }
-
-  private async archiveCandidateRevision(runtime: Runtime, patchSha256: string, verification: RunRecord["verification"]): Promise<number> {
-    const revision = runtime.candidateRevision;
-    const root = path.join(runtime.directory, "artifacts", "revisions");
-    const directory = path.join(root, `revision-${revision}`);
-    if (await lstat(directory).then(() => true, () => false)) throw codedError("VSUP_INVALID_STATE", "Candidate revision storage already exists; refusing to overwrite prior evidence.");
-    await createPrivateDir(directory);
-    const latest = runtime.record.result?.artifacts ?? [];
-    const selected = latest.filter((artifact) => ["diff.patch", "diff.stat", "changed-files.json"].includes(artifact.name));
-    const sizes: number[] = [];
-    for (const artifact of selected) {
-      const content = await readOwnedFile(artifact.path, runtime.record.limits.maxArtifactBytes);
-      const target = path.join(directory, artifact.name);
-      await writeFile(target, content, { mode: 0o600, flag: "wx" });
-      await chmod(target, 0o400);
-      sizes.push(content.length);
-    }
-    const verificationBytes = Buffer.from(JSON.stringify(verification ?? { status: "incomplete", checks: [] }, null, 2) + "\n");
-    await writeFile(path.join(directory, "verification.json"), verificationBytes, { mode: 0o600, flag: "wx" });
-    await chmod(path.join(directory, "verification.json"), 0o400);
-    sizes.push(verificationBytes.length);
-    const total = sizes.reduce((sum, size) => sum + size, 0);
-    const cumulative = (runtime.record.candidateRevisions ?? []).reduce((sum, item) => sum + item.artifactBytes, 0) + total;
-    if (cumulative > runtime.record.limits.maxArtifactBytes) throw codedError("VSUP_OUTPUT_LIMIT", "Cumulative candidate revision artifacts exceeded the original run artifact limit.");
-    return total;
   }
 
   private async writeFallbackResult(runtime: Runtime, resultState: RunState, warning = ARTIFACTS_INCOMPLETE_WARNING): Promise<void> {

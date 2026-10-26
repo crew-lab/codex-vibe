@@ -66,11 +66,16 @@ const TOOL_NAMES: Readonly<Record<string, string>> = {
   'file_system.search_replace': 'edit'
 };
 const TOOL_KINDS: Readonly<Record<string, string>> = { read_file: 'read', write_file: 'edit', edit: 'edit' };
+const SHELL_OR_NETWORK_TOOL_WORDS: ReadonlySet<string> = new Set(['bash', 'shell', 'terminal', 'command', 'exec', 'network', 'http', 'https', 'web', 'fetch', 'url', 'download', 'curl', 'browser']);
 const STOP_REQUEST_KINDS: ReadonlySet<SupervisorCondition['kind']> = new Set(['budget', 'cancelled', 'deadline']);
 const BENIGN_SERVER_ERRORS: ReadonlySet<string> = new Set(['stale_turn', 'conflict', 'not_found', 'callback_closed']);
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const VERSION_TEXT = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 const MAX_VERSION_CHARS = 128;
+
+function isShellOrNetworkTool(tool: string): boolean {
+  return tool.toLowerCase().split(/[^a-z0-9]+/).some((word) => SHELL_OR_NETWORK_TOOL_WORDS.has(word));
+}
 
 export interface AppServerTiming {
   requestTimeoutMs: number;
@@ -253,7 +258,7 @@ class AppServerRun {
   private readonly handler: ApprovalHandler;
   private managedConfigEndpoint: ManagedConfigEndpoint | undefined;
   private readonly stderrRedactor: StreamingRedactor;
-  private turnDone = deferred<TurnEnd>();
+  private readonly turnDone = deferred<TurnEnd>();
   private readonly startReported = deferred<void>();
   private readonly hurried = deferred<void>();
   private readonly emittedEffects = new Set<string>();
@@ -268,7 +273,6 @@ class AppServerRun {
   private usage: UsageTracker | undefined;
   private readonly modelObservations: import("../reporting/telemetry.js").ModelObservation[] = [];
   private openedSessionId = '';
-  private sessionStart: SessionStartResult | undefined;
   private turnId = '';
   private completedTurn: Turn | null = null;
   private processRecord: ProcessRecord | undefined;
@@ -291,7 +295,6 @@ class AppServerRun {
   private hurriedFlag = false;
   private stderrTail = '';
   private lastUsageEmit = 0;
-  private awaitingCorrection = false;
   private deniedUnsafeStreak = 0;
 
   constructor(parts: RunParts) {
@@ -315,7 +318,7 @@ class AppServerRun {
       workspace: parts.input.workerWorkspace,
       excludedGlobs: workspaceAnchors(parts.input.exclusions, parts.input.cwd),
       currentSessionId: () => this.sessionId,
-      isTurnActive: () => (this.turnStarting || this.turnStarted) && this.completedTurn === null && !this.awaitingCorrection && !this.cleaned,
+      isTurnActive: () => (this.turnStarting || this.turnStarted) && this.completedTurn === null && !this.cleaned,
       currentTurnId: () => this.turnId || null,
       ...(parts.options.approvals?.deadlineMs === undefined ? {} : { deadlineMs: parts.options.approvals.deadlineMs }),
       ...(parts.options.approvals?.evaluate === undefined ? {} : { evaluate: parts.options.approvals.evaluate })
@@ -352,7 +355,6 @@ class AppServerRun {
 
   async cancel(): Promise<void> {
     this.handler.revoke();
-    if (this.awaitingCorrection) { this.awaitingCorrection = false; await this.cleanup(); return; }
     if (!this.concludeStarted) this.addCondition({ kind: 'cancelled' });
     if (!this.turnStarted) {
       this.hurry();
@@ -379,41 +381,6 @@ class AppServerRun {
     this.handler.revoke();
     if (this.cleaning === undefined && !this.concludeStarted) await this.cancel();
     else await this.cleanup();
-  }
-
-  async continue(message: string): Promise<void> {
-    if (!this.awaitingCorrection || this.cleaned || this.input.sessionMode !== 'correctable') throw supervisorError('VSUP_INVALID_STATE', 'This run is not awaiting a correctable revision.');
-    if (Date.now() >= this.deadlineAt) throw supervisorError('VSUP_TIMEOUT', 'The original run deadline expired while awaiting validation.');
-    this.awaitingCorrection = false;
-    this.turnStarting = true;
-    this.turnDone = deferred<TurnEnd>();
-    this.completedTurn = null;
-    this.turnId = '';
-    this.turnStarted = false;
-    this.interruptWanted = false;
-    this.interruptSent = false;
-    this.concludeStarted = false;
-    this.terminalEmitted = false;
-    const started = await this.rpc(buildTurnStart(this.sessionId, `Apply only this correction to the current workspace state. Do not restart or restate the original task.\n\nCurrent candidate revision ${this.input.runId}:\n${message}`), parseTurnStartResult, this.startupTimeout());
-    this.turnId = started.turn.id;
-    await settlesWithin(this.client.drained(), this.startupTimeout());
-    this.processor.advanceWatermark(started.lastEventId);
-    this.turnStarting = false;
-    this.turnStarted = true;
-    void this.supervise().catch((error: unknown) => reportBackgroundFailure('app-server-supervise', error));
-    await this.callbacks.onState('running', { approvals: this.approvalSnapshot() });
-    if (started.turn.status !== 'in_progress') this.onTurnCompleted(started.turn);
-  }
-
-  async validateContinuation(): Promise<void> {
-    if (!this.awaitingCorrection || !this.sessionStart || this.cleaned) throw supervisorError('VSUP_INVALID_STATE', 'The correctable session is no longer live.');
-    await this.readback({ checkThinking: true, checkCounts: true, session: this.sessionStart, publishObservation: false });
-  }
-
-  assertPinnedRuntime(verified: VerifiedPin): void {
-    if (verified.executable !== this.executable || JSON.stringify(verified.pin ?? null) !== JSON.stringify(this.pin ?? null)) {
-      throw supervisorError('VSUP_VIBE_VERSION_UNSUPPORTED', 'The pinned Vibe executable or manifest identity changed while the run awaited validation. Close this run and start again after fresh preparation.');
-    }
   }
 
   private async spawnWorker(): Promise<void> {
@@ -504,7 +471,6 @@ class AppServerRun {
     const initialized = buildInitialized();
     this.client.notify(initialized.method, initialized.params);
     const started = await this.rpc(buildSessionStart(this.plan.agentConfig), parseSessionStartResult, this.startupTimeout());
-    this.sessionStart = started;
     this.openedSessionId = started.state.session.id;
     this.processor = new EventProcessor({
       sessionId: started.state.session.id,
@@ -530,8 +496,8 @@ class AppServerRun {
     this.usage = tracker;
   }
 
-  private async readback(options: { checkThinking: boolean; checkCounts: boolean; session: SessionStartResult; publishObservation?: boolean }): Promise<RuntimeReadResult> {
-    const { checkThinking, checkCounts, session: sessionStart, publishObservation = true } = options;
+  private async readback(options: { checkThinking: boolean; checkCounts: boolean; session: SessionStartResult }): Promise<RuntimeReadResult> {
+    const { checkThinking, checkCounts, session: sessionStart } = options;
     const runtime = await this.rpc(buildRuntimeRead(this.sessionId), parseRuntimeReadResult, this.startupTimeout());
     const effective = await this.rpc(buildConfigEffectiveRead(this.sessionId), parseConfigEffectiveReadResult, this.startupTimeout());
     const mismatches: ReadbackMismatch[] = compareReadback(this.plan.expectation, { sessionStart, runtime, effective }, { checkThinking });
@@ -545,7 +511,7 @@ class AppServerRun {
         reason: 'readback_mismatch', fields: mismatches.slice(0, 20).map((item) => item.path), total: mismatches.length
       });
     }
-    if (checkThinking && publishObservation) {
+    if (checkThinking) {
       if (this.modelObservations.length >= 100) throw supervisorError('VSUP_OUTPUT_LIMIT', 'Model observation limit exceeded.');
       this.modelObservations.push(modelObservationSchema.parse({ observed_at: new Date().toISOString(), source: 'runtime/read', reported_name: runtime.runtime.activeModel?.name ?? null, prices_per_million: { input: runtime.runtime.stats.inputPricePerMillion, output: runtime.runtime.stats.outputPricePerMillion, cached_input: runtime.runtime.stats.cachedInputPricePerMillion }, session_model: sessionStart.state.session.model, alias: runtime.runtime.activeModel?.alias ?? null, thinking: runtime.runtime.activeModel?.thinking ?? null, requested_thinking: 'off', requested_thinking_source: 'supervisor-session-config', requested_model: null, requested_model_source: 'unavailable' }));
       if (this.startReported.settled) await this.callbacks.onState('running', { modelObservations: [...this.modelObservations] });
@@ -637,7 +603,6 @@ class AppServerRun {
     switch (signal.type) {
       case 'fatal':
         this.handler.revoke();
-        if (this.failAwaitingValidation(supervisorError('VSUP_BACKEND_ERROR', signal.fatal.message, { reason: signal.fatal.code }))) return;
         this.interrupt();
         return;
       case 'watermark_gap':
@@ -724,14 +689,8 @@ class AppServerRun {
   }
 
   private onDeadline(): void {
-    if (this.concludeStarted && !this.awaitingCorrection) return;
     this.handler.revoke();
     this.addCondition({ kind: 'deadline' });
-    if (this.awaitingCorrection) {
-      this.awaitingCorrection = false;
-      void this.cleanup().then(() => this.callbacks.onState('failed', { error: supervisorError('VSUP_TIMEOUT', 'The original run deadline expired while awaiting validation.') })).catch((error: unknown) => reportBackgroundFailure('app-server-validation-deadline', error));
-      return;
-    }
     if (!this.turnStarted) this.abortStartup(supervisorError('VSUP_TIMEOUT', 'The run exceeded its configured timeout before the turn started.'));
     else this.interrupt();
   }
@@ -746,29 +705,18 @@ class AppServerRun {
   private onProcessLimit(stream: 'stdout' | 'stderr'): void {
     this.shuttingDown = true;
     this.addCondition({ kind: 'output_limit', detail: `${stream} budget exceeded` });
-    if (this.failAwaitingValidation(supervisorError('VSUP_OUTPUT_LIMIT', `The ${stream} output limit was exceeded while awaiting validation.`))) return;
     this.turnDone.resolve('forced');
   }
 
   private onClientFatal(error: JsonRpcFatalError): void {
     this.recordFailure(error);
-    if (this.failAwaitingValidation(supervisorError('VSUP_BACKEND_ERROR', error.message, { reason: 'protocol_fatal' }))) return;
     this.turnDone.resolve('forced');
   }
 
   private onUnexpectedEnd(detail: string): void {
-    if (this.failAwaitingValidation(supervisorError('VSUP_BACKEND_CRASHED', `The Vibe app-server exited while awaiting validation: ${detail}`))) return;
     if (this.shuttingDown || this.completedTurn !== null) return;
     this.addCondition({ kind: 'backend_crashed', detail });
     this.turnDone.resolve('forced');
-  }
-
-  private failAwaitingValidation(error: SupervisorError): boolean {
-    if (!this.awaitingCorrection) return false;
-    this.awaitingCorrection = false;
-    this.failure ??= error;
-    void this.cleanup().then(() => this.callbacks.onState('failed', { error })).catch((cleanupError: unknown) => reportBackgroundFailure('app-server-validation-failure', cleanupError));
-    return true;
   }
 
   private onStderr(chunk: string): void {
@@ -796,7 +744,6 @@ class AppServerRun {
   private markIntegrityFailure(error: SupervisorError): void {
     this.failure ??= error;
     this.integrityFailure ??= error;
-    this.failAwaitingValidation(error);
   }
 
   private track(promise: Promise<unknown>): void {
@@ -838,7 +785,7 @@ class AppServerRun {
       else this.toolCalls.deniedByPolicy += 1;
       const reason = this.handler.ledger.forEffect(effect.entryId)?.reason ?? effect.outcome;
       this.emit('tool_denied', 'warning', { tool: effect.tool, outcome: effect.outcome, reason, entry_id: effect.entryId, ...location });
-      if (/(?:bash|shell|terminal|network|http|browser)/i.test(effect.tool)) {
+      if (isShellOrNetworkTool(effect.tool)) {
         this.deniedUnsafeStreak += 1;
         if (this.deniedUnsafeStreak >= 3) {
           const message = 'The run stopped after three consecutive denied shell or network requests without an approved tool call.';
@@ -858,8 +805,7 @@ class AppServerRun {
 
   private async conclude(how: TurnEnd): Promise<void> {
     this.concludeStarted = true;
-    if (this.graceTimer) clearTimeout(this.graceTimer);
-    this.graceTimer = undefined;
+    this.clearTimers();
     await settlesWithin(Promise.allSettled([...this.background]), BACKGROUND_WAIT_MS);
     const audit = await this.finalRead(how);
     const fatal = this.processor.fatal ?? audit?.fatal ?? this.unfinishedEffects(audit);
@@ -875,14 +821,10 @@ class AppServerRun {
       else if (!final.complete) this.warnings.push('The final assistant message was not marked complete.');
     }
     this.emitCounters(audit);
-    const awaiting = this.input.sessionMode === 'correctable' && outcome.state === 'completed' && !this.hasCondition('budget') && !this.hasCondition('deadline') && !this.hasCondition('cancelled');
-    if (awaiting) this.awaitingCorrection = true;
-    if (!awaiting) {
-      try { await this.cleanup(); }
-      catch (error) {
-        reportBackgroundFailure('app-server-cleanup', error);
-        outcome = { state: 'failed', warnings: [], error: supervisorError('VSUP_BACKEND_ERROR', 'The Vibe app-server termination could not be verified; the run keeps its handle so cleanup can be retried.') };
-      }
+    try { await this.cleanup(); }
+    catch (error) {
+      reportBackgroundFailure('app-server-cleanup', error);
+      outcome = { state: 'failed', warnings: [], error: supervisorError('VSUP_BACKEND_ERROR', 'The Vibe app-server termination could not be verified; the run keeps its handle so cleanup can be retried.') };
     }
     await this.eventChain;
     const warnings = [...outcome.warnings, ...this.warnings];
@@ -890,21 +832,15 @@ class AppServerRun {
     const result: ResultSummary | undefined = outcome.state === 'completed'
       ? { stopReason: outcome.stopReason ?? 'end_turn', summary: bounded?.text ?? '', ...(warnings.length > 0 ? { warnings } : {}) }
       : undefined;
-    this.terminalEmitted = !awaiting;
+    this.terminalEmitted = true;
     try {
-      await this.callbacks.onState(awaiting ? 'awaiting_validation' : outcome.state, {
+      await this.callbacks.onState(outcome.state, {
         ...(usage ? { usage } : {}),
         ...(result ? { result } : {}),
         ...(outcome.error ? { error: outcome.error } : {}),
         approvals: this.approvalSnapshot()
       });
     } catch (error) { reportBackgroundFailure('app-server-terminal-state', error); }
-    if (awaiting) {
-      this.completedTurn = null;
-      this.turnId = '';
-      this.turnStarted = false;
-      this.concludeStarted = true;
-    }
   }
 
   private approvalSnapshot(): ApprovalLedgerSnapshot {
@@ -1180,17 +1116,6 @@ export class AppServerBackend implements SupervisorBackend {
 
   async cancel(handle: BackendRunHandle): Promise<void> {
     await (handle.opaque as AppServerRun).cancel();
-  }
-
-  async continue(handle: BackendRunHandle, message: string): Promise<void> {
-    await (handle.opaque as AppServerRun).continue(message);
-  }
-
-  async validateContinuation(handle: BackendRunHandle): Promise<void> {
-    const executable = await this.appServerExecutable();
-    const run = handle.opaque as AppServerRun;
-    run.assertPinnedRuntime(await this.verifyPin(executable));
-    await run.validateContinuation();
   }
 
   async terminateNow(handle: BackendRunHandle): Promise<void> {

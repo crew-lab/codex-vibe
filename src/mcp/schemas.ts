@@ -39,14 +39,6 @@ export const editStartSchema = z.object({
   prepared_inputs: z.object({ directory: z.string().min(1).max(4096), manifest_sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional()
 }).strict();
 
-export const continueSchema = z.object({
-  run_id: runId,
-  candidate_revision: z.number().int().min(1).max(3),
-  patch_sha256: z.string().regex(/^[a-f0-9]{64}$/),
-  message: z.string().min(1).max(10_000),
-  wait_seconds: waitSeconds
-}).strict();
-
 export const statusSchema = z.object({
   expected_candidate: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   run_id: runId.optional(),
@@ -83,7 +75,5 @@ export const toolSchemas = {
   vibe_result: resultSchema,
   vibe_close: closeSchema
 } as const;
-
-export const continueToolSchema = continueSchema;
 
 export type ToolName = keyof typeof toolSchemas;

@@ -26,7 +26,6 @@ class FakeBackend implements SupervisorBackend {
   releaseStart: (() => void) | undefined;
   beforeReturn: ((input: StartRunInput) => Promise<void>) | undefined;
   input: StartRunInput | undefined;
-  continuations = 0;
   async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     this.starts += 1;
@@ -39,15 +38,6 @@ class FakeBackend implements SupervisorBackend {
   }
   async cancel() { this.cancelCalls += 1; }
   async close() {}
-  async validateContinuation() {}
-  async continue(_handle: BackendRunHandle, message: string) {
-    this.continuations += 1;
-    const input = this.input;
-    if (!input || !this.callbacks) throw new Error("fake run not started");
-    await this.callbacks.onState("running");
-    await writeFile(join(input.workerWorkspace, "generated.txt"), `revision ${this.continuations}: ${message}\n`);
-    await this.callbacks.onState("awaiting_validation", { result: { summary: `revision ${this.continuations}`, stopReason: "end_turn" }, usage: { modelCalls: this.continuations, tokensUsed: this.continuations * 10 } });
-  }
 }
 
 async function setup(backend = new FakeBackend()) {

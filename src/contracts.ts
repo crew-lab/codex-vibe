@@ -257,7 +257,7 @@ export interface SupervisorConfig {
   paths?: { vibe?: string; appServer?: string; vibePinManifest?: string; antigravity?: string };
   excludedGlobs?: Record<string, string[]>;
   budgets?: Record<string, RootBudget>;
-  experimental?: { antigravity?: boolean; correctable?: boolean; vibe3?: boolean };
+  experimental?: { antigravity?: boolean };
 }
 
 export interface StartRunInput {
@@ -272,8 +272,6 @@ export interface StartRunInput {
   output?: "text" | "findings";
   exclusions: ExclusionScope[];
   limits: RunLimits;
-  sessionMode?: "one_shot" | "correctable";
-  maxCorrections?: number;
   preparedContextManifestSha256?: string;
   preparedContextFiles?: Array<{ path: string; sha256: string; bytes: number; provenance: "committed" | "dirty-tracked" | "untracked"; content: string }>;
 }
@@ -300,8 +298,6 @@ export interface BackendRunHandle {
 
 export type BackendStateUpdate = Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "modelObservations" | "preparation" | "pin">> & {
   approvals?: ApprovalLedgerSnapshot;
-  candidateRevision?: number;
-  patchSha256?: string;
 };
 
 export interface BackendCallbacks {
@@ -322,8 +318,6 @@ export interface SupervisorBackend {
   readonly kind: BackendKind;
   probe(): Promise<BackendCapabilities>;
   start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult>;
-  continue?(handle: BackendRunHandle, message: string): Promise<void>;
-  validateContinuation?(handle: BackendRunHandle): Promise<void>;
   cancel(handle: BackendRunHandle): Promise<void>;
   close(handle: BackendRunHandle): Promise<void>;
   terminateNow?(handle: BackendRunHandle): Promise<void>;
@@ -362,7 +356,6 @@ export interface StatusToolInput { expected_candidate?: string; run_id?: string;
 export interface WaitOptions { signal?: AbortSignal }
 export interface ResultToolInput { run_id: string; detail?: "compact" | "full"; include_transcript?: boolean }
 export interface CloseToolInput { run_id: string; cleanup_worktree?: boolean; assessment?: AssessmentInput }
-export interface ContinueToolInput { run_id: string; candidate_revision: number; patch_sha256: string; message: string; wait_seconds?: number }
 
 export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_AUTHORIZATION_INVALID: "Register the reviewed dispatch using task authorize under the selected configuration and use its unexpired matching authorization_id and attempt_id. Readiness alone does not authorize a task.",
