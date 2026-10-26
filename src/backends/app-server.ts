@@ -315,7 +315,7 @@ class AppServerRun {
       workspace: parts.input.workerWorkspace,
       excludedGlobs: workspaceAnchors(parts.input.exclusions, parts.input.cwd),
       currentSessionId: () => this.sessionId,
-      isTurnActive: () => (this.turnStarting || this.turnStarted) && !this.awaitingCorrection && !this.cleaned,
+      isTurnActive: () => (this.turnStarting || this.turnStarted) && this.completedTurn === null && !this.awaitingCorrection && !this.cleaned,
       currentTurnId: () => this.turnId || null,
       ...(parts.options.approvals?.deadlineMs === undefined ? {} : { deadlineMs: parts.options.approvals.deadlineMs }),
       ...(parts.options.approvals?.evaluate === undefined ? {} : { evaluate: parts.options.approvals.evaluate })
@@ -673,7 +673,6 @@ class AppServerRun {
     if (this.turnId === '') this.turnId = turn.id;
     this.completedTurn = turn;
     this.turnStarting = false;
-    this.turnStarted = false;
     this.turnDone.resolve('turn');
   }
 
@@ -725,6 +724,7 @@ class AppServerRun {
   }
 
   private onDeadline(): void {
+    if (this.concludeStarted && !this.awaitingCorrection) return;
     this.handler.revoke();
     this.addCondition({ kind: 'deadline' });
     if (this.awaitingCorrection) {

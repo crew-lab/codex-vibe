@@ -20,7 +20,7 @@ const SCENARIO_KEYS = new Set([
   'name', 'serverName', 'serverVersion', 'startup', 'watermark', 'sessionId', 'log', 'errors', 'runtime', 'harness',
   'harnessSelectionSource', 'effectiveConfig', 'effectiveFromEnv', 'thinkingLevels', 'modelWrite', 'readyInitially',
   'baselineStats', 'contextWindow', 'afterStop', 'eof', 'eofDelayMs', 'interrupt', 'extraFields', 'omit', 'effectWhileBlocked',
-  'badCursor', 'afterHandoff', 'notifyBeforeTurnResponse', 'steps'
+  'badCursor', 'afterHandoff', 'notifyBeforeTurnResponse', 'historyListDelayMs', 'steps'
 ]);
 const STEP_OPS = new Set([
   'say', 'reasoning', 'stats', 'call', 'unknownEntry', 'unknownNotification', 'staleEvent', 'delay', 'hold', 'wedge', 'crash',
@@ -65,6 +65,7 @@ function parseScenario() {
   for (const key of Object.keys(parsed)) if (!SCENARIO_KEYS.has(key)) throw new Error(`unknown scenario key: ${key}`);
   const steps = parsed.steps ?? [];
   if (!Array.isArray(steps) || steps.length > MAX_STEPS) throw new Error('scenario steps must be an array within the step limit');
+  if (parsed.historyListDelayMs !== undefined && !(Number.isInteger(parsed.historyListDelayMs) && parsed.historyListDelayMs >= 0 && parsed.historyListDelayMs <= MAX_DELAY_MS)) throw new Error('historyListDelayMs out of range');
   for (const step of steps) {
     if (!isObject(step) || !STEP_OPS.has(step.op)) throw new Error(`unknown scenario step: ${JSON.stringify(step)}`);
     if (step.op === 'call') checkCallStep(step);
@@ -974,8 +975,9 @@ const handlers = {
     requireSession(params);
     return { lastEventId: state.eventId, state: sessionState({ historyLimit: params.history?.limit }), leaseHolder: { processId: process.pid } };
   },
-  'session/history/list'(params) {
+  async 'session/history/list'(params) {
     requireSession(params);
+    if (scenario.historyListDelayMs) await sleep(scenario.historyListDelayMs);
     const items = params.turnId ? state.history.filter((entry) => entry.turnId === params.turnId) : state.history;
     const result = paginate(items, params.page);
     return { items: clone(result.items), nextCursor: result.nextCursor, previousCursor: result.previousCursor };
