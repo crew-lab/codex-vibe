@@ -321,6 +321,27 @@ describe('app-server backend: clean runs', () => {
     harness.expectCleanedUp();
   });
 
+  it('denies an edit outside allowed_write_paths, keeps running and names the writable paths in the prompt', async () => {
+    const harness = new Harness({
+      name: 'scoped-edit',
+      steps: [
+        { op: 'call', tool: 'file_system.write_file', mode: 'approval', input: { filePath: '${cwd}/src/added.ts', content: 'export const b = 2;\n' } },
+        { op: 'call', tool: 'file_system.search_replace', mode: 'approval', input: { filePath: '${cwd}/src/index.ts', changes: [{ oldString: 'const a = 1;', newString: 'const a = 2;', replaceAll: false }] } },
+        { op: 'say', text: 'Added the module; the other change was refused.' }
+      ]
+    }, { mode: 'edit' });
+    harness.input.allowedWritePaths = ['src/added.ts'];
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(harness.eventsOfType('tool_call').map((event) => event.data.name)).toEqual(['write_file']);
+    expect(harness.eventsOfType('tool_denied').map((event) => event.data.reason)).toEqual(['outside_allowed_write_paths']);
+    const prompt = JSON.stringify(harness.frames('turn/start')[0]);
+    expect(prompt).toContain('Writable paths');
+    expect(prompt).toContain('src/added.ts');
+    harness.expectCleanedUp();
+  });
+
   it.each([['review', ['read_file']], ['edit', ['read_file', 'write_file', 'edit']]] as const)('writes a private %s agent profile that asks for every profile tool and denies reserved paths', async (mode, tools) => {
     const harness = new Harness('hold', { mode });
     const started = await harness.start();
