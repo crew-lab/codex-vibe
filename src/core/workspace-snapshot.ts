@@ -89,6 +89,22 @@ export async function hashWorkspace(root: string, limits: WorkspaceHashLimits = 
   return (await snapshotWorkspace(root, limits)).sha256;
 }
 
+export async function contentDigest(root: string, limits: WorkspaceHashLimits = DEFAULT_HASH_LIMITS): Promise<string> {
+  const gate = createGate(STAT_CONCURRENCY);
+  const [manifest, visible] = await Promise.all([scan(root, limits, gate), listGitVisibleFiles(root)]);
+  const selected = visible ? new Set(visible) : undefined;
+  const entries = [...manifest.entries()].filter(([file, entry]) => entry.kind !== "D" && (selected === undefined || selected.has(file))).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  let hashed = 0;
+  for (const [, entry] of entries) { if (entry.kind === "F") { hashed += Number(entry.size); if (hashed > limits.maxBytes) throw limitError(); } }
+  const contents = await Promise.all(entries.map(([file, entry]) => entry.kind === "F" ? hashFile(path.join(root, file), gate) : Promise.resolve(entry.target ?? "")));
+  const digest = createHash("sha256");
+  entries.forEach(([file, entry], index) => {
+    const executable = entry.kind === "F" && ((entry.mode ?? 0) & 0o111) !== 0 ? "x" : "-";
+    digest.update(`${entry.kind}${file}\0${executable}\0${contents[index]}\0`);
+  });
+  return digest.digest("hex");
+}
+
 export function serializeManifest(snapshot: WorkspaceSnapshot): string {
   return JSON.stringify({ schema_version: MANIFEST_SCHEMA_VERSION, sha256: snapshot.sha256, entries: [...snapshot.manifest.entries()] });
 }

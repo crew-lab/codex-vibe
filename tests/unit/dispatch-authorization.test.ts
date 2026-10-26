@@ -1,4 +1,5 @@
-import { mkdtemp, mkdir, realpath, rm, writeFile, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, rm, utimes, writeFile, readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -94,6 +95,32 @@ describe('durable dispatch authorization', () => {
     const { manager, source, backend } = await fixture();
     const issued = await grant(manager, source);
     await writeFile(path.join(source, 'note.txt'), 'changed contents\n');
+    await expect(manager.reviewStart({ task: 'review', cwd: source, authorization_id: issued.authorization_id, attempt_id: issued.attempt_id })).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID' });
+    expect(backend.starts).toBe(0);
+  });
+
+  it('binds review content, not timestamps or Git-ignored output', async () => {
+    const { manager, source, backend } = await fixture();
+    await writeFile(path.join(source, '.gitignore'), 'node_modules/\n');
+    const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd: source, stdio: 'ignore' });
+    git('init', '-q');
+    git('add', '.');
+    git('commit', '-q', '-m', 'fixture');
+    const issued = await grant(manager, source);
+    const later = new Date(Date.now() + 120_000);
+    await utimes(path.join(source, 'note.txt'), later, later);
+    await mkdir(path.join(source, 'node_modules'));
+    await writeFile(path.join(source, 'node_modules', 'cache.json'), '{}\n');
+    const started = await manager.reviewStart({ task: 'review', cwd: source, authorization_id: issued.authorization_id, attempt_id: issued.attempt_id });
+    await state(manager, started.run_id, 'running');
+    expect(backend.starts).toBe(1);
+  });
+
+  it('binds an untracked file that Git does not ignore', async () => {
+    const { manager, source, backend } = await fixture();
+    execFileSync('git', ['init', '-q'], { cwd: source, stdio: 'ignore' });
+    const issued = await grant(manager, source);
+    await writeFile(path.join(source, 'added.txt'), 'new\n');
     await expect(manager.reviewStart({ task: 'review', cwd: source, authorization_id: issued.authorization_id, attempt_id: issued.attempt_id })).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID' });
     expect(backend.starts).toBe(0);
   });
