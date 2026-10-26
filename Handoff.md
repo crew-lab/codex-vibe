@@ -15,6 +15,7 @@
 | 3 | Native readiness on the 2.1.1 candidate, then one hosted review and one edit, each through `task authorize` | Target agent; hosted runs need a new allowance of two starts |
 | 4 | Publish 2.1.1 as a pre-release from the target-built archive; add a known-issue line to the v2.1.0 release notes | Owner |
 | 5 | Still open: clean-account installation (postponed), broader real-task qualification, the five Antigravity probes | Owner / target agent |
+| 6 | Feature work after 2.1.1 is published (owner, 2026-10-26): `allowed_write_paths` on edits, built on its own branch now; then the review search sidecar, once ADR 0007 is approved and the 2.1.1 hosted review's `run_typescript` probe shows a nested write arriving as a denied `file_system.*` effect. The step 3 brief must keep that probe | Coordinator; owner approves ADR 0007 |
 
 The target briefs dated 2026-10-19 further down describe older source and must not be sent.
 
