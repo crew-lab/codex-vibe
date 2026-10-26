@@ -42,7 +42,12 @@ import { acquireOwnerLock } from "./owner-lock.js";
 import type { OwnerLock } from "./owner-lock.js";
 import { DispatchGrants } from "./dispatch-grants.js";
 import { dispatchDigest } from "./dispatch-binding.js";
-import { verifyTaskInputs, taskInputManifestSchema } from "../preparation/task-inputs.js";
+import { verifyTaskInputs, taskInputManifestSchema, type TaskInputManifest } from "../preparation/task-inputs.js";
+
+function assertPreparedManifestScope(manifest: TaskInputManifest, contract: AcceptanceContract | undefined): void {
+  if (!contract || manifest.contract_sha256 !== contractDigest(contract) || manifest.allowed_output_paths.some((relative) => !contract.allowed_changed_paths.includes(relative))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs do not bind the frozen acceptance contract and output scope.");
+  if (manifest.files.some((file) => file.provenance !== "committed" && manifest.allowed_output_paths.includes(file.path))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input overlaps an editable output with dirty source bytes; re-prepare from the worker base or select read-only context files.");
+}
 
 interface Runtime {
   record: RunRecord;
@@ -306,8 +311,7 @@ export class RunManager {
       throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs are not a safe, readable task context.");
     }
     if (manifest.manifest_sha256 !== prepared.manifest_sha256) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input manifest digest differs from the selected start request.");
-    if (manifest.contract_sha256 !== contractDigest(contract) || manifest.allowed_output_paths.some((relative) => !contract.allowed_changed_paths.includes(relative))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs do not bind the frozen acceptance contract and output scope.");
-    if (manifest.files.some((file) => file.provenance !== "committed" && manifest.allowed_output_paths.includes(file.path))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input overlaps an editable output with dirty source bytes; re-prepare from the worker base or select read-only context files.");
+    assertPreparedManifestScope(manifest, contract);
   }
 
   private async awaitStartOutcome(started: StartResult, waitSeconds: number, signal?: AbortSignal): Promise<StartResult> {
@@ -1096,9 +1100,7 @@ export class RunManager {
         if (verified.manifest_sha256 !== runtime.record.preparedContextManifestSha256) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input manifest digest differs from the selected start request.");
         const manifest = taskInputManifestSchema.parse(JSON.parse((await readOwnedFile(path.join(runtime.preparedInputDirectory, "manifest.json"), 256 * 1024)).toString("utf8")));
         if (manifest.base_commit !== baseRef || manifest.source !== runtime.record.sourceWorkspace) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs are stale for this edit base; prepare them again from the current base.");
-        const contract = runtime.record.acceptanceContract;
-        if (!contract || manifest.contract_sha256 !== contractDigest(contract) || manifest.allowed_output_paths.some((relative) => !contract.allowed_changed_paths.includes(relative))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs do not bind the frozen acceptance contract and output scope.");
-        if (manifest.files.some((file) => file.provenance !== "committed" && manifest.allowed_output_paths.includes(file.path))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input overlaps an editable output with dirty source bytes; re-prepare from the worker base or select read-only context files.");
+        assertPreparedManifestScope(manifest, runtime.record.acceptanceContract);
         preparedContextFiles = [];
         for (const file of manifest.files) {
           const content = await readOwnedFile(path.join(runtime.preparedInputDirectory, "context", file.path), 128 * 1024);
