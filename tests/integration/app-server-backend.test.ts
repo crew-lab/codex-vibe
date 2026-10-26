@@ -905,6 +905,33 @@ describe('app-server backend: deadline, cancel, close and termination', () => {
     harness.expectCleanedUp();
   });
 
+  it('keeps a completed turn completed when the deadline passes during finalization', async () => {
+    const harness = new Harness({ name: 'deadline-during-finalization', historyListDelayMs: 9000, steps: [{ op: 'say', text: 'The review found no issues.', stream: true }] }, { limits: { timeoutSeconds: 6 } });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(terminal.update?.error).toBeUndefined();
+    expect(harness.fixtureEvents('interrupt')).toHaveLength(0);
+    expect(harness.log().some((entry) => entry.kind === 'exit')).toBe(true);
+    harness.expectCleanedUp();
+  }, 30_000);
+
+  it('a cancel after the turn completed shuts the server down gracefully instead of aborting startup', async () => {
+    const harness = new Harness(
+      { name: 'cancel-during-finalization', historyListDelayMs: 3000, eof: 'delay', eofDelayMs: 200, steps: [{ op: 'say', text: 'The review found no issues.', stream: true }] },
+      { options: { timing: { stdinGraceMs: 2000 } } }
+    );
+    const started = await harness.start();
+    await waitFor(() => harness.frames('session/history/list'), (frames) => frames.length > 0);
+    await harness.backend.cancel(started.handle);
+    await harness.terminal;
+
+    expect(harness.fixtureEvents('eof')).toHaveLength(1);
+    expect(harness.log().some((entry) => entry.kind === 'exit')).toBe(true);
+    expect(harness.terminalStates()).toHaveLength(1);
+    harness.expectCleanedUp();
+  }, 20_000);
+
   it('hands the handle out at spawn so a cancel can reach the process before start resolves', async () => {
     const harness = new Harness('allowed-call');
     const started = await harness.start();
