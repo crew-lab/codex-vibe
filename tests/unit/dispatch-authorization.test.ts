@@ -23,10 +23,12 @@ class Backend implements SupervisorBackend {
   cancels = 0;
   crash = false;
   callbacks?: BackendCallbacks;
+  lastInput?: StartRunInput;
   async probe() { return { available: true, backend: this.kind }; }
   async start(input: StartRunInput, callbacks: BackendCallbacks) {
     this.starts++;
     this.callbacks = callbacks;
+    this.lastInput = input;
     if (this.crash) throw new Error('fixture startup failure');
     return { handle: { runId: input.runId, backend: this.kind, opaque: {} }, initialState: 'running' as const };
   }
@@ -123,6 +125,25 @@ describe('durable dispatch authorization', () => {
     await writeFile(path.join(source, 'added.txt'), 'new\n');
     await expect(manager.reviewStart({ task: 'review', cwd: source, authorization_id: issued.authorization_id, attempt_id: issued.attempt_id })).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID' });
     expect(backend.starts).toBe(0);
+  });
+
+  it('binds allowed_write_paths into the edit authorization and the run record', async () => {
+    const { manager, source, backend, data } = await fixture();
+    const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd: source, stdio: 'ignore' });
+    git('init', '-q');
+    git('add', '.');
+    git('commit', '-q', '-m', 'fixture');
+    const expires = new Date(Date.now() + 60_000).toISOString();
+    const issued = await manager.authorizeDispatch('edit', { task: 'edit', cwd: source, allowed_write_paths: ['note.txt'] }, 'test-owner-message', expires);
+    const ids = { authorization_id: issued.authorization_id, attempt_id: issued.attempt_id };
+    await expect(manager.editStart({ task: 'edit', cwd: source, allowed_write_paths: ['other.txt'], ...ids })).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID' });
+    await expect(manager.editStart({ task: 'edit', cwd: source, ...ids })).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID' });
+    const started = await manager.editStart({ task: 'edit', cwd: source, allowed_write_paths: ['note.txt'], ...ids });
+    await state(manager, started.run_id, 'running');
+    expect(backend.starts).toBe(1);
+    expect(backend.lastInput?.allowedWritePaths).toEqual(['note.txt']);
+    const record = runFromWire(runToWire(runFromWire(JSON.parse(await readFile(path.join(data, 'runs', started.run_id, 'meta.json'), 'utf8')))));
+    expect(record.allowedWritePaths).toEqual(['note.txt']);
   });
 
   it('allows exactly one start across isolated session managers sharing grants', async () => {

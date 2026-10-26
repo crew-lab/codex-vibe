@@ -17,6 +17,7 @@ export interface DispatchBindingInput {
   output?: 'text' | 'findings';
   acceptanceContract?: AcceptanceContract;
   preparedManifestSha256?: string;
+  allowedWritePaths?: readonly string[];
   limits: RunLimits;
 }
 
@@ -38,7 +39,7 @@ export async function dispatchDigest(input: DispatchBindingInput): Promise<strin
     catch { throw Object.assign(new Error('The workspace cannot be bound to this dispatch.'), supervisorError('VSUP_AUTHORIZATION_INVALID', 'The workspace cannot be bound to this dispatch.')); }
   }
   return digest(canonical({
-    schema_version: 2,
+    schema_version: 3,
     candidate_sha256: await candidateIdentity(),
     runtime: { node: process.version, executable: await realpath(process.execPath), platform: process.platform, arch: process.arch, pin_sha256: pinSha256 },
     policy_revision: input.policyRevision,
@@ -52,6 +53,7 @@ export async function dispatchDigest(input: DispatchBindingInput): Promise<strin
     output: input.output ?? 'text',
     contract_sha256: input.acceptanceContract ? contractDigest(input.acceptanceContract) : null,
     prepared_manifest_sha256: input.preparedManifestSha256 ?? null,
+    allowed_write_paths: input.allowedWritePaths ?? null,
     limits: input.limits
   }));
 }

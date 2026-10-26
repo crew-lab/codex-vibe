@@ -1,5 +1,5 @@
 import path from "node:path";
-import { acceptanceContractSchema, assessmentSchema } from "../acceptance/schema.js";
+import { acceptanceContractSchema, assessmentSchema, safeRelativePath } from "../acceptance/schema.js";
 import { z } from "zod";
 
 const runId = z.string().uuid({ version: "v4" });
@@ -11,6 +11,9 @@ const maxTurns = z.number().int().min(1).max(MAX_TURNS_LIMIT).optional();
 const timeoutSeconds = z.number().int().min(30).max(7200).optional();
 const baseRef = z.string().min(1).max(512);
 const readinessReceipt = z.string().min(1).max(2048).optional();
+export const MAX_ALLOWED_WRITE_PATHS = 100;
+const allowedWritePath = z.string().refine((value) => safeRelativePath.safeParse(value.endsWith("/") ? value.slice(0, -1) : value).success, "Use a repository-relative file path, or a directory path ending in /, outside reserved and secret names");
+const allowedWritePaths = z.array(allowedWritePath).min(1).max(MAX_ALLOWED_WRITE_PATHS).refine((values) => new Set(values).size === values.length, "Duplicate allowed write path");
 
 export const reviewStartSchema = z.object({
   authorization_id: runId,
@@ -36,7 +39,8 @@ export const editStartSchema = z.object({
   timeout_seconds: timeoutSeconds,
   wait_seconds: waitSeconds,
   readiness_receipt: readinessReceipt,
-  prepared_inputs: z.object({ directory: z.string().min(1).max(4096), manifest_sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional()
+  prepared_inputs: z.object({ directory: z.string().min(1).max(4096), manifest_sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional(),
+  allowed_write_paths: allowedWritePaths.optional()
 }).strict();
 
 export const statusSchema = z.object({

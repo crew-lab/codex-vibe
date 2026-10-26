@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.0 — unreleased
+
+- Added: `vibe_edit_start` accepts `allowed_write_paths`, a list of repository-relative files and `dir/` prefixes. The approval handler denies writes and edits elsewhere with reason `outside_allowed_write_paths` and the run continues; the prompt names the writable paths; the list is bound into the dispatch authorization and kept in the run record. App-server backend only.
+
 ## 2.1.1 — unreleased
 
 Fixes found in review of the 2.1.0 pre-release. A new candidate: 2.1.0's target evidence does not carry over.

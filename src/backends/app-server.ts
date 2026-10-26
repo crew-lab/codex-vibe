@@ -189,7 +189,8 @@ function toSupervisorError(error: unknown, secrets: readonly string[]): Supervis
 function promptFor(input: StartRunInput, listing: string | null): string {
   const context = (input.contextFiles ?? []).map((file) => `Approved context path: ${file}`).join('\n');
   const prepared = (input.preparedContextFiles ?? []).map((file) => `Reviewed prepared context (${file.provenance}; sha256 ${file.sha256}; ${file.bytes} bytes) at ${file.path}:\n<untrusted-context>\n${file.content}\n</untrusted-context>`).join('\n\n');
-  const prefix = [listing, context, prepared].filter((part): part is string => part !== null && part.length > 0).join('\n\n');
+  const writable = input.allowedWritePaths ? `Writable paths (a write anywhere else is refused; a path ending in / covers everything beneath it): ${input.allowedWritePaths.join(', ')}` : null;
+  const prefix = [listing, context, prepared, writable].filter((part): part is string => part !== null && part.length > 0).join('\n\n');
   let prompt = prefix ? `${prefix}\n\nTask:\n${input.task}` : input.task;
   if (input.mode === 'review' && input.output === 'findings') {
     prompt = `${prompt}\n\n${FINDINGS_OUTPUT_CONTRACT}`;
@@ -317,6 +318,7 @@ class AppServerRun {
       mode: parts.input.mode,
       workspace: parts.input.workerWorkspace,
       excludedGlobs: workspaceAnchors(parts.input.exclusions, parts.input.cwd),
+      ...(parts.input.allowedWritePaths ? { allowedWritePaths: parts.input.allowedWritePaths } : {}),
       currentSessionId: () => this.sessionId,
       isTurnActive: () => (this.turnStarting || this.turnStarted) && this.completedTurn === null && !this.cleaned,
       currentTurnId: () => this.turnId || null,
