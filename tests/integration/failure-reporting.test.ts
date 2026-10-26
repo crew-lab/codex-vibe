@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -47,7 +48,7 @@ function managerFor(source: string, data: string, backend: SupervisorBackend) {
 }
 
 async function running(manager: RunManager, source: string) {
-  const started = await manager.reviewStart({ task: 'review', cwd: source });
+  const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
   await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'running');
   return started.run_id;
 }
@@ -59,7 +60,7 @@ describe('failure and privacy reporting', () => {
     backend.startError = Object.assign(new Error(`could not start with ${SECRET}`), { code: 'VSUP_BACKEND_ERROR' });
     const manager = managerFor(source, data, backend);
     try {
-      const started = await manager.reviewStart({ task: 'review', cwd: source });
+      const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
       const status = await waitFor(() => manager.status({ run_id: started.run_id }), (value) => value.state === 'failed');
       expect(status.state).toBe('failed');
       const events = (await readFile(path.join(data, 'runs', started.run_id, 'events.ndjson'), 'utf8')).split('\n').filter(Boolean).map((line) => JSON.parse(line) as { type: string; source: string; data: Record<string, unknown> });

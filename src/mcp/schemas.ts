@@ -13,6 +13,8 @@ const baseRef = z.string().min(1).max(512);
 const readinessReceipt = z.string().min(1).max(2048).optional();
 
 export const reviewStartSchema = z.object({
+  authorization_id: runId,
+  attempt_id: runId,
   task,
   cwd: workspace,
   context_files: z.array(z.string().min(1).max(4096)).max(50).default([]),
@@ -24,6 +26,8 @@ export const reviewStartSchema = z.object({
 }).strict();
 
 export const editStartSchema = z.object({
+  authorization_id: runId,
+  attempt_id: runId,
   task,
   cwd: workspace,
   base_ref: baseRef.default("HEAD"),
@@ -31,7 +35,16 @@ export const editStartSchema = z.object({
   max_turns: maxTurns,
   timeout_seconds: timeoutSeconds,
   wait_seconds: waitSeconds,
-  readiness_receipt: readinessReceipt
+  readiness_receipt: readinessReceipt,
+  prepared_inputs: z.object({ directory: z.string().min(1).max(4096), manifest_sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional()
+}).strict();
+
+export const continueSchema = z.object({
+  run_id: runId,
+  candidate_revision: z.number().int().min(1).max(3),
+  patch_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  message: z.string().min(1).max(10_000),
+  wait_seconds: waitSeconds
 }).strict();
 
 export const statusSchema = z.object({
@@ -70,5 +83,7 @@ export const toolSchemas = {
   vibe_result: resultSchema,
   vibe_close: closeSchema
 } as const;
+
+export const continueToolSchema = continueSchema;
 
 export type ToolName = keyof typeof toolSchemas;

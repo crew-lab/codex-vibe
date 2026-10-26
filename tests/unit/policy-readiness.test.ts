@@ -1,3 +1,4 @@
+import { authorizedEditStart, authorizedReviewStart } from "../support/authorized-start.js";
 import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -100,7 +101,9 @@ async function rejection(promise: Promise<unknown>): Promise<{ code?: string; de
 async function waitForState(manager: RunManager, runId: string, state: string): Promise<void> {
   const until = Date.now() + 5000;
   while (Date.now() < until) {
-    if ((await manager.status({ run_id: runId })).state === state) return;
+    const current = await manager.status({ run_id: runId });
+    if (current.state === state) return;
+    if (current.state === "failed" && state === "running") throw new Error(JSON.stringify(current));
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(`run never reached ${state}`);
@@ -124,7 +127,7 @@ describe("authoritative policy source", () => {
     expect(after).toMatchObject({ eligible: true, blockers: [], workspace: box.beta, restart_required: false, policy_path: box.configPath });
     expect(after.policy_revision).not.toBe(before.policy_revision);
 
-    const started = await manager.reviewStart({ task: "review", cwd: box.beta, readiness_receipt: after.readiness_receipt! });
+    const started = await authorizedReviewStart(manager, { task: "review", cwd: box.beta, readiness_receipt: after.readiness_receipt! });
     expect(started.policy_revision).toBe(after.policy_revision);
     await waitForState(manager, started.run_id, "running");
     expect(backend.starts).toBe(1);
@@ -141,8 +144,8 @@ describe("authoritative policy source", () => {
     const denied = await readiness(manager, box.beta);
     expect(denied.eligible).toBe(false);
     expect(denied.blockers[0]?.code).toBe("VSUP_WORKSPACE_INVALID");
-    expect((await rejection(manager.reviewStart({ task: "review", cwd: box.beta }))).code).toBe("VSUP_WORKSPACE_INVALID");
-    expect((await rejection(manager.editStart({ task: "edit", cwd: box.beta }))).code).toBe("VSUP_WORKSPACE_INVALID");
+    expect((await rejection(authorizedReviewStart(manager, { task: "review", cwd: box.beta }))).code).toBe("VSUP_WORKSPACE_INVALID");
+    expect((await rejection(authorizedEditStart(manager, { task: "edit", cwd: box.beta }))).code).toBe("VSUP_WORKSPACE_INVALID");
     expect(backend.starts).toBe(0);
     expect(await runDirectories(dataDir)).toEqual([]);
   });
@@ -165,7 +168,7 @@ describe("authoritative policy source", () => {
     expect(blocked.blockers[0]?.code).toBe("VSUP_CONFIG_INVALID");
     expect(blocked.blockers[0]?.message).toContain(box.configPath);
     expect(blocked.blockers[0]?.message).toMatch(reason);
-    const refused = await rejection(manager.reviewStart({ task: "review", cwd: box.alpha }));
+    const refused = await rejection(authorizedReviewStart(manager, { task: "review", cwd: box.alpha }));
     expect(refused.code).toBe("VSUP_CONFIG_INVALID");
     expect(backend.starts).toBe(0);
     expect(await runDirectories(dataDir)).toEqual([]);
@@ -206,7 +209,7 @@ describe("authoritative policy source", () => {
     expect(report).toMatchObject({ eligible: false, restart_required: true, boot_drift: [key] });
     expect(report.blockers.map((blocker) => blocker.code)).toEqual(["VSUP_RESTART_REQUIRED"]);
     expect(report.blockers[0]).toMatchObject({ retryable: false, details: { boot_drift: [key] } });
-    const refused = await rejection(manager.reviewStart({ task: "review", cwd: box.beta }));
+    const refused = await rejection(authorizedReviewStart(manager, { task: "review", cwd: box.beta }));
     expect(refused.code).toBe("VSUP_RESTART_REQUIRED");
     expect(backend.starts).toBe(0);
     expect(await runDirectories(dataDir)).toEqual([]);
@@ -234,7 +237,7 @@ describe("unavailable allowed roots", () => {
     const box = await sandbox(({ alpha, beta }) => [alpha, beta]);
     const dataDir = path.join(box.parent, "data");
     const { manager, backend } = await connect(box.configPath, dataDir);
-    const started = await manager.editStart({ task: "edit", cwd: box.alpha });
+    const started = await authorizedEditStart(manager, { task: "edit", cwd: box.alpha });
     await waitForState(manager, started.run_id, "running");
     await backend.callbacks!.onState("completed", { result: { summary: "done" } });
     await waitForState(manager, started.run_id, "completed");
@@ -247,9 +250,9 @@ describe("unavailable allowed roots", () => {
     const lost = await readiness(manager, box.beta);
     expect(lost.eligible).toBe(false);
     expect(lost.blockers).toEqual([expect.objectContaining({ code: "VSUP_WORKSPACE_INVALID", message: expect.stringContaining(`allowed root ${box.beta}`), details: { unavailable_root: box.beta }, retryable: false })]);
-    expect(await rejection(manager.reviewStart({ task: "review", cwd: box.beta }))).toMatchObject({ code: "VSUP_WORKSPACE_INVALID", details: { unavailable_root: box.beta } });
+    expect(await rejection(authorizedReviewStart(manager, { task: "review", cwd: box.beta }))).toMatchObject({ code: "VSUP_WORKSPACE_INVALID", details: { unavailable_root: box.beta } });
     expect(await manager.close({ run_id: started.run_id, cleanup_worktree: true })).toMatchObject({ worktree_removed: true });
-    const next = await manager.reviewStart({ task: "review", cwd: box.alpha, readiness_receipt: (await readiness(manager, box.alpha)).readiness_receipt! });
+    const next = await authorizedReviewStart(manager, { task: "review", cwd: box.alpha, readiness_receipt: (await readiness(manager, box.alpha)).readiness_receipt! });
     await waitForState(manager, next.run_id, "running");
     expect(backend.starts).toBe(2);
   });
@@ -344,9 +347,9 @@ describe("readiness receipts", () => {
     const { manager, backend } = await connect(box.configPath, path.join(box.parent, "data"));
     const receipt = (await readiness(manager, box.alpha)).readiness_receipt!;
     const tampered = `${receipt.slice(0, -2)}${receipt.endsWith("AA") ? "BB" : "AA"}`;
-    const refused = await rejection(manager.reviewStart({ task: "review", cwd: box.alpha, readiness_receipt: tampered }));
+    const refused = await rejection(authorizedReviewStart(manager, { task: "review", cwd: box.alpha, readiness_receipt: tampered }));
     expect(refused).toMatchObject({ code: "VSUP_READINESS_RECEIPT_INVALID", details: { reason: "signature" } });
-    const garbage = await rejection(manager.reviewStart({ task: "review", cwd: box.alpha, readiness_receipt: "not-a-receipt" }));
+    const garbage = await rejection(authorizedReviewStart(manager, { task: "review", cwd: box.alpha, readiness_receipt: "not-a-receipt" }));
     expect(garbage).toMatchObject({ code: "VSUP_READINESS_RECEIPT_INVALID", details: { reason: "malformed" } });
     expect(backend.starts).toBe(0);
   });
@@ -357,7 +360,7 @@ describe("readiness receipts", () => {
     const receipt = (await readiness(manager, box.alpha)).readiness_receipt!;
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(Date.now() + RECEIPT_TTL_MS + 1000);
-    const refused = await rejection(manager.reviewStart({ task: "review", cwd: box.alpha, readiness_receipt: receipt }));
+    const refused = await rejection(authorizedReviewStart(manager, { task: "review", cwd: box.alpha, readiness_receipt: receipt }));
     expect(refused).toMatchObject({ code: "VSUP_READINESS_RECEIPT_INVALID", details: { reason: "expired" } });
     expect(backend.starts).toBe(0);
   });
@@ -367,7 +370,7 @@ describe("readiness receipts", () => {
     const first = await connect(box.configPath, path.join(box.parent, "data-one"));
     const second = await connect(box.configPath, path.join(box.parent, "data-two"));
     const receipt = (await readiness(first.manager, box.alpha)).readiness_receipt!;
-    const refused = await rejection(second.manager.reviewStart({ task: "review", cwd: box.alpha, readiness_receipt: receipt }));
+    const refused = await rejection(authorizedReviewStart(second.manager, { task: "review", cwd: box.alpha, readiness_receipt: receipt }));
     expect(refused).toMatchObject({ code: "VSUP_READINESS_RECEIPT_INVALID", details: { reason: "instance" } });
     expect(second.backend.starts).toBe(0);
   });
@@ -378,7 +381,7 @@ describe("readiness receipts", () => {
     const { manager, backend } = await connect(box.configPath, dataDir);
     const receipt = (await readiness(manager, box.alpha)).readiness_receipt!;
     await replaceConfig(box.configPath, toml([box.alpha, box.beta]));
-    const refused = await rejection(manager.reviewStart({ task: "review", cwd: box.alpha, readiness_receipt: receipt }));
+    const refused = await rejection(authorizedReviewStart(manager, { task: "review", cwd: box.alpha, readiness_receipt: receipt }));
     expect(refused).toMatchObject({ code: "VSUP_READINESS_RECEIPT_INVALID", details: { reason: "revision" } });
     expect(backend.starts).toBe(0);
     expect(await runDirectories(dataDir)).toEqual([]);
@@ -388,17 +391,18 @@ describe("readiness receipts", () => {
     const box = await sandbox(({ alpha, beta }) => [alpha, beta]);
     const { manager, backend } = await connect(box.configPath, path.join(box.parent, "data"));
     const review = (await readiness(manager, box.alpha)).readiness_receipt!;
-    expect(await rejection(manager.editStart({ task: "edit", cwd: box.alpha, readiness_receipt: review }))).toMatchObject({ details: { reason: "operation" } });
-    expect(await rejection(manager.reviewStart({ task: "review", cwd: box.beta, readiness_receipt: review }))).toMatchObject({ details: { reason: "workspace" } });
+    expect(await rejection(authorizedEditStart(manager, { task: "edit", cwd: box.alpha, readiness_receipt: review }))).toMatchObject({ details: { reason: "operation" } });
+    expect(await rejection(authorizedReviewStart(manager, { task: "review", cwd: box.beta, readiness_receipt: review }))).toMatchObject({ details: { reason: "workspace" } });
     const edit = (await readiness(manager, box.alpha, "edit")).readiness_receipt!;
-    expect(await rejection(manager.editStart({ task: "edit", cwd: box.alpha, base_ref: "HEAD~0", readiness_receipt: edit }))).toMatchObject({ details: { reason: "base_ref" } });
+    expect(await rejection(authorizedEditStart(manager, { task: "edit", cwd: box.alpha, base_ref: "HEAD~0", readiness_receipt: edit }))).toMatchObject({ details: { reason: "base_ref" } });
     await writeFile(path.join(box.alpha, "a.txt"), "two\n");
     await git(box.alpha, ["commit", "-qam", "move"]);
-    expect(await rejection(manager.editStart({ task: "edit", cwd: box.alpha, readiness_receipt: edit }))).toMatchObject({ code: "VSUP_READINESS_RECEIPT_INVALID", details: { reason: "base_commit" } });
+    expect(await rejection(authorizedEditStart(manager, { task: "edit", cwd: box.alpha, readiness_receipt: edit }))).toMatchObject({ code: "VSUP_READINESS_RECEIPT_INVALID", details: { reason: "base_commit" } });
     await git(box.alpha, ["branch", "doomed"]);
     const branch = (await readiness(manager, box.alpha, "edit", "doomed")).readiness_receipt!;
+    const branchGrant = await manager.authorizeDispatch("edit", { task: "edit", cwd: box.alpha, base_ref: "doomed" }, "test-owner", new Date(Date.now() + 60000).toISOString());
     await git(box.alpha, ["branch", "-D", "doomed"]);
-    const deleted = await rejection(manager.editStart({ task: "edit", cwd: box.alpha, base_ref: "doomed", readiness_receipt: branch }));
+    const deleted = await rejection(manager.editStart({ task: "edit", cwd: box.alpha, base_ref: "doomed", readiness_receipt: branch, authorization_id: branchGrant.authorization_id, attempt_id: branchGrant.attempt_id }));
     expect(deleted).toMatchObject({ code: "VSUP_READINESS_RECEIPT_INVALID", details: { reason: "base_ref_unresolved" } });
     expect(deleted.message).toContain("no longer resolves");
     expect(backend.starts).toBe(0);
@@ -409,7 +413,7 @@ describe("readiness receipts", () => {
     const dataDir = path.join(box.parent, "data");
     const { manager } = await connect(box.configPath, dataDir);
     const ready = await readiness(manager, box.alpha, "edit");
-    const started = await manager.editStart({ task: "edit", cwd: box.alpha, readiness_receipt: ready.readiness_receipt! });
+    const started = await authorizedEditStart(manager, { task: "edit", cwd: box.alpha, readiness_receipt: ready.readiness_receipt! });
     expect(started).toMatchObject({ base_ref: "HEAD", base_commit: ready.base_commit });
     await writeFile(path.join(box.alpha, "a.txt"), "moved\n");
     await git(box.alpha, ["commit", "-qam", "move"]);
@@ -422,12 +426,12 @@ describe("readiness receipts", () => {
     const box = await sandbox();
     const { manager, backend } = await connect(box.configPath, path.join(box.parent, "data"));
     const receipt = (await readiness(manager, box.alpha)).readiness_receipt!;
-    const first = await manager.reviewStart({ task: "first", cwd: box.alpha });
+    const first = await authorizedReviewStart(manager, { task: "first", cwd: box.alpha });
     await waitForState(manager, first.run_id, "running");
     const busy = await readiness(manager, box.alpha);
     expect(busy).toMatchObject({ eligible: false, active_slot: { busy: true } });
     expect(busy.blockers.map((blocker) => blocker.code)).toEqual(["VSUP_LIMIT_EXCEEDED"]);
-    expect(await rejection(manager.reviewStart({ task: "second", cwd: box.alpha, readiness_receipt: receipt }))).toMatchObject({ code: "VSUP_LIMIT_EXCEEDED" });
+    expect(await rejection(authorizedReviewStart(manager, { task: "second", cwd: box.alpha, readiness_receipt: receipt }))).toMatchObject({ code: "VSUP_LIMIT_EXCEEDED" });
     expect(backend.starts).toBe(1);
   });
 });
@@ -438,7 +442,7 @@ describe("policy changes during a live run", () => {
     const dataDir = path.join(box.parent, "data");
     const { manager, backend } = await connect(box.configPath, dataDir);
     const ready = await readiness(manager, box.beta, "edit");
-    const started = await manager.editStart({ task: "edit", cwd: box.beta, readiness_receipt: ready.readiness_receipt! });
+    const started = await authorizedEditStart(manager, { task: "edit", cwd: box.beta, readiness_receipt: ready.readiness_receipt! });
     await waitForState(manager, started.run_id, "running");
 
     await replaceConfig(box.configPath, toml([box.alpha]));
@@ -451,7 +455,7 @@ describe("policy changes during a live run", () => {
     expect(saved.policy_revision).toBe(ready.policy_revision);
 
     expect((await readiness(manager, box.beta, "edit")).eligible).toBe(false);
-    expect((await rejection(manager.editStart({ task: "next", cwd: box.beta }))).code).toBe("VSUP_WORKSPACE_INVALID");
+    expect((await rejection(authorizedEditStart(manager, { task: "next", cwd: box.beta }))).code).toBe("VSUP_WORKSPACE_INVALID");
     const next = await readiness(manager, box.alpha);
     expect(next.eligible).toBe(true);
     expect(next.policy_revision).not.toBe(ready.policy_revision);
@@ -467,7 +471,7 @@ describe("policy changes during a live run", () => {
     const box = await sandbox(({ alpha, beta }) => [alpha, beta]);
     const dataDir = path.join(box.parent, "data");
     const { manager, backend } = await connect(box.configPath, dataDir);
-    const started = await manager.editStart({ task: "edit", cwd: box.beta });
+    const started = await authorizedEditStart(manager, { task: "edit", cwd: box.beta });
     await waitForState(manager, started.run_id, "running");
     await backend.callbacks!.onState("completed", { result: { summary: "done" } });
     await waitForState(manager, started.run_id, "completed");

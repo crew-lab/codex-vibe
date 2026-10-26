@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { validationCommand } from "./cli/validation.js";
 import { prepareCommand } from "./cli/prepare.js";
+import { taskCommand } from './cli/task.js';
 import { runsCommand } from './cli/runs.js';
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
@@ -69,7 +70,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   try {
     if (command === '--version' || command === '-v') { print(APP_VERSION); return; }
     if (command === 'help' || command === '--help' || command === '-h' || !command) {
-      print('Usage: vibe-supervisor <setup --workspace <dir> [--config <path>] [--codex user|project] [--isolated] [--yes|--dry-run]|allow [--config <path>] <dir>|doctor [--json] [--config <path>]|pin-manifest [--config <path>] [--executable <path>] [--output <path>] [--force]|serve --stdio [--config <path>] [--isolated]|runs [--config <path>] list|show|tail|cleanup [run-id] | runs verify|export <run-id> --out <directory> [--include patch,events] [--validation <file>] | runs sarif <run-id> [--output <file>] | runs usage [--since <YYYY-MM-DD>] [--root <path>] [--json]|--version>'); return;
+      print('Usage: vibe-supervisor <setup --workspace <dir> [--config <path>] [--codex user|project] [--isolated] [--yes|--dry-run]|allow [--config <path>] <dir>|doctor [--json] [--config <path>]|pin-manifest [--config <path>] [--executable <path>] [--output <path>] [--force]|serve --stdio [--config <path>] [--isolated]|task prepare|verify ...|runs [--config <path>] list|show|tail|cleanup [run-id] | runs verify|export <run-id> --out <directory> [--include patch,events] [--validation <file>] | runs sarif <run-id> [--output <file>] | runs usage [--since <YYYY-MM-DD>] [--root <path>] [--json]|--version>'); return;
     }
     if (command === 'doctor') return await doctorCommand(args);
     if (command === 'pin-manifest') return await pinManifestCommand(args);
@@ -100,6 +101,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
     }
     if (command === 'validation') { print(await validationCommand(args)); return; }
     if (command === 'prepare') { const result = await prepareCommand(args); print(result); if ((result as {status?: string}).status !== 'passed') process.exitCode = 1; return; }
+    if (command === 'task') { print(await taskCommand(args)); return; }
     if (command === 'runs') return await runsCommand(args, { cleanup: cleanupWithManager });
     fail(`Unknown command: ${command}`, 2);
   } catch (error) {

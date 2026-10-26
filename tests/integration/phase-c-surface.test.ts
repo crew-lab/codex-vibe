@@ -1,3 +1,4 @@
+import { authorizedEditStart, authorizedReviewStart } from "../support/authorized-start.js";
 import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -63,15 +64,15 @@ describe("limits defaults from the configuration", () => {
     const limits = { ...TEST_CONFIG.limits, maxTurnsReview: 7, reviewTimeoutSeconds: 90, maxTurnsEdit: 9, editTimeoutSeconds: 120 };
     const { source, backend, manager } = await setup({ config: { limits }, git: true });
     try {
-      await manager.reviewStart({ task: "review", cwd: source });
+      await authorizedReviewStart(manager, { task: "review", cwd: source });
       await waitFor(() => backend.inputs.length, (count) => count >= 1);
       expect(backend.inputs[0]?.limits).toMatchObject({ maxTurns: 7, timeoutSeconds: 90 });
       await finish(backend, 0);
-      await manager.reviewStart({ task: "review", cwd: source, max_turns: 3, timeout_seconds: 60 });
+      await authorizedReviewStart(manager, { task: "review", cwd: source, max_turns: 3, timeout_seconds: 60 });
       await waitFor(() => backend.inputs.length, (count) => count >= 2);
       expect(backend.inputs[1]?.limits).toMatchObject({ maxTurns: 3, timeoutSeconds: 60 });
       await finish(backend, 1);
-      await manager.editStart({ task: "edit", cwd: source });
+      await authorizedEditStart(manager, { task: "edit", cwd: source });
       await waitFor(() => backend.inputs.length, (count) => count >= 3);
       expect(backend.inputs[2]?.limits).toMatchObject({ maxTurns: 9, timeoutSeconds: 120 });
       await finish(backend, 2);
@@ -81,7 +82,7 @@ describe("limits defaults from the configuration", () => {
   it("keeps the built-in defaults when the configuration is untouched", async () => {
     const { source, backend, manager } = await setup();
     try {
-      await manager.reviewStart({ task: "review", cwd: source });
+      await authorizedReviewStart(manager, { task: "review", cwd: source });
       await waitFor(() => backend.inputs.length, (count) => count >= 1);
       expect(backend.inputs[0]?.limits).toMatchObject({ maxTurns: 20, timeoutSeconds: 1800 });
       await finish(backend, 0);

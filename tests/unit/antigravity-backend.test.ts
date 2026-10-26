@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { execSync } from 'node:child_process';
 import { appendFile, chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -939,7 +940,7 @@ process.exit(0);
       const manager = new RunManager(config, dataDir);
       await manager.initialize();
 
-      const start = await manager.reviewStart({
+      const start = await authorizedReviewStart(manager, {
         task: 'E2E export test',
         cwd: workspace,
         wait_seconds: 5

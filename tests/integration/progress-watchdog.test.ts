@@ -1,3 +1,4 @@
+import { authorizedEditStart, authorizedReviewStart } from "../support/authorized-start.js";
 import { execFile } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -93,7 +94,7 @@ describe("worker progress watchdog", () => {
   it("fails a silent run with VSUP_NO_PROGRESS, names the silence, cancels the worker and frees the slot", async () => {
     const context = await setup(1);
     try {
-      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: "review", cwd: context.source });
       await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
       const status = await waitFor(() => context.manager.status({ run_id: started.run_id }), (value) => value.state === "failed");
       expect(status.state).toBe("failed");
@@ -109,7 +110,7 @@ describe("worker progress watchdog", () => {
     const context = await setup(2);
     try {
       const backend = context.backend as ScriptedBackend;
-      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: "review", cwd: context.source });
       await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
       const callbacks = backend.callbacks.get(started.run_id)!;
       for (let index = 0; index < 4; index += 1) { await sleep(1000); await callbacks.onEvent({ source: "vibe", type: "message", severity: "info", data: { text: `tick ${index}\n` } }); }
@@ -126,7 +127,7 @@ describe("worker progress watchdog", () => {
     const context = await setup(1);
     try {
       const backend = context.backend as ScriptedBackend;
-      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: "review", cwd: context.source });
       await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
       const callbacks = backend.callbacks.get(started.run_id)!;
       const chatter = setInterval(() => { void callbacks.onEvent({ source: "supervisor", type: "diagnostic", severity: "warning", data: { text: "stderr" } }); }, 200);
@@ -141,7 +142,7 @@ describe("worker progress watchdog", () => {
     const context = await setup(0);
     try {
       const backend = context.backend as ScriptedBackend;
-      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: "review", cwd: context.source });
       await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
       expect(runtimeOf(context.manager, started.run_id).progressTimer).toBeUndefined();
       await backend.callbacks.get(started.run_id)!.onEvent({ source: "vibe", type: "message", severity: "info", data: { text: "hello\n" } });
@@ -152,7 +153,7 @@ describe("worker progress watchdog", () => {
     } finally { await context.manager.shutdown(); }
     const sibling = await setup(1);
     try {
-      const started = await sibling.manager.reviewStart({ task: "review", cwd: sibling.source });
+      const started = await authorizedReviewStart(sibling.manager, { task: "review", cwd: sibling.source });
       await waitFor(() => stateOf(sibling.manager, started.run_id), (value) => value === "running");
       expect(runtimeOf(sibling.manager, started.run_id).progressTimer).toBeDefined();
       const status = await waitFor(() => sibling.manager.status({ run_id: started.run_id }), (value) => value.state === "failed");
@@ -164,7 +165,7 @@ describe("worker progress watchdog", () => {
     const context = await setup(1, { git: true });
     try {
       const backend = context.backend as ScriptedBackend;
-      const started = await context.manager.editStart({ task: "edit", cwd: context.source });
+      const started = await authorizedEditStart(context.manager, { task: "edit", cwd: context.source });
       await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
       const worktree = path.join(context.data, "worktrees", started.run_id);
       await writeFile(path.join(worktree, "generated.txt"), "partial work\n");
@@ -193,7 +194,7 @@ describe("worker activity and settle races", () => {
     };
     const context = await setup(2, { backend: (_data, source) => fakeAppServerBackend(path.dirname(source), source, scenario) });
     try {
-      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: "review", cwd: context.source });
       const status = await waitFor(() => context.manager.status({ run_id: started.run_id }), (value) => value.state === "completed" || value.state === "failed", 20_000);
       expect(status.state).toBe("completed");
     } finally { await context.manager.shutdown(); }
@@ -203,7 +204,7 @@ describe("worker activity and settle races", () => {
     const context = await setup(1);
     try {
       const backend = context.backend as ScriptedBackend;
-      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: "review", cwd: context.source });
       await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
       await backend.callbacks.get(started.run_id)!.onActivity?.("stdout");
       await waitFor(() => context.manager.status({ run_id: started.run_id }), (value) => value.state === "failed");
@@ -212,7 +213,7 @@ describe("worker activity and settle races", () => {
     } finally { await context.manager.shutdown(); }
     const silent = await setup(1);
     try {
-      const started = await silent.manager.reviewStart({ task: "review", cwd: silent.source });
+      const started = await authorizedReviewStart(silent.manager, { task: "review", cwd: silent.source });
       await waitFor(() => silent.manager.status({ run_id: started.run_id }), (value) => value.state === "failed");
       const events = await readEvents(silent.data, started.run_id);
       expect(events.find((event) => event.data.reason === "no_progress")?.data).toMatchObject({ last_activity_kind: "none" });
@@ -224,7 +225,7 @@ describe("worker activity and settle races", () => {
     try {
       const backend = context.backend as ScriptedBackend;
       backend.cancelDelayMs = 2000;
-      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: "review", cwd: context.source });
       await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
       await context.manager.cancel({ run_id: started.run_id });
       await sleep(300);
@@ -239,7 +240,7 @@ describe("worker activity and settle races", () => {
     try {
       const backend = context.backend as ScriptedBackend;
       backend.cancelDelayMs = 2000;
-      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: "review", cwd: context.source });
       await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
       const runtime = runtimeOf(context.manager, started.run_id);
       await (context.manager as unknown as { deadline(runtime: unknown): Promise<void> }).deadline(runtime);
@@ -253,7 +254,7 @@ describe("worker activity and settle races", () => {
     const context = await setup(1);
     try {
       const backend = context.backend as ScriptedBackend;
-      const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+      const started = await authorizedReviewStart(context.manager, { task: "review", cwd: context.source });
       await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
       const runtime = runtimeOf(context.manager, started.run_id);
       runtime.serial = runtime.serial.then(() => sleep(1800));
@@ -267,7 +268,7 @@ describe("worker activity and settle races", () => {
   it("fails an interrupted one-shot run when shutdown outlasts the watchdog window", async () => {
     const context = await setup(1);
     const backend = context.backend as ScriptedBackend;
-    const started = await context.manager.reviewStart({ task: "review", cwd: context.source });
+    const started = await authorizedReviewStart(context.manager, { task: "review", cwd: context.source });
     await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
     const runtime = runtimeOf(context.manager, started.run_id);
     runtime.serial = runtime.serial.then(() => sleep(1800));

@@ -9,8 +9,9 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 
-const OPTIONS = ['--cli', '--config', '--workspace', '--operation', '--base-ref', '--task-file', '--max-turns', '--timeout-seconds', '--output', '--observer-output'];
-const REQUIRED = ['--cli', '--config', '--workspace', '--operation', '--task-file', '--max-turns', '--timeout-seconds', '--output'];
+const OPTIONS = ['--cli', '--config', '--workspace', '--operation', '--base-ref', '--task-file', '--max-turns', '--timeout-seconds', '--authorization-id', '--attempt-id', '--output', '--observer-output'];
+const REQUIRED = ['--cli', '--config', '--workspace', '--operation', '--task-file', '--max-turns', '--timeout-seconds', '--authorization-id', '--attempt-id', '--output'];
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TERMINAL_STATES = new Set(['completed', 'failed', 'cancelled', 'closing', 'closed', 'orphaned', 'recoverable']);
 const POLL_INTERVAL_MS = 100;
 const RUNNING_DEADLINE_MS = 60_000;
@@ -38,6 +39,7 @@ export function parseArgs(args) {
   const timeoutSeconds = Number(values.get('--timeout-seconds'));
   if (!Number.isSafeInteger(maxTurns) || maxTurns < 1 || maxTurns > 50) throw new Error('invalid-max-turns');
   if (!Number.isSafeInteger(timeoutSeconds) || timeoutSeconds < 30 || timeoutSeconds > 7200) throw new Error('invalid-timeout-seconds');
+  if (!UUID_V4.test(values.get('--authorization-id')) || !UUID_V4.test(values.get('--attempt-id'))) throw new Error('invalid-dispatch-identifiers');
   for (const key of ['--cli', '--config', '--workspace', '--task-file', '--output', '--observer-output']) {
     if (values.has(key) && !path.isAbsolute(values.get(key))) throw new Error(`${key.slice(2)}-must-be-absolute`);
   }
@@ -50,6 +52,8 @@ export function parseArgs(args) {
     taskFile: values.get('--task-file'),
     maxTurns,
     timeoutSeconds,
+    authorizationId: values.get('--authorization-id'),
+    attemptId: values.get('--attempt-id'),
     output: values.get('--output'),
     observerOutput: values.get('--observer-output'),
   };
@@ -140,6 +144,7 @@ async function runCase(options, write) {
     stamp('start');
     const startTool = options.operation === 'edit' ? 'vibe_edit_start' : 'vibe_review_start';
     const begun = await first.call(startTool, {
+      authorization_id: options.authorizationId, attempt_id: options.attemptId,
       task, cwd: options.workspace, ...(options.baseRef ? { base_ref: options.baseRef } : {}),
       max_turns: options.maxTurns, timeout_seconds: options.timeoutSeconds, wait_seconds: 0,
       readiness_receipt: readiness.readiness_receipt,
@@ -202,7 +207,7 @@ async function runCase(options, write) {
 
 function usage() {
   return 'Usage: node scripts/disconnect-client.mjs --cli <installed dist/cli.js> --config <config.toml> --workspace <repo> '
-    + '--operation review|edit [--base-ref <ref>] --task-file <file> --max-turns <n> --timeout-seconds <s> --output <new-json-file> [--observer-output <new-jsonl-file>]\n'
+    + '--operation review|edit [--base-ref <ref>] --task-file <file> --max-turns <n> --timeout-seconds <s> --authorization-id <uuid-v4> --attempt-id <uuid-v4> --output <new-json-file> [--observer-output <new-jsonl-file>]\n'
     + 'One official-client active disconnect: readiness, one start, client.close() two seconds after the run is first seen running, then a reconnect that reads the saved run. '
     + 'It never retries, never signals a process and never calls vibe_close.';
 }

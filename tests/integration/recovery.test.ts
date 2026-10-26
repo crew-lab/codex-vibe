@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -174,7 +175,7 @@ describe('one-shot restart behavior', () => {
     const { source, data } = await setup();
     const backend = new FakeBackend();
     const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
-    const started = await manager.reviewStart({ task: 'one shot', cwd: source });
+    const started = await authorizedReviewStart(manager, { task: 'one shot', cwd: source });
     await waitFor(() => manager.status({ run_id: started.run_id }), (status) => status.state === 'running');
     await manager.shutdown();
     const meta = JSON.parse(await readFile(path.join(data, 'runs', started.run_id, 'meta.json'), 'utf8')) as { state: string; error?: { code: string } };

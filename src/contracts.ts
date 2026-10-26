@@ -13,7 +13,7 @@ export function isBackendKind(value: unknown): value is BackendKind {
 }
 export type RunMode = "review" | "edit";
 export type RunState =
-  | "starting" | "running" | "completed" | "failed"
+  | "starting" | "running" | "awaiting_validation" | "completed" | "failed"
   | "cancelled" | "closing" | "closed";
 export type RunExecutionState = Extract<RunState, "completed" | "failed" | "cancelled">;
 export type EventSeverity = "debug" | "info" | "warning" | "error";
@@ -54,6 +54,9 @@ export interface UsageState {
   cachedTokens?: number | null;
   modelCalls?: number | null;
   costSource?: "runtime-stats-prices";
+  priceAvailability?: "available" | "unavailable";
+  priceSource?: "runtime/read" | "unavailable";
+  costAvailability?: "available" | "unavailable";
   tokensUsed?: number;
   contextSize?: number;
   cost?: { amount: number; currency: string; authoritative: false };
@@ -169,7 +172,7 @@ export type SupervisorErrorCode =
   | "VSUP_NO_PROGRESS" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR" | "VSUP_INTERNAL"
   | "VSUP_RESTART_REQUIRED" | "VSUP_READINESS_RECEIPT_INVALID"
   | "VSUP_OWNER_LOCKED" | "VSUP_PREPARATION_TIMEOUT"
-  | "VSUP_BUDGET_EXCEEDED";
+  | "VSUP_BUDGET_EXCEEDED" | "VSUP_AUTHORIZATION_INVALID" | "VSUP_ATTEMPT_CONSUMED";
 
 export interface RunRecord {
   /** Release that created the run; absent on records written without it. */
@@ -189,6 +192,7 @@ export interface RunRecord {
   startedAt?: string;
   finishedAt?: string;
   taskSha256: string;
+  dispatch?: { grant_id: string; attempt_id: string; request_sha256: string };
   acceptanceContract?: AcceptanceContract;
   verification?: Verification;
   assessments?: Assessment[];
@@ -199,6 +203,13 @@ export interface RunRecord {
   process?: ProcessRecord;
   pin?: PinIdentity;
   limits: RunLimits;
+  sessionMode?: "one_shot" | "correctable";
+  maxCorrections?: number;
+  candidateRevision?: number;
+  candidatePatchSha256?: string;
+  correctionMessageHashes?: string[];
+  candidateRevisions?: Array<{ revision: number; patchSha256: string; contractSha256: string; artifactBytes: number; verification: Verification }>;
+  preparedContextManifestSha256?: string;
   usage?: UsageState;
   preparation?: import("./preparation/evidence.js").PreparationStatus;
   cleanup?: { worktree: "removed" | "retained" | "not_requested" | "none"; checked_at: string; reason?: string | undefined };
@@ -227,6 +238,7 @@ export interface RootBudget {
 export interface SupervisorConfig {
   version: 1;
   backend?: BackendKind;
+  vibeVersion?: import("./backends/app-server/supported-vibe.js").SelectableVibeVersion;
   allowedWorkspaceRoots: string[];
   retention: { days: number };
   limits: {
@@ -245,7 +257,7 @@ export interface SupervisorConfig {
   paths?: { vibe?: string; appServer?: string; vibePinManifest?: string; antigravity?: string };
   excludedGlobs?: Record<string, string[]>;
   budgets?: Record<string, RootBudget>;
-  experimental?: { antigravity?: boolean };
+  experimental?: { antigravity?: boolean; correctable?: boolean; vibe3?: boolean };
 }
 
 export interface StartRunInput {
@@ -260,6 +272,10 @@ export interface StartRunInput {
   output?: "text" | "findings";
   exclusions: ExclusionScope[];
   limits: RunLimits;
+  sessionMode?: "one_shot" | "correctable";
+  maxCorrections?: number;
+  preparedContextManifestSha256?: string;
+  preparedContextFiles?: Array<{ path: string; sha256: string; bytes: number; provenance: "committed" | "dirty-tracked" | "untracked"; content: string }>;
 }
 
 export interface ExclusionScope {
@@ -284,6 +300,8 @@ export interface BackendRunHandle {
 
 export type BackendStateUpdate = Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "modelObservations" | "preparation" | "pin">> & {
   approvals?: ApprovalLedgerSnapshot;
+  candidateRevision?: number;
+  patchSha256?: string;
 };
 
 export interface BackendCallbacks {
@@ -304,6 +322,8 @@ export interface SupervisorBackend {
   readonly kind: BackendKind;
   probe(): Promise<BackendCapabilities>;
   start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult>;
+  continue?(handle: BackendRunHandle, message: string): Promise<void>;
+  validateContinuation?(handle: BackendRunHandle): Promise<void>;
   cancel(handle: BackendRunHandle): Promise<void>;
   close(handle: BackendRunHandle): Promise<void>;
   terminateNow?(handle: BackendRunHandle): Promise<void>;
@@ -320,6 +340,8 @@ export interface RuntimeCheck {
 }
 
 export interface StartToolInput {
+  authorization_id: string;
+  attempt_id: string;
   task: string;
   cwd: string;
   readiness_receipt?: string;
@@ -334,13 +356,17 @@ export interface ReviewStartToolInput extends StartToolInput {
 export interface EditStartToolInput extends StartToolInput {
   acceptance_contract?: AcceptanceContract;
   base_ref?: string;
+  prepared_inputs?: { directory: string; manifest_sha256: string };
 }
 export interface StatusToolInput { expected_candidate?: string; run_id?: string; after_seq?: number; max_events?: number; wait_seconds?: number; workspace?: string; operation?: RunMode; base_ref?: string }
 export interface WaitOptions { signal?: AbortSignal }
 export interface ResultToolInput { run_id: string; detail?: "compact" | "full"; include_transcript?: boolean }
 export interface CloseToolInput { run_id: string; cleanup_worktree?: boolean; assessment?: AssessmentInput }
+export interface ContinueToolInput { run_id: string; candidate_revision: number; patch_sha256: string; message: string; wait_seconds?: number }
 
 export const REMEDIATION: Record<SupervisorErrorCode, string> = {
+  VSUP_AUTHORIZATION_INVALID: "Register the reviewed dispatch using task authorize under the selected configuration and use its unexpired matching authorization_id and attempt_id. Readiness alone does not authorize a task.",
+  VSUP_ATTEMPT_CONSUMED: "This attempt cannot be retried. Preserve its evidence; another start requires a fresh direct owner authorization and a newly registered attempt.",
   VSUP_CONFIG_INVALID: "Correct the reported config.toml field and try again.",
   VSUP_VIBE_NOT_FOUND: "Install Vibe or set paths.vibe to its executable; the vibe-app-server executable must sit next to it or be set as paths.app_server.",
   VSUP_VIBE_VERSION_UNSUPPORTED: `Install exactly the supported Vibe version (for example \`uv tool install mistral-vibe==${SUPPORTED_VIBE}\`) or set paths.vibe to its executable; for a pin-manifest failure (details.reason) check paths.vibe_pin_manifest and write the manifest on this machine with \`vibe-supervisor pin-manifest\`.`,

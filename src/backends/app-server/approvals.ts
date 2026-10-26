@@ -47,6 +47,8 @@ export type DenyReason =
   | 'foreign_session'
   | 'unlinked_callback'
   | 'handler_revoked'
+  | 'no_active_turn'
+  | 'stale_turn'
   | 'policy_error';
 
 export interface ApprovalVerdict {
@@ -311,6 +313,8 @@ export interface ApprovalHandlerOptions {
   deadlineMs?: number;
   ledger?: ApprovalLedger;
   currentSessionId?: () => string;
+  isTurnActive?: () => boolean;
+  currentTurnId?: () => string | null;
   evaluate?: (request: ApprovalRequest) => Promise<ApprovalVerdict>;
 }
 
@@ -345,6 +349,8 @@ export class ApprovalHandler {
   readonly ledger: ApprovalLedger;
   private readonly deadlineMs: number;
   private readonly currentSessionId: (() => string) | undefined;
+  private readonly isTurnActive: (() => boolean) | undefined;
+  private readonly currentTurnId: (() => string | null) | undefined;
   private readonly evaluate: (request: ApprovalRequest) => Promise<ApprovalVerdict>;
   private revoked = false;
 
@@ -354,6 +360,8 @@ export class ApprovalHandler {
     this.deadlineMs = deadlineMs;
     this.ledger = options.ledger ?? new ApprovalLedger();
     this.currentSessionId = options.currentSessionId;
+    this.isTurnActive = options.isTurnActive;
+    this.currentTurnId = options.currentTurnId;
     this.evaluate = options.evaluate ?? ((request) => evaluateApproval(options, request));
   }
 
@@ -371,9 +379,14 @@ export class ApprovalHandler {
 
   private async judge(request: ApprovalRequest, context: ApprovalContext, expectedSession: string | null): Promise<ApprovalVerdict> {
     if (this.revoked) return { decision: 'deny', reason: 'handler_revoked' };
+    if (this.isTurnActive && !this.isTurnActive()) return { decision: 'deny', reason: 'no_active_turn' };
+    const expectedTurn = this.currentTurnId?.() ?? null;
+    if (expectedTurn !== null && context.turnId !== expectedTurn) return { decision: 'deny', reason: 'stale_turn' };
     if (expectedSession !== null && context.sessionId !== null && context.sessionId !== expectedSession) return { decision: 'deny', reason: 'foreign_session' };
     const verdict = await withDeadline(this.evaluate(request), this.deadlineMs);
     if (this.revoked) return { decision: 'deny', reason: 'handler_revoked' };
+    if (this.isTurnActive && !this.isTurnActive()) return { decision: 'deny', reason: 'no_active_turn' };
+    if (expectedTurn !== null && this.currentTurnId?.() !== expectedTurn) return { decision: 'deny', reason: 'stale_turn' };
     if (verdict.decision === 'approve' && request.relatedEntryId === null) return { decision: 'deny', reason: 'unlinked_callback' };
     return verdict;
   }

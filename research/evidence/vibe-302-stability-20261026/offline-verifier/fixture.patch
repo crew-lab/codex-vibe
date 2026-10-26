@@ -1,0 +1,57 @@
+diff --git a/src/at-least.mjs b/src/at-least.mjs
+new file mode 100644
+index 0000000..da8a44a
+--- /dev/null
++++ b/src/at-least.mjs
+@@ -0,0 +1 @@
++export function atLeast(value, limit) { return value >= limit; }
+diff --git a/tests/at-least.test.mjs b/tests/at-least.test.mjs
+new file mode 100644
+index 0000000..c7c087e
+--- /dev/null
++++ b/tests/at-least.test.mjs
+@@ -0,0 +1,44 @@
++import { describe, it } from 'node:test';
++import assert from 'node:assert/strict';
++import { atLeast } from '../src/at-least.mjs';
++
++describe('atLeast', () => {
++  it('handles negative below', () => {
++    assert.strictEqual(atLeast(-3, -2), false);
++  });
++
++  it('handles negative equal', () => {
++    assert.strictEqual(atLeast(-2, -2), true);
++  });
++
++  it('handles negative above', () => {
++    assert.strictEqual(atLeast(-1, -2), true);
++  });
++
++  it('handles decimal below', () => {
++    assert.strictEqual(atLeast(699.99, 700), false);
++  });
++
++  it('handles equal', () => {
++    assert.strictEqual(atLeast(700, 700), true);
++  });
++
++  it('handles decimal above', () => {
++    assert.strictEqual(atLeast(700.01, 700), true);
++  });
++
++  it('handles positive above zero', () => {
++    assert.strictEqual(atLeast(1, 0), true);
++  });
++
++  it('handles zero below positive', () => {
++    assert.strictEqual(atLeast(0, 1), false);
++  });
++
++  it('does not mutate input objects with valueOf', () => {
++    const obj = { valueOf: () => 42 };
++    const originalValueOf = obj.valueOf;
++    atLeast(obj, 40);
++    assert.strictEqual(obj.valueOf, originalValueOf);
++  });
++});

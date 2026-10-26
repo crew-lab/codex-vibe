@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -29,7 +30,7 @@ async function writeExecutable(file: string, body: string): Promise<void> {
 }
 
 async function failedRun(manager: RunManager, source: string) {
-  const started = await manager.reviewStart({ task: 'review', cwd: source, wait_seconds: 0 });
+  const started = await authorizedReviewStart(manager, { task: 'review', cwd: source, wait_seconds: 0 });
   const until = Date.now() + 5_000;
   let status = await manager.status({ run_id: started.run_id });
   while (!['failed', 'cancelled', 'completed'].includes(String(status.state)) && Date.now() < until) {

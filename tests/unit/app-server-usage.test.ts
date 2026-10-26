@@ -49,7 +49,7 @@ describe('usageFromStats', () => {
   it('leaves unknowns null and omits them from the usage state', () => {
     const summary = usageFromStats(null, stats({ promptTokens: 10, completionTokens: 5, cachedTokens: null, inputPricePerMillion: null }));
     expect(summary).toMatchObject({ tokensUsed: 15, cachedTokens: null, modelCalls: null, costAmount: null, contextSize: null });
-    expect(toUsageState(summary)).toEqual({ tokensUsed: 15, promptTokens: 10, completionTokens: 5, cachedTokens: null, modelCalls: null, costSource: "runtime-stats-prices" });
+    expect(toUsageState(summary)).toEqual({ tokensUsed: 15, promptTokens: 10, completionTokens: 5, cachedTokens: null, modelCalls: null, priceAvailability: "unavailable", priceSource: "runtime/read", costAvailability: "unavailable" });
   });
 
   it('keeps a model-call count that Vibe did not report as null beside the token counts', () => {

@@ -1,8 +1,24 @@
+# Publication checkpoint — 2026-10-26
+
+The 2.1.0 stability source is consolidated on `codex/publish-vibe-stability` from base `9c38ea0`. This checkpoint supersedes the uncommitted/pending statements in the historical sections below. Only exact Vibe 3.0.2 is supported; the public surface is five one-shot tools and each dispatch requires a single-use registered attempt.
+
+The qualified archive remains byte-exact: SHA-256 `9f949d4337b4dc037c1e82c0a692c8da27878f670992c46f77f79c9f5f1de2a5`, installed candidate `7641d294df5f432b1b99633c052b5e2311e16131e9ad9e8dc828ccf8511f9154`. Target preparation and native readiness passed. The bounded fixture edit was independently accepted after correcting the coordinator verifier; the original rejection remains in the audit history. No additional hosted starts were used.
+
+Publication target: GitHub v2.1.0 pre-release, without stable/latest promotion. The existing archive, kit and original source snapshot are the release artifacts; this source commit additionally contains this handoff and sanitized evidence. Clean-account installation, broader real-task qualification and experimental Antigravity qualification remain open. Unrelated dirty checkouts are preserved. See [qualification evidence](research/evidence/vibe-302-stability-20261026/README.md).
+
+---
+
+# Stability implementation checkpoint — 2026-10-24
+
+The current implementation uses exactly Vibe 3.0.2 and five one-shot MCP tools. Each start requires a locally registered, single-use dispatch authorization and attempt. See [ADR 0010](docs/adr/0010-dispatch-attempt-authorization.md). Continuation is deferred. The previous six-tool archive and its evidence remain historical; they do not qualify this changed source. Hosted inference remains paused.
+
+This work is isolated from the existing dirty checkouts. The local changes are uncommitted and unpushed. Packaging, installed preparation and actual Desktop readiness are separate checks, recorded only after they run. The experimental Antigravity backend remains independent.
+
 # Current handoff
 
 Updated 2026-10-19. Status only: what the source, the archives and the installations are, what remains and who does it, what is open, and where the records are. The picture and the rules are in the [development strategy](planning/development-strategy.md); the sequenced work is in the [development plan](planning/development-plan.md); the boundaries are in [AGENTS.md](AGENTS.md).
 
-## Goals and state at a glance — 2026-10-19
+## Historical goals and state at a glance — 2026-10-19
 
 This section is the one-page summary; the dated sections below are the record behind it.
 
@@ -258,9 +274,9 @@ The owner decided on 2026-10-17 to halt the exploratory feature run (deferred: w
 3. Branch convergence (`origin/codex/package-kit-identity`, `origin/claude/2.1-wave-1`, `origin/explore_project_details`) into main.
 4. Stable, predictable everyday use with the active MCP tools.
 
-## Release identity
+## Historical release identity
 
-- **Source.** `vibe-supervisor` 2.1.0 on main and on `origin/explore_project_details` (with Waves 0–5 and hardened `AntigravityBackend`). Vibe remains pinned to 2.26.1. The source, distributed archive, installed candidate and connected desktop server are distinct identities and need their own evidence.
+- **Source.** `vibe-supervisor` 2.1.0 on main and on `origin/explore_project_details` (with Waves 0–5 and hardened `AntigravityBackend`). That recorded build was pinned to 2.26.1. The source, distributed archive, installed candidate and connected desktop server are distinct identities and need their own evidence.
 - **2.0.1 archive.** Source `44dc6f8`, archive SHA-256 `7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e`, candidate and kit identity `8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4`, packaged on the target under Node 20.19.0/npm 10.8.2.
 - **2.0.2 target archive (`origin/codex/package-kit-identity`).** Source `347bf79`, archive SHA-256 `84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09`, candidate and kit identity `eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1`, packaged on the target under Node 20.19.0/npm 10.8.2, with native desktop 2.0.2 readiness verified on 2026-10-17.
 - **Release status.** The owner deleted the unpublished v2.0.0 draft on 2026-10-15. On 2026-10-19 the owner deleted the earlier published releases, keeping their tags. Pre-releases `v2.0.1` (tagged at `44dc6f8` with tested archive `7978719c…`) and `v2.0.2` (tag corrected to its true source commit `347bf79` with exact old-value lease `b275b1b`, preserving prior tag identity `v2.0.2-pre-correction-b275b1b` and tested archive `84bff941…`) are published on GitHub by the owner with their respective release notes, SBOMs, and preparation kits. Active unreleased development proceeds on the 2.1.0 line.
@@ -326,7 +342,7 @@ git clone https://github.com/crew-lab/codex-vibe.git vibe-supervisor && cd vibe-
 CACHE="$PWD/.npm-offline-cache" && node -e 'const l=require("./package-lock.json");const s=new Set();for(const[k,v]of Object.entries(l.packages)){if(!k||v.link||!v.version)continue;s.add((v.name||k.slice(k.lastIndexOf("node_modules/")+13))+"@"+v.version)}console.log([...s].join("\n"))' | xargs -P 8 -n 1 npm cache add --cache "$CACHE" && VIBE_SUPERVISOR_TEST_NPM_CACHE="$CACHE" npm run package:rc
 ```
 
-Hosted behaviour needs Vibe 2.26.1 and follows [docs/target-acceptance.md](docs/target-acceptance.md): after `pin-manifest`, run `vibe-supervisor prepare check --kit <absolute path of the kit> --config "$CONFIG"` once, because readiness and every start need its pass. The v2.0.0 draft archive (`f2c2119`, SHA-256 `485ecce3…`) is not a useful target build: it lacks the repairs above.
+The historical hosted procedure needed Vibe 2.26.1 and follows [docs/target-acceptance.md](docs/target-acceptance.md): after `pin-manifest`, run `vibe-supervisor prepare check --kit <absolute path of the kit> --config "$CONFIG"` once, because readiness and every start need its pass. The v2.0.0 draft archive (`f2c2119`, SHA-256 `485ecce3…`) is not a useful target build: it lacks the repairs above.
 
 Deleting the remote branches that main already contains: completed on 2026-10-17 (`codex/package-kit-identity` and `claude/2.1-wave-1` deleted; GitHub holds `main` and active worktree branches).
 

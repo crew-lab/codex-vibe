@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { afterEach, test } from 'vitest';
 import { classify, parseArgs, redactReadiness } from '../scripts/disconnect-client.mjs';
 import { makeLaunchableFakeVibe } from './unit/support/launchable-fake-vibe.js';
+import { authorizeCli } from './support/authorize-cli.js';
 
 const exec = promisify(execFile);
 const repo = path.resolve(import.meta.dirname, '..');
@@ -49,7 +50,7 @@ async function sandbox() {
   return { parent, workspace, config, taskFile, workerRecord };
 }
 
-const baseArgs = ['--cli', '/a/cli.js', '--config', '/a/config.toml', '--workspace', '/a/repo', '--task-file', '/a/task.txt', '--max-turns', '12', '--timeout-seconds', '180', '--output', '/a/out.json'];
+const baseArgs = ['--cli', '/a/cli.js', '--config', '/a/config.toml', '--workspace', '/a/repo', '--task-file', '/a/task.txt', '--max-turns', '12', '--timeout-seconds', '180', '--authorization-id', '123e4567-e89b-42d3-a456-426614174000', '--attempt-id', '123e4567-e89b-42d3-a456-426614174001', '--output', '/a/out.json'];
 
 test('parses one edit case and requires a base ref only for edits', () => {
   const options = parseArgs([...baseArgs, '--operation', 'edit', '--base-ref', 'abc']);
@@ -60,6 +61,11 @@ test('parses one edit case and requires a base ref only for edits', () => {
   assert.throws(() => parseArgs([...baseArgs, '--operation', 'review', '--base-ref', 'abc']), /base-ref-required-for-edit-only/);
   assert.throws(() => parseArgs([...baseArgs, '--operation', 'review', '--retries', '1']), /invalid-arguments/);
   assert.throws(() => parseArgs([...baseArgs.slice(0, -1), 'out.json', '--operation', 'review']), /output-must-be-absolute/);
+  const withoutAuthorization = baseArgs.filter((_, index) => index !== baseArgs.indexOf('--authorization-id') && index !== baseArgs.indexOf('--authorization-id') + 1);
+  assert.throws(() => parseArgs([...withoutAuthorization, '--operation', 'review']), /invalid-arguments/);
+  const malformedAuthorization = [...baseArgs];
+  malformedAuthorization[baseArgs.indexOf('--authorization-id') + 1] = 'not-a-uuid';
+  assert.throws(() => parseArgs([...malformedAuthorization, '--operation', 'review']), /invalid-dispatch-identifiers/);
 });
 
 test('counts a run that settled before the disconnect as inconclusive, never as a pass', () => {
@@ -77,8 +83,10 @@ test('disconnects an active edit through the official client and finds it failed
   const box = await sandbox();
   const base = (await git(box.workspace, ['rev-parse', 'HEAD'])).trim();
   const output = path.join(box.parent, 'case-7.json');
+  const task = await readFile(box.taskFile, 'utf8');
+  const grant = await authorizeCli(cli, box.config, 'edit', { task, cwd: box.workspace, base_ref: base, max_turns: 12, timeout_seconds: 180 });
   const run = exec(process.execPath, [script, '--cli', cli, '--config', box.config, '--workspace', box.workspace, '--operation', 'edit', '--base-ref', base,
-    '--task-file', box.taskFile, '--max-turns', '12', '--timeout-seconds', '180', '--output', output], { timeout: 60_000 });
+    '--task-file', box.taskFile, '--max-turns', '12', '--timeout-seconds', '180', '--authorization-id', grant.authorization_id, '--attempt-id', grant.attempt_id, '--output', output], { timeout: 60_000 });
   const finished = await run.catch((error) => error);
   try { strays.add(JSON.parse(await readFile(box.workerRecord, 'utf8')).pid); } catch {}
   const record = JSON.parse(await readFile(output, 'utf8'));
@@ -98,9 +106,11 @@ test.skipIf(process.platform !== 'darwin')('starts the independent observer on t
   const box = await sandbox();
   const base = (await git(box.workspace, ['rev-parse', 'HEAD'])).trim();
   const output = path.join(box.parent, 'case-7.json');
+  const task = await readFile(box.taskFile, 'utf8');
+  const grant = await authorizeCli(cli, box.config, 'edit', { task, cwd: box.workspace, base_ref: base, max_turns: 12, timeout_seconds: 180 });
   const observerOutput = path.join(box.parent, 'case-7-observer.jsonl');
   const finished = await exec(process.execPath, [script, '--cli', cli, '--config', box.config, '--workspace', box.workspace, '--operation', 'edit', '--base-ref', base,
-    '--task-file', box.taskFile, '--max-turns', '12', '--timeout-seconds', '180', '--output', output, '--observer-output', observerOutput], { timeout: 60_000 }).catch((error) => error);
+    '--task-file', box.taskFile, '--max-turns', '12', '--timeout-seconds', '180', '--authorization-id', grant.authorization_id, '--attempt-id', grant.attempt_id, '--output', output, '--observer-output', observerOutput], { timeout: 60_000 }).catch((error) => error);
   const record = JSON.parse(await readFile(output, 'utf8'));
   if (record.observer?.pid) strays.add(record.observer.pid);
   try { strays.add(JSON.parse(await readFile(box.workerRecord, 'utf8')).pid); } catch {}

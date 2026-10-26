@@ -291,11 +291,26 @@ describe('response parsers', () => {
   it('parses the small config and readiness results', () => {
     expect(parseConfigEffectiveReadResult({ config: { enable_subagents: false, tools: {} }, future: 1 })).toEqual({ config: { enable_subagents: false, tools: {} } });
     expectParseError(() => parseConfigEffectiveReadResult({}), 'config');
-    expect(parseConfigReadResult({ config: {}, harnessSelectionSource: 'default', hooksCount: 0, skillsCount: 0 })).toEqual({ harnessSelectionSource: 'default', hooksCount: 0, skillsCount: 0 });
-    expect(parseConfigReadResult({ harnessSelectionSource: 'env' })).toEqual({ harnessSelectionSource: 'env', hooksCount: null, skillsCount: null });
+    expect(parseConfigReadResult({ config: {}, hooksCount: 0, skillsCount: 0 })).toEqual({ harnessSelectionSource: null, hooksCount: 0, skillsCount: 0 });
+    expect(parseConfigReadResult({ hooksCount: 0 })).toEqual({ harnessSelectionSource: null, hooksCount: 0, skillsCount: null });
     expect(parseConfigReadResult({ harnessSelectionSource: null, hooksCount: 0, skillsCount: 0 })).toEqual({ harnessSelectionSource: null, hooksCount: 0, skillsCount: 0 });
+    expect(parseConfigReadResult({ harnessSelectionSource: 'default', hooksCount: 0, skillsCount: 0 }, { vibeVersion: '2.26.1' })).toEqual({ harnessSelectionSource: 'default', hooksCount: 0, skillsCount: 0 });
     expectParseError(() => parseConfigReadResult({ harnessSelectionSource: 1 }), 'harnessSelectionSource');
-    expectParseError(() => parseConfigReadResult({}), 'harnessSelectionSource');
+    expectParseError(() => parseConfigReadResult({ hooksCount: -1 }), 'hooksCount');
+    expectParseError(() => parseConfigReadResult({}, { vibeVersion: '2.26.1' }), 'harnessSelectionSource');
+    expectParseError(() => parseConfigReadResult({ harnessSelectionSource: 'default', hooksCount: -1 }), 'hooksCount');
+    expectParseError(() => parseConfigReadResult({ harnessSelectionSource: 'default', skillsCount: -1 }), 'skillsCount');
+    expectParseError(() => parseConfigReadResult({ harnessSelectionSource: 'default', hooksCount: 'none' }), 'hooksCount');
+    expect(parseConfigReadResult({})).toEqual({ harnessSelectionSource: null, hooksCount: null, skillsCount: null });
+    expect(parseConfigReadResult({}, { vibeVersion: '3.0.2' })).toEqual({ harnessSelectionSource: null, hooksCount: null, skillsCount: null });
+    expect(parseConfigReadResult({ harnessSelectionSource: undefined }, { vibeVersion: '3.0.2' })).toEqual({ harnessSelectionSource: null, hooksCount: null, skillsCount: null });
+    expect(parseConfigReadResult({ harnessSelectionSource: null, hooksCount: 0, skillsCount: 0 }, { vibeVersion: '3.0.2' })).toEqual({ harnessSelectionSource: null, hooksCount: 0, skillsCount: 0 });
+    expect(parseConfigReadResult({ harnessSelectionSource: 'custom', hooksCount: 1, skillsCount: 2 }, { vibeVersion: '3.0.2' })).toEqual({ harnessSelectionSource: 'custom', hooksCount: 1, skillsCount: 2 });
+    expect(parseConfigReadResult({ config: {}, strippedHistoryImages: 0, skillsCount: 0, hooksCount: 0, mcpServersTotal: 0, mcpServersEnabled: 0 }, { vibeVersion: '3.0.2' })).toEqual({ harnessSelectionSource: null, hooksCount: 0, skillsCount: 0 });
+    expectParseError(() => parseConfigReadResult({ harnessSelectionSource: 1 }, { vibeVersion: '3.0.2' }), 'harnessSelectionSource');
+    expectParseError(() => parseConfigReadResult({ hooksCount: -1 }, { vibeVersion: '3.0.2' }), 'hooksCount');
+    expectParseError(() => parseConfigReadResult({ skillsCount: -1 }, { vibeVersion: '3.0.2' }), 'skillsCount');
+    expectParseError(() => parseConfigReadResult({ hooksCount: 'none' }, { vibeVersion: '3.0.2' }), 'hooksCount');
     expect(parseConfigModelWriteResult({ runtime: {}, status: 'applied' })).toEqual({ status: 'applied' });
     expect(parseConfigModelWriteResult({})).toEqual({ status: null });
     expect(parseSessionReadyWaitResult({ ready: true, initDurationMs: 5 })).toEqual({ ready: true });
@@ -610,14 +625,14 @@ describe('against the scripted fake vibe-app-server', () => {
   it('drives the whole one-shot sequence with strict builders and tolerant parsers', async () => {
     const session = openFixture('allowed-call');
     const { init, started } = await handshakeAndStart(session);
-    expect(init).toMatchObject({ serverName: 'vibe-app-server', serverVersion: '2.26.1' });
+    expect(init).toMatchObject({ serverName: 'vibe-app-server', serverVersion: '3.0.2' });
     expect(started.state.session).toMatchObject({ id: sessionId, harness: 'unified', cwd: workspace });
     expect(started.state.eventId).toBe(7);
     const { runtimeBefore, runtimeAfter, configRead, turn: startedTurn } = await readbackAndTurn(session);
     expect(runtimeBefore.runtime.tools).toEqual([{ name: 'read_file' }]);
     expect(runtimeBefore.runtime.activeModel?.thinking).toBe('high');
     expect(runtimeAfter.runtime.activeModel?.thinking).toBe('off');
-    expect(configRead.harnessSelectionSource).toBe('default');
+    expect(configRead.harnessSelectionSource).toBeNull();
     expect(startedTurn.status).toBe('in_progress');
     const completed = await session.completion;
     expect(completed.turn).toMatchObject({ id: startedTurn.id, status: 'completed', stopReason: null, error: null });

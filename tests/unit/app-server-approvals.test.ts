@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ApprovalHandler,
   ApprovalLedger,
@@ -422,6 +422,31 @@ describe('ApprovalHandler session and effect binding', () => {
     session = 's2';
     expect((await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-2', relatedEntryId: 'e2' }), context('s1', 't1'))).reason).toBe('foreign_session');
     expect((await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-3', relatedEntryId: 'e3' }), context('s2', 't1'))).decision).toBe('approve');
+  });
+
+  it('denies callbacks when no turn is active and allows them during turn start', async () => {
+    let active = false;
+    const evaluate = vi.fn(async () => ({ decision: 'approve' as const, reason: null }));
+    const handler = new ApprovalHandler({ mode: 'review', workspace, isTurnActive: () => active, evaluate });
+    expect(await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-idle', relatedEntryId: 'e-idle' }), context('s1', 't0'))).toEqual({ decision: 'deny', reason: 'no_active_turn' });
+    expect(evaluate).not.toHaveBeenCalled();
+    active = true;
+    expect(await handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-active', relatedEntryId: 'e-active' }), context('s1', 't1'))).toEqual({ decision: 'approve', reason: null });
+    expect(evaluate).toHaveBeenCalledOnce();
+  });
+
+  it('does not carry a pending approval into another turn', async () => {
+    let active = true;
+    let turn = 't1';
+    let release!: (value: { decision: 'approve'; reason: null }) => void;
+    const evaluate = vi.fn(() => new Promise<{ decision: 'approve'; reason: null }>((resolve) => { release = resolve; }));
+    const handler = new ApprovalHandler({ mode: 'review', workspace, isTurnActive: () => active, currentTurnId: () => turn, evaluate });
+    const pending = handler.decide(request(read, { filePath: 'src/index.ts' }, { callbackId: 'cb-pending', relatedEntryId: 'e-pending' }), context('s1', 't1'));
+    await Promise.resolve();
+    active = false;
+    turn = 't2';
+    release({ decision: 'approve', reason: null });
+    expect(await pending).toEqual({ decision: 'deny', reason: 'no_active_turn' });
   });
 
   it('denies an approval that names no effect to link to', async () => {

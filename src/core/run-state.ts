@@ -2,7 +2,8 @@ import type { RunState } from "../contracts.js";
 
 const transitions: Record<RunState, readonly RunState[]> = {
   starting: ["running", "completed", "failed", "cancelled", "closing"],
-  running: ["completed", "failed", "cancelled", "closing"],
+  running: ["awaiting_validation", "completed", "failed", "cancelled", "closing"],
+  awaiting_validation: ["running", "completed", "failed", "cancelled", "closing"],
   completed: ["closing", "closed"],
   failed: ["closing", "closed"],
   cancelled: ["closing", "closed"],

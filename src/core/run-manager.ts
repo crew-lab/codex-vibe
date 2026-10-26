@@ -2,12 +2,12 @@ import { captureVerification, verifySaved } from "../acceptance/verify.js";
 import { contractDigest, verificationSummary, type AcceptanceContract, type AssessmentInput } from "../acceptance/schema.js";
 import { readOwnedFile } from "../reporting/private-files.js";
 import { createHash, randomUUID } from "node:crypto";
-import { open, readFile, readdir, realpath, rename, rm, lstat, unlink } from "node:fs/promises";
+import { open, readFile, readdir, realpath, rename, rm, lstat, unlink, writeFile, chmod } from "node:fs/promises";
 import path from "node:path";
 import type {
   ApprovalLedgerSnapshot, BackendCallbacks, BackendKind, ExclusionScope, BackendRunHandle, BackendStateUpdate,
   ReviewStartToolInput, EditStartToolInput, StatusToolInput,
-  ResultToolInput, WaitOptions, CloseToolInput, RunLimits, RunMode, RunRecord, RunState, SupervisorBackend,
+  ResultToolInput, WaitOptions, CloseToolInput, ContinueToolInput, StartRunInput, RunLimits, RunMode, RunRecord, RunState, SupervisorBackend,
   ReviewIntegrity, RuntimeCheck, SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent,
   FindingsArtifact
 } from "../contracts.js";
@@ -40,6 +40,9 @@ import { extractFindingsJsonBlock, validateFindings } from "./findings.js";
 import { workspaceAnchors } from "../security/globs.js";
 import { acquireOwnerLock } from "./owner-lock.js";
 import type { OwnerLock } from "./owner-lock.js";
+import { DispatchGrants } from "./dispatch-grants.js";
+import { dispatchDigest } from "./dispatch-binding.js";
+import { verifyTaskInputs, taskInputManifestSchema } from "../preparation/task-inputs.js";
 
 interface Runtime {
   record: RunRecord;
@@ -80,6 +83,10 @@ interface Runtime {
   logUnavailable?: { kind: "content" | "filesystem"; reason: string; code?: string };
   persistChain: Promise<void>;
   closeChain: Promise<void>;
+  continuationChain: Promise<void>;
+  candidateRevision: number;
+  correctionCount: number;
+  preparedInputDirectory?: string;
   waiters: Set<() => void>;
 }
 
@@ -114,8 +121,8 @@ const COMPACT_TRANSCRIPT_CHARS = 4000;
 const COMPACT_PATCH_BYTES = 4000;
 const COMPACT_DIFF_STAT_CHARS = 2000;
 const COMPACT_CHANGED_FILES = 50;
-const COORDINATOR_ACTION_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "failed", "cancelled", "closed"]);
-const SETTLED_RESULT_STATES: ReadonlySet<RunState> = new Set<RunState>(["completed", "failed", "cancelled"]);
+const COORDINATOR_ACTION_STATES: ReadonlySet<RunState> = new Set<RunState>(["awaiting_validation", "completed", "failed", "cancelled", "closed"]);
+const SETTLED_RESULT_STATES: ReadonlySet<RunState> = new Set<RunState>(["awaiting_validation", "completed", "failed", "cancelled"]);
 const DAY_MS = 86_400_000;
 const RETENTION_FIRST_DELAY_MS = 5000;
 const RETENTION_INTERVAL_MS = DAY_MS;
@@ -141,6 +148,8 @@ export interface RunManagerOptions {
 }
 
 type StartOptions = {
+  authorizationId: string;
+  attemptId: string;
   maxTurns: number;
   timeoutSeconds: number;
   contextFiles?: string[];
@@ -148,6 +157,7 @@ type StartOptions = {
   baseRef?: string;
   readinessReceipt?: string;
   acceptanceContract?: AcceptanceContract;
+  preparedInputs?: { directory: string; manifestSha256: string };
 };
 
 export class RunManager {
@@ -239,6 +249,7 @@ export class RunManager {
   async reviewStart(value: ReviewStartToolInput, wait?: WaitOptions): Promise<StartResult> {
     const input = parseInput(reviewStartSchema, value);
     const started = await this.start("review", input.task, input.cwd, {
+      authorizationId: input.authorization_id, attemptId: input.attempt_id,
       maxTurns: input.max_turns ?? this.config.limits.maxTurnsReview, timeoutSeconds: input.timeout_seconds ?? this.config.limits.reviewTimeoutSeconds,
       contextFiles: input.context_files, output: input.output, ...(input.readiness_receipt === undefined ? {} : { readinessReceipt: input.readiness_receipt })
     });
@@ -247,12 +258,59 @@ export class RunManager {
 
   async editStart(value: EditStartToolInput, wait?: WaitOptions): Promise<StartResult> {
     const input = parseInput(editStartSchema, value);
+    if (input.prepared_inputs && this.activeBackendKind !== "app-server") throw codedError("VSUP_INVALID_STATE", "Prepared task inputs are supported only by the app-server backend.");
+    if (input.prepared_inputs && !input.acceptance_contract) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs require an acceptance_contract to bind their output scope before dispatch.");
+    if (input.prepared_inputs) await this.assertPreparedInputAdmission(input.prepared_inputs, input.acceptance_contract!);
     const started = await this.start("edit", input.task, input.cwd, {
+      authorizationId: input.authorization_id, attemptId: input.attempt_id,
       maxTurns: input.max_turns ?? this.config.limits.maxTurnsEdit, timeoutSeconds: input.timeout_seconds ?? this.config.limits.editTimeoutSeconds,
       ...(input.acceptance_contract ? { acceptanceContract: input.acceptance_contract } : {}),
-      baseRef: input.base_ref, ...(input.readiness_receipt === undefined ? {} : { readinessReceipt: input.readiness_receipt })
+      baseRef: input.base_ref, ...(input.prepared_inputs ? { preparedInputs: { directory: input.prepared_inputs.directory, manifestSha256: input.prepared_inputs.manifest_sha256 } } : {}), ...(input.readiness_receipt === undefined ? {} : { readinessReceipt: input.readiness_receipt })
     });
     return this.awaitStartOutcome(started, input.wait_seconds, wait?.signal);
+  }
+
+  async authorizeDispatch(mode: RunMode, value: Omit<ReviewStartToolInput | EditStartToolInput, "authorization_id" | "attempt_id">, ownerReference: string, expiresAt: string): Promise<{ authorization_id: string; attempt_id: string; request_sha256: string; expires_at: string }> {
+    if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
+    const request = { ...value };
+    delete request.wait_seconds;
+    delete request.readiness_receipt;
+    const parsed = mode === "review"
+      ? parseInput(reviewStartSchema.omit({ authorization_id: true, attempt_id: true, readiness_receipt: true, wait_seconds: true }), request)
+      : parseInput(editStartSchema.omit({ authorization_id: true, attempt_id: true, readiness_receipt: true, wait_seconds: true }), request);
+    const deadline = Date.now() + START_PREPARATION_DEADLINE_MS;
+    const policy = await withDeadline(this.admissionPolicy(), deadline - Date.now(), "Authorization policy validation exceeded its deadline.");
+    const contextFiles = "context_files" in parsed ? parsed.context_files : [];
+    const admitted = await this.validateAdmission(mode, parsed.cwd, contextFiles, policy, deadline);
+    const baseCommit = mode === "edit" ? await this.editBaseCommit(admitted.workspace, "base_ref" in parsed ? parsed.base_ref : "HEAD", deadline) : undefined;
+    const acceptanceContract = "acceptance_contract" in parsed ? parsed.acceptance_contract : undefined;
+    const preparedInputs = "prepared_inputs" in parsed ? parsed.prepared_inputs : undefined;
+    if (preparedInputs) {
+      if (!acceptanceContract) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs require an acceptance contract.");
+      await this.assertPreparedInputAdmission(preparedInputs, acceptanceContract);
+    }
+    const limits = this.dispatchLimits(mode, parsed.max_turns, parsed.timeout_seconds);
+    const requestSha256 = await withDeadline(dispatchDigest({ config: policy.config, policyRevision: policy.revision, mode, workspace: admitted.workspace, task: parsed.task, ...(baseCommit ? { baseCommit } : {}), contextFiles, ...("output" in parsed ? { output: parsed.output } : {}), ...(acceptanceContract ? { acceptanceContract } : {}), ...(preparedInputs ? { preparedManifestSha256: preparedInputs.manifest_sha256 } : {}), limits }), deadline - Date.now(), "Authorization binding exceeded its deadline.");
+    await createPrivateDir(this.usageDataDir);
+    return new DispatchGrants(path.join(this.usageDataDir, "dispatch-grants")).issue({ requestSha256, ownerReference, expiresAt });
+  }
+
+  private dispatchLimits(mode: RunMode, maxTurns?: number, timeoutSeconds?: number): RunLimits {
+    const turns = maxTurns ?? (mode === "review" ? this.config.limits.maxTurnsReview : this.config.limits.maxTurnsEdit);
+    return { timeoutSeconds: timeoutSeconds ?? (mode === "review" ? this.config.limits.reviewTimeoutSeconds : this.config.limits.editTimeoutSeconds), maxTurns: turns, maxEventBytes: this.config.limits.maxEventBytes, maxTranscriptBytes: this.config.limits.maxTranscriptBytes, maxArtifactBytes: this.config.limits.maxArtifactBytes, ...(this.config.limits.maxTokens === undefined ? {} : { maxTokens: this.config.limits.maxTokens }), ...(this.config.limits.maxCostUsd === undefined ? {} : { maxCostUsd: this.config.limits.maxCostUsd }), maxModelCalls: turnBackstop(turns) };
+  }
+
+  private async assertPreparedInputAdmission(prepared: { directory: string; manifest_sha256: string }, contract: AcceptanceContract): Promise<void> {
+    const directory = path.resolve(prepared.directory);
+    let manifest;
+    try {
+      manifest = taskInputManifestSchema.parse(JSON.parse((await readOwnedFile(path.join(directory, "manifest.json"), 256 * 1024)).toString("utf8")));
+    } catch {
+      throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs are not a safe, readable task context.");
+    }
+    if (manifest.manifest_sha256 !== prepared.manifest_sha256) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input manifest digest differs from the selected start request.");
+    if (manifest.contract_sha256 !== contractDigest(contract) || manifest.allowed_output_paths.some((relative) => !contract.allowed_changed_paths.includes(relative))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs do not bind the frozen acceptance contract and output scope.");
+    if (manifest.files.some((file) => file.provenance !== "committed" && manifest.allowed_output_paths.includes(file.path))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input overlaps an editable output with dirty source bytes; re-prepare from the worker base or select read-only context files.");
   }
 
   private async awaitStartOutcome(started: StartResult, waitSeconds: number, signal?: AbortSignal): Promise<StartResult> {
@@ -310,26 +368,25 @@ export class RunManager {
       const workerWorkspace = mode === "edit" ? path.join(this.dataDir, "worktrees", id) : source;
       assertSimpleGlobRoot(workerWorkspace);
       if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
-      const limits: RunLimits = {
-        timeoutSeconds: options.timeoutSeconds, maxTurns: options.maxTurns,
-        maxEventBytes: this.config.limits.maxEventBytes,
-        maxTranscriptBytes: this.config.limits.maxTranscriptBytes,
-        maxArtifactBytes: this.config.limits.maxArtifactBytes,
-        ...(this.config.limits.maxTokens === undefined ? {} : { maxTokens: this.config.limits.maxTokens }),
-        ...(this.config.limits.maxCostUsd === undefined ? {} : { maxCostUsd: this.config.limits.maxCostUsd }),
-        maxModelCalls: turnBackstop(options.maxTurns)
-      };
+      const limits = this.dispatchLimits(mode, options.maxTurns, options.timeoutSeconds);
+      const baseCommit = mode === "edit" ? checkedBase ?? await this.editBaseCommit(source, options.baseRef ?? "HEAD", preparationDeadline) : undefined;
+      const requestSha256 = await withDeadline(dispatchDigest({ config: policy.config, policyRevision: policy.revision, mode, workspace: source, task, ...(baseCommit ? { baseCommit } : {}), contextFiles: options.contextFiles ?? [], ...(options.output ? { output: options.output } : {}), ...(options.acceptanceContract ? { acceptanceContract: options.acceptanceContract } : {}), ...(options.preparedInputs ? { preparedManifestSha256: options.preparedInputs.manifestSha256 } : {}), limits }), preparationDeadline - Date.now(), "Dispatch binding exceeded its preparation deadline.");
+      await new DispatchGrants(path.join(this.usageDataDir, "dispatch-grants")).consume({ authorizationId: options.authorizationId, attemptId: options.attemptId, requestSha256, runId: id });
+      if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor stopped after consuming this attempt; it will not be replayed.");
       const record: RunRecord = {
         schemaVersion: SCHEMA_VERSION, supervisorVersion: APP_VERSION, runId: id,
         backend: this.activeBackendKind, mode, state: "starting", sourceWorkspace: source,
         workerWorkspace, createdAt: now, updatedAt: now,
+        dispatch: { grant_id: options.authorizationId, attempt_id: options.attemptId, request_sha256: requestSha256 },
         taskSha256: createHash("sha256").update(task).digest("hex"), policyRevision: policy.revision, admittedRoot: admitted.root, exclusions: admitted.exclusions, limits,
         ...(options.output ? { output: options.output } : {})
       };
+      if (options.preparedInputs) record.preparedContextManifestSha256 = options.preparedInputs.manifestSha256;
       if (options.acceptanceContract) { record.acceptanceContract = options.acceptanceContract; record.verification = { status: "pending", contract_sha256: contractDigest(options.acceptanceContract), checks: [] }; }
       runtime = this.makeRuntime(record, path.join(this.runRoot, id), task, options.contextFiles ?? []);
+      if (options.preparedInputs) runtime.preparedInputDirectory = options.preparedInputs.directory;
       runtime.slot = true;
-      if (mode === "edit") runtime.baseRef = checkedBase ?? options.baseRef ?? "HEAD";
+      if (mode === "edit") runtime.baseRef = baseCommit!;
       this.runs.set(id, runtime);
       await createPrivateDir(runtime.directory);
       await this.persist(runtime);
@@ -507,6 +564,7 @@ export class RunManager {
       policy_revision: policy?.revision ?? null,
       backend: this.activeBackendKind,
       backend_experimental: this.activeBackendKind === "antigravity",
+      correctable_sessions: { enabled: false, reason: "Continuation is deferred; stable runs are one-shot." },
       restart_required: (policy?.bootDrift.length ?? 0) > 0,
       boot_drift: policy?.bootDrift ?? [],
       operation: input.operation,
@@ -547,6 +605,7 @@ export class RunManager {
     const body = {
       supervisor_version: runtime.record.supervisorVersion ?? null, run_id: runtime.record.runId, state: runtime.record.state, backend: runtime.record.backend,
       last_seq: runtime.eventSeq, next_after_seq: nextAfterSeq, events,
+      ...(runtime.record.sessionMode === "correctable" ? { candidate_revision: runtime.record.candidateRevision ?? null, patch_sha256: runtime.record.candidatePatchSha256 ?? null, max_corrections: runtime.record.maxCorrections ?? 0 } : {}),
       next_action: this.nextAction(runtime.record, runtime.record.state, nextAfterSeq),
       ...(runtime.record.error ? { error: runtime.record.error } : {}),
       ...(runtime.storageDegraded ? { warnings: [`Run state could not be saved (${runtime.storageDegraded.code} in ${runtime.storageDegraded.directory}); progress recorded since may be lost if the supervisor restarts.`] } : {})
@@ -566,8 +625,10 @@ export class RunManager {
     if (!result) return { supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: record.state, backend: record.backend, summary: "Run has not produced a result yet.", artifacts: [], changed_files: [], warnings: [], ...(record.error ? { error: record.error } : {}), next_action };
     const output: Record<string, unknown> = {
       schema_version: 1, supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: record.state, backend: record.backend,
+      ...(record.executionState ? { execution_state: record.executionState } : {}),
       ...(result.stopReason ? { stop_reason: result.stopReason } : {}),
       summary: result.summary ?? "",
+      ...(record.preparedContextManifestSha256 ? { prepared_context_manifest_sha256: record.preparedContextManifestSha256 } : {}),
       verification: record.verification ?? { status: "not_requested", checks: [] },
       assessments: record.assessments ?? [],
       workspace: { source: record.sourceWorkspace, worker: record.workerWorkspace },
@@ -600,7 +661,7 @@ export class RunManager {
 
   private async compactResult(runtime: Runtime, includeTranscript: boolean, reserveChars = 0): Promise<Record<string, unknown>> {
     const record = runtime.record; const result = record.result;
-    const output: Record<string, unknown> = { supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: record.state, backend: record.backend, verification: verificationSummary(record.verification), assessment: record.assessments?.at(-1)?.decision ?? "unassessed" };
+    const output: Record<string, unknown> = { supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: record.state, backend: record.backend, ...(record.executionState ? { execution_state: record.executionState } : {}), verification: verificationSummary(record.verification), assessment: record.assessments?.at(-1)?.decision ?? "unassessed" };
     if (!result) {
       output.summary = "Run has not produced a result yet.";
       output.warnings = [];
@@ -661,12 +722,16 @@ export class RunManager {
     return next;
   }
 
+  async vibeContinue(_value: ContinueToolInput, _wait?: WaitOptions): Promise<Record<string, unknown>> {
+    throw codedError("VSUP_INVALID_STATE", "Continuation is deferred; the stable Supervisor accepts one-shot runs only.");
+  }
+
   private async recordAssessment(runtime: Runtime, input: AssessmentInput): Promise<void> {
-    if (runtime.record.mode !== "edit" || !COORDINATOR_ACTION_STATES.has(runtime.record.state)) throw codedError("VSUP_INVALID_STATE", "Assess only a settled edit.");
+    if (runtime.record.mode !== "edit" || !COORDINATOR_ACTION_STATES.has(runtime.record.state) || (runtime.record.sessionMode === "correctable" && runtime.record.state !== "awaiting_validation")) throw codedError("VSUP_INVALID_STATE", "Assess only the latest exported candidate of an edit.");
     const record = runtime.record;
     const contract = record.acceptanceContract;
     const artifact = record.result?.artifacts?.find((item) => item.name === "diff.patch");
-    if (!contract || input.contract_sha256 !== contractDigest(contract) || input.patch_sha256 !== artifact?.sha256) throw codedError("VSUP_INVALID_ARGUMENT", "Assessment does not match the frozen contract and patch.");
+    if (!contract || input.contract_sha256 !== contractDigest(contract) || input.patch_sha256 !== artifact?.sha256 || (record.sessionMode === "correctable" && (input.patch_sha256 !== record.candidatePatchSha256 || input.candidate_revision !== record.candidateRevision))) throw codedError("VSUP_INVALID_ARGUMENT", "Assessment does not match the frozen contract and latest candidate revision and patch.");
     const verification = await verifySaved(runtime.directory, contract, record.limits.maxArtifactBytes);
     if (input.decision === "accepted" && (verification.status !== "passed" || verification.patch_sha256 !== input.patch_sha256 || contract.required_validations.some((id) => !input.validations.some((item) => item.id === id && item.status === "passed")))) throw codedError("VSUP_INVALID_STATE", "Acceptance requires automated PASS and all required coordinator validations.");
     if ((record.assessments?.length ?? 0) >= 100) throw codedError("VSUP_OUTPUT_LIMIT", "Assessment history is full.");
@@ -681,8 +746,10 @@ export class RunManager {
   private async closeRun(runtime: Runtime, cleanupWanted: boolean): Promise<Record<string, unknown>> {
     const record = runtime.record;
     if (record.state === "closed") return this.closeOutcome(runtime, cleanupWanted ? await this.cleanupWorktree(runtime) : { removed: false });
+    const acceptedLatest = record.state === "awaiting_validation" && record.sessionMode === "correctable" && record.assessments?.some((assessment) => assessment.decision === "accepted" && assessment.candidate_revision === record.candidateRevision && assessment.patch_sha256 === record.candidatePatchSha256);
+    if (acceptedLatest) await this.setState(runtime, "completed", { executionState: "completed", finishedAt: new Date().toISOString() });
     this.clearProgress(runtime);
-    if (!isTerminal(record.state)) {
+    if (!isTerminal(record.state) && record.state !== "completed") {
       const outcome = this.requestOutcome(runtime, { state: "cancelled" });
       try { await this.cancelBackendSession(runtime); }
       catch (error) { return this.unverifiedWorkerOutcome(runtime, error); }
@@ -991,7 +1058,7 @@ export class RunManager {
   }
 
   private makeRuntime(record: RunRecord, directory: string, task: string, contextFiles: string[], lazy = false): Runtime {
-    return { record, directory, task, contextFiles, events: [], eventSeq: 0, eventBytes: 0, ...(lazy ? {} : { loading: Promise.resolve() }), transcript: "", serial: Promise.resolve(), slot: false, cancelRequested: false, started: false, closedHandles: new Set(), transcriptOverflow: false, persistChain: Promise.resolve(), closeChain: Promise.resolve(), waiters: new Set() };
+    return { record, directory, task, contextFiles, events: [], eventSeq: 0, eventBytes: 0, ...(lazy ? {} : { loading: Promise.resolve() }), transcript: "", serial: Promise.resolve(), slot: false, cancelRequested: false, started: false, closedHandles: new Set(), transcriptOverflow: false, persistChain: Promise.resolve(), closeChain: Promise.resolve(), continuationChain: Promise.resolve(), candidateRevision: 0, correctionCount: 0, waiters: new Set() };
   }
 
   private async loadDefaultBackends(): Promise<void> {
@@ -1028,15 +1095,42 @@ export class RunManager {
       if (snapshotTask) await this.persist(runtime);
       if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
       const contextFiles = runtime.contextFiles.map((file) => path.resolve(runtime.record.sourceWorkspace, file));
+      let preparedContextFiles: NonNullable<StartRunInput["preparedContextFiles"]> | undefined;
+      if (runtime.preparedInputDirectory) {
+        const selectedPolicy = await this.admissionPolicy();
+        if (selectedPolicy.revision !== runtime.record.policyRevision || !baseRef) throw codedError("VSUP_READINESS_RECEIPT_INVALID", "Prepared input authorization or edit base changed before dispatch.");
+        const verified = await verifyTaskInputs(runtime.preparedInputDirectory, { allowedRoots: selectedPolicy.config.allowedWorkspaceRoots, exclusions: runtime.record.exclusions ?? [] });
+        if (verified.manifest_sha256 !== runtime.record.preparedContextManifestSha256) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input manifest digest differs from the selected start request.");
+        const manifest = taskInputManifestSchema.parse(JSON.parse((await readOwnedFile(path.join(runtime.preparedInputDirectory, "manifest.json"), 256 * 1024)).toString("utf8")));
+        if (manifest.base_commit !== baseRef || manifest.source !== runtime.record.sourceWorkspace) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs are stale for this edit base; prepare them again from the current base.");
+        const contract = runtime.record.acceptanceContract;
+        if (!contract || manifest.contract_sha256 !== contractDigest(contract) || manifest.allowed_output_paths.some((relative) => !contract.allowed_changed_paths.includes(relative))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs do not bind the frozen acceptance contract and output scope.");
+        if (manifest.files.some((file) => file.provenance !== "committed" && manifest.allowed_output_paths.includes(file.path))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input overlaps an editable output with dirty source bytes; re-prepare from the worker base or select read-only context files.");
+        preparedContextFiles = [];
+        for (const file of manifest.files) {
+          const content = await readOwnedFile(path.join(runtime.preparedInputDirectory, "context", file.path), 128 * 1024);
+          const text = content.toString("utf8");
+          if (!Buffer.from(text, "utf8").equals(content)) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared context is not valid UTF-8 text.");
+          preparedContextFiles.push({ ...file, content: text });
+        }
+      }
       const limits = runtime.record.limits;
       const input = {
         runId: runtime.record.runId, mode: runtime.record.mode, task: runtime.task,
         cwd: runtime.record.sourceWorkspace, workerWorkspace, runDirectory: runtime.directory,
         ...(baseRef ? { baseRef } : {}), ...(contextFiles.length ? { contextFiles } : {}),
         ...(runtime.record.output ? { output: runtime.record.output } : {}),
+        ...(runtime.record.sessionMode ? { sessionMode: runtime.record.sessionMode } : {}),
+        ...(runtime.record.maxCorrections === undefined ? {} : { maxCorrections: runtime.record.maxCorrections }),
+        ...(preparedContextFiles ? { preparedContextManifestSha256: runtime.record.preparedContextManifestSha256, preparedContextFiles } : {}),
         exclusions: runtime.record.exclusions ?? [],
         limits
       };
+      if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
+      const currentPolicy = await this.admissionPolicy();
+      if (currentPolicy.revision !== runtime.record.policyRevision) throw codedError("VSUP_AUTHORIZATION_INVALID", "The dispatch policy changed after attempt consumption.");
+      const launchDigest = await dispatchDigest({ config: currentPolicy.config, policyRevision: currentPolicy.revision, mode: runtime.record.mode, workspace: runtime.record.sourceWorkspace, task: runtime.task, ...(baseRef ? { baseCommit: baseRef } : {}), contextFiles: runtime.contextFiles, ...(runtime.record.output ? { output: runtime.record.output } : {}), ...(runtime.record.acceptanceContract ? { acceptanceContract: runtime.record.acceptanceContract } : {}), ...(runtime.record.preparedContextManifestSha256 ? { preparedManifestSha256: runtime.record.preparedContextManifestSha256 } : {}), limits });
+      if (launchDigest !== runtime.record.dispatch?.request_sha256) throw codedError("VSUP_AUTHORIZATION_INVALID", "Dispatch inputs changed after attempt consumption; this attempt will not be replayed.");
       if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
       const result = await backend.start(input, this.callbacks(runtime));
       if (runtime.cancelRequested || isTerminal(runtime.record.state) || runtime.record.state === "closing" || SETTLED_RESULT_STATES.has(runtime.record.state)) {
@@ -1171,6 +1265,10 @@ export class RunManager {
     if (approvals) runtime.approvals = approvals;
     const outcome = this.reportedOutcome(runtime, state, recordUpdate.error);
     if (outcome && runtime.record.state === "completed") { await this.settle(runtime, outcome); return; }
+    if (state === "awaiting_validation") {
+      await this.settle(runtime, { state: "failed", error: supervisorError("VSUP_INVALID_STATE", "A one-shot backend cannot retain a session for continuation.") });
+      return;
+    }
     if (recordUpdate.preparation) runtime.record.preparation = recordUpdate.preparation;
     if (recordUpdate.modelObservations) runtime.record.modelObservations = recordUpdate.modelObservations;
     if (recordUpdate.usage) runtime.record.usage = recordUpdate.usage;
@@ -1325,6 +1423,32 @@ export class RunManager {
     catch (error) { throw asStorageError(error, runtime.directory); }
   }
 
+  private async archiveCandidateRevision(runtime: Runtime, patchSha256: string, verification: RunRecord["verification"]): Promise<number> {
+    const revision = runtime.candidateRevision;
+    const root = path.join(runtime.directory, "artifacts", "revisions");
+    const directory = path.join(root, `revision-${revision}`);
+    if (await lstat(directory).then(() => true, () => false)) throw codedError("VSUP_INVALID_STATE", "Candidate revision storage already exists; refusing to overwrite prior evidence.");
+    await createPrivateDir(directory);
+    const latest = runtime.record.result?.artifacts ?? [];
+    const selected = latest.filter((artifact) => ["diff.patch", "diff.stat", "changed-files.json"].includes(artifact.name));
+    const sizes: number[] = [];
+    for (const artifact of selected) {
+      const content = await readOwnedFile(artifact.path, runtime.record.limits.maxArtifactBytes);
+      const target = path.join(directory, artifact.name);
+      await writeFile(target, content, { mode: 0o600, flag: "wx" });
+      await chmod(target, 0o400);
+      sizes.push(content.length);
+    }
+    const verificationBytes = Buffer.from(JSON.stringify(verification ?? { status: "incomplete", checks: [] }, null, 2) + "\n");
+    await writeFile(path.join(directory, "verification.json"), verificationBytes, { mode: 0o600, flag: "wx" });
+    await chmod(path.join(directory, "verification.json"), 0o400);
+    sizes.push(verificationBytes.length);
+    const total = sizes.reduce((sum, size) => sum + size, 0);
+    const cumulative = (runtime.record.candidateRevisions ?? []).reduce((sum, item) => sum + item.artifactBytes, 0) + total;
+    if (cumulative > runtime.record.limits.maxArtifactBytes) throw codedError("VSUP_OUTPUT_LIMIT", "Cumulative candidate revision artifacts exceeded the original run artifact limit.");
+    return total;
+  }
+
   private async writeFallbackResult(runtime: Runtime, resultState: RunState, warning = ARTIFACTS_INCOMPLETE_WARNING): Promise<void> {
     const previous = runtime.record.result;
     const warnings = withoutStopReasonWarnings(previous?.warnings ?? []);
@@ -1344,9 +1468,11 @@ export class RunManager {
     return {
       schema_version: 1, supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: resultState, backend: record.backend,
       ...(result?.stopReason ? { stop_reason: result.stopReason } : {}),
+      ...(record.sessionMode === "correctable" ? { candidate_revision: record.candidateRevision ?? null, candidate_patch_sha256: record.candidatePatchSha256 ?? null, candidate_revisions: record.candidateRevisions ?? [] } : {}),
+      ...(record.preparedContextManifestSha256 ? { prepared_context_manifest_sha256: record.preparedContextManifestSha256 } : {}),
       summary: result?.summary ?? "",
       verification: record.verification ?? { status: "not_requested", checks: [] },
-      assessments: record.assessments ?? [],
+      assessments: record.sessionMode === "correctable" ? (record.assessments ?? []).filter((assessment) => assessment.candidate_revision === record.candidateRevision && assessment.patch_sha256 === record.candidatePatchSha256) : record.assessments ?? [],
       workspace: { source: record.sourceWorkspace, worker: record.workerWorkspace },
       artifacts: (result?.artifacts ?? []).map(artifactToWire), changed_files: result?.changedFiles ?? [],
       ...(record.error ? { error: record.error } : {}),
@@ -1558,10 +1684,11 @@ export class RunManager {
     });
   }
 
-  private async setState(runtime: Runtime, state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "modelObservations" | "preparation"> & { startedAt?: string; finishedAt?: string }>): Promise<void> {
+  private async setState(runtime: Runtime, state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "modelObservations" | "preparation" | "executionState" | "candidateRevision" | "candidatePatchSha256"> & { startedAt?: string; finishedAt?: string }>): Promise<void> {
     if (isTerminal(runtime.record.state) && state !== "closing" && state !== "closed") return;
     assertTransition(runtime.record.state, state);
     if (state === "completed" || state === "failed" || state === "cancelled") runtime.record.executionState = state;
+    if (update?.executionState) runtime.record.executionState = update.executionState;
     else if ((state === "closing" || state === "closed") && !runtime.record.executionState && (runtime.record.state === "completed" || runtime.record.state === "failed" || runtime.record.state === "cancelled")) runtime.record.executionState = runtime.record.state;
     runtime.record.state = state;
     runtime.record.updatedAt = new Date().toISOString();
@@ -1571,6 +1698,8 @@ export class RunManager {
     if (update?.result) runtime.record.result = update.result;
     if (update?.error) runtime.record.error = update.error;
     if (update?.process) runtime.record.process = update.process;
+    if (update?.candidateRevision !== undefined) runtime.record.candidateRevision = update.candidateRevision;
+    if (update?.candidatePatchSha256) runtime.record.candidatePatchSha256 = update.candidatePatchSha256;
     if (update?.startedAt) runtime.record.startedAt = update.startedAt;
     if (update?.finishedAt) runtime.record.finishedAt = update.finishedAt;
     if ((isTerminal(state) || state === "completed") && runtime.timer) clearTimeout(runtime.timer);
@@ -1676,6 +1805,7 @@ export class RunManager {
 
   private nextAction(record: RunRecord, state: RunState, afterSeq?: number): string {
     switch (state) {
+      case "awaiting_validation": return "This historical correction record cannot continue; inspect its preserved artifacts and close it.";
       case "completed": return "Check stop_reason and warnings before trusting the result; call vibe_close when done.";
       case "failed":
       case "cancelled": return "Read error and warnings; call vibe_close when done.";

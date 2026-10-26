@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { BUNDLED_SKILL_NAMES } from '../../src/backends/app-server/bundled-skills.js';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -415,6 +416,26 @@ describe('app-server backend: approvals and the event audit', () => {
     expect(terminal.state).toBe('completed');
     expect(harness.eventsOfType('tool_denied')[0]?.data).toMatchObject({ tool: 'file_system.read_file', outcome: 'permission_denied_by_policy' });
     expect(harness.eventsOfType('tool_call')).toHaveLength(0);
+  });
+
+  it('stops after three structured shell denials and preserves all denial events', async () => {
+    const harness = new Harness({
+      name: 'three-shell-denials',
+      steps: [
+        { op: 'call', tool: 'terminal.run_command', mode: 'never', generic: true, input: {} },
+        { op: 'call', tool: 'terminal.run_command', mode: 'never', generic: true, input: {} },
+        { op: 'call', tool: 'terminal.run_command', mode: 'never', generic: true, input: {} },
+        { op: 'say', text: 'This text should not make the denied requests safe.' }
+      ]
+    });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal).message).toContain('three consecutive denied shell or network requests');
+    expect(harness.eventsOfType('tool_denied')).toHaveLength(3);
+    expect(harness.eventsOfType('tool_denied').every((event) => event.data.reason)).toBe(true);
+    expect(harness.eventsOfType('tool_call')).toHaveLength(0);
+    harness.expectCleanedUp();
   });
 
   it('fails the run when an off-profile tool was executed', async () => {
@@ -900,7 +921,7 @@ describe('app-server backend: probe and runtime check', () => {
     const harness = new Harness('allowed-call');
     const probe = await harness.backend.probe();
 
-    expect(probe).toMatchObject({ available: true, version: '2.26.1' });
+    expect(probe).toMatchObject({ available: true, version: '3.0.2' });
     expect(harness.log()).toEqual([]);
 
     const failing = new AppServerBackend(DEFAULT_CONFIG, { executable: '/x/vibe-app-server', preparation: { check: async () => ({ status: "passed" as const, candidate_sha256: null, version: "fixture", reason: "Fake ACP fixture evidence only" }) }, pin: { verify: async () => { throw new PinCheckError('file-mismatch', 'differs'); } } });
@@ -917,7 +938,7 @@ describe('app-server backend: probe and runtime check', () => {
       chmodSync(path.join(base, 'vibe'), 0o755);
       chmodSync(path.join(base, 'vibe-app-server'), 0o755);
       const found = await new AppServerBackend({ ...DEFAULT_CONFIG, paths: { vibe: path.join(base, 'vibe') } }).runtimeCheck();
-      expect(found).toMatchObject({ executable_found: true, resolved_executable: path.join(base, 'vibe-app-server'), pinned_version: '2.26.1', version_verified: false });
+      expect(found).toMatchObject({ executable_found: true, resolved_executable: path.join(base, 'vibe-app-server'), pinned_version: '3.0.2', version_verified: false });
       rmSync(path.join(base, 'vibe-app-server'));
       const missing = await new AppServerBackend({ ...DEFAULT_CONFIG, paths: { vibe: path.join(base, 'vibe') } }).runtimeCheck();
       expect(missing).toMatchObject({ executable_found: false, resolved_executable: null });
@@ -1006,6 +1027,85 @@ describe('app-server backend: session handoff', () => {
     expect(terminal.state).toBe('failed');
     expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'readback_mismatch', fields: ['config.tools.read_file.permission'] } });
     expect(harness.fixtureEvents('interrupt').length).toBeLessThanOrEqual(1);
+    harness.expectCleanedUp();
+  });
+});
+
+describe('app-server backend: correctable same-session turns', () => {
+  it('continues the live session with a correction-only prompt and no new process', async () => {
+    const harness = new Harness('allowed-call');
+    harness.input.sessionMode = 'correctable';
+    const started = await harness.start();
+    harness.handle = started.handle;
+
+    const first = await waitFor(() => harness.states, (states) => states.some((item) => item.state === 'awaiting_validation'));
+    expect(first.at(-1)?.state).toBe('awaiting_validation');
+    await harness.backend.continue(started.handle, 'Fix the typo in the candidate.');
+    const second = await waitFor(() => harness.states, (states) => states.filter((item) => item.state === 'awaiting_validation').length === 2);
+
+    const turns = harness.frames('turn/start');
+    expect(turns).toHaveLength(2);
+    expect((turns[0]?.params as Json).sessionId).toBe((turns[1]?.params as Json).sessionId);
+    expect(harness.log().filter((entry) => entry.kind === 'start')).toHaveLength(1);
+    const secondPrompt = (((turns[1]?.params as Json).message as Array<{ text: string }>)[0]?.text) ?? '';
+    expect(secondPrompt).toContain('Apply only this correction');
+    expect(secondPrompt).toContain('Fix the typo in the candidate.');
+    expect(secondPrompt).not.toContain('Review the repository.');
+    expect(harness.eventsOfType('tool_call')).toHaveLength(2);
+    expect(second.filter((item) => item.state === 'awaiting_validation')).toHaveLength(2);
+
+    await harness.backend.close(started.handle);
+    harness.expectCleanedUp();
+  });
+
+  it('refuses continuation when the verified pin identity changes during validation', async () => {
+    let checks = 0;
+    const harness = new Harness('allowed-call', {
+      options: {
+        pin: {
+          verify: async (executable) => ({
+            executable,
+            vibeVersion: '3.0.2',
+            manifestSha256: 'a'.repeat(64),
+            recordSha256: (checks++ === 0 ? 'b' : 'c').repeat(64)
+          })
+        }
+      }
+    });
+    harness.input.sessionMode = 'correctable';
+    const started = await harness.start();
+    harness.handle = started.handle;
+    await waitFor(() => harness.states, (states) => states.some((item) => item.state === 'awaiting_validation'));
+
+    await expect(harness.backend.validateContinuation(started.handle)).rejects.toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED' });
+    expect(harness.frames('turn/start')).toHaveLength(1);
+    await harness.backend.close(started.handle);
+    harness.expectCleanedUp();
+  });
+
+  it('keeps the original deadline active while awaiting validation and cleans up on expiry', async () => {
+    const harness = new Harness('allowed-call', { limits: { timeoutSeconds: 4 } });
+    harness.input.sessionMode = 'correctable';
+    const started = await harness.start();
+    harness.handle = started.handle;
+    await waitFor(() => harness.states, (states) => states.some((item) => item.state === 'awaiting_validation'));
+    const failed = await waitFor(() => harness.states, (states) => states.some((item) => item.state === 'failed'), 6000);
+
+    expect(failed.find((item) => item.state === 'failed')?.update?.error).toMatchObject({ code: 'VSUP_TIMEOUT' });
+    harness.expectCleanedUp();
+  });
+
+  it('fails and cleans up if the app-server disconnects while awaiting validation', async () => {
+    const harness = new Harness('allowed-call');
+    harness.input.sessionMode = 'correctable';
+    const started = await harness.start();
+    harness.handle = started.handle;
+    await waitFor(() => harness.states, (states) => states.some((item) => item.state === 'awaiting_validation'));
+    if (harness.pid === undefined) throw new Error('The fake app-server did not report its process id');
+    process.kill(harness.pid, 'SIGKILL');
+    const failed = await waitFor(() => harness.states, (states) => states.some((item) => item.state === 'failed'));
+
+    expect(failed.find((item) => item.state === 'failed')?.update?.error).toMatchObject({ code: 'VSUP_BACKEND_CRASHED' });
     harness.expectCleanedUp();
   });
 });
@@ -1395,7 +1495,7 @@ describe('app-server backend: per-workspace exclusions', () => {
 });
 
 describe('app-server backend: pin identity and approval ledger', () => {
-  const identity: PinIdentity = { vibeVersion: '2.26.1', manifestSha256: 'a1'.repeat(32), recordSha256: 'b2'.repeat(32) };
+  const identity: PinIdentity = { vibeVersion: '3.0.2', manifestSha256: 'a1'.repeat(32), recordSha256: 'b2'.repeat(32) };
 
   it('reports the verified pin identity in the first running update only', async () => {
     const harness = new Harness('allowed-call', { options: { pin: { verify: async () => ({ ...identity }) } } });
@@ -1477,7 +1577,7 @@ describe('app-server backend through the run manager: pin, ledger and export', (
     const data = path.join(base, 'data');
     const manager = new RunManager(config, data, [backend]);
     managers.push(manager);
-    const finished = await manager.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 60 });
+    const finished = await authorizedReviewStart(manager, { task: 'Review.', cwd: source, wait_seconds: 60 });
     expect(finished.state).toBe('completed');
     const directory = path.join(data, 'runs', finished.run_id);
 

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPrivateDir, expandHome, isPathWithinRoot } from '../security/paths.js';
 import { configFingerprint, executableSearchPath, getDataDir } from '../config/config.js';
-import { SUPPORTED_VIBE } from '../backends/app-server/supported-vibe.js';
+import { selectedVibeVersion } from '../backends/app-server/supported-vibe.js';
 import { inspectOwnerLock } from '../core/owner-lock.js';
 import type { BackendKind, SupervisorBackend, SupervisorConfig } from '../contracts.js';
 import { APP_VERSION } from '../version.js';
@@ -86,7 +86,7 @@ async function appServerCheck(config: SupervisorConfig, injected: SupervisorBack
   const backend = injected ?? new (await import('../backends/app-server.js')).AppServerBackend(config);
   const capabilities = await backend.probe();
   if (capabilities.available) {
-    return { name: 'vibe', ok: true, status: 'ok', ...(capabilities.version ? { version: capabilities.version } : {}), message: `The installed vibe-app-server matches the pinned manifest for Vibe ${SUPPORTED_VIBE}; the installed files were hashed and Vibe was not launched.` };
+    return { name: 'vibe', ok: true, status: 'ok', ...(capabilities.version ? { version: capabilities.version } : {}), message: `The installed vibe-app-server matches the pinned manifest for Vibe ${selectedVibeVersion(config.vibeVersion)}; the installed files were hashed and Vibe was not launched.` };
   }
   const reason = typeof capabilities.details?.reason === 'string' ? capabilities.details.reason : 'The app-server pin check failed.';
   const code = typeof capabilities.details?.code === 'string' ? ` [${capabilities.details.code}]` : '';

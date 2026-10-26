@@ -1,3 +1,11 @@
+# Current stability implementation — 2026-10-24
+
+The immediate path is exactly Vibe 3.0.2, five MCP tools and one-shot execution. Local administrative dispatch grants bind each owner-authorized task to one durable attempt across isolated sessions. Continuation and Antigravity qualification remain separate deferred streams. See [ADR 0010](../docs/adr/0010-dispatch-attempt-authorization.md) for the implemented dispatch contract.
+
+Execution order: independently review the combined source, pass deterministic release verification, freeze archive and kit, verify the installed identity, run one matched no-inference preparation check, and verify the actual Desktop-connected five-tool surface. Hosted inference is paused; another hosted trial requires a fresh owner instruction and reviewed contract. No edit candidate from the historical four-start fixture sitting was accepted.
+
+All dated plans below are historical context. They neither restore obsolete version support nor authorize installation, hosted trials, publication or a retry. Candidate, runtime, archive, preparation and connected-server identities remain separate. Clean-account qualification remains pending until an account is available.
+
 # vibe-supervisor development plan
 
 One plan for everything from here: landing the integrated 2.0.1 and 2.0.2 on main, packaging and proving them on the target, publishing them as the first 2.x releases, hardening and unifying the Antigravity execution backend, the 2.1 and 2.2 lines, the outreach that rides on them, and what never gets built. Written 2026-10-15 and revised on 2026-10-16 after the target sitting and on 2026-10-17 to reflect the 2.0.2 target evidence (`origin/codex/package-kit-identity`), the 2.1 Wave 0–3 implementation (`origin/claude/2.1-wave-1`), and the hardened Antigravity execution backend (`origin/explore_project_details`, since merged into main and deleted). Revised 2026-10-19 for the Antigravity cold review and the owner's decision to ship that backend in 2.1.0 as experimental and off by default ([6.2](#62-antigravity-cold-review-and-target-probes-2026-10-19)). Not shipped.

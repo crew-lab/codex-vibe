@@ -3,13 +3,13 @@ import type { SupervisorError, SupervisorErrorCode } from '../../contracts.js';
 import { describeMissing, interpreterMissingMessage } from './executable.js';
 import { SUPPORTED_VIBE } from './supported-vibe.js';
 
-export function versionUnsupported(detected: string): SupervisorError {
-  return supervisorError('VSUP_VIBE_VERSION_UNSUPPORTED', `Found Vibe ${detected}; this release supports exactly Vibe ${SUPPORTED_VIBE}.`, { detected_version: detected });
+export function versionUnsupported(detected: string, expected = SUPPORTED_VIBE): SupervisorError {
+  return supervisorError('VSUP_VIBE_VERSION_UNSUPPORTED', `Found Vibe ${detected}; this configuration supports exactly Vibe ${expected}.`, { detected_version: detected, expected_version: expected });
 }
 
-export function versionMismatchOnStderr(stderr: string): SupervisorError | undefined {
+export function versionMismatchOnStderr(stderr: string, expected = SUPPORTED_VIBE): SupervisorError | undefined {
   const detected = stderr.match(/supports exactly \S+; found (\S+)/)?.[1];
-  return detected ? versionUnsupported(detected) : undefined;
+  return detected ? versionUnsupported(detected, expected) : undefined;
 }
 
 const RATE_LIMIT_PATTERN = /\b(?:http|status(?: code)?|error|code)\W{0,3}429\b|\b429\W{1,3}(?:too many|rate)|\(429\)|\btoo many requests\b/i;
@@ -37,8 +37,8 @@ function isCodedError(error: unknown): error is SupervisorError {
   return typeof error === 'object' && error !== null && typeof (error as { code?: unknown }).code === 'string' && (error as { code: string }).code.startsWith('VSUP_');
 }
 
-export async function classifyStartFailure(executable: string, error: unknown, stderr = ''): Promise<unknown> {
-  const mismatch = versionMismatchOnStderr(stderr);
+export async function classifyStartFailure(executable: string, error: unknown, stderr = '', expected = SUPPORTED_VIBE): Promise<unknown> {
+  const mismatch = versionMismatchOnStderr(stderr, expected);
   if (mismatch) return mismatch;
   if (isCodedError(error)) return error;
   const missing = await describeMissing(executable, error);

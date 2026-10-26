@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -63,7 +64,7 @@ async function reviewWithScenario(limits: Partial<SupervisorConfig['limits']> = 
   });
   const manager = new RunManager(config, data, [backend]);
   managers.push(manager);
-  const finished = await manager.reviewStart({ task: 'Review.', cwd: source, wait_seconds: 30 });
+  const finished = await authorizedReviewStart(manager, { task: 'Review.', cwd: source, wait_seconds: 30 });
   expect(finished.state).toBe('completed');
   const directory = path.join(data, 'runs', finished.run_id);
   return {

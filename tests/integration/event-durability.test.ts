@@ -1,3 +1,4 @@
+import { authorizedReviewStart } from "../support/authorized-start.js";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -29,7 +30,7 @@ async function harness(overrides: Partial<typeof TEST_CONFIG> = {}) {
   await mkdir(source); await writeFile(path.join(source, 'file.txt'), 'content\n');
   const backend = new FakeBackend();
   const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source], ...overrides }, data, [backend]);
-  const started = await manager.reviewStart({ task: 'review', cwd: source });
+  const started = await authorizedReviewStart(manager, { task: 'review', cwd: source });
   for (let attempt = 0; attempt < 500 && (await manager.status({ run_id: started.run_id })).state !== 'running'; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
   return { manager, backend, runId: started.run_id, callbacks: backend.callbacks.get(started.run_id)!, eventsFile: path.join(data, 'runs', started.run_id, 'events.ndjson'), metaFile: path.join(data, 'runs', started.run_id, 'meta.json') };
 }

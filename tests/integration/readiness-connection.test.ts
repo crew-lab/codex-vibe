@@ -57,7 +57,7 @@ describe('workspace readiness over a real --isolated stdio connection', () => {
     expect(await readFile(path.join(session, 'config.toml'), 'utf8')).toBe(snapshot);
 
     const altered = `${String(after.readiness_receipt).slice(0, -1)}${String(after.readiness_receipt).endsWith('A') ? 'B' : 'A'}`;
-    const refused = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: second, readiness_receipt: altered } });
+    const refused = await client.callTool({ name: 'vibe_review_start', arguments: { task: 'review', cwd: second, readiness_receipt: altered, authorization_id: '123e4567-e89b-42d3-a456-426614174001', attempt_id: '123e4567-e89b-42d3-a456-426614174002' } });
     expect(refused.isError).toBe(true);
     expect(text(refused)).toContain('VSUP_READINESS_RECEIPT_INVALID');
     const both = await client.callTool({ name: 'vibe_status', arguments: { run_id: '123e4567-e89b-42d3-a456-426614174000', workspace: second, operation: 'review' } });

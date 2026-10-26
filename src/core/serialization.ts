@@ -65,6 +65,13 @@ export function runToWire(run: RunRecord): JsonObject {
     backend: run.backend,
     mode: run.mode,
     ...(run.output ? { output: run.output } : {}),
+    ...(run.sessionMode ? { session_mode: run.sessionMode } : {}),
+    ...(run.maxCorrections === undefined ? {} : { max_corrections: run.maxCorrections }),
+    ...(run.candidateRevision === undefined ? {} : { candidate_revision: run.candidateRevision }),
+    ...(run.candidatePatchSha256 ? { candidate_patch_sha256: run.candidatePatchSha256 } : {}),
+    ...(run.correctionMessageHashes ? { correction_message_hashes: run.correctionMessageHashes } : {}),
+    ...(run.candidateRevisions ? { candidate_revisions: run.candidateRevisions.map((item) => ({ revision: item.revision, patch_sha256: item.patchSha256, contract_sha256: item.contractSha256, artifact_bytes: item.artifactBytes, verification: item.verification })) } : {}),
+    ...(run.preparedContextManifestSha256 ? { prepared_context_manifest_sha256: run.preparedContextManifestSha256 } : {}),
     state: run.state,
     ...(run.executionState ? { execution_state: run.executionState } : {}),
     source_workspace: run.sourceWorkspace,
@@ -80,6 +87,7 @@ export function runToWire(run: RunRecord): JsonObject {
     ...(run.startedAt ? { started_at: run.startedAt } : {}),
     ...(run.finishedAt ? { finished_at: run.finishedAt } : {}),
     task_sha256: run.taskSha256,
+    ...(run.dispatch ? { dispatch: run.dispatch } : {}),
     ...(run.acceptanceContract ? { acceptance_contract: run.acceptanceContract } : {}),
     ...(run.verification ? { verification: run.verification } : {}),
     ...(run.assessments ? { assessments: run.assessments } : {}),
@@ -133,7 +141,44 @@ export function runFromWire(value: unknown): RunRecord {
     taskSha256: stringValue(value.task_sha256),
     limits: limitsFromWire(limits)
   };
+  if (value.dispatch !== undefined) {
+    const dispatch = asObject(value.dispatch);
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (Object.keys(dispatch).sort().join(',') !== 'attempt_id,grant_id,request_sha256' || typeof dispatch.grant_id !== 'string' || !uuid.test(dispatch.grant_id) || typeof dispatch.attempt_id !== 'string' || !uuid.test(dispatch.attempt_id) || typeof dispatch.request_sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(dispatch.request_sha256)) throw new TypeError('Invalid persisted dispatch binding');
+    run.dispatch = { grant_id: dispatch.grant_id, attempt_id: dispatch.attempt_id, request_sha256: dispatch.request_sha256 };
+  }
   if (value.output === "text" || value.output === "findings") run.output = value.output;
+  if (value.session_mode !== undefined) {
+    if (value.session_mode !== "one_shot" && value.session_mode !== "correctable") throw new TypeError("Invalid persisted session mode");
+    run.sessionMode = value.session_mode;
+  }
+  if (value.max_corrections !== undefined) {
+    if (!Number.isInteger(value.max_corrections) || (value.max_corrections as number) < 0 || (value.max_corrections as number) > 2) throw new TypeError("Invalid persisted correction limit");
+    run.maxCorrections = value.max_corrections as number;
+  }
+  if (value.candidate_revision !== undefined) {
+    if (!Number.isInteger(value.candidate_revision) || (value.candidate_revision as number) < 1 || (value.candidate_revision as number) > 3) throw new TypeError("Invalid persisted candidate revision");
+    run.candidateRevision = value.candidate_revision as number;
+  }
+  if (value.candidate_patch_sha256 !== undefined) {
+    if (typeof value.candidate_patch_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(value.candidate_patch_sha256)) throw new TypeError("Invalid persisted candidate patch digest");
+    run.candidatePatchSha256 = value.candidate_patch_sha256;
+  }
+  if (value.correction_message_hashes !== undefined) {
+    if (!Array.isArray(value.correction_message_hashes) || value.correction_message_hashes.length > 2 || value.correction_message_hashes.some((item) => typeof item !== "string" || !/^[a-f0-9]{64}$/.test(item))) throw new TypeError("Invalid persisted correction message digests");
+    run.correctionMessageHashes = value.correction_message_hashes as string[];
+  }
+  if (value.candidate_revisions !== undefined) {
+    if (!Array.isArray(value.candidate_revisions) || value.candidate_revisions.length > 3) throw new TypeError("Invalid persisted candidate revision history");
+    run.candidateRevisions = value.candidate_revisions.map((entry, index) => {
+      if (!isObject(entry) || entry.revision !== index + 1 || typeof entry.patch_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(entry.patch_sha256) || typeof entry.contract_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(entry.contract_sha256) || !Number.isSafeInteger(entry.artifact_bytes) || (entry.artifact_bytes as number) < 0) throw new TypeError("Invalid persisted candidate revision");
+      return { revision: entry.revision as number, patchSha256: entry.patch_sha256, contractSha256: entry.contract_sha256, artifactBytes: entry.artifact_bytes as number, verification: verificationSchema.parse(entry.verification) };
+    });
+  }
+  if (value.prepared_context_manifest_sha256 !== undefined) {
+    if (typeof value.prepared_context_manifest_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(value.prepared_context_manifest_sha256)) throw new TypeError("Invalid prepared input manifest digest");
+    run.preparedContextManifestSha256 = value.prepared_context_manifest_sha256;
+  }
   if (value.execution_state !== undefined) {
     if (value.execution_state !== "completed" && value.execution_state !== "failed" && value.execution_state !== "cancelled") throw new TypeError("Invalid persisted execution state");
     run.executionState = value.execution_state;
@@ -168,8 +213,15 @@ export function runFromWire(value: unknown): RunRecord {
       ...(typeof value.usage.tokens_used === "number" ? { tokensUsed: value.usage.tokens_used } : {}),
       ...(typeof value.usage.context_size === "number" ? { contextSize: value.usage.context_size } : {})
     };
-    if (isObject(value.usage.cost) && typeof value.usage.cost.amount === "number" && typeof value.usage.cost.currency === "string") usage.cost = { amount: value.usage.cost.amount, currency: value.usage.cost.currency, authoritative: false };
+    if (isObject(value.usage.cost)) {
+      if (typeof value.usage.cost.amount !== 'number' || !Number.isFinite(value.usage.cost.amount) || value.usage.cost.amount < 0 || typeof value.usage.cost.currency !== 'string' || value.usage.cost.currency.length < 1 || value.usage.cost.currency.length > 16) throw new TypeError('Invalid persisted cost amount or currency');
+      if (value.usage.cost_availability !== undefined && value.usage.cost.currency !== 'USD') throw new TypeError('Explicit cost availability requires USD currency');
+      usage.cost = { amount: value.usage.cost.amount, currency: value.usage.cost.currency, authoritative: false };
+    }
     Object.assign(usage, usageDetailsFromWire(value.usage));
+    if (usage.costAvailability === 'available' && (!usage.cost || usage.costSource !== 'runtime-stats-prices')) throw new TypeError('Available cost requires a runtime-priced amount');
+    if (usage.costAvailability === 'unavailable' && usage.cost !== undefined) throw new TypeError('Unavailable cost cannot include an amount');
+    if (usage.priceAvailability !== undefined && usage.priceSource !== 'runtime/read' && usage.priceSource !== 'unavailable') throw new TypeError('Price availability requires explicit provenance');
     const toolCalls = toolCallsFromWire(value.usage.tool_calls);
     if (toolCalls) usage.toolCalls = toolCalls;
     run.usage = usage;
@@ -244,7 +296,7 @@ function toolCallsFromWire(value: unknown): ToolCallCounts | undefined {
   return { executed, deniedByHandler, deniedByPolicy };
 }
 
-const RUN_STATES = new Set<RunRecord["state"]>(["starting", "running", "completed", "failed", "cancelled", "closing", "closed"]);
+const RUN_STATES = new Set<RunRecord["state"]>(["starting", "running", "awaiting_validation", "completed", "failed", "cancelled", "closing", "closed"]);
 const ERROR_CODES = new Set<string>(Object.keys(REMEDIATION));
 
 function resultToWire(result: NonNullable<RunRecord["result"]>): JsonObject {
@@ -310,7 +362,7 @@ function stringValue(value: unknown): string { if (typeof value !== "string") th
 function numberValue(value: unknown): number { if (typeof value !== "number" || !Number.isFinite(value)) throw new TypeError("Invalid persisted number field"); return value; }
 
 function usageDetailsToWire(usage: NonNullable<RunRecord["usage"]>): JsonObject {
-  return Object.fromEntries(([['prompt_tokens',usage.promptTokens],['completion_tokens',usage.completionTokens],['cached_tokens',usage.cachedTokens],['model_calls',usage.modelCalls],['cost_source',usage.costSource]] as const).filter(([,value]) => value !== undefined));
+  return Object.fromEntries(([['prompt_tokens',usage.promptTokens],['completion_tokens',usage.completionTokens],['cached_tokens',usage.cachedTokens],['model_calls',usage.modelCalls],['cost_source',usage.costSource],['price_availability',usage.priceAvailability],['price_source',usage.priceSource],['cost_availability',usage.costAvailability]] as const).filter(([,value]) => value !== undefined));
 }
 function usageDetailsFromWire(raw: JsonObject): Partial<NonNullable<RunRecord["usage"]>> {
   const out: Partial<NonNullable<RunRecord["usage"]>> = {};
@@ -319,6 +371,13 @@ function usageDetailsFromWire(raw: JsonObject): Partial<NonNullable<RunRecord["u
     if (typeof value === 'number' && Number.isFinite(value) && value >= 0) out[field] = value;
     else if (value === null && (field === 'cachedTokens' || field === 'modelCalls')) out[field] = null;
   }
+  if (raw.cost_source !== undefined && raw.cost_source !== 'runtime-stats-prices') throw new TypeError('Invalid persisted cost source');
   if (raw.cost_source === 'runtime-stats-prices') out.costSource = raw.cost_source;
+  if (raw.price_availability !== undefined && raw.price_availability !== 'available' && raw.price_availability !== 'unavailable') throw new TypeError('Invalid persisted price availability');
+  if (raw.price_availability === 'available' || raw.price_availability === 'unavailable') out.priceAvailability = raw.price_availability;
+  if (raw.price_source !== undefined && raw.price_source !== 'runtime/read' && raw.price_source !== 'unavailable') throw new TypeError('Invalid persisted price source');
+  if (raw.price_source === 'runtime/read' || raw.price_source === 'unavailable') out.priceSource = raw.price_source;
+  if (raw.cost_availability !== undefined && raw.cost_availability !== 'available' && raw.cost_availability !== 'unavailable') throw new TypeError('Invalid persisted cost availability');
+  if (raw.cost_availability === 'available' || raw.cost_availability === 'unavailable') out.costAvailability = raw.cost_availability;
   return out;
 }

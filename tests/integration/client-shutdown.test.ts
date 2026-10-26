@@ -6,9 +6,11 @@ import { promisify } from 'node:util';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { afterEach, describe, expect, it } from 'vitest';
+import { authorizeCli } from '../support/authorize-cli.js';
 
 const exec = promisify(execFile);
 const repo = path.resolve(import.meta.dirname, '..', '..');
+const cli = path.join(process.env.VIBE_SUPERVISOR_TEST_DIST ?? path.join(repo, 'dist'), 'cli.js');
 const server = path.join(repo, 'tests', 'fixtures', 'fake-supervisor-server.mjs');
 const canonicalTmp = await realpath(tmpdir());
 type Reply = { run_id?: string; state?: string; error?: unknown };
@@ -64,7 +66,10 @@ async function launch(box: Awaited<ReturnType<typeof sandbox>>, mode = 'exit') {
   const pid = transport.pid as number;
   strays.add(pid);
   const call = async (name: string, args: Record<string, unknown>) => {
-    const result = await client.callTool({ name, arguments: args }, { timeout: 20_000 });
+    const start = name === 'vibe_review_start' || name === 'vibe_edit_start';
+    const operation = name === 'vibe_edit_start' ? 'edit' : 'review';
+    const identifiers = start ? await authorizeCli(cli, box.config, operation, args) : {};
+    const result = await client.callTool({ name, arguments: { ...args, ...identifiers } }, { timeout: 20_000 });
     const text = (result.content as { type: string; text?: string }[]).find((part) => part.type === 'text')?.text ?? '{}';
     return (result.structuredContent ?? JSON.parse(text)) as Reply;
   };

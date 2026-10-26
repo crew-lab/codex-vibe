@@ -1,4 +1,4 @@
-import { elapsed } from './telemetry.js';
+import { elapsed, reportUsage, thinkingProvenance } from './telemetry.js';
 import { lstat, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -127,11 +127,15 @@ async function diagnosticProjection(directory: string, record: RunRecord): Promi
 export async function exportReport(options: { directory: string; output: string; include?: readonly ('patch' | 'events')[]; validationFile?: string; verifyOnly?: boolean }): Promise<Record<string, unknown>> {
   await assertOwnedDirectory(options.directory);
   const record = runFromWire(JSON.parse((await readOwnedFile(path.join(options.directory, 'meta.json'), 1024 * 1024)).toString('utf8')));
-  if (!['completed', 'failed', 'cancelled', 'closed'].includes(record.state)) throw new Error('Only settled runs may be exported');
+  if (!['awaiting_validation', 'completed', 'failed', 'cancelled', 'closed'].includes(record.state)) throw new Error('Only audited candidates and settled runs may be exported');
   const verification = await verifySaved(options.directory, record.acceptanceContract, record.limits.maxArtifactBytes);
   const patchArtifact = record.result?.artifacts?.find((item) => item.name === 'diff.patch');
   const diagnostics = await diagnosticProjection(options.directory, record);
   const approvals = await approvalLedger(options.directory, record);
+  const observations = record.modelObservations ?? [];
+  const requestedModels = observations.map((observation) => observation.requested_model);
+  const modelRequestIsProven = observations.length > 0 && observations.every((observation) => typeof observation.requested_model === 'string' && observation.requested_model_source === 'explicit-selection');
+  const requestedModel = modelRequestIsProven && requestedModels.every((value) => value === requestedModels[0]) ? requestedModels[0]! : null;
   const exportedApprovals = approvals ? Buffer.from(JSON.stringify(publicValue(exportedLedger(approvals.ledger, record)), null, 2) + '\n') : undefined;
   let external: unknown = null;
   if (options.validationFile) {
@@ -140,18 +144,30 @@ export async function exportReport(options: { directory: string; output: string;
     if (new Set(manifest.validations.map((item) => item.id)).size !== manifest.validations.length) throw new Error('Duplicate validation IDs');
     external = { source: 'coordinator-reported', ...manifest };
   }
+  const assessments = record.assessments ?? [];
+  const currentAssessment = record.sessionMode === 'correctable'
+    ? assessments.find((item) => item.candidate_revision === record.candidateRevision && item.patch_sha256 === record.candidatePatchSha256)
+    : assessments.at(-1);
   const report = publicValue({
-    schema_version: 1, run_id: record.runId, supervisor_version: record.supervisorVersion ?? null, mode: record.mode,
+    schema_version: 1, report_version: 2, run_id: record.runId, supervisor_version: record.supervisorVersion ?? null, mode: record.mode,
     execution: { state: verification.execution_state ?? record.executionState ?? (record.state === 'closed' ? 'unknown' : record.state), stop_reason: record.result?.stopReason ?? null },
-    verification: verificationSummary(verification), assessment: record.assessments?.at(-1)?.decision ?? 'unassessed', assessments: record.assessments ?? [],
-    provenance: { task_sha256: record.taskSha256, base_commit: verification.base_commit ?? record.worktree?.baseRef ?? null, patch_sha256: patchArtifact?.sha256 ?? null, contract_sha256: record.acceptanceContract ? contractDigest(record.acceptanceContract) : null, policy_revision: record.policyRevision ?? null },
+    verification: verificationSummary(verification), assessment: currentAssessment?.decision ?? 'unassessed', assessments,
+    provenance: { ...(record.dispatch ? { dispatch: record.dispatch } : {}), task_sha256: record.taskSha256, base_commit: verification.base_commit ?? record.worktree?.baseRef ?? null, patch_sha256: patchArtifact?.sha256 ?? null, contract_sha256: record.acceptanceContract ? contractDigest(record.acceptanceContract) : null, policy_revision: record.policyRevision ?? null },
     timestamps: { created: record.createdAt, launched: record.launchedAt ?? null, started: record.startedAt ?? null, finished: record.finishedAt ?? null },
     preparation: record.preparation ?? {status:"unknown"},
-    models: { observations: record.modelObservations ?? [], provider: null, underlying_model: null, unavailable_reason: "Runtime-reported session model, model name and alias are recorded when exposed; provider and underlying weights remain unverified." },
+    models: {
+      observations,
+      display_labels: observations.map((observation) => ({ session_model: observation.session_model, alias: observation.alias, reported_name: observation.reported_name ?? null })),
+      requested_model: { value: requestedModel, source: requestedModel === null ? 'unavailable' : 'explicit-selection' },
+      thinking: thinkingProvenance(observations),
+      provider: null,
+      underlying_model: null,
+      unavailable_reason: "Runtime-reported model names, aliases and thinking are labels only; provider and underlying weights remain unverified."
+    },
     durations_ms: { inference: null, finalization: null, preparation: elapsed(record.createdAt, record.launchedAt), startup: elapsed(record.launchedAt, record.startedAt), execution_and_finalization: elapsed(record.startedAt, record.finishedAt), total: elapsed(record.createdAt, record.finishedAt) },
     ...(record.pin ? { pin: pinToWire(record.pin) } : {}),
     ...(approvals && exportedApprovals ? { approvals: { file: 'approvals.json', source_sha256: approvals.sha256, exported_sha256: digest(exportedApprovals), records: approvals.ledger.records.length, truncated: approvals.ledger.truncated } } : {}),
-    usage: record.usage ?? null, limits: record.limits, warnings: record.result?.warnings ?? [], error: record.error ?? null,
+    usage: reportUsage(record.usage), limits: record.limits, warnings: record.result?.warnings ?? [], error: record.error ?? null,
     cleanup: record.cleanup ?? { worktree: 'unknown', reason: 'Cleanup evidence was not recorded or the run has not settled' }, external_validation: external
   }) as Record<string, unknown>;
   const files: Record<string, Buffer> = {

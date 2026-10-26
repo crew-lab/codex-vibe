@@ -1,3 +1,4 @@
+import { authorizedEditStart } from "../support/authorized-start.js";
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { access, appendFile, chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -69,7 +70,6 @@ const activeSlots = (manager: RunManager) => (manager as unknown as { activeSlot
 const stateOf = (manager: RunManager, runId: string) => manager.status({ run_id: runId }).then((value) => value.state as string);
 const runDir = (data: string, runId: string) => path.join(data, "runs", runId);
 const readMeta = async (data: string, runId: string) => JSON.parse(await readFile(path.join(runDir(data, runId), "meta.json"), "utf8")) as Record<string, unknown>;
-const readResult = async (data: string, runId: string) => JSON.parse(await readFile(path.join(runDir(data, runId), "result.json"), "utf8")) as { state: string; warnings: string[]; artifacts: Array<{ name: string }> };
 const exists = (file: string) => access(file).then(() => true, () => false);
 
 async function readEvents(data: string, runId: string): Promise<Array<{ type: string; data: Record<string, unknown> }>> {
@@ -83,7 +83,7 @@ async function registeredWorktrees(source: string): Promise<string[]> {
 
 async function completedEdit(context: Awaited<ReturnType<typeof setup>>, prepare?: (workspace: string) => Promise<void>) {
   context.backend.beforeReturn = async (input) => { await writeFile(path.join(input.workerWorkspace, "generated.txt"), "new output\n"); await prepare?.(input.workerWorkspace); };
-  const started = await context.manager.editStart({ task: "edit", cwd: context.source });
+  const started = await authorizedEditStart(context.manager, { task: "edit", cwd: context.source });
   await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
   await context.backend.callbacks.get(started.run_id)?.onState("completed", { result: { summary: "done" } });
   await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "completed");
@@ -94,7 +94,7 @@ describe("worktree creation", () => {
   it("records the exact detached worktree identity created for the run", async () => {
     const context = await setup();
     try {
-      const started = await context.manager.editStart({ task: "edit", cwd: context.source });
+      const started = await authorizedEditStart(context.manager, { task: "edit", cwd: context.source });
       await waitFor(() => stateOf(context.manager, started.run_id), (value) => value === "running");
       const meta = await readMeta(context.data, started.run_id);
       expect(meta.worktree).toMatchObject({ path: path.join(context.data, "worktrees", started.run_id), created_by_supervisor: true });
@@ -103,31 +103,19 @@ describe("worktree creation", () => {
     } finally { await context.manager.shutdown(); }
   });
 
-  it("fails a base_ref that does not exist with VSUP_WORKTREE_CREATE_FAILED, git's stderr, and no worktree record", async () => {
+  it("refuses a missing edit base before authorizing or creating a worktree", async () => {
     const context = await setup();
     try {
-      const started = await context.manager.editStart({ task: "edit", cwd: context.source, base_ref: "no-such-ref" });
-      const status = await waitFor(() => context.manager.status({ run_id: started.run_id }), (value) => value.state === "failed");
-      expect(status.state).toBe("failed");
-      const error = status.error as { code: string; details?: { stderr_tail?: string } };
-      expect(error.code).toBe("VSUP_WORKTREE_CREATE_FAILED");
-      expect(error.details?.stderr_tail).toEqual(expect.stringContaining("fatal"));
-      expect(error.details?.stderr_tail?.length).toBeLessThanOrEqual(1024);
-      const meta = await waitFor(() => readMeta(context.data, started.run_id), (value) => value.state === "failed");
-      expect(meta.worktree).toBeUndefined();
-      expect(meta.error).toMatchObject({ code: "VSUP_WORKTREE_CREATE_FAILED" });
-      expect((await readResult(context.data, started.run_id)).state).toBe("failed");
-      expect(await exists(path.join(context.data, "worktrees", started.run_id))).toBe(false);
-      expect(await waitFor(async () => activeSlots(context.manager), (value) => value === 0)).toBe(0);
+      await expect(authorizedEditStart(context.manager, { task: "edit", cwd: context.source, base_ref: "no-such-ref" })).rejects.toMatchObject({ code: "VSUP_WORKTREE_CREATE_FAILED", details: { reason: "base_ref_unresolved" } });
+      expect(await exists(path.join(context.data, "worktrees"))).toBe(false);
+      expect(activeSlots(context.manager)).toBe(0);
     } finally { await context.manager.shutdown(); }
   });
 
-  it("fails an edit run in a directory that is not a repository with VSUP_WORKTREE_CREATE_FAILED", async () => {
+  it("refuses a non-repository edit before authorization", async () => {
     const context = await setup({ git: false });
     try {
-      const started = await context.manager.editStart({ task: "edit", cwd: context.source });
-      const status = await waitFor(() => context.manager.status({ run_id: started.run_id }), (value) => value.state === "failed");
-      expect((status.error as { code: string }).code).toBe("VSUP_WORKTREE_CREATE_FAILED");
+      await expect(authorizedEditStart(context.manager, { task: "edit", cwd: context.source })).rejects.toMatchObject({ code: "VSUP_WORKTREE_CREATE_FAILED" });
     } finally { await context.manager.shutdown(); }
   });
 
@@ -266,7 +254,7 @@ describe("close", () => {
     await chmod(wrapper, 0o755);
     process.env.PATH = `${bin}${path.delimiter}${savedPath ?? ""}`;
     try {
-      const started = await context.manager.editStart({ task: "delayed edit", cwd: context.source });
+      const started = await authorizedEditStart(context.manager, { task: "delayed edit", cwd: context.source });
       const worktree = path.join(context.data, "worktrees", started.run_id);
       await waitFor(() => exists(marker), Boolean);
       let closeFinished = false;
@@ -293,7 +281,7 @@ describe("close", () => {
     await chmod(wrapper, 0o755);
     process.env.PATH = `${bin}${path.delimiter}${savedPath ?? ""}`;
     try {
-      const started = await context.manager.editStart({ task: "delayed shutdown edit", cwd: context.source });
+      const started = await authorizedEditStart(context.manager, { task: "delayed shutdown edit", cwd: context.source });
       await waitFor(() => exists(marker), Boolean);
       const lockPath = path.join(context.data, "supervisor.lock");
       let finished = false;
