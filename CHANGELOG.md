@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.1.1 — unreleased
+
+Fixes found in review of the 2.1.0 pre-release. A new candidate: 2.1.0's target evidence does not carry over.
+
+- Fixed: a deadline or cancel that arrived after the worker's turn had completed, while the supervisor was still reading the final history, took the startup-abort path and killed the server mid-finalization; a completed run could end as failed.
+- Fixed: a review's dispatch authorization is bound to the content of the files Git does not ignore (every file outside a Git work tree) instead of their timestamps and inodes, so a touched file or ignored build output no longer spends a single-use attempt.
+- Fixed: the stop after three consecutive denied shell or network calls also counts web fetch and search tools.
+- Changed: `task authorize --expires-at` must be within 24 hours; a start against a data directory with no registered authorization says so instead of reporting an invalid authorization.
+- Removed: the unreachable same-session correction code (ADR 0009); records it created stay readable.
+
 ## 2.1.0 — unreleased
 
 Unreleased; source on main. Line 2.1 introduces an experimental, opt-in Google Antigravity execution backend (`agy 1.4.0`), full auditability via tool-call accounting and approval ledgers, root-anchored exclusion globs, daily cost budgets, structured review findings with SARIF 2.1.0 export, and cross-session inspection. All record fields remain backwards-compatible (2.0 records load cleanly, and 2.0 supervisors ignore unknown fields). Pre-releases v2.0.1 and v2.0.2 are published on GitHub.

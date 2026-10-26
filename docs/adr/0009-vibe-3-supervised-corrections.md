@@ -1,6 +1,6 @@
 # ADR 0009: supervised same-session corrections
 
-Status: deferred historical experiment. The stable five-tool one-shot contract in [ADR 0010](0010-dispatch-attempt-authorization.md) supersedes this proposal. The source checkpoint preserves its implementation; it is not an active configuration option.
+Status: deferred historical experiment. The stable five-tool one-shot contract in [ADR 0010](0010-dispatch-attempt-authorization.md) supersedes this proposal. Its implementation was removed from the source in 2.1.1 and remains in Git history; it is not an active configuration option. Records it created stay readable.
 
 ## Context
 
