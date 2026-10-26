@@ -1,6 +1,6 @@
 # Current state — 2026-10-26
 
-**Source.** `codex/stability-2.1.1` (version 2.1.1, unreleased) sits on `codex/publish-vibe-stability`, the branch of [crew-lab/codex-vibe#10](https://github.com/crew-lab/codex-vibe/pull/10). Neither is merged; `main` is still `9c38ea0`. Merge PR 10 first, then the 2.1.1 branch.
+**Source.** `main` at `5751d85` is version 2.1.1, unreleased. It holds the 2.1.0 source of [crew-lab/codex-vibe#10](https://github.com/crew-lab/codex-vibe/pull/10) (merged by fast-forward) and the 2.1.1 fixes on top.
 
 **Releases.** v2.1.0 (archive `9f949d43…`, candidate `7641d294…`), v2.0.2 and v2.0.1 are pre-releases; none is latest. v2.1.0 was built before the fixes below: in it, a deadline or cancel that lands while a completed run is being finalized can kill the server and turn the run into a failure.
 
@@ -10,8 +10,8 @@
 
 | # | Step | Who |
 |---|---|---|
-| 1 | Review and merge PR 10, then the 2.1.1 branch | Owner |
-| 2 | Package 2.1.1 from the merged `main`, install beside 2.1.0, pin manifest, `prepare check` ([brief below](#target-brief-211-packaging-and-no-inference-checks--2026-10-26)) | Target agent, on the owner's yes to authorizations 1–3 |
+| 1 | Done 2026-10-26: PR 10 and the 2.1.1 fixes are on `main` at `5751d85` | — |
+| 2 | Package 2.1.1 from `5751d85`, install beside 2.1.0, pin manifest, `prepare check`, readiness ([brief below](#target-brief-211-packaging-and-no-inference-checks--2026-10-26)) | Target agent; the owner said yes to authorizations 1–3 on 2026-10-26 |
 | 3 | Native readiness on the 2.1.1 candidate, then one hosted review and one edit, each through `task authorize` | Target agent; hosted runs need a new allowance of two starts |
 | 4 | Publish 2.1.1 as a pre-release from the target-built archive; add a known-issue line to the v2.1.0 release notes | Owner |
 | 5 | Still open: clean-account installation (postponed), broader real-task qualification, the five Antigravity probes | Owner / target agent |
@@ -20,12 +20,12 @@ The target briefs dated 2026-10-19 further down describe older source and must n
 
 ### Target brief: 2.1.1 packaging and no-inference checks — 2026-10-26
 
-Send only after step 1 is merged and the owner says yes to authorizations 1 to 3 of the [target acceptance procedure](docs/target-acceptance.md#authorizations) for 2.1.1. It is not a hosted allowance.
+The owner said yes on 2026-10-26 to authorizations 1 to 3 of the [target acceptance procedure](docs/target-acceptance.md#authorizations) for 2.1.1: build and install side by side with the registration switch, the pin manifest, and the no-inference checks. It is not a hosted allowance.
 
 ```text
 Fetch main and read Handoff.md, section "Current state — 2026-10-26", and docs/target-acceptance.md. Follow the procedure's steps 1 to 4 for the 2.1.1 candidate. Stop at the first failure; no retries, no configuration edits to make a check pass, no hosted start, no task authorize.
 
-1. Build from the main commit that contains version 2.1.1 (git checkout --detach <commit>, confirm git rev-parse HEAD) under exactly Node 20.19.0 and npm 10.8.2: npm ci, npm run verify:release, then package:rc with the offline cache populated with the locked versions. Record the archive SHA-256 and the kit's SHA256SUMS.
+1. Build from main at 5751d85 (git checkout --detach 5751d85, confirm git rev-parse HEAD) under exactly Node 20.19.0 and npm 10.8.2: npm ci, npm run verify:release, then package:rc with the offline cache populated with the locked versions. Record the archive SHA-256 and the kit's SHA256SUMS.
 2. Install the archive into a new private prefix beside the 2.1.0 install, with its own configuration directory, pin manifest path and data directory. Keep the 2.1.0 registration as the rollback; switch the Codex registration to 2.1.1 only after step 4 passes.
 3. Use the same Vibe 3.0.2 install the 2.1.0 sitting used. vibe --version must print 3.0.2. Run pin-manifest and doctor --json on the candidate configuration and review the manifest as the procedure says.
 4. prepare check --kit with the candidate's kit (check its SHA256SUMS first) and read the saved report against every criterion in step 4 of the procedure.
