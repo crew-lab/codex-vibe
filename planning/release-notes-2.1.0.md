@@ -1,5 +1,7 @@
 # vibe-supervisor 2.1.0 release notes (draft)
 
+Superseded 2026-10-26: v2.1.0 was published with its own notes on GitHub, describing the Vibe 3.0.2 qualification. This draft predates that line and is kept as a record; 2.1.1's notes come from the changelog.
+
 Draft for the GitHub release, written 2026-10-19 from main before the target sitting. Every `[UPDATE AT PUBLISH]` is filled from the merged `docs/acceptance.json` and the target evidence; a gate is called passed only when it is `VERIFIED` there. Delete this paragraph before publishing. The text below the line is the release body.
 
 ---

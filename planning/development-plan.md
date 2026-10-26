@@ -1,10 +1,8 @@
-# Current stability implementation — 2026-10-24
+# Current state — 2026-10-26
 
-The immediate path is exactly Vibe 3.0.2, five MCP tools and one-shot execution. Local administrative dispatch grants bind each owner-authorized task to one durable attempt across isolated sessions. Continuation and Antigravity qualification remain separate deferred streams. See [ADR 0010](../docs/adr/0010-dispatch-attempt-authorization.md) for the implemented dispatch contract.
+Exactly Vibe 3.0.2, five one-shot MCP tools, one single-use dispatch grant per owner-authorized task ([ADR 0010](../docs/adr/0010-dispatch-attempt-authorization.md)). v2.1.0 is published as a pre-release; 2.1.1 is on `main` at `5751d85` and is the next candidate. [Section 3](#3-the-critical-path-and-your-touchpoints) has the path; the [Handoff](../Handoff.md#current-state--2026-10-26) has the target brief.
 
-Execution order: independently review the combined source, pass deterministic release verification, freeze archive and kit, verify the installed identity, run one matched no-inference preparation check, and verify the actual Desktop-connected five-tool surface. Hosted inference is paused; another hosted trial requires a fresh owner instruction and reviewed contract. No edit candidate from the historical four-start fixture sitting was accepted.
-
-All dated plans below are historical context. They neither restore obsolete version support nor authorize installation, hosted trials, publication or a retry. Candidate, runtime, archive, preparation and connected-server identities remain separate. Clean-account qualification remains pending until an account is available.
+Dated plans further down are history. They authorize no installation, hosted run, publication or retry. Candidate, runtime, archive, preparation and connected-server identities stay separate.
 
 # vibe-supervisor development plan
 
@@ -18,12 +16,13 @@ Revised 2026-10-19 for the 2.1.0 target briefs; earlier, on 2026-10-17, after th
 
 | Item | State |
 |---|---|
-| Main (2026-10-19) | 2.1.0, unreleased: the 2.0.2 line plus 2.1 Waves 0–5 and the experimental Antigravity backend with its cold-review fixes and agy probes; every branch above it is merged and deleted. `npm run verify:release`: 101 files, 1,477 tests; CI green |
+| Main (2026-10-26) | 2.1.1 at `5751d85`, unreleased: 2.1.0 plus its review fixes (finalization under a late deadline or cancel, content-bound review grants, web tools in the three-denial stop, 24-hour grant expiry, correction code removed). `npm run verify:release` on Node 20.19.0: 106 files, 1,545 tests |
+| 2.1.0 archive | Target-built (`9f949d43…`, candidate `7641d294…`); preparation check, native readiness and one accepted fixture edit; published 2026-10-26 as a pre-release with a known-issue note ([evidence](../research/evidence/vibe-302-stability-20261026/README.md)) |
 | 2.0.2 archive | Packaged on the target under Node 20.19.0 from `347bf79` (archive `84bff9411b63188051a8ca7c025d362ac5a0f08b532f37dc0e9a01b9ba0f4437`, candidate/kit `eaa4032009dc7db754471b0be3c5de57f4d1d067baef0999d6664cfdc179c202`); side-by-side install, pin, `doctor`, `prepare check` PASS and native readiness passed; published as a pre-release |
 | Antigravity status (2026-10-19) | Experimental, off unless `experimental.antigravity = true`; cold-review fixes and the agy probes on main; not for production until the five `antigravity-*` target gates pass ([6.2](#62-antigravity-cold-review-and-target-probes-2026-10-19)) |
 | 2.0.1 archive | Packaged on the target from `44dc6f8` under Node 20.19.0: archive `7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e`, candidate and kit identity `8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4` |
-| Hosted allowance | Three starts authorized for the 2.0.1 sitting; all three used (review, edit, disconnect); none yet for 2.1.0 |
-| 2.1.0 target | Briefs for steps 1 and 2 (Antigravity opted in) and for step 3 are in the Handoff; step 3 waits for an allowance |
+| Hosted allowance | None open. The 2.0.1 sitting used its three starts; the 2.1.0 qualification used its own; 2.1.1 needs a new allowance of two |
+| 2.1.1 target | The owner said yes to authorizations 1–3 on 2026-10-26; the brief is in the Handoff and has not been sent |
 | Target kit | `docs/target-acceptance.md` is the procedure; `package:rc` writes `preparation-kit-<version>/` beside the archive and installs the exact archive offline to prove the binding before it reports success |
 | Outreach | Drafts only: the dev.to article, the interest note's asks, the marketing calendar. Nothing posted |
 
@@ -47,21 +46,23 @@ Revised 2026-10-19 for the 2.1.0 target briefs; earlier, on 2026-10-17, after th
 | 2.1 Wave 4: Review findings & SARIF (`origin/explore_project_details`) | Structured review findings (`output: "findings"`), `findings.json` artifact, workspace and exclusion safety validation (`src/core/findings.ts`), and SARIF 2.1.0 export (`src/core/sarif.ts`, `src/cli/runs/sarif.ts`) | 97 files, 1,433 tests passing |
 | 2.1 Wave 5: Daily cost ledger & budgets (`origin/explore_project_details`) | Per-root daily spending limits (`budgets.<root>.max_cost_usd_per_day`), rolling 24h usage aggregation across standard and isolated runs (`src/core/usage-ledger.ts`), admission check with `VSUP_BUDGET_EXCEEDED`, and `runs usage` CLI (`src/cli/runs/usage.ts`) | 98 files, 1,441 tests passing |
 | Antigravity Execution Backend Phases 1–3 (`origin/explore_project_details`) | `AntigravityBackend` (`src/backends/antigravity.ts`) revalidated and hardened for `agy 1.4.0`: isolated `HOME`/`TMPDIR`, strict unified `settings.json` policy, untrusted extension guard, watchdog activity, `boot_drift` tracking, structured `stream-json` envelope parsing, `PreToolUse` hook enforcing `judgeWorkspacePath` and emitting `approvals.json`, and zero-inference `prepare check` with slash-command read-backs and synthetic hook evaluations | Tests pass in `verify:release` on `origin/explore_project_details` |
+| Vibe 3.0.2 stability (2.1.0) | Exact Vibe 3.0.2 pin, five one-shot tools, `task authorize` and single-use dispatch grants, prepared task inputs | Target preparation check, native readiness and an accepted fixture edit on archive `9f949d43…` |
+| 2.1.0 review fixes (2.1.1) | Finalization kept intact under a late deadline or cancel; review grants bound to Git-visible file content; web tools in the three-denial stop; 24-hour grant expiry and an unregistered-directory error; correction code removed | 106 files, 1,545 tests in `verify:release` on Node 20.19.0; no target evidence yet |
 
 Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily cost ledger, per-root budgets, and the Antigravity backend are delivered on `explore_project_details`. Per owner decision 2026-10-17, feature expansion is frozen to focus on operational stability and target verification.
 
 ## 3. The critical path and your touchpoints
 
-The 2.0.x path is done: 2.0.1 and 2.0.2 are published as pre-releases from their target-tested archives, the disconnect passed, and every branch is merged. Section 4 keeps how that went. The 2.1.0 path, in the [Handoff](../Handoff.md)'s order:
+The 2.0.x path is done, and 2.1.0 is published as a pre-release. The 2.1.1 path, in the [Handoff](../Handoff.md#current-state--2026-10-26)'s order:
 
 | # | Step | Who | Your touchpoint |
 |---|---|---|---|
-| 1 | Package 2.1.0 from main on the target under Node 20.19.0 with the offline cache; the target-built archive is the one published | Target agent | Send the Handoff's "Target brief: 2.1.0 steps 1 and 2" |
-| 2 | `pin-manifest`, `doctor` and `prepare check` for `app-server`, the excluded-glob read-back, and the five agy probes (Antigravity opted in by the owner 2026-10-19) | Target agent | The same brief; no hosted start |
+| 1 | Package 2.1.1 from `5751d85` on the target under Node 20.19.0 with the offline cache, install beside 2.1.0, `pin-manifest`, `doctor`, `prepare check`, then native readiness | Target agent | Send the Handoff's "Target brief: 2.1.1 packaging and no-inference checks" (authorizations 1–3 given 2026-10-26) |
 | — | Review and merge the evidence branch: private-path scan, `npm run verify:release`, archive and kit identity, each gate entry against its saved report | Coordinator | Yes to the merge |
-| 3 | One hosted review and one edit on 2.1.0 (Handoff "Target brief: 2.1.0 step 3") | Target agent | **A hosted allowance of two starts** |
-| 4 | Clean-account installation | You | Postponed by the owner 2026-10-19 |
-| 5 | Publish 2.1.0 from the target-held tested assets, a pre-release while step 4 is open; notes from the [draft](release-notes-2.1.0.md) with its markers filled | You | **Run `gh release create` on the target Mac** |
+| 2 | One hosted review and one edit on 2.1.1, each registered with `task authorize`; brief written after step 1's evidence is merged | Target agent | **A hosted allowance of two starts** |
+| 3 | Publish 2.1.1 from the target-held tested assets as a pre-release; notes from the changelog | You | **Run `gh release create` on the target Mac** |
+| 4 | Clean-account installation; then a release may be marked latest | You | Postponed by the owner 2026-10-19 |
+| 5 | The five Antigravity probes on a 2.1.x candidate | Target agent | Opt-in and a sitting of its own |
 | 6 | Outreach, after a release is marked latest | You | Section "Outreach and adjacent work" |
 | any | Repository description and topics (section 4.7); no rename (owner 2026-10-19) | You | **Run the `gh` command** |
 
