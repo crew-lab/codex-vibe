@@ -4,7 +4,7 @@ import { canonical, contractDigest, digest, type AcceptanceContract } from '../a
 import { supervisorError, type RunLimits, type RunMode, type SupervisorConfig } from '../contracts.js';
 import { candidateIdentity } from '../preparation/evidence.js';
 import { resolveContextFile } from '../security/paths.js';
-import { hashWorkspace } from './workspace-snapshot.js';
+import { contentDigest } from './workspace-snapshot.js';
 
 export interface DispatchBindingInput {
   config: SupervisorConfig;
@@ -34,11 +34,11 @@ export async function dispatchDigest(input: DispatchBindingInput): Promise<strin
   }
   let reviewSnapshot: string | null = null;
   if (input.mode === 'review') {
-    try { reviewSnapshot = await hashWorkspace(input.workspace); }
+    try { reviewSnapshot = await contentDigest(input.workspace); }
     catch { throw Object.assign(new Error('The workspace cannot be bound to this dispatch.'), supervisorError('VSUP_AUTHORIZATION_INVALID', 'The workspace cannot be bound to this dispatch.')); }
   }
   return digest(canonical({
-    schema_version: 1,
+    schema_version: 2,
     candidate_sha256: await candidateIdentity(),
     runtime: { node: process.version, executable: await realpath(process.execPath), platform: process.platform, arch: process.arch, pin_sha256: pinSha256 },
     policy_revision: input.policyRevision,
@@ -47,7 +47,7 @@ export async function dispatchDigest(input: DispatchBindingInput): Promise<strin
     workspace: input.workspace,
     task_sha256: digest(input.task),
     base_commit: input.baseCommit ?? null,
-    review_snapshot_sha256: reviewSnapshot,
+    review_content_sha256: reviewSnapshot,
     context,
     output: input.output ?? 'text',
     contract_sha256: input.acceptanceContract ? contractDigest(input.acceptanceContract) : null,
