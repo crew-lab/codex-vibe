@@ -45,7 +45,8 @@ async function currentStatus(root: string, relative: string): Promise<'committed
   const record = status.slice(0, 2);
   if (record.includes('U') || record === 'AA' || record === 'DD') throw new Error(`Conflicted source file refused: ${relative}`);
   if (!record) {
-    await runGit(root, ['ls-files', '--error-unmatch', '--', relative]);
+    const tracked = await runGit(root, ['ls-files', '-z', '--', relative]);
+    if (!tracked) throw new Error(`Selected input is ignored or absent from Git discovery: ${relative}. Use a reviewed non-ignored evidence document; do not disable ignore rules or force-add private evidence.`);
     return 'committed';
   }
   if (record === '??') return 'untracked';
@@ -104,6 +105,27 @@ export async function prepareTaskInputs(options: { source: string; base: string;
   if (!outputPaths.length || new Set(outputPaths).size !== outputPaths.length) throw new Error('Output paths must be non-empty and unique');
   const scopes = options.exclusions ?? [];
   const anchors = workspaceAnchors(scopes, source);
+  const output = path.resolve(options.output);
+  const problems: string[] = [];
+  if (output === source || output.startsWith(`${source}${path.sep}`) || source.startsWith(`${output}${path.sep}`)) problems.push('Prepared context must be outside source checkout; select a new directory under an owner-private parent');
+  try { await assertOwnedDirectory(path.dirname(output)); }
+  catch { problems.push('Output parent must exist, be canonical, owned by the current user and mode 0700'); }
+  try { await lstat(output); problems.push('Prepared output already exists; select a new directory'); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') problems.push('Prepared output cannot be inspected'); }
+  let contractSha256: string | null = null;
+  if (options.contractFile) {
+    try { contractSha256 = contractDigest(acceptanceContractSchema.parse(JSON.parse((await readOwnedFile(options.contractFile, 256 * 1024)).toString('utf8')))); }
+    catch { problems.push('Acceptance contract is unsafe or invalid; require an owned canonical single-link file with mode 0600 and a valid acceptance-contract JSON schema'); }
+  }
+  for (const relative of options.files) {
+    try { await assertInputPolicy(source, relative, anchors); safeRelativePath.parse(relative); await currentStatus(source, relative); }
+    catch (error) { problems.push((error as Error).message); }
+  }
+  for (const relative of outputPaths) {
+    try { await assertInputPolicy(source, relative, anchors); safeRelativePath.parse(relative); }
+    catch (error) { problems.push((error as Error).message); }
+  }
+  if (problems.length) throw new Error(`Task preparation preflight failed:\n${problems.map(problem => `- ${problem}`).join('\n')}`);
   const files = [];
   let totalBytes = 0;
   for (const relative of options.files) {
@@ -120,18 +142,10 @@ export async function prepareTaskInputs(options: { source: string; base: string;
     await assertInputPolicy(source, relative, anchors);
     safeOutputs.push(safeRelativePath.parse(relative));
   }
-  let contractSha256: string | null = null;
-  if (options.contractFile) {
-    try { contractSha256 = contractDigest(acceptanceContractSchema.parse(JSON.parse((await readOwnedFile(options.contractFile, 256 * 1024)).toString('utf8')))); }
-    catch { throw new Error('Acceptance contract is unsafe or invalid'); }
-  }
   const fileEntries = files.map(({ path: filePath, sha256, bytes, provenance }) => ({ path: filePath, sha256, bytes, provenance }));
   const dirtyEntries = fileEntries.filter((entry) => entry.provenance !== 'committed').map(({ path: filePath, sha256, bytes }) => ({ path: filePath, sha256, bytes }));
   const body = { schema_version: 1 as const, owner: 'vibe-supervisor-task-inputs' as const, source, base_commit: base, files: fileEntries, dirty_overlay_sha256: digest(canonical(dirtyEntries)), allowed_output_paths: safeOutputs, contract_sha256: contractSha256, policy_sha256: policyDigest(options.allowedRoots, scopes), total_files: fileEntries.length, total_bytes: totalBytes, token_count: null as null };
   const manifest = taskInputManifestSchema.parse({ ...body, manifest_sha256: manifestHash(body) });
-  const output = path.resolve(options.output);
-  await assertOwnedDirectory(path.dirname(output));
-  if (output === source || output.startsWith(`${source}${path.sep}`) || source.startsWith(`${output}${path.sep}`)) throw new Error('Prepared context must be outside source checkout');
   await mkdir(output, { mode: 0o700 });
   try {
     await assertOwnedDirectory(output);

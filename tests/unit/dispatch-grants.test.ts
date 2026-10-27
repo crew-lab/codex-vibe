@@ -15,6 +15,41 @@ const input = (expiresAt = new Date(Date.now() + 60_000).toISOString()) => ({ re
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
 describe('DispatchGrants', () => {
+  it('normalizes equivalent timezone and fractional formats before persistence and consumption', async () => {
+    const date = new Date(Date.now() + 3_600_000);
+    date.setUTCMilliseconds(0);
+    const utc = date.toISOString();
+    const shifted = new Date(date.getTime() + 3_600_000).toISOString().slice(0, 19);
+    const behind = new Date(date.getTime() - 3_600_000).toISOString().slice(0, 19);
+    for (const expiry of [utc, utc.replace('.000', ''), utc.replace('.000', '.0'), utc.replace('.000', '.00'), `${shifted}+01:00`, `${behind}-01:00`, `  ${utc}  `]) {
+      const root = await fixture();
+      const grants = new DispatchGrants(root);
+      const issued = await grants.issue(input(expiry));
+      expect(issued.expires_at).toBe(utc);
+      expect(JSON.parse(await readFile(path.join(root, `${issued.authorization_id}.json`), 'utf8')).expires_at).toBe(utc);
+      await grants.consume({ authorizationId: issued.authorization_id, attemptId: issued.attempt_id, requestSha256: digest, binding: fields, runId: issued.attempt_id });
+      await expect(grants.consume({ authorizationId: issued.authorization_id, attemptId: issued.attempt_id, requestSha256: digest, binding: fields, runId: issued.attempt_id })).rejects.toMatchObject({ code: 'VSUP_ATTEMPT_CONSUMED' });
+    }
+  });
+
+  it('preserves nonzero fractional seconds when normalizing', async () => {
+    const root = await fixture();
+    const expiry = new Date(Date.now() + 60_000).toISOString().replace(/\.\d{3}Z$/, '.12Z');
+    const issued = await new DispatchGrants(root).issue(input(expiry));
+    expect(issued.expires_at).toBe(expiry.replace('.12Z', '.120Z'));
+  });
+
+  it('rejects malformed expiry without creating grant storage and names the field', async () => {
+    for (const expiry of ['2027-02-30T12:00:00Z', '2027-01-01T24:00:00Z', '2027-01-01T12:00:00', '2027-01-01', 'tomorrow', '2027-01-01T12:00:00+24:00', '2027-01-01T12:00:00+01:60', '2027-01-01T12:00:00-00:00', '2027-01-01T12:00:00.1234Z']) {
+      const root = await fixture();
+      await expect(new DispatchGrants(root).issue(input(expiry))).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID', message: expect.stringContaining('--expires-at') });
+      await expect(lstat(root)).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+    const root = await fixture();
+    await expect(new DispatchGrants(root).issue(input(new Date(Date.now() - 1000).toISOString().replace(/\.\d{3}Z$/, 'Z')))).rejects.toMatchObject({ message: '--expires-at must be in the future.' });
+    await expect(new DispatchGrants(root).issue(input(new Date(Date.now() + 25 * 3_600_000).toISOString().replace(/\.\d{3}Z$/, 'Z')))).rejects.toMatchObject({ message: expect.stringContaining('24 hours') });
+  });
+
   it('issues one bound attempt, consumes it once, and retains it across instances', async () => {
     const root = await fixture(); const grants = new DispatchGrants(root); const issued = await grants.issue(input());
     expect(issued.authorization_id).toMatch(/^[0-9a-f-]{36}$/i);

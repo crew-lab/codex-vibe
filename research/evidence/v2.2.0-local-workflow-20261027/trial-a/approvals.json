@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "run_id": "bba6bf2a-34a8-4189-bacd-3fcbcf802999",
+  "truncated": false,
+  "records": [
+    {
+      "callback_id": "approval-0suVndGCu",
+      "related_entry_id": "effect-f8508d83-6546-5187-8baf-2d4c7d1c1665",
+      "turn_id": "turn-56415b866a655e3855e73c4b29c14b94",
+      "tool": "file_system.read_file",
+      "path": "src/limit.mjs",
+      "fingerprint": "89c87caa300427696e14dd2057fffb57f7cb854ed42e58db51da034e4db1253e",
+      "decision": "approve",
+      "reason": null
+    },
+    {
+      "callback_id": "approval-aqFuiyhxG",
+      "related_entry_id": "effect-b0491f13-63f7-572b-bdb7-c8d09479c72b",
+      "turn_id": "turn-56415b866a655e3855e73c4b29c14b94",
+      "tool": "file_system.read_file",
+      "path": "CONTRACT.md",
+      "fingerprint": "179b1801f49d4e86a2104fa5477d1e022e8bceaa1f54a936e325151650c4e2a8",
+      "decision": "approve",
+      "reason": null
+    },
+    {
+      "callback_id": "approval-KYtaS8MRX",
+      "related_entry_id": "effect-0b4c85b9-7a06-582d-9e10-9b0e5f07dfcf",
+      "turn_id": "turn-56415b866a655e3855e73c4b29c14b94",
+      "tool": "file_system.search_replace",
+      "path": "src/limit.mjs",
+      "fingerprint": "bc3bdc491b6c146900f61c936284b6dd8cd58d2f9daa2cff2126f2215c683e7d",
+      "decision": "approve",
+      "reason": null
+    }
+  ]
+}

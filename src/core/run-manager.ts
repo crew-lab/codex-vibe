@@ -40,7 +40,7 @@ import { extractFindingsJsonBlock, validateFindings } from "./findings.js";
 import { workspaceAnchors } from "../security/globs.js";
 import { acquireOwnerLock } from "./owner-lock.js";
 import type { OwnerLock } from "./owner-lock.js";
-import { DispatchGrants } from "./dispatch-grants.js";
+import { DispatchGrants, registrationStorageError } from "./dispatch-grants.js";
 import { bindingMismatchError, dispatchBinding, type DispatchBinding } from "./dispatch-binding.js";
 import { verifyTaskInputs, taskInputManifestSchema, type TaskInputManifest } from "../preparation/task-inputs.js";
 
@@ -298,8 +298,13 @@ export class RunManager {
     }
     const limits = this.dispatchLimits(mode, parsed.max_turns, parsed.timeout_seconds);
     const binding = await withDeadline(dispatchBinding({ config: policy.config, policyRevision: policy.revision, mode, workspace: admitted.workspace, task: parsed.task, ...(baseCommit ? { baseCommit } : {}), contextFiles, ...("output" in parsed ? { output: parsed.output } : {}), ...(acceptanceContract ? { acceptanceContract } : {}), ...(preparedInputs ? { preparedManifestSha256: preparedInputs.manifest_sha256 } : {}), ...(allowedWritePaths ? { allowedWritePaths } : {}), limits }), deadline - Date.now(), "Authorization binding exceeded its deadline.");
-    await createPrivateDir(this.usageDataDir);
-    return new DispatchGrants(path.join(this.usageDataDir, "dispatch-grants")).issue({ requestSha256: binding.requestSha256, binding: binding.fields, ownerReference, expiresAt });
+    try { await createPrivateDir(this.usageDataDir); }
+    catch (error) { throw registrationStorageError(error, 'prepare_directory'); }
+    try { return await new DispatchGrants(path.join(this.usageDataDir, "dispatch-grants")).issue({ requestSha256: binding.requestSha256, binding: binding.fields, ownerReference, expiresAt }); }
+    catch (error) {
+      if ((error as { code?: string }).code === 'VSUP_AUTHORIZATION_INVALID') throw error;
+      throw registrationStorageError(error, 'write_grant');
+    }
   }
 
   private dispatchLimits(mode: RunMode, maxTurns?: number, timeoutSeconds?: number): RunLimits {
@@ -566,6 +571,7 @@ export class RunManager {
     const issued = eligible ? this.receipts.issue({ revision: policy!.revision, operation: input.operation, workspace: workspace!, baseRef: baseRef ?? null, baseCommit }) : undefined;
     return {
       server_version: APP_VERSION,
+      supervisor_runtime: { node: process.version, executable: await realpath(process.execPath), platform: process.platform, arch: process.arch },
       server_instance_id: this.receipts.instanceId,
       session_id: this.sessionId ?? null,
       policy_path: this.policy.configPath,

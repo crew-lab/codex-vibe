@@ -1,4 +1,4 @@
-import { realpath, lstat, mkdir, open } from 'node:fs/promises';
+import { realpath, lstat, mkdir, open, chmod } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
@@ -135,8 +135,11 @@ export async function createPrivateDir(dir: string): Promise<void> {
       if (info.isSymbolicLink() || !info.isDirectory()) throw new WorkspacePathError('Private directory changed during creation');
     }
   }
-  const { chmod } = await import('node:fs/promises');
-  await chmod(absolute, 0o700);
+  const before = await lstat(absolute);
+  if (typeof process.getuid === 'function' && before.uid !== process.getuid()) throw new WorkspacePathError('Private directory must be owned by the current user');
+  if ((before.mode & 0o7777) !== 0o700) await chmod(absolute, 0o700);
+  const after = await lstat(absolute);
+  if (after.isSymbolicLink() || !after.isDirectory() || after.ino !== before.ino || after.dev !== before.dev || (after.mode & 0o7777) !== 0o700 || (typeof process.getuid === 'function' && after.uid !== process.getuid())) throw new WorkspacePathError('Private directory changed or is not owner-private');
 }
 
 async function assertNoSymlinkComponents(input: string): Promise<void> {

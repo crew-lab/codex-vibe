@@ -1,3 +1,22 @@
+# Development plan: local stabilization first
+
+Current state is recorded only in [Handoff](../Handoff.md). Follow the [local operating procedure](../docs/local-operation.md). The immediate finish line is a successful administrative registration from the actual project permission context, followed by a tiny native edit and representative project review on one qualified candidate. Preparation PASS alone does not prove this path.
+
+Freeze feature expansion. Classify failures before rebuilding; host permission, provider failure, coordinator error and rejected output do not automatically require changed product bytes. Preserve enforcement, exact identities, one-use accounting, independent acceptance and rollback. No commit, push or publication is part of this stabilization task.
+
+<details>
+<summary>Historical strategy and release sequencing — not the current operator path</summary>
+
+# Consolidation checkpoint — 2026-10-27
+
+The current integration candidate is 2.2.0 based on fetched main `9076646`, plus the Node 24 administrative compatibility fix. Main already contains the 2.1.1 finalization/content-binding/denial fixes, allowed_write_paths and authorization diagnostics (binding schema 4). Those changes are not duplicated. The candidate adds explicit server-runtime selection for authorization and release verification on Node 20.19.0 and Node 24.21.0. Both full suites passed: 107 files / 1,556 tests each. Node 20 packaging, offline installed-package smoke and final archive/kit identity checks passed. An independent temporary installation loaded the produced archive under Node 24 and matched the kit identity.
+
+The agentskills delivery completed through Luna/coordinator work; its refused Vibe attempt produced no implementation or context-comprehension evidence. Offline recomputation confirmed a Node 24 grant versus Node 20 server mismatch. Prefer the connected server's reported executable for task authorization, keep candidate/configuration aligned, and retain differing-field diagnostics. Preserve artifact reconstruction, independent ownership-based review, explicit zero-start metrics and durable evidence; syntax checks must name one script per invocation.
+
+The resulting archive was installed side by side under Node 24.21.0. Its matched no-inference preparation passed, and a fresh SDK client confirmed the exact five-tool surface, eligible workspaces and free slot. Supervisor registration now selects this candidate with rollback preserved; native Desktop acceptance remains pending reconnect because the open connection still reports 2.1.0. No hosted allowance, publication, main push, inherited acceptance or automatic retry is implied. Published assets are unchanged. Earlier release sequencing below remains historical; this chat explicitly requested building the latest consolidated source before the test.
+
+---
+
 # Current state — 2026-10-26
 
 Exactly Vibe 3.0.2, five one-shot MCP tools, one single-use dispatch grant per owner-authorized task ([ADR 0010](../docs/adr/0010-dispatch-attempt-authorization.md)). v2.1.0 is published as a pre-release; 2.1.1 is on `main` at `5751d85` and is the next candidate. [Section 3](#3-the-critical-path-and-your-touchpoints) has the path; the [Handoff](../Handoff.md#current-state--2026-10-26) has the target brief.
@@ -68,7 +87,7 @@ The 2.0.x path is done, and 2.1.0 is published as a pre-release. The 2.1.1 path,
 | next | The review search sidecar ([design](2.1-designs.md#5-search-sidecar-for-reviews)), re-read against Vibe 3.0.2's tagged source | Coordinator | **Approve ADR 0007**; needs `nested-run-typescript-shape-and-gating` evidence from the 2.1.1 hosted review |
 | any | Repository description and topics (section 4.7); no rename (owner 2026-10-19) | You | **Run the `gh` command** |
 
-Open decisions that do not block the release are in section 4.12. A failure in step 1 or 2 is a candidate defect: the fix comes back to main, and the sitting restarts on a rebuilt archive (section 4.5).
+Open decisions that do not block the release are in section 4.12. Classify any failure before choosing its remedy: product defect, host permission, installation/configuration, provider failure, coordinator-verification error or rejected worker output. Rebuild only for changed distribution bytes; rerun matched preparation when bound inputs change. A host command requiring scoped permission is not itself a product defect or permission to replay a task.
 
 ## 4. 2.0.1 to published
 
@@ -568,3 +587,5 @@ You send everything personally; agents only draft.
 | Monthly | Blog series pieces; CFP submissions | Agents draft, you publish |
 
 The marketing calendar's weeks 3 to 4 ("2.0.1 work; history leaves the tree") are already done; its registry work (weeks 5 and 6) can start as soon as a release is marked latest. The independence line ("an independent project, not affiliated with Mistral AI or OpenAI") goes in every public asset. Security claims always carry "application policy, not an OS sandbox". Claims use exact version-bound outcomes and disclose unknown model and cost fields; research citations are refreshed when used.
+
+</details>

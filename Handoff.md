@@ -1,3 +1,14 @@
+# Current local stabilization — 2026-10-27
+
+The local workflow passed its two bounded native hosted trials on candidate `81df8140eb49afbebfb5202bc3186c97f9ea8b57a7243d108ce376cbdcc73b90` (2.2.0, Node 24.21.0, isolated exact Vibe 3.0.2). Administrative registration uses the host-supported scoped command permission. Trial A's one-file edit passed the automated contract and ten independent numeric cases; Trial B's three-boundary UARoots review was independently accepted. Both workers exited, private state was removed and the slot is free. A's dirty worktree is intentionally retained with its verified export. Both authorized starts are consumed; no replay or fallback occurred.
+
+The regular PATH Vibe CLI is 3.0.3; it is separate from the supervised runtime and is not qualified by this evidence. Two successes establish these local flows, not general reliability or clean-account qualification. The source is `919fd3c` plus uncommitted repairs and this later status update; frozen source/archive/kit identities and full qualification records are retained outside the public tree in the task's private durable `local-workflow-proof-20261027` evidence packet. Its `HOSTED-QUALIFICATION.md` and `HOSTED-RUN-LEDGER.json` record exact run identities, provenance, usage, assessments and limitations. Archive SHA-256 is `6b0a120d1ae16bb102af4bc07bfa11522684f536a3a17fce3f9f93dc70d44984`.
+
+Follow [the single local operating procedure](docs/local-operation.md). Preserve the qualified installation, existing settings and rollback. No source commit, push or publication is included. Broader tasks, Vibe upgrades and promotion require their own scope/allowance; feature expansion remains deferred pending the owner's next development decision.
+
+<details>
+<summary>Historical checkpoints and superseded executable runbooks — evidence only</summary>
+
 # Current state — 2026-10-26
 
 **Source.** `main` is version 2.2.0, unreleased (owner, 2026-10-27: merge 2.2.0 now rather than after 2.1.1 is published). The 2.1.1 candidate is commit `5751d85` on `main`'s history: the 2.1.0 source of [crew-lab/codex-vibe#10](https://github.com/crew-lab/codex-vibe/pull/10) plus the 2.1.1 fixes. The target builds 2.1.1 from that pinned commit, never from `main`'s tip.
@@ -447,3 +458,5 @@ Coordinator review on Node 20.19.0/npm 10.8.2 passed `verify:release` (89 files,
 
 Phase 1 target installation identified that `vibe-supervisor serve --isolated` sets `VIBE_SUPERVISOR_HOME` to the per-connection session directory, while `prepare check` writes `preparation-receipt.json` into the selected configuration directory. `getManager`, `RunManager`, `IsolatedRunRouter` and backend construction now pass `preparationDataDir` explicitly from the selected configuration through ordinary serving and saved-session routing. Added official MCP SDK regression in `tests/integration/readiness-connection.test.ts` verifying that review and edit readiness under `--isolated` locate the receipt and report `eligible: true`, while corrupted or missing receipts refuse with `VSUP_INVALID_STATE`.
 
+
+</details>

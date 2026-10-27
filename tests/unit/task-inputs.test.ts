@@ -27,6 +27,23 @@ async function fixture(): Promise<{ parent: string; source: string; base: string
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
 describe('prepared task inputs', () => {
+  it('reports ignored inputs, contract permissions and output placement together without creating a bundle', async () => {
+    const { source, base } = await fixture();
+    await writeFile(path.join(source, '.gitignore'), 'ignored.txt\n');
+    await writeFile(path.join(source, 'ignored.txt'), 'private diagnostic input');
+    const contract = path.join(source, 'contract.json');
+    await writeFile(contract, '{}', { mode: 0o644 });
+    const output = path.join(source, 'prepared');
+    let message = '';
+    try { await prepareTaskInputs({ source, base, files: ['ignored.txt'], output, contractFile: contract, allowedRoots: [source] }); }
+    catch (error) { message = (error as Error).message; }
+    expect(message).toContain('outside source checkout');
+    expect(message).toContain('mode 0600');
+    expect(message).toContain('ignored or absent from Git discovery: ignored.txt');
+    await expect(lstat(output)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile(path.join(source, 'ignored.txt'), 'utf8')).toBe('private diagnostic input');
+  });
+
   it('copies committed, dirty, and untracked bytes exactly and leaves source unchanged', async () => {
     const { parent, source, base } = await fixture();
     await writeFile(path.join(source, 'tracked.txt'), 'dirty overlay\n');
@@ -86,7 +103,7 @@ describe('prepared task inputs', () => {
   it('requires an owner-private output parent and refuses changed prepared bytes', async () => {
     const { parent, source, base } = await fixture();
     const unsafe = path.join(parent, 'unsafe'); await mkdir(unsafe); await chmod(unsafe, 0o777);
-    await expect(prep({ source, base, files: ['tracked.txt'], output: path.join(unsafe, 'prepared') })).rejects.toThrow('Unsafe directory');
+    await expect(prep({ source, base, files: ['tracked.txt'], output: path.join(unsafe, 'prepared') })).rejects.toThrow('Output parent must exist, be canonical, owned by the current user and mode 0700');
     const output = path.join(parent, 'prepared'); await prep({ source, base, files: ['tracked.txt'], output });
     const copy = path.join(output, 'context', 'tracked.txt'); await chmod(copy, 0o600); await writeFile(copy, 'tampered\n');
     await expect(verify(output, source)).rejects.toThrow('Prepared context bytes changed');
