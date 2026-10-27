@@ -1,0 +1,309 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-27",
+  "status": "local-workflow-proven-for-two-bounded-trials",
+  "candidate": "81df8140eb49afbebfb5202bc3186c97f9ea8b57a7243d108ce376cbdcc73b90",
+  "supervisor": "2.2.0",
+  "supervisor_runtime": "Node 24.21.0",
+  "worker": "Vibe 3.0.2",
+  "global_cli": "Vibe 3.0.3; separate runtime, not qualified by these trials",
+  "hosted_starts_authorized": 2,
+  "hosted_starts_used": 2,
+  "hosted_starts_remaining": 0,
+  "replays": 0,
+  "fallbacks": 0,
+  "trials": [
+    {
+      "trial": "A",
+      "run_id": "bba6bf2a-34a8-4189-bacd-3fcbcf802999",
+      "mode": "edit",
+      "execution": {
+        "state": "completed",
+        "stop_reason": "end_turn"
+      },
+      "coordinator_acceptance": "accepted",
+      "assessment_scope": "hash-bound edit assessment in Supervisor",
+      "supervisor_assessment": "accepted",
+      "verification": {
+        "contract_sha256": "3b6a7b9ffaa7c6d1850680f105965273654079f90b5341ed9fdb6a841a2f0f8b",
+        "checked_at": "2026-10-27T19:21:56.314Z",
+        "patch_sha256": "137823a369a1f9d34613710bd085bad693dfcbebacb7a4137522ee1348ec1e3e",
+        "base_commit": "22d056371f06d6811e81b85ef999de0bbb19751c",
+        "execution_state": "completed",
+        "status": "passed",
+        "check_count": 4,
+        "failed_checks": []
+      },
+      "coordinator_validation": "TRIAL-A-validation.json",
+      "pin": {
+        "vibe_version": "3.0.2",
+        "manifest_sha256": "3221c7dc42b95092a0a347d05cab9f850c673b0b64f62d27de6954fb82e72f48",
+        "record_sha256": "c3238b982fe256e0c9dd2a2059ded853f2fdaa5ac12acda572b9e6deeaed084d"
+      },
+      "models": {
+        "observations": [
+          {
+            "observed_at": "2026-10-27T19:16:51.748Z",
+            "source": "runtime/read",
+            "session_model": null,
+            "alias": "mistral-medium-3.5",
+            "thinking": "off",
+            "requested_thinking": "off",
+            "requested_thinking_source": "supervisor-session-config",
+            "requested_model": null,
+            "requested_model_source": "unavailable",
+            "reported_name": "mistral-vibe-cli-latest",
+            "prices_per_million": {
+              "input": 1.5,
+              "output": 7.5,
+              "cached_input": 0.15
+            }
+          }
+        ],
+        "display_labels": [
+          {
+            "session_model": null,
+            "alias": "mistral-medium-3.5",
+            "reported_name": "mistral-vibe-cli-latest"
+          }
+        ],
+        "requested_model": {
+          "value": null,
+          "source": "unavailable"
+        },
+        "thinking": {
+          "requested": {
+            "value": "off",
+            "source": "supervisor-session-config"
+          },
+          "status": "matched",
+          "observations": [
+            {
+              "observed_at": "2026-10-27T19:16:51.748Z",
+              "value": "off",
+              "source": "runtime/read"
+            }
+          ]
+        },
+        "provider": null,
+        "underlying_model": null,
+        "unavailable_reason": "Runtime-reported model names, aliases and thinking are labels only; provider and underlying weights remain unverified."
+      },
+      "durations_ms": {
+        "inference": null,
+        "finalization": null,
+        "preparation": 34,
+        "startup": 2130,
+        "execution_and_finalization": 5952,
+        "total": 8116
+      },
+      "usage": {
+        "tokensUsed": 22275,
+        "contextSize": 209715,
+        "promptTokens": 22026,
+        "completionTokens": 249,
+        "cachedTokens": 14592,
+        "modelCalls": 3,
+        "priceAvailability": "available",
+        "priceSource": "runtime/read",
+        "costAvailability": "available",
+        "toolCalls": {
+          "executed": 3,
+          "deniedByHandler": 0,
+          "deniedByPolicy": 0
+        },
+        "cost": {
+          "amount": 0.0152073,
+          "currency": "USD",
+          "authoritative": false
+        },
+        "costSource": "runtime-stats-prices"
+      },
+      "warnings": [],
+      "task_sha256": "a883613c18ae4480c7c0f577341b4424e9a14595975b9e8836cf07309ec5c4cb",
+      "request_sha256": "b8b4ddf370f7a57811c06b88b030b9805ec83182bfbb42b8e268da8cfe90b9cf",
+      "observed_tools": [
+        {
+          "tool": "file_system.read_file",
+          "path": "src/limit.mjs",
+          "decision": "approve"
+        },
+        {
+          "tool": "file_system.read_file",
+          "path": "CONTRACT.md",
+          "decision": "approve"
+        },
+        {
+          "tool": "file_system.search_replace",
+          "path": "src/limit.mjs",
+          "decision": "approve"
+        }
+      ],
+      "task_characters": 529,
+      "context_note": "Read CONTRACT.md and src/limit.mjs; exported correct single-file patch.",
+      "cleanup": {
+        "state": "closed",
+        "process_pid": 28054,
+        "process_status": "exited",
+        "private_directories_present": {
+          "child-home": false,
+          "vibe-home": false,
+          "tmp": false,
+          "antigravity-home": false,
+          "antigravity-tmp": false
+        }
+      },
+      "worktree_cleanup": {
+        "worktree": "retained",
+        "checked_at": "2026-10-27T19:18:10.481Z",
+        "reason": "Uncommitted or untracked files remain after export; worktree retained"
+      }
+    },
+    {
+      "trial": "B",
+      "run_id": "a3b87749-71c5-49bd-b892-a9b6f733baa4",
+      "mode": "review",
+      "execution": {
+        "state": "completed",
+        "stop_reason": "end_turn"
+      },
+      "coordinator_acceptance": "accepted",
+      "assessment_scope": "external coordinator review acceptance; edit-assessment API not applicable",
+      "supervisor_assessment": "unassessed",
+      "verification": {
+        "status": "not_requested",
+        "check_count": 0,
+        "failed_checks": []
+      },
+      "coordinator_validation": "TRIAL-B-validation.json",
+      "pin": {
+        "vibe_version": "3.0.2",
+        "manifest_sha256": "3221c7dc42b95092a0a347d05cab9f850c673b0b64f62d27de6954fb82e72f48",
+        "record_sha256": "c3238b982fe256e0c9dd2a2059ded853f2fdaa5ac12acda572b9e6deeaed084d"
+      },
+      "models": {
+        "observations": [
+          {
+            "observed_at": "2026-10-27T19:20:09.097Z",
+            "source": "runtime/read",
+            "session_model": null,
+            "alias": "mistral-medium-3.5",
+            "thinking": "off",
+            "requested_thinking": "off",
+            "requested_thinking_source": "supervisor-session-config",
+            "requested_model": null,
+            "requested_model_source": "unavailable",
+            "reported_name": "mistral-vibe-cli-latest",
+            "prices_per_million": {
+              "input": 1.5,
+              "output": 7.5,
+              "cached_input": 0.15
+            }
+          }
+        ],
+        "display_labels": [
+          {
+            "session_model": null,
+            "alias": "mistral-medium-3.5",
+            "reported_name": "mistral-vibe-cli-latest"
+          }
+        ],
+        "requested_model": {
+          "value": null,
+          "source": "unavailable"
+        },
+        "thinking": {
+          "requested": {
+            "value": "off",
+            "source": "supervisor-session-config"
+          },
+          "status": "matched",
+          "observations": [
+            {
+              "observed_at": "2026-10-27T19:20:09.097Z",
+              "value": "off",
+              "source": "runtime/read"
+            }
+          ]
+        },
+        "provider": null,
+        "underlying_model": null,
+        "unavailable_reason": "Runtime-reported model names, aliases and thinking are labels only; provider and underlying weights remain unverified."
+      },
+      "durations_ms": {
+        "inference": null,
+        "finalization": null,
+        "preparation": 396,
+        "startup": 2613,
+        "execution_and_finalization": 10574,
+        "total": 13583
+      },
+      "usage": {
+        "tokensUsed": 40194,
+        "contextSize": 209715,
+        "promptTokens": 39821,
+        "completionTokens": 373,
+        "cachedTokens": 13696,
+        "modelCalls": 2,
+        "priceAvailability": "available",
+        "priceSource": "runtime/read",
+        "costAvailability": "available",
+        "toolCalls": {
+          "executed": 2,
+          "deniedByHandler": 0,
+          "deniedByPolicy": 0
+        },
+        "cost": {
+          "amount": 0.0440394,
+          "currency": "USD",
+          "authoritative": false
+        },
+        "costSource": "runtime-stats-prices"
+      },
+      "warnings": [],
+      "task_sha256": "16cb0f02615d9a2312ca9076f9b6563b86c442b5c1c74408b6dcfdde240248f7",
+      "request_sha256": "3ea8a75c2b50454774d6300ba68a2880ab5fdd772b871df08eb7a7d1e18b8875",
+      "observed_tools": [
+        {
+          "tool": "file_system.read_file",
+          "path": "docs/Marketing/SEO/mitigation-2026-10/page-architecture.md",
+          "decision": "approve"
+        },
+        {
+          "tool": "file_system.read_file",
+          "path": "docs/Marketing/SEO/mitigation-2026-10/s03-s04-work-plan.md",
+          "decision": "approve"
+        }
+      ],
+      "task_characters": 742,
+      "context_note": "Two frozen context files; both observed read; all three requested boundaries supported. Initial source revision reconciled before registration.",
+      "cleanup": {
+        "state": "closed",
+        "process_pid": 29663,
+        "process_status": "exited",
+        "private_directories_present": {
+          "child-home": false,
+          "vibe-home": false,
+          "tmp": false,
+          "antigravity-home": false,
+          "antigravity-tmp": false
+        }
+      },
+      "worktree_cleanup": {
+        "worktree": "none",
+        "checked_at": "2026-10-27T19:21:53.797Z"
+      }
+    }
+  ],
+  "totals": {
+    "tokens": 62469,
+    "model_calls": 5,
+    "estimated_cost_usd": 0.0592467,
+    "cost_authoritative": false
+  },
+  "remaining_limits": [
+    "Two successes do not establish general reliability.",
+    "Broader real-task and clean-account qualification remain separate.",
+    "Source repairs remain uncommitted; no publication or deployment."
+  ]
+}

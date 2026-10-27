@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "patch_sha256": "137823a369a1f9d34613710bd085bad693dfcbebacb7a4137522ee1348ec1e3e",
+  "validation_directory": "/private/tmp/vsup-trial-A-validation-82f75xp6/candidate",
+  "validations": [
+    {
+      "id": "fixture-semantics",
+      "status": "passed",
+      "cases": 10
+    },
+    {
+      "id": "complete-diff",
+      "status": "passed",
+      "changed_paths": [
+        "src/limit.mjs"
+      ]
+    },
+    {
+      "id": "source-preservation",
+      "status": "passed"
+    }
+  ],
+  "candidate_text": "export function atLeast(value, minimum) { return value >= minimum; }\n"
+}

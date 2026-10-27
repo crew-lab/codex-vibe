@@ -1,3 +1,22 @@
+# Development strategy: local stabilization first
+
+Current state is recorded only in [Handoff](../Handoff.md). Follow the [local operating procedure](../docs/local-operation.md). The immediate finish line is a successful administrative registration from the actual project permission context, followed by a tiny native edit and representative project review on one qualified candidate. Preparation PASS alone does not prove this path.
+
+Freeze feature expansion. Classify failures before rebuilding; host permission, provider failure, coordinator error and rejected output do not automatically require changed product bytes. Preserve enforcement, exact identities, one-use accounting, independent acceptance and rollback. No commit, push or publication is part of this stabilization task.
+
+<details>
+<summary>Historical strategy and release sequencing — not the current operator path</summary>
+
+# Consolidation checkpoint — 2026-10-27
+
+The current integration candidate is 2.2.0 based on fetched main `9076646`, plus the Node 24 administrative compatibility fix. Main already contains the 2.1.1 finalization/content-binding/denial fixes, allowed_write_paths and authorization diagnostics (binding schema 4). Those changes are not duplicated. The candidate adds explicit server-runtime selection for authorization and release verification on Node 20.19.0 and Node 24.21.0. Both full suites passed: 107 files / 1,556 tests each. Node 20 packaging, offline installed-package smoke and final archive/kit identity checks passed. An independent temporary installation loaded the produced archive under Node 24 and matched the kit identity.
+
+The agentskills delivery completed through Luna/coordinator work; its refused Vibe attempt produced no implementation or context-comprehension evidence. Offline recomputation confirmed a Node 24 grant versus Node 20 server mismatch. Prefer the connected server's reported executable for task authorization, keep candidate/configuration aligned, and retain differing-field diagnostics. Preserve artifact reconstruction, independent ownership-based review, explicit zero-start metrics and durable evidence; syntax checks must name one script per invocation.
+
+The resulting archive was installed side by side under Node 24.21.0. Its matched no-inference preparation passed, and a fresh SDK client confirmed the exact five-tool surface, eligible workspaces and free slot. Supervisor registration now selects this candidate with rollback preserved; native Desktop acceptance remains pending reconnect because the open connection still reports 2.1.0. No hosted allowance, publication, main push, inherited acceptance or automatic retry is implied. Published assets are unchanged. Earlier release sequencing below remains historical; this chat explicitly requested building the latest consolidated source before the test.
+
+---
+
 # Current state — 2026-10-26
 
 Exactly Vibe 3.0.2, five one-shot MCP tools, and one single-use dispatch grant per owner-authorized task ([ADR 0010](../docs/adr/0010-dispatch-attempt-authorization.md)). v2.1.0 is published as a pre-release; 2.1.1, with the fixes from its review, is on `main` and waits for its own target sitting. Same-session corrections are not in the source ([ADR 0009](../docs/adr/0009-vibe-3-supervised-corrections.md)); Antigravity stays experimental. Feature work resumes after 2.1.1 is published (owner, 2026-10-26). First priority is the review search tool, because worker answer quality is the weakest axis and reviews cannot search. It changes three enforcement points, so it waits for ADR 0007 and for the nested `run_typescript` write evidence that the 2.1.1 hosted review's policy probe collects. `allowed_write_paths` on edits narrows the handler and is built meanwhile on its own branch. The order of the remaining work, who does it and the target briefs are in [Handoff.md](../Handoff.md#current-state--2026-10-26).
@@ -225,3 +244,5 @@ The owner decided on 2026-10-17 to halt the open-ended feature run (deferred: wh
 - **Agents work in parallel on disjoint files.** Each agent owns named files, commits nothing, and reports what it could not verify. The coordinator runs the full checks before every commit, and nothing is committed while a check fails.
 - **Branches.** Work happens on a branch, in an isolated worktree that leaves the primary checkout alone, and reaches main by merge after the full checks and a cold review. Push with `make push` (main) or `make push-branch BRANCH=<name>`. A branch is deleted only after an ancestry check.
 - **Owner decisions are explicit.** Pushes, hosted runs, releases, scope readings, vendor downloads and every public post need the owner's separate yes, recorded in [Handoff.md](../Handoff.md).
+
+</details>

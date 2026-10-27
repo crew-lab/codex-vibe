@@ -102,5 +102,34 @@ try {
   } finally {
     await client.close();
   }
-  process.stdout.write(JSON.stringify({ status: 'PASS', package: manifest.name, version: manifest.version, isolatedHome: true, installedCliExecutable: 'PASS', installedMcpInitializeAndListTools: 'PASS', eofShutdown: 'PASS', concurrentIsolatedMcp: 'PASS', savedRunReconnectMcp: 'PASS' }) + '\n');
+  const adminHome = path.join(tmpRoot, 'administrative-state');
+  await mkdir(adminHome, { mode: 0o700 });
+  const adminConfig = path.join(adminHome, 'config.toml');
+  const adminEnv = { ...env, VIBE_SUPERVISOR_HOME: adminHome, VIBE_SUPERVISOR_TEST_DIST: path.join(installedRoot, 'dist'), FAKE_PROCESS_MODE: 'exit' };
+  run(executable, ['allow', '--config', adminConfig, packDir], { env: adminEnv });
+  const request = { task: 'Installed administrative handoff fixture', cwd: packDir, max_turns: 1, timeout_seconds: 30 };
+  const requestFile = path.join(tmpRoot, 'administrative-request.json');
+  await writeFile(requestFile, JSON.stringify({ operation: 'review', request }), { mode: 0o600 });
+  const grant = JSON.parse(run(process.execPath, [cli, 'task', 'authorize', '--request', requestFile, '--owner-reference', 'offline-installed-fixture', '--expires-at', new Date(Date.now() + 600_000).toISOString().replace(/\.\d{3}Z$/, 'Z'), '--config', adminConfig], { env: adminEnv }));
+  const administrativeClient = new Client({ name: 'installed-administrative-handoff', version: manifest.version });
+  const administrativeTransport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'tests/fixtures/fake-supervisor-server.mjs')], env: adminEnv, stderr: 'pipe' });
+  try {
+    await administrativeClient.connect(administrativeTransport);
+    const call = async (name, args) => {
+      const response = await administrativeClient.callTool({ name, arguments: args });
+      return { response, body: JSON.parse(response.content.find(item => item.type === 'text').text) };
+    };
+    const startArgs = { ...request, authorization_id: grant.authorization_id, attempt_id: grant.attempt_id, wait_seconds: 10 };
+    const started = await call('vibe_review_start', startArgs);
+    if (started.response.isError || !started.body.run_id) throw new Error('Installed administrative grant was not admitted by MCP.');
+    let current = started.body;
+    for (let count = 0; current.state === 'running' && count < 10; count++) current = (await call('vibe_status', { run_id: current.run_id, wait_seconds: 1 })).body;
+    if (current.state !== 'completed') throw new Error('Scripted installed handoff did not complete.');
+    const closed = await call('vibe_close', { run_id: current.run_id });
+    if (closed.response.isError) throw new Error('Installed handoff did not close.');
+    const repeated = await call('vibe_review_start', startArgs);
+    if (!repeated.response.isError || !JSON.stringify(repeated.body).includes('VSUP_ATTEMPT_CONSUMED')) throw new Error('Installed handoff refunded an attempt.');
+  } finally { await administrativeClient.close(); }
+
+  process.stdout.write(JSON.stringify({ status: 'PASS', package: manifest.name, version: manifest.version, isolatedHome: true, installedCliExecutable: 'PASS', installedMcpInitializeAndListTools: 'PASS', eofShutdown: 'PASS', concurrentIsolatedMcp: 'PASS', savedRunReconnectMcp: 'PASS', installedAdministrativeHandoff: 'PASS' }) + '\n');
 } finally { await rm(tmpRoot, { recursive: true, force: true }); }

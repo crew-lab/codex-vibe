@@ -1,0 +1,12 @@
+{
+  "state": "closed",
+  "process_pid": 28054,
+  "process_status": "exited",
+  "private_directories_present": {
+    "child-home": false,
+    "vibe-home": false,
+    "tmp": false,
+    "antigravity-home": false,
+    "antigravity-tmp": false
+  }
+}
