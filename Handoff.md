@@ -1,6 +1,8 @@
 # Current state — 2026-10-26
 
-**Source.** `main` at `5751d85` is version 2.1.1, unreleased. It holds the 2.1.0 source of [crew-lab/codex-vibe#10](https://github.com/crew-lab/codex-vibe/pull/10) (merged by fast-forward) and the 2.1.1 fixes on top.
+**Source.** `main` is version 2.2.0, unreleased (owner, 2026-10-27: merge 2.2.0 now rather than after 2.1.1 is published). The 2.1.1 candidate is commit `5751d85` on `main`'s history: the 2.1.0 source of [crew-lab/codex-vibe#10](https://github.com/crew-lab/codex-vibe/pull/10) plus the 2.1.1 fixes. The target builds 2.1.1 from that pinned commit, never from `main`'s tip.
+
+**2.2.0 on `main`** ([changelog](CHANGELOG.md)): `allowed_write_paths` on edits, and a refused start that names the differing bound fields in `details.differing_fields`. Its grants are not compatible with 2.1.x grants (binding schema 4). It needs its own candidate and target sitting after 2.1.1.
 
 **Releases.** v2.1.0 (archive `9f949d43…`, candidate `7641d294…`), v2.0.2 and v2.0.1 are pre-releases; none is latest. v2.1.0 was built before the fixes below: in it, a deadline or cancel that lands while a completed run is being finalized can kill the server and turn the run into a failure.
 
@@ -15,7 +17,7 @@
 | 3 | Native readiness on the 2.1.1 candidate, then one hosted review and one edit, each through `task authorize` | Target agent; hosted runs need a new allowance of two starts |
 | 4 | Publish 2.1.1 as a pre-release from the target-built archive; add a known-issue line to the v2.1.0 release notes | Owner |
 | 5 | Still open: clean-account installation (postponed), broader real-task qualification, the five Antigravity probes | Owner / target agent |
-| 6 | Feature work after 2.1.1 is published (owner, 2026-10-26): 2.2.0 = `codex/allowed-write-paths` (`47439ab`) plus `codex/authorization-diagnostics` (`da2ea89`, a refused start names the differing bound fields), both merged into `main` only after 2.1.1 is published (owner, 2026-10-27); the two branches both change the dispatch binding schema, so the second merge resolves it; then the review search sidecar, once ADR 0007 is approved and the 2.1.1 hosted review's `run_typescript` probe shows a nested write arriving as a denied `file_system.*` effect. The step 3 brief must keep that probe | Coordinator; owner approves ADR 0007 |
+| 6 | 2.2.0 (merged on `main` 2026-10-27): package, preparation check and one hosted edit exercising `allowed_write_paths`, after 2.1.1 is published. Then the review search sidecar, once ADR 0007 is approved and the 2.1.1 hosted review's `run_typescript` probe shows a nested write arriving as a denied `file_system.*` effect. The step 3 brief must keep that probe | Target agent; owner approves ADR 0007 |
 
 The target briefs dated 2026-10-19 further down describe older source and must not be sent.
 
