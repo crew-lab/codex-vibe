@@ -1,0 +1,25 @@
+{
+  "status": "PASS",
+  "candidate": "498be8a2bf42b9cc3b19a0211aea40b48c9ea4bdf2baba7c43c43d9b02e4ebc7",
+  "runtime": {
+    "node": "v24.21.0",
+    "executable": "<nvm-home>/versions/node/v24.21.0/bin/node"
+  },
+  "checks": {
+    "owner": true,
+    "mode0600": true,
+    "canonical_expiry": true,
+    "requested_expiry": true,
+    "ten_minute_window": true,
+    "request_digest": true,
+    "node_version": true,
+    "node_executable": true,
+    "candidate": true,
+    "unused": true
+  },
+  "expiry": "2026-10-27T18:49:27.697Z",
+  "worker_starts": 0,
+  "grant_consumed": false,
+  "settings_changed": false,
+  "request_sha256": "8f0c2ef7affde437a5df9265dfa796aa8c8d4473c2a1df8362e89debd6072a31"
+}

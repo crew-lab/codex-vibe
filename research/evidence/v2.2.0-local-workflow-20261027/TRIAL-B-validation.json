@@ -1,0 +1,30 @@
+{
+  "verification_status": "passed",
+  "semantic_boundaries": [
+    {
+      "id": "reverse-Hannover",
+      "status": "passed",
+      "architecture_evidence": "Hannover return points to existing Lviv hub selection/fallback; no reverse Hannover URL.",
+      "plan_evidence": "For return, use existing selection/fallback through the Lviv hub without representing it as a published reverse route."
+    },
+    {
+      "id": "IF-Hannover-inline",
+      "status": "passed",
+      "architecture_evidence": "IF↔Hannover remains inline inquiry only.",
+      "plan_evidence": "IF↔Hannover remains inline inquiry only."
+    },
+    {
+      "id": "unsupported-carrier-claims",
+      "status": "passed",
+      "architecture_evidence": "OP-1–OP-4 and OP-service await evidence and are excluded/deferred from public copy until current support.",
+      "plan_evidence": "OP-1–OP-4, OP-service: await evidence; plan omission from included public copy pending current support."
+    }
+  ],
+  "source_files_unchanged": 274,
+  "head_before": "d6bbff2a6b12a6d6f065ae00b81c11bad0ef3e74",
+  "head_after": "624196ade5ca9b404502e7b5793f7c1a28a635af",
+  "notes": [
+    "Working-tree bytes remained identical across all 274 files; a concurrent source commit changed HEAD and cleared Git status. The initial coordinator check overconstrained review validation to unchanged HEAD and was corrected to content comparison. No worker artifact rejection occurred.",
+    "Quoted Markdown typography normalized for checks; a shortened lead-in capitalizes a phrase, while the substantive complete excerpts support all three conclusions."
+  ]
+}

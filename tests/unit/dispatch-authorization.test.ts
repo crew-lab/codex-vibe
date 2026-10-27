@@ -3,7 +3,9 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as paths from '../../src/security/paths.js';
+import { DispatchGrants } from '../../src/core/dispatch-grants.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import type { BackendCallbacks, BackendRunHandle, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
 import { TEST_CONFIG } from './support/test-config.js';
@@ -12,6 +14,7 @@ import { runFromWire, runToWire } from '../../src/core/serialization.js';
 const roots: string[] = [];
 const managers: RunManager[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(managers.splice(0).map(manager => manager.shutdown()));
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
@@ -65,6 +68,23 @@ async function state(manager: RunManager, id: string, expected: string) {
 }
 
 describe('durable dispatch authorization', () => {
+  it.each(['prepare_directory', 'write_grant'] as const)('names a denied %s operation without launching or returning a grant', async operation => {
+    const { manager, source, shared, backend } = await fixture();
+    const denied = Object.assign(new Error('private filesystem detail'), { code: 'EPERM' });
+    if (operation === 'prepare_directory') {
+      const original = paths.createPrivateDir;
+      vi.spyOn(paths, 'createPrivateDir').mockImplementation(async directory => { if (directory === shared) throw denied; await original(directory); });
+    } else {
+      vi.spyOn(DispatchGrants.prototype, 'issue').mockRejectedValue(denied);
+    }
+    let failure: unknown;
+    try { await grant(manager, source); } catch (error) { failure = error; }
+    expect(failure).toMatchObject({ code: 'VSUP_STORAGE_ERROR', details: { phase: 'grant_registration', operation, code: 'EPERM' }, remediation: expect.stringContaining('scoped administrative command permission') });
+    expect((failure as Error).message).not.toContain('private filesystem detail');
+    expect(backend.starts).toBe(0);
+    await expect(readFile(path.join(shared, 'dispatch-grants', 'consumed'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('requires identifiers before any worker launch', async () => {
     const { manager, source, backend } = await fixture();
     await expect(manager.reviewStart({ task: 'review', cwd: source } as never)).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT' });

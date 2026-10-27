@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "report_version": 2,
+  "run_id": "a3b87749-71c5-49bd-b892-a9b6f733baa4",
+  "supervisor_version": "2.2.0",
+  "mode": "review",
+  "execution": {
+    "state": "completed",
+    "stop_reason": "end_turn"
+  },
+  "verification": {
+    "status": "not_requested",
+    "check_count": 0,
+    "failed_checks": []
+  },
+  "assessment": "unassessed",
+  "assessments": [],
+  "provenance": {
+    "dispatch": {
+      "grant_id": "2c7c6d4c-0fa2-4e87-a389-8c40ab78d15b",
+      "attempt_id": "f2a97e1c-fc0e-4751-a0ca-f9eede4c1834",
+      "request_sha256": "3ea8a75c2b50454774d6300ba68a2880ab5fdd772b871df08eb7a7d1e18b8875"
+    },
+    "task_sha256": "16cb0f02615d9a2312ca9076f9b6563b86c442b5c1c74408b6dcfdde240248f7",
+    "base_commit": null,
+    "patch_sha256": null,
+    "contract_sha256": null,
+    "policy_revision": "1496f093cdcd3a9eded035d238adc0efcc5c5ff1add688e31217be5e8728d504"
+  },
+  "timestamps": {
+    "created": "2026-10-27T19:20:06.105Z",
+    "launched": "2026-10-27T19:20:06.501Z",
+    "started": "2026-10-27T19:20:09.114Z",
+    "finished": "2026-10-27T19:20:19.688Z"
+  },
+  "preparation": {
+    "status": "passed",
+    "candidate_sha256": "81df8140eb49afbebfb5202bc3186c97f9ea8b57a7243d108ce376cbdcc73b90",
+    "version": "2.2.0",
+    "reason": "Version-matched no-inference evidence; hosted acceptance remains separate"
+  },
+  "models": {
+    "observations": [
+      {
+        "observed_at": "2026-10-27T19:20:09.097Z",
+        "source": "runtime/read",
+        "session_model": null,
+        "alias": "mistral-medium-3.5",
+        "thinking": "off",
+        "requested_thinking": "off",
+        "requested_thinking_source": "supervisor-session-config",
+        "requested_model": null,
+        "requested_model_source": "unavailable",
+        "reported_name": "mistral-vibe-cli-latest",
+        "prices_per_million": {
+          "input": 1.5,
+          "output": 7.5,
+          "cached_input": 0.15
+        }
+      }
+    ],
+    "display_labels": [
+      {
+        "session_model": null,
+        "alias": "mistral-medium-3.5",
+        "reported_name": "mistral-vibe-cli-latest"
+      }
+    ],
+    "requested_model": {
+      "value": null,
+      "source": "unavailable"
+    },
+    "thinking": {
+      "requested": {
+        "value": "off",
+        "source": "supervisor-session-config"
+      },
+      "status": "matched",
+      "observations": [
+        {
+          "observed_at": "2026-10-27T19:20:09.097Z",
+          "value": "off",
+          "source": "runtime/read"
+        }
+      ]
+    },
+    "provider": null,
+    "underlying_model": null,
+    "unavailable_reason": "Runtime-reported model names, aliases and thinking are labels only; provider and underlying weights remain unverified."
+  },
+  "durations_ms": {
+    "inference": null,
+    "finalization": null,
+    "preparation": 396,
+    "startup": 2613,
+    "execution_and_finalization": 10574,
+    "total": 13583
+  },
+  "pin": {
+    "vibe_version": "3.0.2",
+    "manifest_sha256": "3221c7dc42b95092a0a347d05cab9f850c673b0b64f62d27de6954fb82e72f48",
+    "record_sha256": "c3238b982fe256e0c9dd2a2059ded853f2fdaa5ac12acda572b9e6deeaed084d"
+  },
+  "approvals": {
+    "file": "approvals.json",
+    "source_sha256": "6f892e412a89770833f0cbb4ede639a9d5a293459ffab5b8d25e8bf5a6e1f973",
+    "exported_sha256": "6f892e412a89770833f0cbb4ede639a9d5a293459ffab5b8d25e8bf5a6e1f973",
+    "records": 2,
+    "truncated": false
+  },
+  "usage": {
+    "tokensUsed": 40194,
+    "contextSize": 209715,
+    "promptTokens": 39821,
+    "completionTokens": 373,
+    "cachedTokens": 13696,
+    "modelCalls": 2,
+    "priceAvailability": "available",
+    "priceSource": "runtime/read",
+    "costAvailability": "available",
+    "toolCalls": {
+      "executed": 2,
+      "deniedByHandler": 0,
+      "deniedByPolicy": 0
+    },
+    "cost": {
+      "amount": 0.0440394,
+      "currency": "USD",
+      "authoritative": false
+    },
+    "costSource": "runtime-stats-prices"
+  },
+  "limits": {
+    "timeoutSeconds": 180,
+    "maxTurns": 12,
+    "maxEventBytes": 52428800,
+    "maxTranscriptBytes": 10485760,
+    "maxArtifactBytes": 104857600,
+    "maxModelCalls": 17
+  },
+  "warnings": [],
+  "error": null,
+  "cleanup": {
+    "worktree": "none",
+    "checked_at": "2026-10-27T19:21:53.797Z"
+  },
+  "external_validation": null
+}
