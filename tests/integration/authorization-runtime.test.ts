@@ -38,10 +38,11 @@ describe('authorization Node selection', () => {
     await writeFile(config, configText, { mode: 0o600 });
     const request = path.join(root, 'request.json');
     await writeFile(request, JSON.stringify({ operation: 'review', request: { task: 'inspect fixture', cwd: workspace, max_turns: 1, timeout_seconds: 30 } }), { mode: 0o600 });
-    const args = [path.join(dist, 'cli.js'), 'task', 'authorize', '--request', request, '--config', config, '--owner-reference', 'offline-runtime-regression', '--expires-at', new Date(Date.now() + 60_000).toISOString()];
+    const args = [path.join(dist, 'cli.js'), 'task', 'authorize', '--request', request, '--config', config, '--owner-reference', 'offline-runtime-regression', '--expires-at', new Date(Date.now() + 60_000).toISOString().replace(/\.\d{3}Z$/, 'Z')];
     const plain = JSON.parse((await exec(process.execPath, args)).stdout);
     const selected = JSON.parse((await exec(process.execPath, [...args, '--runtime-node', other])).stdout);
     const direct = JSON.parse((await exec(other, args)).stdout);
+    expect(selected.expires_at).toMatch(/\.000Z$/);
     expect(selected.request_sha256).toBe(direct.request_sha256);
     expect(plain.request_sha256).not.toBe(selected.request_sha256);
     expect(await readFile(config, 'utf8')).toBe(configText);

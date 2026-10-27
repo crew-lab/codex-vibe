@@ -1,3 +1,12 @@
+# Development strategy: local stabilization first
+
+Current state is recorded only in [Handoff](../Handoff.md). Follow the [local operating procedure](../docs/local-operation.md). The immediate finish line is a successful administrative registration from the actual project permission context, followed by a tiny native edit and representative project review on one qualified candidate. Preparation PASS alone does not prove this path.
+
+Freeze feature expansion. Classify failures before rebuilding; host permission, provider failure, coordinator error and rejected output do not automatically require changed product bytes. Preserve enforcement, exact identities, one-use accounting, independent acceptance and rollback. No commit, push or publication is part of this stabilization task.
+
+<details>
+<summary>Historical strategy and release sequencing — not the current operator path</summary>
+
 # Consolidation checkpoint — 2026-10-27
 
 The current integration candidate is 2.2.0 based on fetched main `9076646`, plus the Node 24 administrative compatibility fix. Main already contains the 2.1.1 finalization/content-binding/denial fixes, allowed_write_paths and authorization diagnostics (binding schema 4). Those changes are not duplicated. The candidate adds explicit server-runtime selection for authorization and release verification on Node 20.19.0 and Node 24.21.0. Both full suites passed: 107 files / 1,556 tests each. Node 20 packaging, offline installed-package smoke and final archive/kit identity checks passed. An independent temporary installation loaded the produced archive under Node 24 and matched the kit identity.
@@ -235,3 +244,5 @@ The owner decided on 2026-10-17 to halt the open-ended feature run (deferred: wh
 - **Agents work in parallel on disjoint files.** Each agent owns named files, commits nothing, and reports what it could not verify. The coordinator runs the full checks before every commit, and nothing is committed while a check fails.
 - **Branches.** Work happens on a branch, in an isolated worktree that leaves the primary checkout alone, and reaches main by merge after the full checks and a cold review. Push with `make push` (main) or `make push-branch BRANCH=<name>`. A branch is deleted only after an ancestry check.
 - **Owner decisions are explicit.** Pushes, hosted runs, releases, scope readings, vendor downloads and every public post need the owner's separate yes, recorded in [Handoff.md](../Handoff.md).
+
+</details>

@@ -2,6 +2,10 @@
 
 ## 2.2.0 — unreleased
 
+- Fixed: administrative grant permission failures identify registration and the failed operation, with scoped-command guidance. Already-private owned directories are verified without redundant chmod; ownership and symlink checks remain enforced.
+
+- Fixed: dispatch grant expiry accepts ISO timestamps with optional milliseconds and explicit timezone offsets, normalizes them to UTC, and names invalid or expired `--expires-at` input. The 24-hour ceiling and single-use enforcement remain unchanged.
+
 - Added: Node 20.19.0 and 24.21.0 release-test coverage, connected supervisor runtime identity, and explicit administrative `task authorize --runtime-node` selection for a CLI using a different Node than the server. Runtime binding, preparation and one-use enforcement remain unchanged.
 
 - Added: `vibe_edit_start` accepts `allowed_write_paths`, a list of repository-relative files and `dir/` prefixes. The approval handler denies writes and edits elsewhere with reason `outside_allowed_write_paths` and the run continues; the prompt names the writable paths; the list is bound into the dispatch authorization and kept in the run record. App-server backend only.

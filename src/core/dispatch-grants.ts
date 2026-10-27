@@ -40,9 +40,32 @@ function storage(): Error {
   return fail('VSUP_STORAGE_ERROR', 'Dispatch authorization storage could not be safely accessed or made durable.');
 }
 
+export function registrationStorageError(error: unknown, operation: 'prepare_directory' | 'write_grant'): Error {
+  const raw = error as { code?: unknown; details?: { code?: unknown } } | null;
+  const candidate = raw?.details?.code ?? raw?.code;
+  const code = typeof candidate === 'string' && ['EACCES', 'EPERM', 'EROFS', 'ENOSPC', 'EDQUOT', 'EIO', 'EMFILE'].includes(candidate) ? candidate : 'UNAVAILABLE';
+  const permission = code === 'EACCES' || code === 'EPERM';
+  const message = permission ? `Administrative grant registration failed during ${operation}: cannot write Supervisor-private state (${code}). Use the host-supported scoped command permission for the selected installed CLI, Node runtime and configuration; no worker was started.` : `Administrative grant storage is unavailable or unsafe during ${operation}; no worker was started.`;
+  const mapped = { ...supervisorError('VSUP_STORAGE_ERROR', message, { phase: 'grant_registration', operation, code }), ...(permission ? { remediation: 'Preserve the selected private state and ownership checks. Request scoped administrative command permission; do not relocate storage or automatically retry dispatch.' } : {}) };
+  return Object.assign(new Error(message), mapped, { supervisor: mapped });
+}
+
 function uuid(): string { return randomUUID(); }
 function validTimestamp(value: string): boolean {
   return typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
+}
+function normalizeExpiry(value: unknown): string {
+  const message = '--expires-at must be an ISO 8601 timestamp with seconds and a timezone (Z or ±HH:MM); fractional seconds are optional.';
+  if (typeof value !== 'string') throw fail('VSUP_AUTHORIZATION_INVALID', message);
+  const match = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,3}))?(Z|[+-]\d\d:\d\d)$/.exec(value.trim());
+  if (!match) throw fail('VSUP_AUTHORIZATION_INVALID', message);
+  const local = `${match[1]}.${(match[2] ?? '').padEnd(3, '0')}Z`;
+  if (!validTimestamp(local)) throw fail('VSUP_AUTHORIZATION_INVALID', message);
+  const zone = match[3]!;
+  if (zone !== 'Z' && (Number(zone.slice(1, 3)) > 23 || Number(zone.slice(4)) > 59 || zone === '-00:00')) throw fail('VSUP_AUTHORIZATION_INVALID', message);
+  const milliseconds = Date.parse(`${match[1]}.${(match[2] ?? '').padEnd(3, '0')}${zone}`);
+  if (!Number.isFinite(milliseconds)) throw fail('VSUP_AUTHORIZATION_INVALID', message);
+  return new Date(milliseconds).toISOString();
 }
 function foreignOwner(uid: number): boolean { return typeof process.getuid === 'function' && uid !== process.getuid(); }
 
@@ -51,21 +74,24 @@ export class DispatchGrants {
   constructor(root: string) { this.root = path.resolve(root); }
 
   async issue(input: GrantInput): Promise<IssuedGrant> {
-    if (!input || !SHA256.test(input.requestSha256) || !validBinding(input.binding) || typeof input.ownerReference !== 'string' || input.ownerReference.length < 1 || input.ownerReference.length > 256 || /[\u0000-\u001f\u007f]/.test(input.ownerReference) || redactSecrets(input.ownerReference) !== input.ownerReference || !validTimestamp(input.expiresAt) || Date.parse(input.expiresAt) <= Date.now()) throw invalid();
-    if (Date.parse(input.expiresAt) - Date.now() > MAX_GRANT_LIFETIME_MS) throw fail('VSUP_AUTHORIZATION_INVALID', 'A dispatch authorization must expire within 24 hours of registration.');
+    if (!input || !SHA256.test(input.requestSha256) || !validBinding(input.binding) || typeof input.ownerReference !== 'string' || input.ownerReference.length < 1 || input.ownerReference.length > 256 || /[\u0000-\u001f\u007f]/.test(input.ownerReference) || redactSecrets(input.ownerReference) !== input.ownerReference) throw invalid();
+    const expiresAt = normalizeExpiry(input.expiresAt);
+    const now = Date.now();
+    if (Date.parse(expiresAt) <= now) throw fail('VSUP_AUTHORIZATION_INVALID', '--expires-at must be in the future.');
+    if (Date.parse(expiresAt) - now > MAX_GRANT_LIFETIME_MS) throw fail('VSUP_AUTHORIZATION_INVALID', 'A dispatch authorization must expire within 24 hours of registration.');
     try {
       await this.ensureRoot();
       const authorizationId = uuid();
       const attemptId = uuid();
       const issuedAt = new Date().toISOString();
-      const record: GrantRecord = { grant_id: authorizationId, attempt_id: attemptId, request_sha256: input.requestSha256.toLowerCase(), binding: input.binding, owner_reference: input.ownerReference, issued_at: issuedAt, expires_at: input.expiresAt };
+      const record: GrantRecord = { grant_id: authorizationId, attempt_id: attemptId, request_sha256: input.requestSha256.toLowerCase(), binding: input.binding, owner_reference: input.ownerReference, issued_at: issuedAt, expires_at: expiresAt };
       const file = path.join(this.root, `${authorizationId}.json`);
       await this.writeExclusive(file, `${JSON.stringify(record)}\n`);
       await this.syncDirectory(this.root);
-      return { authorization_id: authorizationId, attempt_id: attemptId, request_sha256: record.request_sha256, expires_at: input.expiresAt };
+      return { authorization_id: authorizationId, attempt_id: attemptId, request_sha256: record.request_sha256, expires_at: expiresAt };
     } catch (error) {
       if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'VSUP_AUTHORIZATION_INVALID') throw error;
-      throw storage();
+      throw registrationStorageError(error, 'write_grant');
     }
   }
 

@@ -1,0 +1,54 @@
+[
+  {
+    "operation": "review",
+    "candidate": {
+      "version": "2.2.0",
+      "sha256": "81df8140eb49afbebfb5202bc3186c97f9ea8b57a7243d108ce376cbdcc73b90"
+    },
+    "eligible": true,
+    "preparation": {
+      "status": "passed",
+      "candidate_sha256": "81df8140eb49afbebfb5202bc3186c97f9ea8b57a7243d108ce376cbdcc73b90",
+      "version": "2.2.0",
+      "reason": "Version-matched no-inference evidence; hosted acceptance remains separate"
+    },
+    "active_slot": {
+      "busy": false
+    },
+    "blockers": [],
+    "boot_drift": [],
+    "restart_required": false,
+    "supervisor_runtime": {
+      "node": "v24.21.0",
+      "executable": "<nvm-home>/versions/node/v24.21.0/bin/node",
+      "platform": "darwin",
+      "arch": "arm64"
+    }
+  },
+  {
+    "operation": "edit",
+    "candidate": {
+      "version": "2.2.0",
+      "sha256": "81df8140eb49afbebfb5202bc3186c97f9ea8b57a7243d108ce376cbdcc73b90"
+    },
+    "eligible": true,
+    "preparation": {
+      "status": "passed",
+      "candidate_sha256": "81df8140eb49afbebfb5202bc3186c97f9ea8b57a7243d108ce376cbdcc73b90",
+      "version": "2.2.0",
+      "reason": "Version-matched no-inference evidence; hosted acceptance remains separate"
+    },
+    "active_slot": {
+      "busy": false
+    },
+    "blockers": [],
+    "boot_drift": [],
+    "restart_required": false,
+    "supervisor_runtime": {
+      "node": "v24.21.0",
+      "executable": "<nvm-home>/versions/node/v24.21.0/bin/node",
+      "platform": "darwin",
+      "arch": "arm64"
+    }
+  }
+]

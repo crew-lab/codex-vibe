@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "run_id": "a3b87749-71c5-49bd-b892-a9b6f733baa4",
+  "truncated": false,
+  "records": [
+    {
+      "callback_id": "approval-vVVL7zzjP",
+      "related_entry_id": "effect-a463a078-14d1-5842-9d03-a592188a76c4",
+      "turn_id": "turn-bbf4916d6441195b60e49e094571098f",
+      "tool": "file_system.read_file",
+      "path": "docs/Marketing/SEO/mitigation-2026-10/page-architecture.md",
+      "fingerprint": "981f0af851aa7ed52a4ff995c0fcbf68cd012d4cbacb24d5c26e4aa795da8ec9",
+      "decision": "approve",
+      "reason": null
+    },
+    {
+      "callback_id": "approval-YPFnjqM3E",
+      "related_entry_id": "effect-01e0327c-b7ed-52a4-99ce-a1ce61a9c0b1",
+      "turn_id": "turn-bbf4916d6441195b60e49e094571098f",
+      "tool": "file_system.read_file",
+      "path": "docs/Marketing/SEO/mitigation-2026-10/s03-s04-work-plan.md",
+      "fingerprint": "7ed53fc5c62c62b6fe382567b1762f13d17a62b0ba872218e4923941f96cab4e",
+      "decision": "approve",
+      "reason": null
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+diff --git a/src/limit.mjs b/src/limit.mjs
+index d8c7918..bb1955c 100644
+--- a/src/limit.mjs
++++ b/src/limit.mjs
+@@ -1 +1 @@
+-export function atLeast(value, minimum) { return value > minimum; }
++export function atLeast(value, minimum) { return value >= minimum; }
