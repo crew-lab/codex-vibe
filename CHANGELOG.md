@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.0 — unreleased
+
+- Changed: a start refused by its dispatch authorization now says why. A grant stores a hash per bound field, and a mismatch lists the differing field names in the message and in `details.differing_fields` (for example `task`, `limits`, `review_content`, or `node_executable` with a hint to run `task authorize` from the same install, Node and configuration as the server). An unknown authorization, a mismatched `attempt_id` and an expired grant each have their own message, and a change between consumption and launch names its fields too. Grants registered by an earlier version keep the generic refusal.
+
 ## 2.1.1 — unreleased
 
 Fixes found in review of the 2.1.0 pre-release. A new candidate: 2.1.0's target evidence does not carry over.
