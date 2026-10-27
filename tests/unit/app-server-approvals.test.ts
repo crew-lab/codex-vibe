@@ -186,6 +186,20 @@ describe('evaluateApproval', () => {
     expect(await evaluateApproval(edit(), request('file_system.read_file', { filePath: 'src/index.ts' }, { detailKind: 'user_input' }))).toEqual({ decision: 'deny', reason: 'unsupported_callback' });
     expect(await evaluateApproval(edit(), request('file_system.read_file', { filePath: 'src/index.ts' }, { detailKind: null }))).toEqual({ decision: 'deny', reason: 'unsupported_callback' });
   });
+
+  it('limits writes and edits to the declared paths and leaves reads alone', async () => {
+    const scoped = { ...edit(), allowedWritePaths: ['src/new.ts', 'docs/'] };
+    const approve = { decision: 'approve', reason: null };
+    const outside = { decision: 'deny', reason: 'outside_allowed_write_paths' };
+    expect(await evaluateApproval(scoped, request('file_system.write_file', { filePath: 'src/new.ts', content: '' }))).toEqual(approve);
+    expect(await evaluateApproval(scoped, request('file_system.write_file', { filePath: 'docs/guide/intro.md', content: '' }))).toEqual(approve);
+    expect(await evaluateApproval(scoped, request('file_system.search_replace', { filePath: 'src/index.ts', changes: [] }))).toEqual(outside);
+    expect(await evaluateApproval(scoped, request('file_system.write_file', { filePath: 'src/new.ts.bak', content: '' }))).toEqual(outside);
+    expect(await evaluateApproval(scoped, request('file_system.write_file', { filePath: 'docs', content: '' }))).toEqual(outside);
+    expect(await evaluateApproval(scoped, request('file_system.write_file', { filePath: 'docsx/a.md', content: '' }))).toEqual(outside);
+    expect(await evaluateApproval(scoped, request('file_system.read_file', { filePath: 'src/index.ts', offset: null, limit: 2000 }))).toEqual(approve);
+    expect(await evaluateApproval(scoped, request('file_system.write_file', { filePath: '.env', content: '' }))).toEqual({ decision: 'deny', reason: 'path_secret' });
+  });
 });
 
 describe('ApprovalLedger', () => {

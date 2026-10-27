@@ -49,6 +49,7 @@ export type DenyReason =
   | 'handler_revoked'
   | 'no_active_turn'
   | 'stale_turn'
+  | 'outside_allowed_write_paths'
   | 'policy_error';
 
 export interface ApprovalVerdict {
@@ -212,7 +213,12 @@ export async function judgeWorkspacePath(workspace: string, rawPath: string, exc
   return { allowed: true, resolved: located.resolved, relative };
 }
 
-export async function evaluateApproval(options: { mode: RunMode; workspace: string; excludedGlobs?: readonly ExclusionSpec[] }, request: ApprovalRequest): Promise<ApprovalVerdict> {
+export function withinAllowedWritePaths(relative: string, allowed: readonly string[]): boolean {
+  const posix = relative.split(path.sep).join('/');
+  return allowed.some((entry) => entry.endsWith('/') ? posix.startsWith(entry) : posix === entry);
+}
+
+export async function evaluateApproval(options: { mode: RunMode; workspace: string; excludedGlobs?: readonly ExclusionSpec[]; allowedWritePaths?: readonly string[] }, request: ApprovalRequest): Promise<ApprovalVerdict> {
   const deny = (reason: DenyReason): ApprovalVerdict => ({ decision: 'deny', reason });
   if (request.detailKind !== 'approval') return deny('unsupported_callback');
   const effect = request.effect;
@@ -222,7 +228,9 @@ export async function evaluateApproval(options: { mode: RunMode; workspace: stri
   const filePath = effectFilePath(effect.input);
   if (filePath === null) return deny('missing_file_path');
   const judgement = await judgeWorkspacePath(options.workspace, filePath, options.excludedGlobs ?? []);
-  return judgement.allowed ? { decision: 'approve', reason: null } : deny(judgement.reason);
+  if (!judgement.allowed) return deny(judgement.reason);
+  if (options.allowedWritePaths && effect.kind !== 'file_read' && !withinAllowedWritePaths(judgement.relative, options.allowedWritePaths)) return deny('outside_allowed_write_paths');
+  return { decision: 'approve', reason: null };
 }
 
 export type LedgerOutcome = 'recorded' | 'duplicate' | 'full';
@@ -310,6 +318,7 @@ export interface ApprovalHandlerOptions {
   mode: RunMode;
   workspace: string;
   excludedGlobs?: readonly ExclusionSpec[];
+  allowedWritePaths?: readonly string[];
   deadlineMs?: number;
   ledger?: ApprovalLedger;
   currentSessionId?: () => string;

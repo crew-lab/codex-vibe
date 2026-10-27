@@ -1,6 +1,7 @@
 import { preparationStatusSchema } from "../preparation/evidence.js";
 import { z } from "zod";
 import { modelObservationsSchema } from "../reporting/telemetry.js";
+import { MAX_ALLOWED_WRITE_PATHS } from "../mcp/schemas.js";
 import { acceptanceContractSchema, verificationSchema, parseAssessments } from "../acceptance/schema.js";
 import { MAX_APPROVAL_LEDGER_RECORDS, MAX_RUN_EXCLUDED_GLOBS, REMEDIATION, isBackendKind } from "../contracts.js";
 import type { ApprovalLedgerSnapshot, ExclusionScope, PinIdentity, RunLimits, RunRecord, SupervisorErrorCode, SupervisorEvent, ToolCallCounts, UsageState } from "../contracts.js";
@@ -72,6 +73,7 @@ export function runToWire(run: RunRecord): JsonObject {
     ...(run.correctionMessageHashes ? { correction_message_hashes: run.correctionMessageHashes } : {}),
     ...(run.candidateRevisions ? { candidate_revisions: run.candidateRevisions.map((item) => ({ revision: item.revision, patch_sha256: item.patchSha256, contract_sha256: item.contractSha256, artifact_bytes: item.artifactBytes, verification: item.verification })) } : {}),
     ...(run.preparedContextManifestSha256 ? { prepared_context_manifest_sha256: run.preparedContextManifestSha256 } : {}),
+    ...(run.allowedWritePaths ? { allowed_write_paths: run.allowedWritePaths } : {}),
     state: run.state,
     ...(run.executionState ? { execution_state: run.executionState } : {}),
     source_workspace: run.sourceWorkspace,
@@ -178,6 +180,10 @@ export function runFromWire(value: unknown): RunRecord {
   if (value.prepared_context_manifest_sha256 !== undefined) {
     if (typeof value.prepared_context_manifest_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(value.prepared_context_manifest_sha256)) throw new TypeError("Invalid prepared input manifest digest");
     run.preparedContextManifestSha256 = value.prepared_context_manifest_sha256;
+  }
+  if (value.allowed_write_paths !== undefined) {
+    if (!Array.isArray(value.allowed_write_paths) || value.allowed_write_paths.length < 1 || value.allowed_write_paths.length > MAX_ALLOWED_WRITE_PATHS || value.allowed_write_paths.some((item) => typeof item !== "string" || item.length < 1 || item.length > 1025)) throw new TypeError("Invalid persisted allowed write paths");
+    run.allowedWritePaths = value.allowed_write_paths as string[];
   }
   if (value.execution_state !== undefined) {
     if (value.execution_state !== "completed" && value.execution_state !== "failed" && value.execution_state !== "cancelled") throw new TypeError("Invalid persisted execution state");

@@ -25,6 +25,15 @@ describe("MCP tool input schemas", () => {
     expect(toolSchemas.vibe_review_start.parse({ authorization_id: runId, attempt_id: runId, task: "Inspect", cwd: "/repo", max_turns: 3, timeout_seconds: 60 })).toMatchObject({ max_turns: 3, timeout_seconds: 60 });
   });
 
+  it("accepts allowed_write_paths as safe file or directory paths and rejects the rest", () => {
+    const base = { authorization_id: runId, attempt_id: runId, task: "Change", cwd: "/repo" };
+    expect(toolSchemas.vibe_edit_start.parse({ ...base, allowed_write_paths: ["src/a.ts", "docs/"] })).toMatchObject({ allowed_write_paths: ["src/a.ts", "docs/"] });
+    for (const bad of [[], ["../a.ts"], ["/abs.ts"], [".env"], [".git/"], ["a//b"], ["src/a.ts", "src/a.ts"], ["/"]]) {
+      expect(() => toolSchemas.vibe_edit_start.parse({ ...base, allowed_write_paths: bad }), JSON.stringify(bad)).toThrow();
+    }
+    expect(() => toolSchemas.vibe_review_start.parse({ ...base, allowed_write_paths: ["src/a.ts"] })).toThrow();
+  });
+
   it("requires UUIDv4 authorization and attempt identifiers on each start", () => {
     for (const schema of [toolSchemas.vibe_review_start, toolSchemas.vibe_edit_start]) {
       expect(() => schema.parse({ task: "Inspect", cwd: "/repo" })).toThrow();

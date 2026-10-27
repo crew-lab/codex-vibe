@@ -210,6 +210,7 @@ export interface RunRecord {
   correctionMessageHashes?: string[];
   candidateRevisions?: Array<{ revision: number; patchSha256: string; contractSha256: string; artifactBytes: number; verification: Verification }>;
   preparedContextManifestSha256?: string;
+  allowedWritePaths?: string[];
   usage?: UsageState;
   preparation?: import("./preparation/evidence.js").PreparationStatus;
   cleanup?: { worktree: "removed" | "retained" | "not_requested" | "none"; checked_at: string; reason?: string | undefined };
@@ -273,6 +274,7 @@ export interface StartRunInput {
   exclusions: ExclusionScope[];
   limits: RunLimits;
   preparedContextManifestSha256?: string;
+  allowedWritePaths?: string[];
   preparedContextFiles?: Array<{ path: string; sha256: string; bytes: number; provenance: "committed" | "dirty-tracked" | "untracked"; content: string }>;
 }
 
@@ -351,6 +353,7 @@ export interface EditStartToolInput extends StartToolInput {
   acceptance_contract?: AcceptanceContract;
   base_ref?: string;
   prepared_inputs?: { directory: string; manifest_sha256: string };
+  allowed_write_paths?: string[];
 }
 export interface StatusToolInput { expected_candidate?: string; run_id?: string; after_seq?: number; max_events?: number; wait_seconds?: number; workspace?: string; operation?: RunMode; base_ref?: string }
 export interface WaitOptions { signal?: AbortSignal }
