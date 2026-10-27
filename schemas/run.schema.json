@@ -47,6 +47,17 @@
         "findings"
       ]
     },
+    "allowed_write_paths": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1025
+      }
+    },
     "state": {
       "enum": [
         "starting",
