@@ -1,3 +1,7 @@
+# Consolidated build checkpoint — 2026-10-27
+
+This isolated candidate starts from fetched `origin/main` at `9076646` (2.2.0). The source already includes allowed_write_paths and authorization diagnostics; they are not independently reapplied. The candidate adds Node 20/24 CI coverage, `supervisor_runtime` readiness reporting, explicit `task authorize --runtime-node` selection and cross-runtime regressions preserving binding schema 4, write scopes and single-use attempts. It incorporates the agentskills refusal diagnosis without replaying its task. Source, archive, installation and connected-server identities remain separate. No hosted run, publication or main push is included. The historical 2.1.1 release sequence below remains recorded; the owner requested consolidation and build of the latest source in this chat.
+
 # Current state — 2026-10-26
 
 **Source.** `main` is version 2.2.0, unreleased (owner, 2026-10-27: merge 2.2.0 now rather than after 2.1.1 is published). The 2.1.1 candidate is commit `5751d85` on `main`'s history: the 2.1.0 source of [crew-lab/codex-vibe#10](https://github.com/crew-lab/codex-vibe/pull/10) plus the 2.1.1 fixes. The target builds 2.1.1 from that pinned commit, never from `main`'s tip.

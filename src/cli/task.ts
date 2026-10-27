@@ -7,6 +7,7 @@ import { RunManager } from '../core/run-manager.js';
 import { selectedConfigPolicy } from '../config/policy.js';
 import { z } from 'zod';
 import { resolveAdmittedWorkspace } from '../security/paths.js';
+import { authorizeWithNode } from './task-runtime.js';
 
 function parse(args: string[], allowed: readonly string[]): Map<string, string> {
   const values = new Map<string, string>();
@@ -20,8 +21,13 @@ function parse(args: string[], allowed: readonly string[]): Map<string, string> 
 
 export async function taskCommand(args: string[]): Promise<unknown> {
   if (args[0] === 'authorize') {
-    const values = parse(args.slice(1), ['--request', '--owner-reference', '--expires-at', '--config']);
+    const values = parse(args.slice(1), ['--request', '--owner-reference', '--expires-at', '--config', '--runtime-node']);
     for (const key of ['--request', '--owner-reference', '--expires-at', '--config']) if (!values.has(key)) throw new Error(`Missing ${key}`);
+    if (values.has('--runtime-node')) {
+      const forwarded = ['authorize', ...[...values].filter(([key]) => key !== '--runtime-node').flat()];
+      const result = await authorizeWithNode(values.get('--runtime-node')!, forwarded);
+      if (result !== undefined) return result;
+    }
     const document = z.object({ operation: z.enum(['review', 'edit']), request: z.record(z.string(), z.unknown()) }).strict().parse(JSON.parse((await readOwnedFile(path.resolve(values.get('--request')!), 256 * 1024)).toString('utf8')));
     const resolved = await loadResolvedConfig({ configPath: path.resolve(values.get('--config')!), createDataDir: false, requirePinManifest: false });
     const manager = new RunManager(resolved.config, resolved.dataDir, [], undefined, { policy: selectedConfigPolicy(resolved.configPath), usageDataDir: resolved.dataDir });
@@ -46,5 +52,5 @@ export async function taskCommand(args: string[]): Promise<unknown> {
     const exclusions = await configExclusions(config, manifest.source);
     return verifyTaskInputs(directory, { allowedRoots: config.allowedWorkspaceRoots, exclusions }, values.has('--files') ? values.get('--files')!.split(',') : undefined);
   }
-  throw new Error('Usage: vibe-supervisor task authorize --request <private-json> --owner-reference <instruction-reference> --expires-at <UTC-ISO-time> --config <file> | task prepare --source <canonical-git-root> --base <full-commit> --files <path,...> --out <new-private-directory> [--output-paths <path,...>] [--contract <json>] [--config <file>] | task verify --dir <prepared-directory> [--files <path,...>] [--config <file>]');
+  throw new Error('Usage: vibe-supervisor task authorize --request <private-json> --owner-reference <instruction-reference> --expires-at <UTC-ISO-time> --config <file> [--runtime-node <absolute-node-executable>] | task prepare --source <canonical-git-root> --base <full-commit> --files <path,...> --out <new-private-directory> [--output-paths <path,...>] [--contract <json>] [--config <file>] | task verify --dir <prepared-directory> [--files <path,...>] [--config <file>]');
 }

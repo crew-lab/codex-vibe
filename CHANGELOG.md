@@ -2,6 +2,8 @@
 
 ## 2.2.0 — unreleased
 
+- Added: Node 20.19.0 and 24.21.0 release-test coverage, connected supervisor runtime identity, and explicit administrative `task authorize --runtime-node` selection for a CLI using a different Node than the server. Runtime binding, preparation and one-use enforcement remain unchanged.
+
 - Added: `vibe_edit_start` accepts `allowed_write_paths`, a list of repository-relative files and `dir/` prefixes. The approval handler denies writes and edits elsewhere with reason `outside_allowed_write_paths` and the run continues; the prompt names the writable paths; the list is bound into the dispatch authorization and kept in the run record. App-server backend only.
 - Changed: a start refused by its dispatch authorization now says why. A grant stores a hash per bound field, and a mismatch lists the differing field names in the message and in `details.differing_fields` (for example `task`, `limits`, `review_content`, or `node_executable` with a hint to run `task authorize` from the same install, Node and configuration as the server). An unknown authorization, a mismatched `attempt_id` and an expired grant each have their own message, and a change between consumption and launch names its fields too. Grants registered by an earlier version keep the generic refusal.
 

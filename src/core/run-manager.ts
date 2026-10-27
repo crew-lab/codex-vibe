@@ -566,6 +566,7 @@ export class RunManager {
     const issued = eligible ? this.receipts.issue({ revision: policy!.revision, operation: input.operation, workspace: workspace!, baseRef: baseRef ?? null, baseCommit }) : undefined;
     return {
       server_version: APP_VERSION,
+      supervisor_runtime: { node: process.version, executable: await realpath(process.execPath), platform: process.platform, arch: process.arch },
       server_instance_id: this.receipts.instanceId,
       session_id: this.sessionId ?? null,
       policy_path: this.policy.configPath,
