@@ -86,7 +86,8 @@ describe('durable dispatch authorization', () => {
     const issued = await grant(manager, source);
     await expect(manager.reviewStart({ task: 'changed', cwd: source, ...issued })).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT' });
     const ids = { authorization_id: issued.authorization_id, attempt_id: issued.attempt_id };
-    await expect(manager.reviewStart({ task: 'changed', cwd: source, ...ids })).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID' });
+    await expect(manager.reviewStart({ task: 'changed', cwd: source, ...ids })).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID', details: { differing_fields: ['task'] } });
+    await expect(manager.reviewStart({ task: 'review', cwd: source, max_turns: 3, ...ids })).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID', details: { differing_fields: ['limits'] } });
     expect(backend.starts).toBe(0);
     const started = await manager.reviewStart({ task: 'review', cwd: source, ...ids });
     await state(manager, started.run_id, 'running');
@@ -97,7 +98,7 @@ describe('durable dispatch authorization', () => {
     const { manager, source, backend } = await fixture();
     const issued = await grant(manager, source);
     await writeFile(path.join(source, 'note.txt'), 'changed contents\n');
-    await expect(manager.reviewStart({ task: 'review', cwd: source, authorization_id: issued.authorization_id, attempt_id: issued.attempt_id })).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID' });
+    await expect(manager.reviewStart({ task: 'review', cwd: source, authorization_id: issued.authorization_id, attempt_id: issued.attempt_id })).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID', details: { differing_fields: ['review_content'] } });
     expect(backend.starts).toBe(0);
   });
 
@@ -136,7 +137,7 @@ describe('durable dispatch authorization', () => {
     const expires = new Date(Date.now() + 60_000).toISOString();
     const issued = await manager.authorizeDispatch('edit', { task: 'edit', cwd: source, allowed_write_paths: ['note.txt'] }, 'test-owner-message', expires);
     const ids = { authorization_id: issued.authorization_id, attempt_id: issued.attempt_id };
-    await expect(manager.editStart({ task: 'edit', cwd: source, allowed_write_paths: ['other.txt'], ...ids })).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID' });
+    await expect(manager.editStart({ task: 'edit', cwd: source, allowed_write_paths: ['other.txt'], ...ids })).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID', details: { differing_fields: ['allowed_write_paths'] } });
     await expect(manager.editStart({ task: 'edit', cwd: source, ...ids })).rejects.toMatchObject({ code: 'VSUP_AUTHORIZATION_INVALID' });
     const started = await manager.editStart({ task: 'edit', cwd: source, allowed_write_paths: ['note.txt'], ...ids });
     await state(manager, started.run_id, 'running');

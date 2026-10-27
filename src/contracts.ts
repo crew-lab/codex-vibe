@@ -361,7 +361,7 @@ export interface ResultToolInput { run_id: string; detail?: "compact" | "full"; 
 export interface CloseToolInput { run_id: string; cleanup_worktree?: boolean; assessment?: AssessmentInput }
 
 export const REMEDIATION: Record<SupervisorErrorCode, string> = {
-  VSUP_AUTHORIZATION_INVALID: "Register the reviewed dispatch using task authorize under the selected configuration and use its unexpired matching authorization_id and attempt_id. Readiness alone does not authorize a task.",
+  VSUP_AUTHORIZATION_INVALID: "Register the reviewed dispatch using task authorize under the selected configuration and use its unexpired matching authorization_id and attempt_id. When details.differing_fields is present, it names what differs from the registration: request fields (task, limits, context_files, review_content and the like) mean the start must repeat the registered request exactly; runtime fields (candidate, node_executable, node_version, platform, pin_manifest, policy, backend) mean task authorize ran with a different install, Node or configuration than the MCP server. Readiness alone does not authorize a task.",
   VSUP_ATTEMPT_CONSUMED: "This attempt cannot be retried. Preserve its evidence; another start requires a fresh direct owner authorization and a newly registered attempt.",
   VSUP_CONFIG_INVALID: "Correct the reported config.toml field and try again.",
   VSUP_VIBE_NOT_FOUND: "Install Vibe or set paths.vibe to its executable; the vibe-app-server executable must sit next to it or be set as paths.app_server.",
