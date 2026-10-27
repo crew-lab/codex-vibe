@@ -1,3 +1,13 @@
+# Consolidation checkpoint — 2026-10-27
+
+The current integration candidate is 2.2.0 based on fetched main `9076646`, plus the Node 24 administrative compatibility fix. Main already contains the 2.1.1 finalization/content-binding/denial fixes, allowed_write_paths and authorization diagnostics (binding schema 4). Those changes are not duplicated. The candidate adds explicit server-runtime selection for authorization and release verification on Node 20.19.0 and Node 24.21.0. Both full suites passed: 107 files / 1,556 tests each. Node 20 packaging, offline installed-package smoke and final archive/kit identity checks passed. An independent temporary installation loaded the produced archive under Node 24 and matched the kit identity.
+
+The agentskills delivery completed through Luna/coordinator work; its refused Vibe attempt produced no implementation or context-comprehension evidence. Offline recomputation confirmed a Node 24 grant versus Node 20 server mismatch. Prefer the connected server's reported executable for task authorization, keep candidate/configuration aligned, and retain differing-field diagnostics. Preserve artifact reconstruction, independent ownership-based review, explicit zero-start metrics and durable evidence; syntax checks must name one script per invocation.
+
+The resulting archive was installed side by side under Node 24.21.0. Its matched no-inference preparation passed, and a fresh SDK client confirmed the exact five-tool surface, eligible workspaces and free slot. Supervisor registration now selects this candidate with rollback preserved; native Desktop acceptance remains pending reconnect because the open connection still reports 2.1.0. No hosted allowance, publication, main push, inherited acceptance or automatic retry is implied. Published assets are unchanged. Earlier release sequencing below remains historical; this chat explicitly requested building the latest consolidated source before the test.
+
+---
+
 # Current state — 2026-10-26
 
 Exactly Vibe 3.0.2, five one-shot MCP tools, one single-use dispatch grant per owner-authorized task ([ADR 0010](../docs/adr/0010-dispatch-attempt-authorization.md)). v2.1.0 is published as a pre-release; 2.1.1 is on `main` at `5751d85` and is the next candidate. [Section 3](#3-the-critical-path-and-your-touchpoints) has the path; the [Handoff](../Handoff.md#current-state--2026-10-26) has the target brief.

@@ -45,6 +45,7 @@ describe('workspace readiness over a real --isolated stdio connection', () => {
     const check = async (workspace: string) => JSON.parse(text(await client.callTool({ name: 'vibe_status', arguments: { workspace, operation: 'review' } }))) as Record<string, unknown> & { blockers: { code: string }[] };
 
     const before = await check(second);
+    expect(before.supervisor_runtime).toEqual({ node: process.version, executable: await realpath(process.execPath), platform: process.platform, arch: process.arch });
     expect(before).toMatchObject({ eligible: false, policy_path: configPath, server_version: expect.any(String), session_id: expect.stringMatching(/^session-/) });
     expect(before.blockers.map((blocker) => blocker.code)).toEqual(['VSUP_WORKSPACE_INVALID', 'VSUP_INVALID_STATE']);
     const session = path.join(data, 'mcp-sessions', String(before.session_id));
