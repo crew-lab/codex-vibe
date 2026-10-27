@@ -6,6 +6,11 @@ import { candidateIdentity } from '../preparation/evidence.js';
 import { resolveContextFile } from '../security/paths.js';
 import { contentDigest } from './workspace-snapshot.js';
 
+export const DISPATCH_BINDING_FIELDS = ['candidate', 'node_version', 'node_executable', 'platform', 'pin_manifest', 'policy', 'backend', 'operation', 'workspace', 'task', 'base_commit', 'review_content', 'context_files', 'output', 'acceptance_contract', 'prepared_inputs', 'allowed_write_paths', 'limits'] as const;
+export type DispatchBindingField = typeof DISPATCH_BINDING_FIELDS[number];
+const SERVER_RUNTIME_BINDING_FIELDS: ReadonlySet<string> = new Set(['candidate', 'node_version', 'node_executable', 'platform', 'pin_manifest', 'policy', 'backend']);
+export interface DispatchBinding { requestSha256: string; fields: Record<DispatchBindingField, string> }
+
 export interface DispatchBindingInput {
   config: SupervisorConfig;
   policyRevision: string;
@@ -21,7 +26,7 @@ export interface DispatchBindingInput {
   limits: RunLimits;
 }
 
-export async function dispatchDigest(input: DispatchBindingInput): Promise<string> {
+export async function dispatchBinding(input: DispatchBindingInput): Promise<DispatchBinding> {
   const context: Array<{ path: string; sha256: string }> = [];
   for (const file of input.contextFiles) {
     const resolved = await resolveContextFile(input.workspace, file);
@@ -38,22 +43,33 @@ export async function dispatchDigest(input: DispatchBindingInput): Promise<strin
     try { reviewSnapshot = await contentDigest(input.workspace); }
     catch { throw Object.assign(new Error('The workspace cannot be bound to this dispatch.'), supervisorError('VSUP_AUTHORIZATION_INVALID', 'The workspace cannot be bound to this dispatch.')); }
   }
-  return digest(canonical({
-    schema_version: 3,
-    candidate_sha256: await candidateIdentity(),
-    runtime: { node: process.version, executable: await realpath(process.execPath), platform: process.platform, arch: process.arch, pin_sha256: pinSha256 },
-    policy_revision: input.policyRevision,
+  const values: Record<DispatchBindingField, unknown> = {
+    candidate: await candidateIdentity(),
+    node_version: process.version,
+    node_executable: await realpath(process.execPath),
+    platform: `${process.platform}-${process.arch}`,
+    pin_manifest: pinSha256,
+    policy: input.policyRevision,
     backend: input.config.backend ?? 'app-server',
     operation: input.mode,
     workspace: input.workspace,
-    task_sha256: digest(input.task),
+    task: digest(input.task),
     base_commit: input.baseCommit ?? null,
-    review_content_sha256: reviewSnapshot,
-    context,
+    review_content: reviewSnapshot,
+    context_files: context,
     output: input.output ?? 'text',
-    contract_sha256: input.acceptanceContract ? contractDigest(input.acceptanceContract) : null,
-    prepared_manifest_sha256: input.preparedManifestSha256 ?? null,
+    acceptance_contract: input.acceptanceContract ? contractDigest(input.acceptanceContract) : null,
+    prepared_inputs: input.preparedManifestSha256 ?? null,
     allowed_write_paths: input.allowedWritePaths ?? null,
     limits: input.limits
-  }));
+  };
+  const fields = Object.fromEntries(DISPATCH_BINDING_FIELDS.map((field) => [field, digest(canonical(values[field]))])) as Record<DispatchBindingField, string>;
+  return { requestSha256: digest(canonical({ schema_version: 4, fields })), fields };
+}
+
+export function bindingMismatchError(registered: Readonly<Record<string, string>>, current: Readonly<Record<string, string>>, subject: string): Error {
+  const differing = [...new Set([...Object.keys(registered), ...Object.keys(current)])].filter((field) => registered[field] !== current[field]).sort();
+  const runtimeHint = differing.some((field) => SERVER_RUNTIME_BINDING_FIELDS.has(field)) ? ' Run task authorize with the same vibe-supervisor install, Node executable and --config as the MCP server.' : '';
+  const message = `${subject} in: ${differing.join(', ')}.${runtimeHint}`;
+  return Object.assign(new Error(message), supervisorError('VSUP_AUTHORIZATION_INVALID', message, { differing_fields: differing }));
 }

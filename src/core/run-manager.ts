@@ -41,7 +41,7 @@ import { workspaceAnchors } from "../security/globs.js";
 import { acquireOwnerLock } from "./owner-lock.js";
 import type { OwnerLock } from "./owner-lock.js";
 import { DispatchGrants } from "./dispatch-grants.js";
-import { dispatchDigest } from "./dispatch-binding.js";
+import { bindingMismatchError, dispatchBinding, type DispatchBinding } from "./dispatch-binding.js";
 import { verifyTaskInputs, taskInputManifestSchema, type TaskInputManifest } from "../preparation/task-inputs.js";
 
 function assertPreparedManifestScope(manifest: TaskInputManifest, contract: AcceptanceContract | undefined): void {
@@ -89,6 +89,7 @@ interface Runtime {
   persistChain: Promise<void>;
   closeChain: Promise<void>;
   preparedInputDirectory?: string;
+  dispatchBinding?: DispatchBinding;
   waiters: Set<() => void>;
 }
 
@@ -296,9 +297,9 @@ export class RunManager {
       await this.assertPreparedInputAdmission(preparedInputs, acceptanceContract);
     }
     const limits = this.dispatchLimits(mode, parsed.max_turns, parsed.timeout_seconds);
-    const requestSha256 = await withDeadline(dispatchDigest({ config: policy.config, policyRevision: policy.revision, mode, workspace: admitted.workspace, task: parsed.task, ...(baseCommit ? { baseCommit } : {}), contextFiles, ...("output" in parsed ? { output: parsed.output } : {}), ...(acceptanceContract ? { acceptanceContract } : {}), ...(preparedInputs ? { preparedManifestSha256: preparedInputs.manifest_sha256 } : {}), ...(allowedWritePaths ? { allowedWritePaths } : {}), limits }), deadline - Date.now(), "Authorization binding exceeded its deadline.");
+    const binding = await withDeadline(dispatchBinding({ config: policy.config, policyRevision: policy.revision, mode, workspace: admitted.workspace, task: parsed.task, ...(baseCommit ? { baseCommit } : {}), contextFiles, ...("output" in parsed ? { output: parsed.output } : {}), ...(acceptanceContract ? { acceptanceContract } : {}), ...(preparedInputs ? { preparedManifestSha256: preparedInputs.manifest_sha256 } : {}), ...(allowedWritePaths ? { allowedWritePaths } : {}), limits }), deadline - Date.now(), "Authorization binding exceeded its deadline.");
     await createPrivateDir(this.usageDataDir);
-    return new DispatchGrants(path.join(this.usageDataDir, "dispatch-grants")).issue({ requestSha256, ownerReference, expiresAt });
+    return new DispatchGrants(path.join(this.usageDataDir, "dispatch-grants")).issue({ requestSha256: binding.requestSha256, binding: binding.fields, ownerReference, expiresAt });
   }
 
   private dispatchLimits(mode: RunMode, maxTurns?: number, timeoutSeconds?: number): RunLimits {
@@ -375,14 +376,14 @@ export class RunManager {
       if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
       const limits = this.dispatchLimits(mode, options.maxTurns, options.timeoutSeconds);
       const baseCommit = mode === "edit" ? checkedBase ?? await this.editBaseCommit(source, options.baseRef ?? "HEAD", preparationDeadline) : undefined;
-      const requestSha256 = await withDeadline(dispatchDigest({ config: policy.config, policyRevision: policy.revision, mode, workspace: source, task, ...(baseCommit ? { baseCommit } : {}), contextFiles: options.contextFiles ?? [], ...(options.output ? { output: options.output } : {}), ...(options.acceptanceContract ? { acceptanceContract: options.acceptanceContract } : {}), ...(options.preparedInputs ? { preparedManifestSha256: options.preparedInputs.manifestSha256 } : {}), ...(options.allowedWritePaths ? { allowedWritePaths: options.allowedWritePaths } : {}), limits }), preparationDeadline - Date.now(), "Dispatch binding exceeded its preparation deadline.");
-      await new DispatchGrants(path.join(this.usageDataDir, "dispatch-grants")).consume({ authorizationId: options.authorizationId, attemptId: options.attemptId, requestSha256, runId: id });
+      const binding = await withDeadline(dispatchBinding({ config: policy.config, policyRevision: policy.revision, mode, workspace: source, task, ...(baseCommit ? { baseCommit } : {}), contextFiles: options.contextFiles ?? [], ...(options.output ? { output: options.output } : {}), ...(options.acceptanceContract ? { acceptanceContract: options.acceptanceContract } : {}), ...(options.preparedInputs ? { preparedManifestSha256: options.preparedInputs.manifestSha256 } : {}), ...(options.allowedWritePaths ? { allowedWritePaths: options.allowedWritePaths } : {}), limits }), preparationDeadline - Date.now(), "Dispatch binding exceeded its preparation deadline.");
+      await new DispatchGrants(path.join(this.usageDataDir, "dispatch-grants")).consume({ authorizationId: options.authorizationId, attemptId: options.attemptId, requestSha256: binding.requestSha256, binding: binding.fields, runId: id });
       if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor stopped after consuming this attempt; it will not be replayed.");
       const record: RunRecord = {
         schemaVersion: SCHEMA_VERSION, supervisorVersion: APP_VERSION, runId: id,
         backend: this.activeBackendKind, mode, state: "starting", sourceWorkspace: source,
         workerWorkspace, createdAt: now, updatedAt: now,
-        dispatch: { grant_id: options.authorizationId, attempt_id: options.attemptId, request_sha256: requestSha256 },
+        dispatch: { grant_id: options.authorizationId, attempt_id: options.attemptId, request_sha256: binding.requestSha256 },
         taskSha256: createHash("sha256").update(task).digest("hex"), policyRevision: policy.revision, admittedRoot: admitted.root, exclusions: admitted.exclusions, limits,
         ...(options.output ? { output: options.output } : {})
       };
@@ -390,6 +391,7 @@ export class RunManager {
       if (options.allowedWritePaths) record.allowedWritePaths = [...options.allowedWritePaths];
       if (options.acceptanceContract) { record.acceptanceContract = options.acceptanceContract; record.verification = { status: "pending", contract_sha256: contractDigest(options.acceptanceContract), checks: [] }; }
       runtime = this.makeRuntime(record, path.join(this.runRoot, id), task, options.contextFiles ?? []);
+      runtime.dispatchBinding = binding;
       if (options.preparedInputs) runtime.preparedInputDirectory = options.preparedInputs.directory;
       runtime.slot = true;
       if (mode === "edit") runtime.baseRef = baseCommit!;
@@ -1128,8 +1130,8 @@ export class RunManager {
       if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
       const currentPolicy = await this.admissionPolicy();
       if (currentPolicy.revision !== runtime.record.policyRevision) throw codedError("VSUP_AUTHORIZATION_INVALID", "The dispatch policy changed after attempt consumption.");
-      const launchDigest = await dispatchDigest({ config: currentPolicy.config, policyRevision: currentPolicy.revision, mode: runtime.record.mode, workspace: runtime.record.sourceWorkspace, task: runtime.task, ...(baseRef ? { baseCommit: baseRef } : {}), contextFiles: runtime.contextFiles, ...(runtime.record.output ? { output: runtime.record.output } : {}), ...(runtime.record.acceptanceContract ? { acceptanceContract: runtime.record.acceptanceContract } : {}), ...(runtime.record.preparedContextManifestSha256 ? { preparedManifestSha256: runtime.record.preparedContextManifestSha256 } : {}), ...(runtime.record.allowedWritePaths ? { allowedWritePaths: runtime.record.allowedWritePaths } : {}), limits });
-      if (launchDigest !== runtime.record.dispatch?.request_sha256) throw codedError("VSUP_AUTHORIZATION_INVALID", "Dispatch inputs changed after attempt consumption; this attempt will not be replayed.");
+      const launch = await dispatchBinding({ config: currentPolicy.config, policyRevision: currentPolicy.revision, mode: runtime.record.mode, workspace: runtime.record.sourceWorkspace, task: runtime.task, ...(baseRef ? { baseCommit: baseRef } : {}), contextFiles: runtime.contextFiles, ...(runtime.record.output ? { output: runtime.record.output } : {}), ...(runtime.record.acceptanceContract ? { acceptanceContract: runtime.record.acceptanceContract } : {}), ...(runtime.record.preparedContextManifestSha256 ? { preparedManifestSha256: runtime.record.preparedContextManifestSha256 } : {}), ...(runtime.record.allowedWritePaths ? { allowedWritePaths: runtime.record.allowedWritePaths } : {}), limits });
+      if (launch.requestSha256 !== runtime.record.dispatch?.request_sha256) throw runtime.dispatchBinding ? bindingMismatchError(runtime.dispatchBinding.fields, launch.fields, "Dispatch inputs changed after attempt consumption, so this attempt will not be replayed. They changed") : codedError("VSUP_AUTHORIZATION_INVALID", "Dispatch inputs changed after attempt consumption; this attempt will not be replayed.");
       if (runtime.cancelRequested || isTerminal(runtime.record.state)) return;
       const result = await backend.start(input, this.callbacks(runtime));
       if (runtime.cancelRequested || isTerminal(runtime.record.state) || runtime.record.state === "closing" || SETTLED_RESULT_STATES.has(runtime.record.state)) {

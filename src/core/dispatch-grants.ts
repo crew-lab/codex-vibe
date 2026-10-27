@@ -4,15 +4,19 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { supervisorError, type SupervisorErrorCode } from '../contracts.js';
 import { redactSecrets } from '../security/redaction.js';
+import { bindingMismatchError } from './dispatch-binding.js';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256 = /^[0-9a-f]{64}$/i;
 const MAX_RECORD_BYTES = 8192;
 export const MAX_GRANT_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
-type GrantInput = { requestSha256: string; ownerReference: string; expiresAt: string };
+type Binding = Readonly<Record<string, string>>;
+type GrantInput = { requestSha256: string; binding: Binding; ownerReference: string; expiresAt: string };
 type IssuedGrant = { authorization_id: string; attempt_id: string; request_sha256: string; expires_at: string };
-type GrantRecord = { grant_id: string; attempt_id: string; request_sha256: string; owner_reference: string; issued_at: string; expires_at: string };
+type GrantRecord = { grant_id: string; attempt_id: string; request_sha256: string; binding?: Binding; owner_reference: string; issued_at: string; expires_at: string };
+const BINDING_FIELD = /^[a-z_]{1,40}$/;
+const MAX_BINDING_FIELDS = 32;
 
 function fail(code: SupervisorErrorCode, message: string): Error {
   return Object.assign(new Error(message), supervisorError(code, message));
@@ -24,6 +28,12 @@ function invalid(): Error {
 
 function unregistered(): Error {
   return fail('VSUP_AUTHORIZATION_INVALID', 'No dispatch authorization is registered under this data directory; register the task with task authorize using the same configuration as the server.');
+}
+
+function validBinding(value: unknown): value is Binding {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const entries = Object.entries(value);
+  return entries.length > 0 && entries.length <= MAX_BINDING_FIELDS && entries.every(([field, hash]) => BINDING_FIELD.test(field) && typeof hash === 'string' && SHA256.test(hash));
 }
 
 function storage(): Error {
@@ -41,14 +51,14 @@ export class DispatchGrants {
   constructor(root: string) { this.root = path.resolve(root); }
 
   async issue(input: GrantInput): Promise<IssuedGrant> {
-    if (!input || !SHA256.test(input.requestSha256) || typeof input.ownerReference !== 'string' || input.ownerReference.length < 1 || input.ownerReference.length > 256 || /[\u0000-\u001f\u007f]/.test(input.ownerReference) || redactSecrets(input.ownerReference) !== input.ownerReference || !validTimestamp(input.expiresAt) || Date.parse(input.expiresAt) <= Date.now()) throw invalid();
+    if (!input || !SHA256.test(input.requestSha256) || !validBinding(input.binding) || typeof input.ownerReference !== 'string' || input.ownerReference.length < 1 || input.ownerReference.length > 256 || /[\u0000-\u001f\u007f]/.test(input.ownerReference) || redactSecrets(input.ownerReference) !== input.ownerReference || !validTimestamp(input.expiresAt) || Date.parse(input.expiresAt) <= Date.now()) throw invalid();
     if (Date.parse(input.expiresAt) - Date.now() > MAX_GRANT_LIFETIME_MS) throw fail('VSUP_AUTHORIZATION_INVALID', 'A dispatch authorization must expire within 24 hours of registration.');
     try {
       await this.ensureRoot();
       const authorizationId = uuid();
       const attemptId = uuid();
       const issuedAt = new Date().toISOString();
-      const record: GrantRecord = { grant_id: authorizationId, attempt_id: attemptId, request_sha256: input.requestSha256.toLowerCase(), owner_reference: input.ownerReference, issued_at: issuedAt, expires_at: input.expiresAt };
+      const record: GrantRecord = { grant_id: authorizationId, attempt_id: attemptId, request_sha256: input.requestSha256.toLowerCase(), binding: input.binding, owner_reference: input.ownerReference, issued_at: issuedAt, expires_at: input.expiresAt };
       const file = path.join(this.root, `${authorizationId}.json`);
       await this.writeExclusive(file, `${JSON.stringify(record)}\n`);
       await this.syncDirectory(this.root);
@@ -59,14 +69,17 @@ export class DispatchGrants {
     }
   }
 
-  async consume(input: { authorizationId: string; attemptId: string; requestSha256: string; runId: string }): Promise<void> {
-    if (!input || !UUID_V4.test(input.authorizationId) || !UUID_V4.test(input.attemptId) || !UUID_V4.test(input.runId) || !SHA256.test(input.requestSha256)) throw invalid();
+  async consume(input: { authorizationId: string; attemptId: string; requestSha256: string; binding: Binding; runId: string }): Promise<void> {
+    if (!input || !UUID_V4.test(input.authorizationId) || !UUID_V4.test(input.attemptId) || !UUID_V4.test(input.runId) || !SHA256.test(input.requestSha256) || !validBinding(input.binding)) throw fail('VSUP_AUTHORIZATION_INVALID', 'authorization_id and attempt_id must be the UUIDs that task authorize printed.');
     try {
       await lstat(this.root).catch((error: NodeJS.ErrnoException) => { throw error.code === 'ENOENT' ? unregistered() : error; });
       await this.ensureRoot();
       const file = path.join(this.root, `${input.authorizationId}.json`);
-      const record = await this.readGrant(file).catch((error: NodeJS.ErrnoException) => { throw error.code === 'ENOENT' ? invalid() : error; });
-      if (record.grant_id !== input.authorizationId || record.attempt_id !== input.attemptId || record.request_sha256 !== input.requestSha256.toLowerCase() || Date.parse(record.expires_at) <= Date.now()) throw invalid();
+      const record = await this.readGrant(file).catch((error: NodeJS.ErrnoException) => { throw error.code === 'ENOENT' ? fail('VSUP_AUTHORIZATION_INVALID', 'No authorization with this authorization_id is registered under this data directory.') : error; });
+      if (record.grant_id !== input.authorizationId) throw invalid();
+      if (record.attempt_id !== input.attemptId) throw fail('VSUP_AUTHORIZATION_INVALID', 'This attempt_id does not belong to the authorization_id; pass the pair task authorize printed together.');
+      if (Date.parse(record.expires_at) <= Date.now()) throw fail('VSUP_AUTHORIZATION_INVALID', `This authorization expired at ${record.expires_at}; register the task again.`);
+      if (record.request_sha256 !== input.requestSha256.toLowerCase()) throw record.binding ? bindingMismatchError(record.binding, input.binding, 'The start differs from its registered authorization') : invalid();
       const attempts = path.join(this.root, 'consumed');
       await mkdir(attempts, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'EEXIST') throw error; });
       await this.verifyDirectory(attempts);
@@ -126,7 +139,8 @@ export class DispatchGrants {
       const raw: unknown = JSON.parse(bounded.subarray(0, bytesRead).toString('utf8'));
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw invalid();
       const row = raw as Record<string, unknown>;
-      if (Object.keys(row).sort().join(',') !== 'attempt_id,expires_at,grant_id,issued_at,owner_reference,request_sha256' || typeof row.grant_id !== 'string' || !UUID_V4.test(row.grant_id) || typeof row.attempt_id !== 'string' || !UUID_V4.test(row.attempt_id) || typeof row.request_sha256 !== 'string' || !SHA256.test(row.request_sha256) || typeof row.owner_reference !== 'string' || row.owner_reference.length < 1 || row.owner_reference.length > 256 || /[\u0000-\u001f\u007f]/.test(row.owner_reference) || redactSecrets(row.owner_reference) !== row.owner_reference || !validTimestamp(String(row.issued_at)) || !validTimestamp(String(row.expires_at)) || Date.parse(String(row.expires_at)) <= Date.parse(String(row.issued_at)) || Date.parse(String(row.expires_at)) - Date.parse(String(row.issued_at)) > MAX_GRANT_LIFETIME_MS) throw invalid();
+      const keys = Object.keys(row).filter((key) => key !== 'binding').sort().join(',');
+      if (keys !== 'attempt_id,expires_at,grant_id,issued_at,owner_reference,request_sha256' || (row.binding !== undefined && !validBinding(row.binding)) || typeof row.grant_id !== 'string' || !UUID_V4.test(row.grant_id) || typeof row.attempt_id !== 'string' || !UUID_V4.test(row.attempt_id) || typeof row.request_sha256 !== 'string' || !SHA256.test(row.request_sha256) || typeof row.owner_reference !== 'string' || row.owner_reference.length < 1 || row.owner_reference.length > 256 || /[\u0000-\u001f\u007f]/.test(row.owner_reference) || redactSecrets(row.owner_reference) !== row.owner_reference || !validTimestamp(String(row.issued_at)) || !validTimestamp(String(row.expires_at)) || Date.parse(String(row.expires_at)) <= Date.parse(String(row.issued_at)) || Date.parse(String(row.expires_at)) - Date.parse(String(row.issued_at)) > MAX_GRANT_LIFETIME_MS) throw invalid();
       return row as GrantRecord;
     } finally { await handle.close(); }
   }
