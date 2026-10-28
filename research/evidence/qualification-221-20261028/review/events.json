@@ -1,0 +1,56 @@
+[
+  {
+    "seq": 1,
+    "timestamp": "2026-10-28T15:43:22.045Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 2,
+    "timestamp": "2026-10-28T15:43:22.048Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 3,
+    "timestamp": "2026-10-28T15:43:27.022Z",
+    "type": "tool_denied",
+    "severity": "warning",
+    "name": "unknown",
+    "outcome": "permission_denied_by_policy",
+    "reason": "permission_denied_by_policy"
+  },
+  {
+    "seq": 4,
+    "timestamp": "2026-10-28T15:43:33.480Z",
+    "type": "message",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown"
+  },
+  {
+    "seq": 5,
+    "timestamp": "2026-10-28T15:43:33.480Z",
+    "type": "diagnostic",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown",
+    "reason": "reasoning_observation",
+    "streamed_entries": 0,
+    "history_entries": 0,
+    "history_audited": true
+  },
+  {
+    "seq": 6,
+    "timestamp": "2026-10-28T15:43:33.481Z",
+    "type": "diagnostic",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown",
+    "reason": "ignored_notifications"
+  }
+]

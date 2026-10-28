@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, StartRunInput, SupervisorBackend } from "../../src/contracts.js";
 import { MAX_APPROVAL_LEDGER_RECORDS } from "../../src/contracts.js";
 import { approvalsToWire, runFromWire, runToWire } from "../../src/core/serialization.js";
+import { exportReport } from "../../src/reporting/export.js";
 import { RunManager } from "../../src/core/run-manager.js";
 import { exclusionScopesForWorkspace } from "../../src/core/exclusions.js";
 import { TEST_CONFIG } from "./support/test-config.js";
@@ -67,6 +68,21 @@ describe("run record fields added in 2.1", () => {
     expect(record.pin).toBeUndefined();
     expect(record.exclusions).toBeUndefined();
     expect(JSON.stringify(runToWire(record))).toBe(JSON.stringify(written));
+  });
+
+  it("preserves unknown legacy counts and validates persisted review counts", () => {
+    const legacy = recordWrittenBy201();
+    expect(runFromWire(legacy).contextFileCount).toBeUndefined();
+    expect(runToWire(runFromWire(legacy))).not.toHaveProperty("context_file_count");
+    for (const count of [0, 1, 50]) {
+      const record = runFromWire({ ...legacy, context_file_count: count });
+      expect(record.contextFileCount).toBe(count);
+      expect(runToWire(record).context_file_count).toBe(count);
+    }
+    for (const count of [-1, 51, 1.5, "1", null]) {
+      expect(() => runFromWire({ ...legacy, context_file_count: count })).toThrow(/context file count/);
+    }
+    expect(() => runFromWire({ ...legacy, mode: "edit", context_file_count: 0 })).toThrow(/context file count/);
   });
 
   it("loads a flat exclusion list written before anchoring as globs under the admitted root", () => {
@@ -194,6 +210,36 @@ describe("run manager records the 2.1 contract fields", () => {
       const result = JSON.parse(await readFile(join(directory, "result.json"), "utf8")) as { artifacts: Array<{ name: string; sha256: string }>; usage: unknown };
       expect(result.artifacts.find((artifact) => artifact.name === "approvals.json")?.sha256).toBe(createHash("sha256").update(ledgerText).digest("hex"));
       expect(result.usage).toEqual(meta.usage);
+    } finally { await manager.shutdown(); }
+  });
+
+  it.each([[[]], [["notes.md"]]])("persists review context count across close and exports without context paths: %j", async (contextFiles) => {
+    const parent = await mkdtemp(join(await realpath(tmpdir()), "vsup-context-count-")); roots.push(parent);
+    const source = join(parent, "source"); const data = join(parent, "data");
+    await mkdir(source);
+    await writeFile(join(source, "notes.md"), "Review context");
+    const backend = new RecordingBackend();
+    const manager = new RunManager({ ...TEST_CONFIG, allowedWorkspaceRoots: [source] }, data, [backend]);
+    try {
+      const started = await authorizedReviewStart(manager, { task: "review", cwd: source, context_files: contextFiles });
+      await waitFor(async () => (await manager.status({ run_id: started.run_id })).state === "running");
+      await backend.callbacks?.onState("completed", { result: { summary: "Done" } });
+      await waitFor(async () => (await manager.status({ run_id: started.run_id })).state === "completed");
+      await manager.close({ run_id: started.run_id });
+      const directory = join(data, "runs", started.run_id);
+      const meta = JSON.parse(await readFile(join(directory, "meta.json"), "utf8")) as Record<string, unknown>;
+      expect(runFromWire(meta).contextFileCount).toBe(contextFiles.length);
+      const output = join(parent, "export");
+      await exportReport({ directory, output });
+      const report = JSON.parse(await readFile(join(output, "report.json"), "utf8")) as Record<string, unknown>;
+      expect(report.context_file_count).toBe(contextFiles.length);
+      expect(JSON.stringify(report)).not.toContain("notes.md");
+      delete meta.context_file_count;
+      await writeFile(join(directory, "meta.json"), JSON.stringify(meta), { mode: 0o600 });
+      const legacyOutput = join(parent, "legacy-export");
+      await exportReport({ directory, output: legacyOutput });
+      const legacy = JSON.parse(await readFile(join(legacyOutput, "report.json"), "utf8")) as Record<string, unknown>;
+      expect(legacy.context_file_count).toBeNull();
     } finally { await manager.shutdown(); }
   });
 
