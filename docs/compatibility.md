@@ -163,7 +163,7 @@ An earlier build of the same workflow, the **workflow candidate**, was observed 
 
 ## Verified gates
 
-Recorded in `acceptance.json` as the `v2.0.1-archive-*` entries for the corrected 2.0.1 archive (candidate `8b1b7dd556ea985e`), the target no-inference conformance for `backend = "antigravity"` (`antigravity-backend-no-inference-check`), and the pnpm validation. 2.0.2 app-server backend has no verified target gate yet.
+Recorded per build in `acceptance.json` as each build's `observed` list. For the supported 2.2.0 build these are the Node floor, the no-inference conformance check, native readiness, the hosted review and edit, execution provenance, usage and the export; the table below is historical, from the corrected 2.0.1 archive (candidate `8b1b7dd556ea985e`), the 1.4.0 Antigravity no-inference check and the pnpm validation.
 
 | Gate | Result |
 |---|---|
