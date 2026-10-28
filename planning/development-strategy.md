@@ -10,11 +10,21 @@ How vibe-supervisor is developed, verified and released: the picture, the direct
 
 1. **Make the qualified workflow dependable.** Broader real-task qualification beyond the two bounded trials, then the clean-account installation, after which a release may be marked latest. Start failures are diagnosed from `details.differing_fields`, never retried blindly.
 2. **Close the Antigravity gates.** `agy` 1.4.7 and 1.4.8 support is on `main`; 1.4.9 with an opt-in, logged `--dangerously-skip-permissions` switch is in progress. The five probe gates move only when their evidence is committed.
-3. **The review search tool.** Worker answer quality is the weakest axis and reviews cannot search. Vibe 3.0.2's built-in `grep` judges only the directory it searches, not each file it reads, so it stays off; the route is a supervisor-owned MCP server ([design](2.1-designs.md#5-search-sidecar-for-reviews)). It changes three enforcement points: ADR 0007 first, then a hosted review carrying the nested `run_typescript` probe.
+3. **The review search tool.** Worker answer quality is the weakest axis and reviews cannot search. Vibe 3.0.2's built-in `grep` judges only the directory it searches, not each file it reads, so it stays off; the route is a supervisor-owned MCP server ([design](2.1-designs.md#5-search-tool-for-reviews), proposed 2026-10-28 from Vibe 3.0.2's source). It changes three enforcement points, so it needs the owner's decision recorded here and in the Handoff, then a hosted review carrying the nested `run_typescript` probe.
 4. **Tooling — done.** Byte-reproducible archives: one SBOM and acceptance date from `SOURCE_DATE_EPOCH`, else the HEAD commit time (owner, 2026-10-27), and a namespace from the lockfile hash, so the SBOM written after packing is the same for every build of a commit.
 5. **The next Vibe release.** 3.0.3 shipped four days after 3.0.2 with breaking configuration changes. A new pin is a new candidate: tagged-source review, conformance check and its own sitting, decided per release.
 
-Feature expansion beyond these needs the owner's decision. Dated checkpoints and superseded runbooks live in the Handoff's history and in Git, not here.
+Feature expansion beyond these needs the owner's decision. Decisions and new ideas are recorded in this document and the Handoff; no new ADRs are written, and the existing ones stay as the record of past decisions (owner, 2026-10-28). Dated checkpoints and superseded runbooks live in the Handoff's history and in Git, not here.
+
+## Ideas under consideration — 2026-10-28
+
+Each is a candidate for the owner's decision, with what is known so far. None is authorized.
+
+- **Search tool design.** Two read-only tools, `list_files` and `grep`, from a supervisor-owned stdio MCP server declared in `agentConfig.mcpServers` with an empty environment. Vibe 3.0.2 offers MCP tools only inside `run_typescript` (`tools.mcp_supervisor_search.grep`), so reviews must enable `run_typescript`. Every call is an approval the handler judges by route, input schema and path; the server also judges every file it lists or reads with `judgeWorkspacePath` and `excluded_globs`, which is what Vibe's own `grep` lacks. Bounds: 64 KiB and 500 matches per call, a 2-second regex limit per file, a 10-second call deadline. The server is outside the worker's process group, so it carries its own lifetime check. Source facts and hashes are in [compatibility-v3](../docs/compatibility-v3.md#search-tool-facts); still open: the live `toolName` of an MCP approval, whether `runtime/read` lists MCP tools, and the nested-write gate.
+- **A standing authorization.** Today every start needs a grant registered beforehand. An owner-configured budget per root (for example N starts a day within fixed limits) would let Codex start Vibe without a per-start command, at the cost of the one-registration-per-task rule. It would change the dispatch contract, so it needs an explicit owner decision.
+- **A Codex custom agent.** Codex sub-agents are Codex model threads defined as TOML files; a `vibe-reviewer` agent that knows the grant, start and close sequence would make delegation smoother without changing the supervisor.
+- **Vibe 3.0.3 and later.** The assessment ([research](../research/vibe-3.0.3-assessment-2026-10-28.md)) recommends waiting: 3.0.3 renames the edit tool on the approval wire (`file_system.search_replace` to `file_system.edit`), so a re-pin needs a code change and a new candidate, and none of its fixes addresses a problem seen on 3.0.2.
+- **Integration surfaces.** ACP, `vibe -p`, the agent socket and `run-server` were reviewed and rejected for now; revisit only if Mistral publishes a versioned, supported contract for one of them.
 
 ## Vision and scope
 
@@ -96,7 +106,7 @@ Five layers, each honest about what it cannot show. Evidence is recorded against
 | 2.1.1 | The 2.1.0 review fixes | Superseded: never packaged; carried into 2.2.0 |
 | 2.2.0 | 2.1.1 plus `allowed_write_paths`, per-field authorization diagnostics, Node-runtime-aligned `task authorize`, grant storage and prepared-input repairs | **Supported.** Pre-release (2026-10-27) after two accepted native trials; not latest until the clean-account installation |
 | 2.2.1 (unreleased) | Antigravity `agy` 1.4.7 and 1.4.8, pinned built-in skills, browser shims; 1.4.9 and the logged skip-permissions switch in progress | On `main`; needs the Antigravity probe evidence and a candidate of its own |
-| Next minor | Wider, still one MCP contract: the review search tool (ADR 0007), Linux, MCPB and Codex plugin packaging, the `runs` watch view, reviewed dependency-preparation profiles | Each item behind its own gate; Linux claimed only with its own pin manifest and target evidence |
+| Next minor | Wider, still one MCP contract: the review search tool, Linux, MCPB and Codex plugin packaging, the `runs` watch view, reviewed dependency-preparation profiles | Each item behind its own gate; Linux claimed only with its own pin manifest and target evidence |
 | Next Vibe release | A new candidate pinned to it | Wire facts revalidated against the new tag; conformance check, one review and one edit on the target |
 
 Existing releases are never replaced or retagged, and only the latest release is supported. A release is marked latest only after the clean-account installation is recorded for it.

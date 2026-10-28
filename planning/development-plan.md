@@ -84,7 +84,7 @@ The 2.0.x path is done, and 2.1.0 is published as a pre-release. The 2.1.1 path,
 | 5 | The five Antigravity probes on a 2.1.x candidate | Target agent | Opt-in and a sitting of its own |
 | 6 | Outreach, after a release is marked latest | You | Section "Outreach and adjacent work" |
 | next | `allowed_write_paths` on edits ([section 7](#7-22-wider-still-one-path)): built on its own branch, merged after 2.1.1 is published | Coordinator | Yes to the merge |
-| next | The review search sidecar ([design](2.1-designs.md#5-search-sidecar-for-reviews)), re-read against Vibe 3.0.2's tagged source | Coordinator | **Approve ADR 0007**; needs `nested-run-typescript-shape-and-gating` evidence from the 2.1.1 hosted review |
+| next | The review search sidecar ([design](2.1-designs.md#5-search-tool-for-reviews)), re-read against Vibe 3.0.2's tagged source | Coordinator | **Approve ADR 0007**; needs `nested-run-typescript-shape-and-gating` evidence from the 2.1.1 hosted review |
 | any | Repository description and topics (section 4.7); no rename (owner 2026-10-19) | You | **Run the `gh` command** |
 
 Open decisions that do not block the release are in section 4.12. Classify any failure before choosing its remedy: product defect, host permission, installation/configuration, provider failure, coordinator-verification error or rejected worker output. Rebuild only for changed distribution bytes; rerun matched preparation when bound inputs change. A host command requiring scoped permission is not itself a product defect or permission to replay a task.
