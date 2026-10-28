@@ -13,7 +13,7 @@ import type {
 } from "../contracts.js";
 import { APP_VERSION } from "../version.js";
 import { SCHEMA_VERSION, supervisorError } from "../contracts.js";
-import { closeSchema, editStartSchema, resultSchema, reviewStartSchema, statusSchema } from "../mcp/schemas.js";
+import { closeSchema, dispatchRequestSchemas, editStartSchema, resultSchema, reviewStartSchema, statusSchema } from "../mcp/schemas.js";
 import { atomicWriteJson, sanitizeForPersistence } from "../persistence/atomic.js";
 import { readNdjsonRecovering } from "../persistence/ndjson.js";
 import { EventLog } from "../persistence/event-log.js";
@@ -42,6 +42,7 @@ import { acquireOwnerLock } from "./owner-lock.js";
 import type { OwnerLock } from "./owner-lock.js";
 import { DispatchGrants, registrationStorageError } from "./dispatch-grants.js";
 import { bindingMismatchError, dispatchBinding, type DispatchBinding } from "./dispatch-binding.js";
+import { taskAuthorizeCommand } from "./dispatch-command.js";
 import { verifyTaskInputs, taskInputManifestSchema, type TaskInputManifest } from "../preparation/task-inputs.js";
 
 function assertPreparedManifestScope(manifest: TaskInputManifest, contract: AcceptanceContract | undefined): void {
@@ -280,9 +281,7 @@ export class RunManager {
     const request = { ...value };
     delete request.wait_seconds;
     delete request.readiness_receipt;
-    const parsed = mode === "review"
-      ? parseInput(reviewStartSchema.omit({ authorization_id: true, attempt_id: true, readiness_receipt: true, wait_seconds: true }), request)
-      : parseInput(editStartSchema.omit({ authorization_id: true, attempt_id: true, readiness_receipt: true, wait_seconds: true }), request);
+    const parsed = mode === "review" ? parseInput(dispatchRequestSchemas.review, request) : parseInput(dispatchRequestSchemas.edit, request);
     const deadline = Date.now() + START_PREPARATION_DEADLINE_MS;
     const policy = await withDeadline(this.admissionPolicy(), deadline - Date.now(), "Authorization policy validation exceeded its deadline.");
     const contextFiles = "context_files" in parsed ? parsed.context_files : [];
@@ -569,6 +568,7 @@ export class RunManager {
     if (preparation && preparation.status !== "passed") blockers.push(supervisorError("VSUP_INVALID_STATE", "Matching candidate conformance is required before dispatch.", { preparation }));
     const eligible = blockers.length === 0 && policy !== undefined && workspace !== null;
     const issued = eligible ? this.receipts.issue({ revision: policy!.revision, operation: input.operation, workspace: workspace!, baseRef: baseRef ?? null, baseCommit }) : undefined;
+    const taskAuthorize = this.policy.configPath ? await taskAuthorizeCommand({ configPath: this.policy.configPath, operation: input.operation, workspace: workspace ?? input.workspace, baseRef }) : null;
     return {
       server_version: APP_VERSION,
       supervisor_runtime: { node: process.version, executable: await realpath(process.execPath), platform: process.platform, arch: process.arch },
@@ -594,8 +594,9 @@ export class RunManager {
       active_slot: { busy },
       runtime,
       ...(issued ? { readiness_receipt: issued.receipt, receipt_expires_at: issued.expiresAt } : {}),
+      task_authorize: taskAuthorize,
       next_action: eligible
-        ? `Start the ${input.operation} with readiness_receipt before receipt_expires_at on this same connection. The receipt proves preparation only; it does not authorize the task or guarantee provider availability.`
+        ? `Write the exact ${input.operation} request from task_authorize.request_template plus its task to a private file, run task_authorize.argv with the file and an owner reference in place of the placeholders, then start the ${input.operation} with the same request, the returned authorization_id and attempt_id, and readiness_receipt before receipt_expires_at on this same connection. The receipt proves preparation only; it does not authorize the task or guarantee provider availability.`
         : "Resolve every blocker and check again. This is a preparation failure, not a Vibe run result; do not substitute another implementer automatically."
     };
   }
