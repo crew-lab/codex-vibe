@@ -4,6 +4,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { nodeVersionAtLeast } from '../dist/runtime/node-version.js';
+import { sourceDate } from './source-date.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const packageJson = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
@@ -48,7 +49,7 @@ try {
 const gates = JSON.parse(await readFile(path.join(root, 'docs', 'acceptance.json'), 'utf8'));
 const report = {
   schema_version: 1,
-  generated_at: new Date().toISOString(),
+  generated_at: sourceDate(root),
   deterministic_checks: checks,
   verified_release_gates: (gates.verified ?? []).map(({ name, status }) => ({ name, status })),
   unverified_release_gates: (gates.unverified ?? []).map(({ name, status, evidence_required }) => ({ name, status, reason: evidence_required })),
