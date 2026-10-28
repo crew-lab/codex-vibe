@@ -6,9 +6,9 @@ These instructions apply to this repository and its descendants unless a more sp
 
 This is codex-vibe, a local MCP supervisor for one-shot Mistral Vibe reviews and isolated edits. The package is `vibe-supervisor` (version in `package.json`), ESM, npm-private and distributed through GitHub Releases. `vibe-app-server` is the default engine (one process per run). Google Antigravity (`agy` CLI) is an experimental second backend, off unless a configuration sets `experimental.antigravity = true` with `backend = "antigravity"` ([ADR 0008](docs/adr/0008-antigravity-execution-backend.md)); it is not for production until its target probes pass. There is no automatic patch integration, and only the latest release is supported. The source version, a published release, a frozen archive, an installed candidate and the connected server are separate facts; [Handoff.md](Handoff.md) records which is which. Preserve the existing MIT license and copyright notice.
 
-Read [README.md](README.md) for usage, [Handoff.md](Handoff.md) for scope and remaining work, [docs/reference.md](docs/reference.md) for tools/config/CLI, and [docs/functionality.md](docs/functionality.md) for behavior. The coordinator workflow is in [docs/workflow-acceptance.md](docs/workflow-acceptance.md) (acceptance contracts, assessments and reports), [docs/preparation.md](docs/preparation.md) (the version-matched preparation kit that gates dispatch) and [docs/validation-workspace.md](docs/validation-workspace.md) (owned validation copies). Consult [docs/security.md](docs/security.md), [docs/compatibility.md](docs/compatibility.md) (its source basis records the Vibe tag and file hashes the wire facts were read from), [docs/target-acceptance.md](docs/target-acceptance.md) (the procedure that proves a build on the machine that runs Vibe), and the ADRs (0004 is the app-server client, 0005 the managed-configuration isolation, 0006 Vibe's bundled skills, 0008 the Antigravity backend) before changing those boundaries. `docs/errors.md` is generated: run `npm run docs:errors` after changing a remedy.
+Read [README.md](README.md) for usage, [Handoff.md](Handoff.md) for scope and remaining work, [docs/reference.md](docs/reference.md) for tools/config/CLI, and [docs/functionality.md](docs/functionality.md) for behavior. The coordinator workflow is in [docs/workflow-acceptance.md](docs/workflow-acceptance.md) (acceptance contracts, assessments and reports), [docs/preparation.md](docs/preparation.md) (the version-matched preparation kit that gates dispatch) and [docs/validation-workspace.md](docs/validation-workspace.md) (owned validation copies). Consult [docs/security.md](docs/security.md), [docs/compatibility.md](docs/compatibility.md) (its source basis records the Vibe tag and file hashes the wire facts were read from), [docs/target-acceptance.md](docs/target-acceptance.md) (the procedure that proves a build on the machine that runs Vibe), and the ADRs (0004 is the app-server client, 0005 the managed-configuration isolation, 0006 Vibe's bundled skills, 0008 the Antigravity backend, 0010 dispatch authorization) before changing those boundaries. `docs/errors.md` is generated: run `npm run docs:errors` after changing a remedy.
 
-When delegating implementation, assign clear file ownership and tell workers they share the codebase and must preserve others' changes. Do not create user-owned chats for internal implementation subtasks.
+When delegating implementation, assign clear file ownership and tell workers they share the codebase and must preserve others' changes.
 
 ## Task authorization and coordination
 
@@ -20,6 +20,7 @@ The main chat coordinates and independently verifies. A fallback implementer is 
 
 - Use the existing strict TypeScript contracts, pinned dependencies, official MCP SDKs, and lockfile. The current compiler is TypeScript 5.9.3; do not silently migrate versions or add replacement frameworks.
 - Edit source in `src/`, tests in `tests/`, documentation in the repository root or `docs/`, and scripts in `scripts/`. Do not edit generated `dist/`, `node_modules/`, or release tarballs as source.
+- Commit messages are one line, `type(scope): summary`. Push `main` with `make push` and a branch with `make push-branch BRANCH=<name>` (macOS Keychain token). Fetch first: the target agent pushes too.
 - Inspect current Git status before edits and preserve unrelated changes. Commit, push, publish, deploy, or change user-global configuration only within explicit user authorization.
 - Keep stdout reserved for MCP frames in server mode. Send diagnostics to stderr; redact sensitive data before logging or persistence.
 - Do not add code comments. Name things so the code reads without them; what cannot be inferred goes in `docs/`. Comments a tool reads (lint or compiler directives) are allowed.
@@ -29,7 +30,7 @@ The main chat coordinates and independently verifies. A fallback implementer is 
 ## Boundaries that must remain intact
 
 - Canonical workspace allowlists are required; the starter allowlist is empty. Reject invalid, unsafe, or out-of-root paths rather than broadening access.
-- Review profiles enable `read_file` only (there is no `grep`); edits add `write_file` and `edit`. The model-visible catalogue cannot be narrowed, so tools outside the profile stay listed and are refused at execution; never describe them as hidden. Edits use supervisor-created detached Git worktrees. Do not automatically apply, commit, merge, or push worker changes.
+- Review profiles enable `read_file` only (Vibe's own `grep` is not enabled); edits add `write_file` and `edit`. The model-visible catalogue cannot be narrowed, so tools outside the profile stay listed and are refused at execution; never describe them as hidden. Edits use supervisor-created detached Git worktrees. Do not automatically apply, commit, merge, or push worker changes.
 - Shell and network tools stay disabled. `allow_shell: true` is rejected. The application policy is not a kernel sandbox; do not describe it as one.
 - Keep private per-run HOME/VIBE_HOME/TMPDIR, explicit child environment filtering, untrusted project state, and reasoning/secret filtering; reasoning stays off disk (session logging off, a throwaway private store deleted at close and by restart recovery). Do not inherit user/project tools, hooks, agents, skills, MCP servers, or trust records. The one skill exception is [ADR 0006](docs/adr/0006-bundled-vibe-skills.md): Vibe's packaged plugin skills `vibe:create-plugin`, `vibe:skill-creator`, `vibe:vibe` and `vibe:worktree` (or a subset of them) are accepted when each entry reports source `plugin`, scope `builtin`, no registry and a unique name. `disabled_skills = ["*"]` stays, so root user/project skills remain off and `config/read` `skillsCount` must stay zero; an unknown, duplicate or provenance-free entry, or a user/global/project/registry lookalike, fails the read-back. A skill grants no tool, path, shell or network access, and the profile tools do not change because of it.
 - Keep the app-server enforcement points: the supervisor-written session configuration and `VIBE_*` environment, the per-run owned loopback managed-configuration endpoint that serves only a disabled policy and is read back before the first turn ([ADR 0005](docs/adr/0005-target-conformance-repairs.md)), the `permission = "ask"` agent profile with its denylist, the startup read-back, an approval handler that denies unless the call is the profile's tool on an in-workspace path (never a session or permanent approval, 5-second deadline), and an event validator that fails closed on an unapproved allowed effect, an unknown entry kind or a watermark gap. Loosening one needs the owner's decision, recorded in the development strategy and Handoff.
@@ -44,7 +45,7 @@ The main chat coordinates and independently verifies. A fallback implementer is 
 
 ## Verification and reporting
 
-For code changes, run the relevant tests (`npx vitest run <files>`) and `npm run lint`, `npm run typecheck` and `npm run build` as appropriate; CI runs `npm run verify:release` on Node 20.19. Before creating a release candidate run:
+For code changes, run the relevant tests (`npx vitest run <files>`) and `npm run lint`, `npm run typecheck` and `npm run build` as appropriate; CI runs `npm run verify:release` on Node 20.19.0 and 24.21.0. Before creating a release candidate run:
 
 ```sh
 npm run verify:release
@@ -63,18 +64,4 @@ The owner decided on 2026-10-16 that the target machine may fix code. The target
 
 ### Recording target evidence
 
-The repository is public. Evidence recorded on the target machine (outputs of the [target acceptance procedure](docs/target-acceptance.md), reports, manifests) never contains a machine path, a credential, a readiness receipt, reasoning or private session history. Replace these before anything is committed, longest prefix first, and keep the exact bytes of any file whose hash is recorded elsewhere:
-
-| Original | Placeholder |
-| --- | --- |
-| Supervisor private home directory | `<private-supervisor-home>` |
-| Vibe uv tool environment | `<vibe-tool-env>` |
-| Node version manager home | `<nvm-home>` |
-| Supervisor repository checkout | `<supervisor-repository>` |
-| Site project repository checkout | `<site-project-repository>` |
-| Any other path under the original home directory | `<target-home>/...` |
-| Private project name, any letter case | `<site-project>` |
-| Private project domain | `<site-project-domain>` |
-| Private project root placeholder used in a runbook | `<site-project-root>` |
-
-Run `grep -rn '/Users/\|/home/' <evidence folder>` before committing; raw-byte files that still contain a path or a name are listed with the reason beside the evidence.
+The repository is public. Target evidence never contains a machine path, a credential, a readiness receipt, reasoning or private session history; the placeholders and the private-path check are in [target acceptance](docs/target-acceptance.md#recording-evidence).

@@ -122,7 +122,7 @@ Record for each gate its `result`, the evidence object and every `fail` finding.
 - Stop at the first failure of a deterministic requirement: any `fail` finding, a refused start, a failed or unverified edit, an unexpected process or directory left behind. No retries, no raised limits, no extra runs, and no configuration edits to make a check pass; report to the preparing machine. A preparation failure is infrastructure evidence: it never triggers a fallback implementer or a replay of a task.
 - Observation gates (thinking effect, experiments when inconclusive, nested gating when not exercised, unknown kinds, handoff) record what was seen and do not stop the sequence unless a run failed.
 - Never record credentials, receipts, reasoning or private session history. The `reasoning_observation` diagnostic stores counts only.
-- Evidence goes in a folder the owner names, outside the shipped tree. Use the placeholders from [AGENTS.md](../AGENTS.md#recording-target-evidence) (`<private-supervisor-home>`, `<vibe-tool-env>`, `<site-project>`, and the rest) in everything else, and run `grep -rn '/Users/\|/home/' "$EVIDENCE"` before anything is committed.
+- Evidence goes in a folder the owner names, outside the shipped tree. Use the placeholders from [recording evidence](#recording-evidence) (`<private-supervisor-home>`, `<vibe-tool-env>`, `<site-project>`, and the rest) in everything else, and run `grep -rn '/Users/\|/home/' "$EVIDENCE"` before anything is committed.
 - Record a gate as observed in `docs/acceptance.json` (in the build's `observed` list, with its `evidence` path and a one-line `note`) only when its committed evidence is complete; anything else stays in that build's `open` list with one line on why. Update [compatibility](compatibility.md#unverified-gates) to match and run `npm run acceptance`. Gates that stay open keep their entry with the finding added to `result`. Commit on a branch and push with `make push-branch BRANCH=<name>`.
 
 | Gate | Moves to verified when |
@@ -142,3 +142,21 @@ Record for each gate its `result`, the evidence object and every `fail` finding.
 | `antigravity-stream-tool-shape` | `agy_probes.stream_tool_shape.result` `pass`, with the recorded field names (item 4) |
 | `antigravity-proxy-honoured` | `agy_probes.proxy_honoured.result` `pass`, with the recorded hosts (item 5) |
 | `antigravity-project-config-not-loaded` | `agy_probes.project_config_not_loaded.result` `pass`, `loaded` empty (item 6) |
+
+## Recording evidence
+
+The repository is public. Evidence recorded on the target machine (outputs of this procedure, reports, manifests) never contains a machine path, a credential, a readiness receipt, reasoning or private session history. Replace these before anything is committed, longest prefix first, and keep the exact bytes of any file whose hash is recorded elsewhere:
+
+| Original | Placeholder |
+| --- | --- |
+| Supervisor private home directory | `<private-supervisor-home>` |
+| Vibe uv tool environment | `<vibe-tool-env>` |
+| Node version manager home | `<nvm-home>` |
+| Supervisor repository checkout | `<supervisor-repository>` |
+| Site project repository checkout | `<site-project-repository>` |
+| Any other path under the original home directory | `<target-home>/...` |
+| Private project name, any letter case | `<site-project>` |
+| Private project domain | `<site-project-domain>` |
+| Private project root placeholder used in a runbook | `<site-project-root>` |
+
+Run `grep -rn '/Users/\|/home/' <evidence folder>` before committing; raw-byte files that still contain a path or a name are listed with the reason beside the evidence.
