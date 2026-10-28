@@ -13,7 +13,7 @@
 | 1 | 2.1.1: superseded. It was never packaged; the target qualified 2.2.0 instead | — |
 | 2 | Clean-account installation (postponed 2026-10-19); a release is marked latest only after it | Owner |
 | 3 | Broader real-task qualification beyond the two bounded trials | Owner allowance; target agent |
-| 4 | Merge `codex/antigravity-agy-148`: `codex/consolidated-candidate-20261027` (agy 1.4.7 and 1.4.8, Antigravity built-in skill policy) re-applied onto `main` with its review fixes (no unqualified 1.4.6, `builtin: true` required, `ANTIGRAVITY_API_KEY` kept as a fallback, POSIX-only shims). Then the five Antigravity probes on a candidate that contains it | Owner approves the merge; then target agent |
+| 4 | Merged on 2026-10-28 as `codex/antigravity-agy-148`: `codex/consolidated-candidate-20261027` (agy 1.4.7 and 1.4.8, Antigravity built-in skill policy) re-applied onto `main` with its review fixes (no unqualified 1.4.6, `builtin: true` required, `ANTIGRAVITY_API_KEY` kept as a fallback, POSIX-only shims). Next: the five Antigravity probes on a candidate that contains it | Target agent |
 | 5 | The newer Vibe release (3.0.3, on the target's PATH): a new candidate only after its own tagged-source review and target sitting | Owner decides |
 | 6 | Review search sidecar: draft ADR 0007 for the MCP stdio route (Vibe 3.0.2's client-provided tools are host-embedding only, so not usable over the wire); building it needs the owner's approval and a hosted review carrying the nested `run_typescript` probe | Coordinator drafts; owner approves |
 | 7 | Byte-reproducible archives: one SBOM and acceptance date from `SOURCE_DATE_EPOCH`, else the HEAD commit time (owner, 2026-10-27), and no SBOM regeneration after packing | Coordinator |
