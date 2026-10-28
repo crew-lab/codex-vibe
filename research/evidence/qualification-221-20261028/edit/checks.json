@@ -1,0 +1,44 @@
+{
+  "contract_sha256": "8896e601218112a5b1f410ad1f2aab801b37ba31ccda46e7a398e14c033a7d6a",
+  "checked_at": "2026-10-28T15:45:09.192Z",
+  "patch_sha256": "447965ba19a88ef0a78893085cbbed828c3c9d441324715c75d4d5e2881de742",
+  "base_commit": "c83c01e4c5987fbe0e18afcfcccfea2d0a3a3e00",
+  "execution_state": "completed",
+  "status": "failed",
+  "checks": [
+    {
+      "id": "$scope",
+      "status": "passed",
+      "reason": "changed-path-allowlist"
+    },
+    {
+      "id": "$required_changes",
+      "status": "passed",
+      "reason": "required-changed-paths"
+    },
+    {
+      "id": "module",
+      "path": "src/at-least.mjs",
+      "status": "passed",
+      "reason": "file_exists"
+    },
+    {
+      "id": "tests",
+      "path": "tests/at-least.test.mjs",
+      "status": "passed",
+      "reason": "file_exists"
+    },
+    {
+      "id": "native-test-runner",
+      "path": "tests/at-least.test.mjs",
+      "status": "passed",
+      "reason": "text_contains"
+    },
+    {
+      "id": "strict-assertions",
+      "path": "tests/at-least.test.mjs",
+      "status": "failed",
+      "reason": "text_contains"
+    }
+  ]
+}

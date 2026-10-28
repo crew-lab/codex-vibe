@@ -1,0 +1,115 @@
+{
+  "run_id": "33a634d5-a2bd-453e-8cb3-54cb571ecdee",
+  "candidate": "81df8140eb49afbebfb5202bc3186c97f9ea8b57a7243d108ce376cbdcc73b90",
+  "usage": {
+    "tokensUsed": 75875,
+    "contextSize": 209715,
+    "promptTokens": 63336,
+    "completionTokens": 12539,
+    "cachedTokens": 25856,
+    "modelCalls": 2,
+    "priceAvailability": "available",
+    "priceSource": "runtime/read",
+    "costAvailability": "available",
+    "toolCalls": {
+      "executed": 1,
+      "deniedByHandler": 0,
+      "deniedByPolicy": 0
+    },
+    "cost": {
+      "amount": 0.1541409,
+      "currency": "USD",
+      "authoritative": false
+    },
+    "costSource": "runtime-stats-prices"
+  },
+  "duration_ms": {
+    "inference": null,
+    "finalization": null,
+    "preparation": 33,
+    "startup": 2396,
+    "execution_and_finalization": 97412,
+    "total": 99841
+  },
+  "acceptance": "rejected",
+  "verification": {
+    "contract_sha256": "2f55d322a666fdfffe20ae12fa8faf1fb3ea18bc801d664427b43edb4c03c2a5",
+    "checked_at": "2026-10-28T08:51:08.371Z",
+    "patch_sha256": "3d160509ac0dd6328a670395d4b4ee3b9958dc70a9b6a6d5efb2fd3703d55b78",
+    "base_commit": "15725cba20f4f83475f0df8241e66f31836ce1d4",
+    "execution_state": "completed",
+    "status": "passed",
+    "check_count": 6,
+    "failed_checks": []
+  },
+  "contract_sha256": "2f55d322a666fdfffe20ae12fa8faf1fb3ea18bc801d664427b43edb4c03c2a5",
+  "pin": {
+    "vibe_version": "3.0.2",
+    "manifest_sha256": "3221c7dc42b95092a0a347d05cab9f850c673b0b64f62d27de6954fb82e72f48",
+    "record_sha256": "c3238b982fe256e0c9dd2a2059ded853f2fdaa5ac12acda572b9e6deeaed084d"
+  },
+  "coordinator_validations": [
+    {
+      "id": "one-file-scope",
+      "status": "passed",
+      "reference": "ops/evidence/single-board-trial/experience.md"
+    },
+    {
+      "id": "standalone-offline",
+      "status": "passed",
+      "reference": "ops/evidence/single-board-trial/experience.md"
+    },
+    {
+      "id": "exact-copy-keys",
+      "status": "failed",
+      "reference": "ops/evidence/single-board-trial/experience.md"
+    },
+    {
+      "id": "viewport375",
+      "status": "failed",
+      "reference": "ops/evidence/single-board-trial/experience.md"
+    },
+    {
+      "id": "early-action",
+      "status": "passed",
+      "reference": "ops/evidence/single-board-trial/experience.md"
+    },
+    {
+      "id": "typography-targets",
+      "status": "failed",
+      "reference": "ops/evidence/single-board-trial/experience.md"
+    },
+    {
+      "id": "fragments-inert",
+      "status": "failed",
+      "reference": "ops/evidence/single-board-trial/experience.md"
+    },
+    {
+      "id": "contrast",
+      "status": "incomplete",
+      "reference": "ops/evidence/single-board-trial/experience.md"
+    },
+    {
+      "id": "truth-and-handoff",
+      "status": "failed",
+      "reference": "ops/evidence/single-board-trial/experience.md"
+    },
+    {
+      "id": "links-whitespace",
+      "status": "failed",
+      "reference": "ops/evidence/single-board-trial/experience.md"
+    }
+  ],
+  "slot_after_close": {
+    "busy": false,
+    "eligible": true,
+    "blockers": []
+  },
+  "retry_replay_extra_start": false,
+  "authorization_accounting": {
+    "specific_trial_starts": 1,
+    "d3_allowance_debit": "not assigned; no retroactive authorization or inference from dates"
+  },
+  "source_ledger_sha256": "de874ae7c26106a3beb3728ee64ce6041dc914bc43d91d7185d423018ff5ca2e",
+  "source": "Target project trial ledger; original retained privately, this is a sanitized projection"
+}

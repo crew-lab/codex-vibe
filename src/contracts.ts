@@ -192,6 +192,7 @@ export interface RunRecord {
   startedAt?: string;
   finishedAt?: string;
   taskSha256: string;
+  contextFileCount?: number;
   dispatch?: { grant_id: string; attempt_id: string; request_sha256: string };
   acceptanceContract?: AcceptanceContract;
   verification?: Verification;

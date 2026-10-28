@@ -65,6 +65,7 @@ export function runToWire(run: RunRecord): JsonObject {
     run_id: run.runId,
     backend: run.backend,
     mode: run.mode,
+    ...(run.contextFileCount === undefined ? {} : { context_file_count: run.contextFileCount }),
     ...(run.output ? { output: run.output } : {}),
     ...(run.sessionMode ? { session_mode: run.sessionMode } : {}),
     ...(run.maxCorrections === undefined ? {} : { max_corrections: run.maxCorrections }),
@@ -143,6 +144,10 @@ export function runFromWire(value: unknown): RunRecord {
     taskSha256: stringValue(value.task_sha256),
     limits: limitsFromWire(limits)
   };
+  if (value.context_file_count !== undefined) {
+    if (run.mode !== "review" || !Number.isSafeInteger(value.context_file_count) || (value.context_file_count as number) < 0 || (value.context_file_count as number) > 50) throw new TypeError("Invalid persisted context file count");
+    run.contextFileCount = value.context_file_count as number;
+  }
   if (value.dispatch !== undefined) {
     const dispatch = asObject(value.dispatch);
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

@@ -1,0 +1,22 @@
+[
+  {
+    "kind": "row",
+    "date": "2026-10-27",
+    "supervisor_version": "2.2.0",
+    "run_id": "c9eff0b7-67b4-4aed-be46-1b8e8857f908",
+    "shape": "edit, 5 contract checks, 2 changed files",
+    "measure": "max_turns 12, 178 s, 256,677 tokens, 5 model calls, about 0.22 USD",
+    "accepted": false,
+    "reason": "Original patch independently reconstructed and rendered. Timed out180s;2of4files;CSS/JSmissing;blankiframe0of7populatedcopyboards;320pxoverflows507;11brokenanchors;2whitespaceerrors;unsupportedcompletion/contrastclaims. Preservepartial,nointegration,retryorfallback."
+  },
+  {
+    "kind": "row",
+    "date": "2026-10-28",
+    "supervisor_version": "2.2.0",
+    "run_id": "33a634d5-a2bd-453e-8cb3-54cb571ecdee",
+    "shape": "edit, 4 contract checks, 1 changed file",
+    "measure": "max_turns 12, end_turn, 97 s, 75,875 tokens, 2 model calls, about 0.15 USD",
+    "accepted": false,
+    "reason": "Original board independently rendered unchanged at375x812:421px overflow; missing frozen no-date/no-WhatsApp paragraph; CTA typo and duplicated topics;7/8 invalid local fragments;13px helper/11px caption;103 whitespace lines. Contrast measurement partial. No integration or repair."
+  }
+]
