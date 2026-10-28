@@ -71,7 +71,7 @@ Every factual claim in the article, in reading order, with where it comes from. 
 | Model label `mistral-vibe-cli-latest`, alias `mistral-medium-3.5`, thinking off; provider and weights unverified; cost is an estimate, not billing | `HOSTED-QUALIFICATION.md:27` |
 | Not proven: general reliability, clean account, nested `run_typescript` gating, Antigravity, better answers by delegating | `README.md:3` in that folder; `Handoff.md:5`; `planning/development-strategy.md:11` |
 | Mixed record: 2.0.1 review reversed two of five cases; 2.0.1 edit missed its contract; 2.1.0 fixture edit accepted; six 1.x runs, three accepted | `planning/development-strategy.md:77`, `:166`, `:206`; `CHANGELOG.md:93`; `../sources.md` ("Real-project runs") |
-| Accepted tasks were narrow and named their inputs | `skills/vibe-supervisor/SKILL.md:54`; `../sources.md` |
+| Accepted tasks were narrow and named their inputs | `.agents/skills/vibe-supervisor/SKILL.md:54`; `../sources.md` |
 | Session configuration contents and the `VIBE_*` switches | `docs/security.md:36` |
 | Read-back fails before any turn on any difference | `docs/security.md:38` |
 | Handler: profile tool, `realpath` inside the workspace, denylist, exclusions, `allowed_write_paths`, 5-second deadline, never session or permanent approval | `docs/security.md:46-50` |
@@ -86,7 +86,7 @@ Every factual claim in the article, in reading order, with where it comes from. 
 | `allow`, `pin-manifest`, `doctor --json`, `prepare check --kit` sequence; doctor launches nothing; the preparation pass gates dispatch | `README.md:44-50`, `:60`; `docs/reference.md` ("CLI") |
 | `setup` registers `serve --stdio --isolated --config <path>`; one private storage directory per connection | `src/cli/codex.ts:31-32`; `README.md:53` |
 | The `task authorize` example's flags and the expiry expression | `docs/reference.md:190`; `docs/local-operation.md` ("Authorize and start"). `$NODE_FROM_READINESS` is a placeholder for the readiness-reported executable, not a real variable the CLI knows |
-| Skill ships two task templates | `skills/vibe-supervisor/SKILL.md:52-78` |
+| Skill ships two task templates | `.agents/skills/vibe-supervisor/SKILL.md:52-78` |
 | Per-run token and dollar ceilings; per-root daily budget; a ceiling can overshoot by one model call | `docs/reference.md:171`; `CHANGELOG.md:52-53`; `planning/development-strategy.md:81` |
 | Linux and Windows code paths exist and are unclaimed | `planning/development-strategy.md:164`; `Handoff.md` ("Known limits of this state") |
 | `vibe-app-server` has no version field; no official page names it a third-party boundary; 3.0.0 removed three app-server RPCs | `planning/development-strategy.md:159`; `marketing/strategy.md:128` |
