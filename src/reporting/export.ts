@@ -150,6 +150,7 @@ export async function exportReport(options: { directory: string; output: string;
     : assessments.at(-1);
   const report = publicValue({
     schema_version: 1, report_version: 2, run_id: record.runId, supervisor_version: record.supervisorVersion ?? null, mode: record.mode,
+    ...(record.mode === 'review' ? { context_file_count: record.contextFileCount ?? null } : {}),
     execution: { state: verification.execution_state ?? record.executionState ?? (record.state === 'closed' ? 'unknown' : record.state), stop_reason: record.result?.stopReason ?? null },
     verification: verificationSummary(verification), assessment: currentAssessment?.decision ?? 'unassessed', assessments,
     provenance: { ...(record.dispatch ? { dispatch: record.dispatch } : {}), task_sha256: record.taskSha256, base_commit: verification.base_commit ?? record.worktree?.baseRef ?? null, patch_sha256: patchArtifact?.sha256 ?? null, contract_sha256: record.acceptanceContract ? contractDigest(record.acceptanceContract) : null, policy_revision: record.policyRevision ?? null },

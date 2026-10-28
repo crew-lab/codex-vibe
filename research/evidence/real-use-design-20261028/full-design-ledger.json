@@ -1,0 +1,52 @@
+{
+  "run_id": "c9eff0b7-67b4-4aed-be46-1b8e8857f908",
+  "candidate": "81df8140eb49afbebfb5202bc3186c97f9ea8b57a7243d108ce376cbdcc73b90",
+  "usage": {
+    "tokensUsed": 256677,
+    "contextSize": 209715,
+    "promptTokens": 244664,
+    "completionTokens": 12013,
+    "cachedTokens": 173696,
+    "modelCalls": 5,
+    "priceAvailability": "available",
+    "priceSource": "runtime/read",
+    "costAvailability": "available",
+    "toolCalls": {
+      "executed": 5,
+      "deniedByHandler": 0,
+      "deniedByPolicy": 1
+    },
+    "cost": {
+      "amount": 0.2226039,
+      "currency": "USD",
+      "authoritative": false
+    },
+    "costSource": "runtime-stats-prices"
+  },
+  "duration_ms": {
+    "inference": null,
+    "finalization": null,
+    "preparation": 37,
+    "startup": 2522,
+    "execution_and_finalization": 178092,
+    "total": 180651
+  },
+  "execution_state": "failed",
+  "execution_stop": "VSUP_TIMEOUT",
+  "assessment": "rejected as completeS05delivery",
+  "artifact_acceptance": "rejected as completeS05; partial preserved",
+  "verification": "incomplete automated; coordinator checks fail acceptance",
+  "patch_sha256": "a4f0601cbba2c47d08ddcff5be2a838cefedefacaeba790d4579b3f464d8e6e9",
+  "contract_sha256": "271621a25a6bf0dc1bded9ed8d19fd35cbbc944b1f9c73e67af82d32fcc2bc6f",
+  "pin": {
+    "vibe_version": "3.0.2",
+    "manifest_sha256": "3221c7dc42b95092a0a347d05cab9f850c673b0b64f62d27de6954fb82e72f48",
+    "record_sha256": "c3238b982fe256e0c9dd2a2059ded853f2fdaa5ac12acda572b9e6deeaed084d"
+  },
+  "authorization_accounting": {
+    "specific_trial_starts": 1,
+    "d3_allowance_debit": "not assigned; no retroactive authorization or inference from dates"
+  },
+  "source_ledger_sha256": "55eff9953e2e2e1aa899d691ae1ef1dd7e77ec08f5352f9f3193de66831e9a5d",
+  "source": "Target project trial ledger; original retained privately, this is a sanitized projection"
+}

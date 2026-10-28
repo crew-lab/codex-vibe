@@ -386,6 +386,7 @@ export class RunManager {
       const record: RunRecord = {
         schemaVersion: SCHEMA_VERSION, supervisorVersion: APP_VERSION, runId: id,
         backend: this.activeBackendKind, mode, state: "starting", sourceWorkspace: source,
+        ...(mode === "review" ? { contextFileCount: options.contextFiles?.length ?? 0 } : {}),
         workerWorkspace, createdAt: now, updatedAt: now,
         dispatch: { grant_id: options.authorizationId, attempt_id: options.attemptId, request_sha256: binding.requestSha256 },
         taskSha256: createHash("sha256").update(task).digest("hex"), policyRevision: policy.revision, admittedRoot: admitted.root, exclusions: admitted.exclusions, limits,
