@@ -123,7 +123,7 @@ Record for each gate its `result`, the evidence object and every `fail` finding.
 - Observation gates (thinking effect, experiments when inconclusive, nested gating when not exercised, unknown kinds, handoff) record what was seen and do not stop the sequence unless a run failed.
 - Never record credentials, receipts, reasoning or private session history. The `reasoning_observation` diagnostic stores counts only.
 - Evidence goes in a folder the owner names, outside the shipped tree. Use the placeholders from [AGENTS.md](../AGENTS.md#recording-target-evidence) (`<private-supervisor-home>`, `<vibe-tool-env>`, `<site-project>`, and the rest) in everything else, and run `grep -rn '/Users/\|/home/' "$EVIDENCE"` before anything is committed.
-- Move a gate to `verified` in `docs/acceptance.json` (status `VERIFIED`, `evidence` path, one-line `result`) only when its evidence is complete, update the same row in [compatibility](compatibility.md#unverified-gates), and run `npm run acceptance`. Gates that stay open keep their entry with the finding added to `result`. Commit on a branch and push with `make push-branch BRANCH=<name>`.
+- Record a gate as observed in `docs/acceptance.json` (in the build's `observed` list, with its `evidence` path and a one-line `note`) only when its committed evidence is complete; anything else stays in that build's `open` list with one line on why. Update [compatibility](compatibility.md#unverified-gates) to match and run `npm run acceptance`. Gates that stay open keep their entry with the finding added to `result`. Commit on a branch and push with `make push-branch BRANCH=<name>`.
 
 | Gate | Moves to verified when |
 |---|---|
