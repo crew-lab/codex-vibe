@@ -270,10 +270,14 @@ export async function startScriptedModelServer(): Promise<ScriptedModelServer> {
 
       let part: Record<string, unknown> = { text: 'done' };
       if (!functionResponse && current.issuedTool === null) {
-        const call = chooseProbeCall(body, current.probePath);
-        if (call) {
-          current.issuedTool = call.name;
-          part = { functionCall: call };
+        if (/flash-lite/i.test(pathname)) {
+          part = { text: 'probe intent' };
+        } else {
+          const call = chooseProbeCall(body, current.probePath);
+          if (call) {
+            current.issuedTool = call.name;
+            part = { functionCall: call };
+          }
         }
       }
       const payload = scriptedGenerateResponse(part, pathname);
@@ -586,11 +590,11 @@ function killProcessGroup(child: ChildProcess): void {
   }
 }
 
-function runAgy(executablePath: string, cwd: string, env: NodeJS.ProcessEnv): Promise<AgyRunOutput> {
+function runAgy(executablePath: string, cwd: string, env: NodeJS.ProcessEnv, skipPermissions: boolean): Promise<AgyRunOutput> {
   return new Promise((resolve) => {
     const child = spawn(
       executablePath,
-      ['-p', AGY_PROBE_PROMPT, '--output-format', 'stream-json', '--disable-slash-commands', '--sandbox', '--print-timeout', '30s'],
+      ['-p', AGY_PROBE_PROMPT, ...(skipPermissions ? ['--dangerously-skip-permissions'] : []), '--output-format', 'stream-json', '--disable-slash-commands', '--sandbox', '--print-timeout', '30s'],
       { cwd, env, stdio: ['ignore', 'pipe', 'ignore'], detached: process.platform !== 'win32' }
     );
     const chunks: Buffer[] = [];
@@ -644,6 +648,7 @@ interface ProbeContext {
   proxy: ProbeProxy;
   model: ScriptedModelServer;
   hookScript: string;
+  skipPermissions: boolean;
 }
 
 interface ToolProbeRun {
@@ -685,7 +690,7 @@ async function runToolProbe(
   const run = `probe-${label}`;
   context.proxy.setRun(run);
   context.model.beginRun(run, nonce, probePath);
-  const output = await runAgy(context.executablePath, workspace, probeEnvironment(childHome, childTmp, context.proxy.port, context.model.url, neutralizerBin));
+  const output = await runAgy(context.executablePath, workspace, probeEnvironment(childHome, childTmp, context.proxy.port, context.model.url, neutralizerBin), context.skipPermissions);
   const requests = context.model.requests.filter((request) => request.run === run);
   const probeTool = context.model.issuedTool(run);
 
@@ -827,6 +832,7 @@ export async function runAgyProbes(options: {
   root: string;
   proxy: ProbeProxy;
   readback: SlashReadback;
+  skipPermissions?: boolean;
 }): Promise<{ report: AgyProbeReport; findings: ProbeFinding[] }> {
   const findings: ProbeFinding[] = [];
   const root = path.join(options.root, 'agy-probes');
@@ -834,7 +840,7 @@ export async function runAgyProbes(options: {
   const hookScript = path.join(root, 'probe-hook.mjs');
   await writeFile(hookScript, PROBE_HOOK_SCRIPT, { mode: 0o700 });
   const model = await startScriptedModelServer();
-  const context: ProbeContext = { executablePath: options.executablePath, root, proxy: options.proxy, model, hookScript };
+  const context: ProbeContext = { executablePath: options.executablePath, root, proxy: options.proxy, model, hookScript, skipPermissions: options.skipPermissions === true };
   const report = notRunProbeReport();
 
   try {
@@ -878,7 +884,7 @@ export async function runAgyProbes(options: {
     await writeIsolatedSettings(egressHome, 'review', egressWorkspace, [], { modelProvider: 'gemini' });
     await writeAntigravityPreToolHook(egressHome, { mode: 'review', workerWorkspace: egressWorkspace, excludedAnchors: [] });
     options.proxy.setRun('egress-probe');
-    const egressOutput = await runAgy(options.executablePath, egressWorkspace, probeEnvironment(egressHome, egressTmp, options.proxy.port, null, neutralizerBin));
+    const egressOutput = await runAgy(options.executablePath, egressWorkspace, probeEnvironment(egressHome, egressTmp, options.proxy.port, null, neutralizerBin), options.skipPermissions === true);
     const egressAttempts = options.proxy.attemptsFor('egress-probe');
     const proxyEvaluation = evaluateProxyProbe(egressAttempts.map((attempt) => attempt.host));
     if (egressOutput.timedOut) {

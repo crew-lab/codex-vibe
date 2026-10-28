@@ -63,6 +63,7 @@ export interface AntigravityPreparationReport {
     total_tokens: number;
   };
   agy_probes: AgyProbeReport;
+  agy_permission_layer: 'enforced' | 'bypassed';
   findings: Array<{ level: 'info' | 'fail'; code: string; message: string }>;
 }
 
@@ -618,6 +619,7 @@ export async function runAntigravityPreparationCheck(
         executablePath,
         root: tempRoot,
         proxy,
+        skipPermissions: config.experimental?.antigravitySkipPermissions === true,
         readback: (slashCommand, cwd, childHome, childTmp) =>
           runCliSlashCommandReadback(executablePath, slashCommand, cwd, childHome, childTmp, proxy.port)
       });
@@ -701,6 +703,7 @@ export async function runAntigravityPreparationCheck(
       total_tokens: totalTokensObserved
     },
     agy_probes: probeReport,
+    agy_permission_layer: config.experimental?.antigravitySkipPermissions === true ? 'bypassed' : 'enforced',
     findings
   };
 
@@ -736,10 +739,12 @@ export function antigravityPermissionsMatch(value: unknown, expectedAllow: reado
   if (!Array.isArray(value)) return false;
   const scopes = new Set<string>();
   let globalMatched = false;
+  const normalizeRule = (rule: string): string =>
+    rule.trim().replace(/^view_file\(/, 'read_file(').replace(/^write_to_file\(/, 'write_file(');
   const matches = (actual: unknown, expected: readonly string[]): boolean => {
     if (!Array.isArray(actual) || actual.some((rule) => typeof rule !== 'string')) return false;
-    const normalized = actual.map((rule: string) => rule.trim()).sort();
-    const wanted = [...expected].sort();
+    const normalized = [...new Set(actual.map((rule: string) => normalizeRule(rule)))].sort();
+    const wanted = [...new Set(expected.map((rule: string) => normalizeRule(rule)))].sort();
     return normalized.length === wanted.length && normalized.every((rule, index) => rule === wanted[index]);
   };
   for (const entry of value) {
@@ -748,7 +753,7 @@ export function antigravityPermissionsMatch(value: unknown, expectedAllow: reado
     if (typeof scope.scope !== 'string' || !['global', 'project', 'shared'].includes(scope.scope) || scopes.has(scope.scope)) return false;
     scopes.add(scope.scope);
     if (scope.scope === 'global') {
-      globalMatched = matches(scope.allow, expectedAllow) && matches(scope.deny, expectedDeny);
+      globalMatched = matches(scope.allow ?? [], expectedAllow) && matches(scope.deny ?? [], expectedDeny);
       if (!globalMatched) return false;
     } else if (!matches(scope.allow ?? [], []) || !matches(scope.deny ?? [], [])) return false;
   }
