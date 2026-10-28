@@ -76,10 +76,14 @@ describe('Antigravity headless admission and lifecycle regressions', () => {
 
   it('accepts a pinned skill only with builtin: true, and only qualified agy versions', () => {
     expect(onlyAllowedAntigravityBuiltinSkills([{ name: 'automation', builtin: true }])).toBe(true);
+    expect(onlyAllowedAntigravityBuiltinSkills([{ name: 'antigravity-guide', builtin: true }])).toBe(true);
+    expect(onlyAllowedAntigravityBuiltinSkills([{ name: 'antigravity_guide', builtin: true }])).toBe(true);
     expect(onlyAllowedAntigravityBuiltinSkills([{ name: 'automation', scope: 'builtin' }])).toBe(false);
     expect(onlyAllowedAntigravityBuiltinSkills([{ name: 'automation', builtin: false, scope: 'builtin' }])).toBe(false);
     expect(onlyAllowedAntigravityBuiltinSkills([{ name: 'automation', builtin: true }, { name: 'automation', builtin: true }])).toBe(false);
+    expect(isSupportedAntigravityVersion('1.4.9')).toBe(true);
     expect(isSupportedAntigravityVersion('1.4.8')).toBe(true);
+    expect(isSupportedAntigravityVersion('1.4.7')).toBe(true);
     expect(isSupportedAntigravityVersion('1.4.6')).toBe(false);
   });
 

@@ -146,6 +146,12 @@ describe('Antigravity preparation probe classification', () => {
     ]) expect(antigravityPermissionsMatch(actual, allow, deny)).toBe(false);
   });
 
+  it('accepts global permissions with omitted deny when expected deny list is empty', () => {
+    const allow = ['read_file(/w/**)'];
+    expect(antigravityPermissionsMatch([{ scope: 'global', allow }, { scope: 'project' }, { scope: 'shared' }], allow, [])).toBe(true);
+    expect(antigravityPermissionsMatch([{ scope: 'global', allow, deny: [] }, { scope: 'project' }, { scope: 'shared' }], allow, [])).toBe(true);
+  });
+
   it('accepts only the WorkspacePathError that names the planted ancestor configuration', () => {
     const workspace = '/w/planted/packages/unisolated';
     const ancestor = '/w/planted/packages';
@@ -312,6 +318,12 @@ describe('Antigravity preparation probes through a fake agy', () => {
     const out = await prepareWith('version-1.4.8');
     expect(out.status).toBe('passed');
     expect(out.report.executable.version).toBe('1.4.8');
+  }, 90_000);
+
+  it('accepts agy 1.4.9 executable during preparation', async () => {
+    const out = await prepareWith('version-1.4.9');
+    expect(out.status).toBe('passed');
+    expect(out.report.executable.version).toBe('1.4.9');
   }, 90_000);
 
   it('fails the receipt when agy lets a failed hook allow the call', async () => {
