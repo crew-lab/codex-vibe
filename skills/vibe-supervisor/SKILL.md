@@ -46,7 +46,7 @@ Every delegation starts with a native workspace readiness call on the connection
 Collect the desired outcome, concrete acceptance criteria, canonical allowed workspace, exact file scope, exclusions, and explicit Git base for edits. Never put credentials in task text. Check the real connected tool schemas and do not invoke fields or tools absent from that catalog. The sequence is fixed:
 
 1. Readiness, as above. The eligible reply carries `task_authorize`: `argv` is the exact `task authorize` command bound to the connected server (its Node executable, its CLI entrypoint and its `--config`), `request_template` is `{ "operation", "request": { cwd, context_files | base_ref } }` for this workspace and operation, and `expires_at` is the grant expiry the command carries (30 minutes). No `--runtime-node` is needed with it.
-2. Write the request file: `request_template` plus `task` (and the `context_files` to read), as a private file outside the repository. This is the exact final request; what the start sends must equal it field for field.
+2. Write the request file: `request_template` plus `task` and, for a review, the `context_files` chosen as described under [choose the review context](#choose-the-review-context), as a private file outside the repository. This is the exact final request; what the start sends must equal it field for field.
 3. Run `task_authorize.argv` with only `<private-request-file>` and `<owner-reference>` replaced. The host's command permission is the owner's per-start check: a refusal is a stop, not something to route around. The command prints `authorization_id` and `attempt_id`; keep them private.
 4. Start with exactly the same request plus `authorization_id`, `attempt_id` and the `readiness_receipt`, before `receipt_expires_at`, on the same connection. On `VSUP_AUTHORIZATION_INVALID`, read `details.differing_fields`: fix the named request fields, or re-run readiness when a runtime field (`candidate`, `node_executable`, `node_version`, `policy`, `pin_manifest`) is listed, then register a new grant. Never retry with the same identifiers or a guessed change.
 5. Follow the run with cursor-based `vibe_status` calls, read `vibe_result`, then close as described below.
@@ -56,6 +56,20 @@ The readiness receipt is admission evidence and does not replace the grant; the 
 Files matched by the root's `excluded_globs` or the fixed secret denylist are refused to the worker; leave them out of the file scope. A root with a daily budget refuses a start with `VSUP_BUDGET_EXCEEDED` once its 24-hour spending reaches the ceiling; do not move the task to another root to get around it.
 
 Start one review or edit with bounded turns, deadline, output limits, wait, and the readiness receipt. Do not raise limits or rotate accounts after a failure. Write the task text from a template below.
+
+## Choose the review context
+
+The worker cannot search: it has `read_file` and a bounded file listing, nothing else. You can search, so do it before the grant is registered and hand the worker the result as `context_files`.
+
+1. Search the repository yourself (`rg`, or your own tools) for the symbols the question names, their call sites and the tests that cover them. Open what you find; a file that only mentions the symbol in a comment or an import is not context.
+2. Choose at most 8 files: the definitions, the callers whose behaviour the question depends on, and the tests that pin the current contract. Fewer is better. The schema takes 50, but each file is one `read_file` turn before the worker can answer, so 8 files fit `max_turns` 30 with room for the answer, and a longer list is a sign the question is too wide for one review; split it instead.
+3. Put their repository-relative paths in `context_files` in the request file. The supervisor checks each at admission (it must exist, resolve inside the workspace and match no `excluded_globs`), lists each in the prompt as an approved context path, and binds its path and content digest into the grant.
+4. Name the same files in the task text, in reading order, with one clause each on why they matter, so the worker reads them first and knows what to look for in each.
+5. Never include a secret-named file (`.env*`, `.envrc*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`), an excluded file (`VSUP_WORKSPACE_INVALID` refuses the start) or a generated one (`dist/`, lockfiles, build output): a generated file spends a read on nothing and never answers a question about the source.
+
+The list must be final before `task authorize`: adding, removing or reordering an entry, or a change to a listed file's content, after registration refuses the start with `VSUP_AUTHORIZATION_INVALID` and `differing_fields: ['context_files']`, and a new grant is needed.
+
+For each real review, log beside its usefulness entry how many context files were passed and how many `read_file` calls the run executed (`usage.tool_calls.executed` in the result, or the `tool_call:read_file:executed` count in `runs export`), with whether the answer was accepted. The run record does not keep `context_files`, so this count is recorded by hand.
 
 ## Write the task from a template
 
@@ -85,7 +99,7 @@ No shell, network or test execution.
 Final answer: what changed, then an inventory of changed and scratch files.
 ```
 
-Match the limits to the template: a review of two or three files fits `max_turns` 12; raise turns only with the number of files to read. Record whether the answer was accepted, so the template can be improved; `vibe-supervisor runs usefulness` summarizes the recorded assessments.
+Match the limits to the template: a review of two or three files fits `max_turns` 12; raise turns only with the number of files to read. Record whether the answer was accepted, so the template can be improved; `vibe-supervisor runs usefulness` summarizes the recorded assessments of edits and counts reviews without assessing them.
 
 ## Check the result
 
