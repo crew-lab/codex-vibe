@@ -8,15 +8,22 @@
 
 **What remains.**
 
-| # | Step | Who |
-|---|---|---|
-| 1 | 2.1.1: superseded. It was never packaged; the target qualified 2.2.0 instead | — |
-| 2 | Clean-account installation (postponed 2026-10-19); a release is marked latest only after it | Owner |
-| 3 | Broader real-task qualification beyond the two bounded trials | Owner allowance; target agent |
-| 4 | Antigravity on `main` (2026-10-28): agy 1.4.7, 1.4.8 and 1.4.9 (from the target's `018f17b`), with `--dangerously-skip-permissions` as an opt-in, logged switch (`[experimental] antigravity_skip_permissions`, default off, ADR 0008 amendment). The target reports all five probes passing on agy 1.4.9 with the flag on; the evidence is not in the repository yet, so the `antigravity-*` gates stay unverified until it is committed | Target agent commits probe evidence |
-| 5 | The newer Vibe release (3.0.3, on the target's PATH): assessed on 2026-10-28, recommendation: wait (see the 2026-10-28 assessment under `research/`); it renames the edit tool on the approval wire, so a re-pin needs a code change and a new candidate | Owner decides |
-| 6 | Review search tool: the design is in [2.1-designs §5](planning/2.1-designs.md#5-search-tool-for-reviews) (MCP stdio route, source-checked against Vibe 3.0.2). Building it needs the owner's decision, recorded in the strategy and here, and a hosted review carrying the nested `run_typescript` probe | Owner decides |
-| 7 | Done 2026-10-28: byte-reproducible `package:rc` (one source date, lockfile-derived SBOM namespace); two clean builds matched. The target build of the next candidate can be compared by `SHA256SUMS` | — |
+The order, each step's outcome and the recommendation for every owner decision (D1–D6) are in the [development strategy's Direction](planning/development-strategy.md#direction--2026-10-28); this table is the status.
+
+| # | Step | Who | State |
+|---|---|---|---|
+| 1 | Record the 2.2.0 build and its two trials in `docs/acceptance.json` (it still names 2.1.0 and lists the hosted gates as unverified); then simplify the ledger to one observed-list per build | Coordinator agent | Open; the simplification waits on D1 |
+| 2 | Mark v2.2.0 latest. The owner has no spare standard macOS account (2026-10-17), so the clean-account gate would be retired as a blocker; the target's fresh-prefix install and the offline smoke stand in | Owner | Waits on D2 |
+| 3 | Ten real starts through Codex on real tasks, each logged with its export and `runs usefulness` entry; the log orders the later steps | Owner uses; target agent records | Waits on D3 (a hosted allowance of about ten) |
+| 4 | Start friction: `vibe_status` returns the exact `task authorize` command for the connected server; the skill carries the sequence; a Codex custom agent wraps it. The single-use grant is unchanged | Coordinator agent | Open, no decision needed |
+| 5 | The nested `run_typescript` probe rides on the next hosted review and settles `nested-run-typescript-shape-and-gating` | Target agent | Inside step 3's allowance |
+| 6 | Search context without a new boundary: the skill has Codex search first and pass the hits as `context_files`; measured on step 3's reviews | Coordinator agent | Open, no decision needed |
+| 7 | Review search sidecar ([design](planning/2.1-designs.md#5-search-tool-for-reviews), source-checked against Vibe 3.0.2): built only if step 5 shows nested calls deniable and step 6 did not close the quality gap; it changes three AGENTS.md lines | Coordinator agent; target agent runs its hosted gate | Waits on D4, after steps 5 and 6; recommendation: not yet |
+| 8 | Antigravity frozen at agy 1.4.9: `main` carries 1.4.7–1.4.9 and the opt-in, logged `[experimental] antigravity_skip_permissions` switch (ADR 0008 amendment). The target reports all five probes passing with the flag on; the evidence is not in the repository, so the `antigravity-*` gates stay unverified until it is committed. No new agy versions or features after that; removed in the next minor if unused | Target agent commits the evidence | Waits on D5; recommendation: freeze |
+| 9 | Vibe cadence: stay on 3.0.2 and re-pin on a trigger only (a problem seen in step 3, a security fix, 3.0.2 uninstallable). The newer release on the target's PATH (3.0.3) renames the edit tool on the approval wire (2026-10-28 assessment under `research/`). Prepare the move with a per-version wire table; a re-pin's qualification is the preparation PASS plus one fixture review and one fixture edit | Coordinator agent | Waits on D6; recommendation: yes |
+| 10 | Thin the documents: `planning/development-plan.md` to Git history, superseded briefs deleted from this file | Coordinator agent | Open, no decision needed |
+| 11 | Release 2.2.1 as its own candidate once step 4 lands: preparation PASS, one review, one edit, pre-release | Target agent; owner publishes | Needs a hosted allowance of two |
+| — | Done 2026-10-28: byte-reproducible `package:rc` (one source date, lockfile-derived SBOM namespace); two clean builds matched, so the target build of the next candidate can be compared by `SHA256SUMS` | — | Done |
 
 <details>
 <summary>Historical checkpoints and superseded executable runbooks — evidence only</summary>
