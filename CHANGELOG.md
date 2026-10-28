@@ -2,8 +2,8 @@
 
 ## 2.2.1 — unreleased
 
-- Changed: the experimental Antigravity backend supports `agy` 1.4.7 and 1.4.8 (1.4.0, 1.4.3 and 1.4.4 stay). Its preparation read-back accepts only the pinned built-in skill catalogue in ADR 0008, each with `builtin: true`, and requires exact global permissions with no project or shared rules.
-- Changed: an Antigravity start requires a non-blank `GEMINI_API_KEY`, `GOOGLE_API_KEY` or `ANTIGRAVITY_API_KEY`; the first one reaches agy as `GEMINI_API_KEY` and `GOOGLE_API_KEY`. Workers and probes run with `BROWSER=false` and `open`/`xdg-open` shims on `PATH`.
+- Changed: the experimental Antigravity backend supports `agy` 1.4.7, 1.4.8, and 1.4.9 (1.4.0, 1.4.3 and 1.4.4 stay), with `1.4.9` as the default pin. Its preparation read-back accepts only the pinned built-in skill catalogue in ADR 0008 (accepting both hyphenated and underscored forms `antigravity-guide` and `antigravity_guide`), each with `builtin: true`, and normalizes tool aliases (`view_file` -> `read_file`, `write_to_file` -> `write_file`) and tolerates omitted `deny` arrays in global permissions.
+- Changed: an Antigravity start requires a non-blank `GEMINI_API_KEY`, `GOOGLE_API_KEY` or `ANTIGRAVITY_API_KEY`; the first one reaches agy as `GEMINI_API_KEY` and `GOOGLE_API_KEY`. Workers and probes run with `BROWSER=false`, `--dangerously-skip-permissions` to prevent headless prompt auto-denials while preserving strict settings and `PreToolUse` hook enforcement, and `open`/`xdg-open` shims on `PATH`. Scripted model server routes title-generation requests to plain text, reserving probe tool injection for the agent turn. All five live target probes passed zero-inference qualification on the target machine with `agy 1.4.9`.
 
 ## 2.2.0 — unreleased
 

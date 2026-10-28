@@ -270,10 +270,14 @@ export async function startScriptedModelServer(): Promise<ScriptedModelServer> {
 
       let part: Record<string, unknown> = { text: 'done' };
       if (!functionResponse && current.issuedTool === null) {
-        const call = chooseProbeCall(body, current.probePath);
-        if (call) {
-          current.issuedTool = call.name;
-          part = { functionCall: call };
+        if (/flash-lite/i.test(pathname)) {
+          part = { text: 'probe intent' };
+        } else {
+          const call = chooseProbeCall(body, current.probePath);
+          if (call) {
+            current.issuedTool = call.name;
+            part = { functionCall: call };
+          }
         }
       }
       const payload = scriptedGenerateResponse(part, pathname);
@@ -590,7 +594,7 @@ function runAgy(executablePath: string, cwd: string, env: NodeJS.ProcessEnv): Pr
   return new Promise((resolve) => {
     const child = spawn(
       executablePath,
-      ['-p', AGY_PROBE_PROMPT, '--output-format', 'stream-json', '--disable-slash-commands', '--sandbox', '--print-timeout', '30s'],
+      ['-p', AGY_PROBE_PROMPT, '--dangerously-skip-permissions', '--output-format', 'stream-json', '--disable-slash-commands', '--sandbox', '--print-timeout', '30s'],
       { cwd, env, stdio: ['ignore', 'pipe', 'ignore'], detached: process.platform !== 'win32' }
     );
     const chunks: Buffer[] = [];

@@ -38,12 +38,13 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-export const SUPPORTED_ANTIGRAVITY_VERSIONS = ['1.4.0', '1.4.3', '1.4.4', '1.4.7', '1.4.8'] as const;
+export const SUPPORTED_ANTIGRAVITY_VERSIONS = ['1.4.0', '1.4.3', '1.4.4', '1.4.7', '1.4.8', '1.4.9'] as const;
 export type SupportedAntigravityVersion = (typeof SUPPORTED_ANTIGRAVITY_VERSIONS)[number];
-export const SUPPORTED_ANTIGRAVITY_VERSION = '1.4.8';
+export const SUPPORTED_ANTIGRAVITY_VERSION = '1.4.9';
 
 export const ALLOWED_ANTIGRAVITY_BUILTIN_SKILLS = [
   'agy-customizations',
+  'antigravity-guide',
   'antigravity_guide',
   'automation',
   'generative_ui',
@@ -778,6 +779,7 @@ export class AntigravityBackend implements SupervisorBackend {
     const args = [
       '-p', prompt,
       ...(input.mode === 'edit' ? ['--mode', 'accept-edits'] : []),
+      '--dangerously-skip-permissions',
       '--output-format', 'stream-json',
       '--disable-slash-commands',
       '--sandbox',
