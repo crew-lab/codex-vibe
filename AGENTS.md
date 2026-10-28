@@ -55,7 +55,7 @@ VIBE_SUPERVISOR_TEST_NPM_CACHE=/absolute/path/to/populated/npm-cache npm run pac
 
 For documentation-only changes, verify local links and `git diff --check`; a full test rerun is unnecessary without a behavioral change. Packaging should be regenerated when delivering an updated tarball.
 
-Report checks actually performed. Fake Vibe fixtures and initialization-only probes do not prove hosted behavior. Gates in [docs/acceptance.json](docs/acceptance.json) and [docs/compatibility.md](docs/compatibility.md#unverified-gates) stay unverified until their evidence is recorded there. Handoff.md holds the working rules for where evidence may come from.
+Report checks actually performed. Fake Vibe fixtures and initialization-only probes do not prove hosted behavior. [docs/acceptance.json](docs/acceptance.json) is the gate ledger: one entry per build with its identity, the gates observed on that archive (each citing a committed evidence path) and the gates still open with one line why; `npm run acceptance` copies the supported build's open gates and every build's observed and open names into the release report. A gate moves from open to observed only when sanitized evidence for that exact archive is committed under `research/evidence/` and cited; evidence never transfers to another build. [docs/compatibility.md](docs/compatibility.md#unverified-gates) explains what stays open on the supported release. Handoff.md holds the working rules for where evidence may come from.
 
 ### Code changes on the target machine
 
