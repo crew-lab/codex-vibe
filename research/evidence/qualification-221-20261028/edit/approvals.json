@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "run_id": "db5c06c6-1f12-4a1c-b6b8-c555444fed6d",
+  "truncated": false,
+  "records": [
+    {
+      "callback_id": "approval-MsJINGN5j",
+      "related_entry_id": "effect-9673fcf7-2684-5349-b018-d9e3696e0226",
+      "turn_id": "turn-f8af036afaa639df697a95ee3a304946",
+      "tool": "file_system.read_file",
+      "path": "CONTRACT.md",
+      "fingerprint": "179b1801f49d4e86a2104fa5477d1e022e8bceaa1f54a936e325151650c4e2a8",
+      "decision": "approve",
+      "reason": null
+    },
+    {
+      "callback_id": "approval-yNPfsKohv",
+      "related_entry_id": "effect-daa1ec55-5c9b-52b3-9a25-656292de67e8",
+      "turn_id": "turn-f8af036afaa639df697a95ee3a304946",
+      "tool": "file_system.read_file",
+      "path": "src/limit.mjs",
+      "fingerprint": "89c87caa300427696e14dd2057fffb57f7cb854ed42e58db51da034e4db1253e",
+      "decision": "approve",
+      "reason": null
+    },
+    {
+      "callback_id": "approval-yCgdIJ4lY",
+      "related_entry_id": "effect-dd8e368e-f25c-59e1-b4c8-b8b122d0984f",
+      "turn_id": "turn-f8af036afaa639df697a95ee3a304946",
+      "tool": "file_system.write_file",
+      "path": "src/at-least.mjs",
+      "fingerprint": "b47fdd031d3fb66b07ef2463a8478f6d461a42c343e85cc612ecd1325299f416",
+      "decision": "approve",
+      "reason": null
+    },
+    {
+      "callback_id": "approval-K245fw5hD",
+      "related_entry_id": "effect-0afa2019-0b35-54cb-80bd-d09c1604e8ed",
+      "turn_id": "turn-f8af036afaa639df697a95ee3a304946",
+      "tool": "file_system.write_file",
+      "path": "tests/at-least.test.mjs",
+      "fingerprint": "870823f6428aebc6921edf1cc81a50111c373f46a9b9a3f60a305c7dd03d001c",
+      "decision": "approve",
+      "reason": null
+    }
+  ]
+}
