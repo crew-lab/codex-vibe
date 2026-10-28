@@ -1,6 +1,6 @@
 # Development strategy
 
-How vibe-supervisor is developed, verified and released: the picture, the direction, the release line and the rules. [Handoff.md](../Handoff.md) holds the current status (what is done, what remains, who acts); the [development plan](development-plan.md) is the historical sequence up to 2.2.0, and the live sequence is the Direction below. Operators follow [the local operating procedure](../docs/local-operation.md).
+How vibe-supervisor is developed, verified and released: the picture, the direction, the release line and the rules. [Handoff.md](../Handoff.md) holds the current status (what is done, what remains, who acts); the live sequence is the Direction below, and the sequenced plan that led to 2.2.0 is in Git history ([development-plan.md](development-plan.md) says where). Operators follow [the local operating procedure](../docs/local-operation.md).
 
 ## Direction — 2026-10-28
 
@@ -229,9 +229,10 @@ Existing releases are never replaced or retagged, and only the latest release is
 
 **About working with agents.**
 - An agent must never stage, move or remove files in Git. One agent's staged removals once went into an unrelated commit and published a half-removed change. The coordinator commits by path.
-- Chain every check and the commit with `&&`, so a failed check stops it. A secret-scan failure was once committed because the command continued.
+- Chain every check and the commit with `&&`, so a failed check stops it. A secret-scan failure was once committed because the command continued. A check gates on its exit code (`cmd; echo exit=$?`), never on a `grep` of test output, which hides failures.
+- A long-running agent writes a usable first version early, so an interruption leaves something; the coordinator checks for its leftover processes afterwards.
 - Fake credentials must not look like keys: `/\bsk-[A-Za-z0-9_-]{24,}\b/` fails the secret scan.
-- Agents write files with the Write tool, never with heredocs that wait on stdin, and avoid aliased `ls`; both left hung shells. After an agent finishes, check for its leftover processes.
+- Agents write files with the Write tool, never with heredocs that wait on stdin, and avoid aliased `ls`; both left hung shells.
 - Give each agent named files, the wire facts it must use, and what it must not touch; forward any fact one agent finds that another depends on.
 - A test that passes alone and fails under full parallel load is a timing issue to fix, not to retry until green.
 - Give the owner runnable commands, never placeholders: a command is run as written.
