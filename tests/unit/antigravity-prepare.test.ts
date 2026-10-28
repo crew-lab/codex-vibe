@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -41,12 +41,12 @@ async function makeRoot(): Promise<string> {
 
 async function fakeAgy(root: string, mode: string): Promise<string> {
   const script = path.join(root, `agy-${mode || 'conforming'}`);
-  await writeFile(script, `#!/bin/sh\nexec "${process.execPath}" "${fixture}" --fake-mode=${mode} "$@"\n`);
+  await writeFile(script, `#!/bin/sh\nprintf '%s\\n' "$*" >> "${path.join(root, 'argv.log')}"\nexec "${process.execPath}" "${fixture}" --fake-mode=${mode} "$@"\n`);
   await chmod(script, 0o755);
   return script;
 }
 
-async function prepareWith(mode: string) {
+async function prepareWith(mode: string, skipPermissions = false) {
   const root = await makeRoot();
   const dataDir = path.join(root, 'data');
   await mkdir(dataDir, { recursive: true });
@@ -54,9 +54,11 @@ async function prepareWith(mode: string) {
     ...DEFAULT_CONFIG,
     backend: 'antigravity' as const,
     allowedWorkspaceRoots: [root],
-    paths: { antigravity: await fakeAgy(root, mode) }
+    paths: { antigravity: await fakeAgy(root, mode) },
+    experimental: { antigravity: true, ...(skipPermissions ? { antigravitySkipPermissions: true } : {}) }
   };
-  return runAntigravityPreparationCheck(config, { dataDir });
+  const out = await runAntigravityPreparationCheck(config, { dataDir });
+  return Object.assign(out, { argvLog: path.join(root, 'argv.log') });
 }
 
 function evidence(overrides: Partial<ToolProbeEvidence>): ToolProbeEvidence {
@@ -144,6 +146,12 @@ describe('Antigravity preparation probe classification', () => {
       [global, { scope: 'unknown' }],
       []
     ]) expect(antigravityPermissionsMatch(actual, allow, deny)).toBe(false);
+  });
+
+  it('accepts global permissions with omitted deny when expected deny list is empty', () => {
+    const allow = ['read_file(/w/**)'];
+    expect(antigravityPermissionsMatch([{ scope: 'global', allow }, { scope: 'project' }, { scope: 'shared' }], allow, [])).toBe(true);
+    expect(antigravityPermissionsMatch([{ scope: 'global', allow, deny: [] }, { scope: 'project' }, { scope: 'shared' }], allow, [])).toBe(true);
   });
 
   it('accepts only the WorkspacePathError that names the planted ancestor configuration', () => {
@@ -254,6 +262,14 @@ describe('Antigravity preparation probe classification', () => {
 });
 
 describe('Antigravity preparation probes through a fake agy', () => {
+  it.each([[false, 'enforced'], [true, 'bypassed']] as const)('passes --dangerously-skip-permissions to probe runs only when the switch is %s, and records the %s layer', async (skip, layer) => {
+    const out = await prepareWith('', skip);
+    const probeRuns = (await readFile(out.argvLog, 'utf8')).split('\n').filter((line) => line.startsWith('-p vibe-supervisor no-inference preparation probe'));
+    expect(probeRuns.length).toBeGreaterThan(0);
+    expect(probeRuns.every((line) => line.includes('--dangerously-skip-permissions') === skip)).toBe(true);
+    expect(out.report.agy_permission_layer).toBe(layer);
+  });
+
   it('passes when agy invokes the hook, honours deny and hook failures, routes through the proxy and ignores planted project config', async () => {
     const out = await prepareWith('');
     const probes = out.report.agy_probes;
@@ -312,6 +328,12 @@ describe('Antigravity preparation probes through a fake agy', () => {
     const out = await prepareWith('version-1.4.8');
     expect(out.status).toBe('passed');
     expect(out.report.executable.version).toBe('1.4.8');
+  }, 90_000);
+
+  it('accepts agy 1.4.9 executable during preparation', async () => {
+    const out = await prepareWith('version-1.4.9');
+    expect(out.status).toBe('passed');
+    expect(out.report.executable.version).toBe('1.4.9');
   }, 90_000);
 
   it('fails the receipt when agy lets a failed hook allow the call', async () => {

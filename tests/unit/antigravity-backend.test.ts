@@ -323,7 +323,7 @@ process.exit(0);
 
     const deniedEvents = events.filter((e) => e.type === 'tool_denied');
     expect(deniedEvents).toHaveLength(1);
-    expect(deniedEvents[0]?.data).toMatchObject({ tool: 'run_command', reason: 'sandbox_denied' });
+    expect(deniedEvents[0]?.data).toMatchObject({ tool: 'run_command', reason: 'sandbox_denied', agy_permission_layer: 'enforced' });
 
     const reasoningDiag = events.find((e) => e.type === 'diagnostic' && e.data?.reason === 'reasoning_observation');
     expect(reasoningDiag?.data).toMatchObject({
@@ -837,11 +837,12 @@ process.exit(0);
 
     const toolCallEvents = events.filter((e) => e.type === 'tool_call');
     expect(toolCallEvents).toHaveLength(2);
-    expect(toolCallEvents[0]?.data).toMatchObject({ tool: 'read_file' });
+    expect(toolCallEvents[0]?.data).toMatchObject({ tool: 'read_file', agy_permission_layer: 'enforced' });
     expect(toolCallEvents[1]?.data).toMatchObject({ tool: 'list_dir' });
 
     const toolDeniedEvents = events.filter((e) => e.type === 'tool_denied');
     expect(toolDeniedEvents).toHaveLength(7);
+    expect(toolDeniedEvents.every((e) => e.data.agy_permission_layer === 'enforced')).toBe(true);
     expect(toolDeniedEvents.map((e) => e.data.reason)).toEqual([
       'path_excluded',
       'path_outside_workspace',

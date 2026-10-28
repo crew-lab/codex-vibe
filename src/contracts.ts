@@ -258,7 +258,7 @@ export interface SupervisorConfig {
   paths?: { vibe?: string; appServer?: string; vibePinManifest?: string; antigravity?: string };
   excludedGlobs?: Record<string, string[]>;
   budgets?: Record<string, RootBudget>;
-  experimental?: { antigravity?: boolean };
+  experimental?: { antigravity?: boolean; antigravitySkipPermissions?: boolean };
 }
 
 export interface StartRunInput {

@@ -11,7 +11,9 @@ const modes = new Set((modeArg ? modeArg.slice('--fake-mode='.length) : '').spli
 const args = rawArgs.filter((arg) => arg !== modeArg);
 
 if (args[0] === '--version') {
-  if (modes.has('version-1.4.8')) {
+  if (modes.has('version-1.4.9')) {
+    process.stdout.write('1.4.9\n');
+  } else if (modes.has('version-1.4.8')) {
     process.stdout.write('1.4.8\n');
   } else if (modes.has('version-1.4.7')) {
     process.stdout.write('1.4.7\n');

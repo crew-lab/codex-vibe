@@ -578,6 +578,7 @@ export class RunManager {
       policy_revision: policy?.revision ?? null,
       backend: this.activeBackendKind,
       backend_experimental: this.activeBackendKind === "antigravity",
+      ...(this.activeBackendKind === "antigravity" ? { antigravity_permission_layer: this.config.experimental?.antigravitySkipPermissions === true ? "bypassed" : "enforced" } : {}),
       correctable_sessions: { enabled: false, reason: "Continuation is deferred; stable runs are one-shot." },
       restart_required: (policy?.bootDrift.length ?? 0) > 0,
       boot_drift: policy?.bootDrift ?? [],
