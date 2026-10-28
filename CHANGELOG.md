@@ -4,6 +4,7 @@
 
 - Changed: the experimental Antigravity backend supports `agy` 1.4.7 and 1.4.8 (1.4.0, 1.4.3 and 1.4.4 stay). Its preparation read-back accepts only the pinned built-in skill catalogue in ADR 0008, each with `builtin: true`, and requires exact global permissions with no project or shared rules.
 - Changed: an Antigravity start requires a non-blank `GEMINI_API_KEY`, `GOOGLE_API_KEY` or `ANTIGRAVITY_API_KEY`; the first one reaches agy as `GEMINI_API_KEY` and `GOOGLE_API_KEY`. Workers and probes run with `BROWSER=false` and `open`/`xdg-open` shims on `PATH`.
+- Changed: `npm run package:rc` is reproducible. The SBOM and acceptance report date comes from `SOURCE_DATE_EPOCH`, else the HEAD commit time; the SBOM namespace is derived from the package name, version and lockfile hash. A clean rebuild at the same commit can be compared by `SHA256SUMS`.
 
 ## 2.2.0 — unreleased
 
