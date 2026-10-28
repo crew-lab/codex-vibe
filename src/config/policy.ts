@@ -44,6 +44,7 @@ const BOOT_BOUND_SETTINGS: ReadonlyArray<readonly [string, (config: SupervisorCo
   ["backend", (config) => config.backend ?? "app-server"],
   ["paths.antigravity", (config) => config.paths?.antigravity ?? null],
   ["experimental.antigravity", (config) => config.experimental?.antigravity ?? false],
+  ["experimental.antigravity_skip_permissions", (config) => config.experimental?.antigravitySkipPermissions ?? false],
 ];
 
 export function bootBoundDrift(boot: SupervisorConfig, current: SupervisorConfig): string[] {

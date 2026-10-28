@@ -70,11 +70,15 @@ const baseSchema = z.object({
     }).strict()
   ).optional(),
   experimental: z.object({
-    antigravity: z.boolean().optional()
+    antigravity: z.boolean().optional(),
+    antigravity_skip_permissions: z.boolean().optional()
   }).strict().optional()
 }).strict().superRefine((value, context) => {
   if (value.backend === "antigravity" && value.experimental?.antigravity !== true) {
     context.addIssue({ code: "custom", path: ["backend"], message: `"antigravity" is an experimental backend and is off by default; set [experimental] antigravity = true to opt in after following docs/target-acceptance.md, or remove backend to use the default app-server.` });
+  }
+  if (value.experimental?.antigravity_skip_permissions === true && value.experimental.antigravity !== true) {
+    context.addIssue({ code: "custom", path: ["experimental", "antigravity_skip_permissions"], message: "antigravity_skip_permissions applies only to the experimental Antigravity backend; set [experimental] antigravity = true as well, or remove it." });
   }
   if (value.backend === "antigravity") {
     for (const [root, budget] of Object.entries(value.budgets ?? {})) {
@@ -147,7 +151,7 @@ export function validateConfig(input: unknown, home = process.env.HOME ?? proces
     allowedWorkspaceRoots: parsed.allowed_workspace_roots,
     ...(excludedGlobs === undefined ? {} : { excludedGlobs }),
     ...(budgets === undefined ? {} : { budgets }),
-    ...(parsed.experimental === undefined ? {} : { experimental: { ...(parsed.experimental.antigravity === undefined ? {} : { antigravity: parsed.experimental.antigravity }) } }),
+    ...(parsed.experimental === undefined ? {} : { experimental: { ...(parsed.experimental.antigravity === undefined ? {} : { antigravity: parsed.experimental.antigravity }), ...(parsed.experimental.antigravity_skip_permissions === undefined ? {} : { antigravitySkipPermissions: parsed.experimental.antigravity_skip_permissions }) } }),
     retention: { days: parsed.retention.days },
     limits: {
       reviewTimeoutSeconds: parsed.limits.review_timeout_seconds,

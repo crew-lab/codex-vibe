@@ -97,6 +97,38 @@ describe('Antigravity headless admission and lifecycle regressions', () => {
     await expect(lstat(f.input.runDirectory!)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it.each([
+    [false, 'enforced', false],
+    [true, 'bypassed', true]
+  ] as const)('passes --dangerously-skip-permissions only when antigravity_skip_permissions is %s and logs the %s layer', async (skip, layer, expectFlag) => {
+    const f = await fixture();
+    const argvFile = path.join(f.root, 'argv.json');
+    await writeFile(f.executable, f.prefix + `fs.writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(process.argv.slice(2)));\nprocess.exit(0);\n`, { mode: 0o700 });
+    const config = { ...f.config, experimental: { antigravity: true, antigravitySkipPermissions: skip } };
+    const backend = new AntigravityBackend(config, passedPreparation);
+    const events: Array<{ type: string; data: Record<string, unknown> }> = [];
+    const stderrLines: string[] = [];
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: string | Uint8Array) => { stderrLines.push(String(chunk)); return true; }) as typeof process.stderr.write);
+    let settled!: () => void;
+    const done = new Promise<void>((resolve) => { settled = resolve; });
+    try {
+      const started = await backend.start(f.input, {
+        onEvent(event) { events.push({ type: event.type, data: event.data as Record<string, unknown> }); },
+        onState(state) { if (state === 'failed' || state === 'completed' || state === 'cancelled') settled(); }
+      });
+      await done;
+      await backend.close(started.handle);
+    } finally { stderr.mockRestore(); }
+    const argv = JSON.parse(await readFile(argvFile, 'utf8')) as string[];
+    expect(argv.includes('--dangerously-skip-permissions')).toBe(expectFlag);
+    const bypassNotice = events.find((event) => event.type === 'diagnostic' && event.data.reason === 'antigravity_permission_layer_bypassed');
+    expect(Boolean(bypassNotice)).toBe(expectFlag);
+    if (expectFlag) {
+      expect(bypassNotice?.data.agy_permission_layer).toBe(layer);
+      expect(stderrLines.some((line) => line.includes('--dangerously-skip-permissions'))).toBe(true);
+    }
+  });
+
   it('cancels a worker waiting for authentication and removes its browser interception state', async () => {
     const f = await fixture();
     const waiting = path.join(f.root, 'waiting');
