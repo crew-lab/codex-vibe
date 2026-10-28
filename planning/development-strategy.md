@@ -31,7 +31,7 @@ The experimental Antigravity backend is a second vendor with weekly releases who
 | 10 | Thin the documents | `planning/development-plan.md` goes to Git history (its live content is this section and the Handoff); the Handoff keeps the current state and its collapsed history, and superseded briefs are deleted rather than kept | Coordinator agent | Nothing | S |
 | 11 | Release 2.2.1 when it carries something the owner uses | A candidate from `main` after step 4 lands, not for the Antigravity changes alone: preparation PASS, one review and one edit, then a pre-release; latest once step 2's rule applies | Target agent builds and runs; owner publishes | A hosted allowance of two | M |
 
-**Owner decisions and the recommendation for each.**
+**Owner decisions.** The owner accepted D1–D6 as recommended on 2026-10-28; standing authorization stays declined until after the ten starts.
 
 - **D1, simplify the ledger: yes.** It is two releases behind, so today it informs nobody; a per-build observed list that stays true is worth more than eighteen gates that do not. It changes the "Verification and reporting" text in AGENTS.md, not a boundary.
 - **D2, mark 2.2.0 latest without the clean account: yes.** The gate cannot be met with the accounts available, and the only user has already installed the archive into a fresh prefix.
