@@ -2,6 +2,8 @@
 
 Status: owner-approved on 2026-10-17; implemented on main; ships in 2.1.0 off by default behind `experimental.antigravity = true` (owner decision 2026-10-19); experimental until the target checks in [docs/target-acceptance.md](../target-acceptance.md#antigravity-backend-probes) pass.
 
+**Frozen 2026-10-28 (owner decision D5).** The backend stays as it is: `agy` 1.4.0, 1.4.3, 1.4.4, 1.4.7, 1.4.8 and 1.4.9 remain supported, and no new agy version, flag or feature is added. The target's reported pass of all five probes on agy 1.4.9 with `antigravity_skip_permissions` on is recorded as claimed, not recorded, until its sanitized evidence is committed under `research/evidence/`; the five `antigravity-*` gates in `docs/acceptance.json` stay open until then. The backend remains opt-in and tested, and is dropped at the next minor release if the owner has not opted in by then, with this ADR kept as history.
+
 vibe-app-server (pinned to exactly Vibe 3.0.2) remains the default engine (`backend = "app-server"`). Following the owner's 2026-10-17 decision, Google Antigravity (`agy` CLI, pinned to supported versions `agy 1.4.0`, `1.4.3`, `1.4.4`, `1.4.7`, `1.4.8`, `1.4.9` and binary SHA-256) is supported as an optional second execution backend selected by `backend = "antigravity"` (with optional `paths.antigravity`, defaulting to `"agy"`). Both configuration keys are boot-bound: modifying either surfaces `boot_drift` and requires a server restart.
 
 The Antigravity backend maintains defense-in-depth across five mandatory isolation layers:

@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { nodeVersionAtLeast } from '../dist/runtime/node-version.js';
 import { sourceDate } from './source-date.mjs';
+import { buildAcceptanceReport } from './acceptance-report.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const packageJson = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
@@ -46,13 +47,7 @@ try {
   await client.close().catch(() => undefined);
   await rm(smokeRoot, { recursive: true, force: true });
 }
-const gates = JSON.parse(await readFile(path.join(root, 'docs', 'acceptance.json'), 'utf8'));
-const report = {
-  schema_version: 1,
-  generated_at: sourceDate(root),
-  deterministic_checks: checks,
-  verified_release_gates: (gates.verified ?? []).map(({ name, status }) => ({ name, status })),
-  unverified_release_gates: (gates.unverified ?? []).map(({ name, status, evidence_required }) => ({ name, status, reason: evidence_required })),
-};
+const ledger = JSON.parse(await readFile(path.join(root, 'docs', 'acceptance.json'), 'utf8'));
+const report = buildAcceptanceReport({ ledger, checks, generatedAt: sourceDate(root) });
 process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 if (checks.some((check) => check.status === 'FAIL')) process.exitCode = 1;
