@@ -48,6 +48,7 @@ import {
 } from './app-server/failure.js';
 import { configureManagedConfigEndpoint, startManagedConfigEndpoint, type ManagedConfigEndpoint } from './app-server/managed-config.js';
 import { SUPPORTED_VIBE } from './app-server/supported-vibe.js';
+import { PINNED_WIRE } from './app-server/vibe-wire.js';
 
 const BACKEND_KIND: BackendKind = 'app-server';
 const APP_SERVER_BINARY = 'vibe-app-server';
@@ -60,12 +61,8 @@ const EXIT_WAIT_MS = 1500;
 const BACKGROUND_WAIT_MS = 2000;
 const MAX_STDERR_DETAIL_CHARS = 400;
 
-const TOOL_NAMES: Readonly<Record<string, string>> = {
-  'file_system.read_file': 'read_file',
-  'file_system.write_file': 'write_file',
-  'file_system.search_replace': 'edit'
-};
-const TOOL_KINDS: Readonly<Record<string, string>> = { read_file: 'read', write_file: 'edit', edit: 'edit' };
+const TOOL_NAMES: Readonly<Record<string, string>> = Object.fromEntries(PINNED_WIRE.tools.map((tool) => [tool.approvalName, tool.configName]));
+const TOOL_KINDS: Readonly<Record<string, string>> = Object.fromEntries(PINNED_WIRE.tools.map((tool) => [tool.configName, tool.access]));
 const SHELL_OR_NETWORK_TOOL_WORDS: ReadonlySet<string> = new Set(['bash', 'shell', 'terminal', 'command', 'exec', 'network', 'http', 'https', 'web', 'fetch', 'url', 'download', 'curl', 'browser']);
 const STOP_REQUEST_KINDS: ReadonlySet<SupervisorCondition['kind']> = new Set(['budget', 'cancelled', 'deadline']);
 const BENIGN_SERVER_ERRORS: ReadonlySet<string> = new Set(['stale_turn', 'conflict', 'not_found', 'callback_closed']);

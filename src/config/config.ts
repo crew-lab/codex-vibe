@@ -6,6 +6,7 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { parse } from "smol-toml";
 import { DEFAULT_CONFIG } from "./defaults.js";
 import { validateConfig } from "./validation.js";
+import { SUPPORTED_VIBE } from "../backends/app-server/supported-vibe.js";
 import { supervisorError } from "../contracts.js";
 import type { RootBudget, SupervisorConfig } from "../contracts.js";
 import { createPrivateDir, inspectWorkspaceRoots } from "../security/paths.js";
@@ -158,7 +159,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Super
   } catch (error) {
     if (error instanceof Error) {
       throw Object.assign(new Error(`Invalid supervisor configuration: ${error.message}`, { cause: error }), {
-        supervisor: supervisorError("VSUP_CONFIG_INVALID", `Invalid configuration file ${selection.configPath}: ${error.message} Supported fields are version, backend, vibe_version (3.0.2 only), allowed_workspace_roots, excluded_globs, budgets, retention, limits (including max_tokens and max_cost_usd), paths (vibe, app_server, vibe_pin_manifest, antigravity) and experimental (antigravity, antigravity_skip_permissions); remove unsupported fields.`, { configPath: selection.configPath })
+        supervisor: supervisorError("VSUP_CONFIG_INVALID", `Invalid configuration file ${selection.configPath}: ${error.message} Supported fields are version, backend, vibe_version (${SUPPORTED_VIBE} only), allowed_workspace_roots, excluded_globs, budgets, retention, limits (including max_tokens and max_cost_usd), paths (vibe, app_server, vibe_pin_manifest, antigravity) and experimental (antigravity, antigravity_skip_permissions); remove unsupported fields.`, { configPath: selection.configPath })
       });
     }
     throw error;
