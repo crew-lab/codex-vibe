@@ -78,6 +78,8 @@ Who acts: the owner for anything public, agents only draft. The gate is what mus
 
 ## 7. Owner decisions
 
+The owner accepted M1–M6 as recommended on 2026-10-28.
+
 | # | Decision | Recommendation |
 |---|---|---|
 | M1 | Retire the 2026-10-14 launch calendar, the 90-day metrics table (50 to 150 stars, 100 downloads, 1,000 reads) and the blog series, talk abstracts and portfolio page | Yes. None of them can be met or measured by a tool with one user, and each was a draft that rots |
