@@ -6,12 +6,13 @@ import { compileSegment, createExcludedMatcher, relativeSegments, type Exclusion
 import { isPathWithinRoot } from '../../security/paths.js';
 import type { JsonObject } from './jsonrpc.js';
 import { EFFECT_PATH_FIELD, callbackAcknowledgement, effectFilePath, parseCallbackCall, type ApprovalDecisionType, type ApprovalRequest } from './protocol.js';
+import { PINNED_WIRE, profileApprovalNames, wireToolByApprovalName } from './vibe-wire.js';
 
 export { anchorsOf, createExcludedMatcher, excludedRelativePath, type ExcludedMatcher, type ExclusionAnchor, type ExclusionSpec } from '../../security/globs.js';
 
-export const REVIEW_TOOLS: readonly string[] = ['file_system.read_file'];
-export const EDIT_TOOLS: readonly string[] = ['file_system.read_file', 'file_system.write_file', 'file_system.search_replace'];
-export const WRITE_TOOLS: readonly string[] = ['file_system.write_file', 'file_system.search_replace'];
+export const REVIEW_TOOLS: readonly string[] = profileApprovalNames('review');
+export const EDIT_TOOLS: readonly string[] = profileApprovalNames('edit');
+export const WRITE_TOOLS: readonly string[] = PINNED_WIRE.tools.filter((tool) => tool.access === 'edit').map((tool) => tool.approvalName);
 
 export const RESERVED_DIRECTORIES: readonly string[] = ['.git', '.vibe', '.agents'];
 export const RESERVED_FILES: readonly string[] = ['.vibeignore'];
@@ -22,11 +23,7 @@ export const DEFAULT_MAX_LEDGER_RECORDS = 4096;
 const MAX_PATH_CHARS = 4096;
 const MAX_RECORDED_PATH_CHARS = 512;
 
-const EFFECT_KIND_BY_TOOL: Readonly<Record<string, string>> = {
-  'file_system.read_file': 'file_read',
-  'file_system.write_file': 'file_write',
-  'file_system.search_replace': 'file_edit'
-};
+const EFFECT_KIND_BY_TOOL: Readonly<Record<string, string>> = Object.fromEntries(PINNED_WIRE.tools.map((tool) => [tool.approvalName, tool.effectKind]));
 
 export type DenyReason =
   | 'unsupported_callback'
@@ -103,14 +100,14 @@ function normalizedChanges(input: Record<string, unknown>): unknown {
 
 export function inputFingerprint(tool: string, input: Record<string, unknown>): string | null {
   let material: unknown;
-  switch (tool) {
-    case 'file_system.read_file':
+  switch (wireToolByApprovalName(tool)?.fingerprint) {
+    case 'path':
       material = { tool, filePath: input[EFFECT_PATH_FIELD] };
       break;
-    case 'file_system.write_file':
+    case 'path_content':
       material = { tool, filePath: input[EFFECT_PATH_FIELD], content: input.content };
       break;
-    case 'file_system.search_replace':
+    case 'path_changes':
       material = { tool, filePath: input[EFFECT_PATH_FIELD], changes: normalizedChanges(input) };
       break;
     default:
@@ -229,7 +226,7 @@ export async function evaluateApproval(options: { mode: RunMode; workspace: stri
   if (filePath === null) return deny('missing_file_path');
   const judgement = await judgeWorkspacePath(options.workspace, filePath, options.excludedGlobs ?? []);
   if (!judgement.allowed) return deny(judgement.reason);
-  if (options.allowedWritePaths && effect.kind !== 'file_read' && !withinAllowedWritePaths(judgement.relative, options.allowedWritePaths)) return deny('outside_allowed_write_paths');
+  if (options.allowedWritePaths && isWriteTool(effect.toolName) && !withinAllowedWritePaths(judgement.relative, options.allowedWritePaths)) return deny('outside_allowed_write_paths');
   return { decision: 'approve', reason: null };
 }
 

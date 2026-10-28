@@ -1,5 +1,8 @@
 import { createServer } from 'node:http';
-import type { SessionConfigPlan } from './session-config.js';
+import { settingEnvironmentName, type SessionConfigPlan } from './session-config.js';
+import { PINNED_WIRE } from './vibe-wire.js';
+
+const { route: MANAGED_CONFIG_ROUTE, baseUrlSetting: BASE_URL_SETTING } = PINNED_WIRE.managedConfig;
 
 export interface ManagedConfigEndpoint {
   readonly url: string;
@@ -8,7 +11,7 @@ export interface ManagedConfigEndpoint {
 
 export async function startManagedConfigEndpoint(): Promise<ManagedConfigEndpoint> {
   const server = createServer({ maxHeaderSize: 8192, requestTimeout: 1000, headersTimeout: 1000 }, (request, response) => {
-    const allowed = request.method === 'GET' && request.url === '/api/v1/code/managed-config' &&
+    const allowed = request.method === 'GET' && request.url === MANAGED_CONFIG_ROUTE &&
       request.headers['transfer-encoding'] === undefined &&
       (request.headers['content-length'] === undefined || request.headers['content-length'] === '0');
     response.writeHead(allowed ? 200 : 403, { 'Content-Type': 'application/json', Connection: 'close', 'Cache-Control': 'no-store' });
@@ -41,6 +44,6 @@ export function configureManagedConfigEndpoint(plan: SessionConfigPlan, url: str
   if (!/^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}$/.test(url) || Number(new URL(url).port) > 65535) {
     throw new TypeError('Managed-config endpoint must be an owned IPv4 loopback HTTP endpoint.');
   }
-  plan.environment.VIBE_VIBE_BASE_URL = url;
-  plan.expectation = { ...plan.expectation, settings: [...plan.expectation.settings, { path: ['vibe_base_url'], value: url, match: 'equal' }] };
+  plan.environment[settingEnvironmentName(BASE_URL_SETTING)] = url;
+  plan.expectation = { ...plan.expectation, settings: [...plan.expectation.settings, { path: BASE_URL_SETTING.split('.'), value: url, match: 'equal' }] };
 }
