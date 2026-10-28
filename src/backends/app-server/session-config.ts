@@ -6,16 +6,14 @@ import { excludedGlobProblem } from '../../config/validation.js';
 import { anchoredDenylistPatterns, type DenylistAnchor } from '../../security/globs.js';
 import { buildConfigModelWrite, type SessionAgentConfigInput } from './protocol.js';
 import { THINKING_OFF, type ReadbackExpectation, type SettingExpectation, type ToolPolicyExpectation } from './readback.js';
+import { PINNED_WIRE, type WireSetting, type WireSettingValue } from './vibe-wire.js';
 
-export const PROFILE_TOOLS: Readonly<Record<RunMode, readonly string[]>> = {
-  review: ['read_file'],
-  edit: ['read_file', 'write_file', 'edit']
-};
+export const PROFILE_TOOLS: Readonly<Record<RunMode, readonly string[]>> = PINNED_WIRE.profiles;
 
-export const DISABLED_TOOLS: readonly string[] = ['ask_user_question', 'exit_plan_mode', 'cron'];
+export const DISABLED_TOOLS: readonly string[] = PINNED_WIRE.disabledTools;
 export const AGENT_NAMES: Readonly<Record<RunMode, string>> = { review: 'supervisor-review', edit: 'supervisor-edit' };
 export const PRIVATE_DIRECTORY_NAMES = { home: 'child-home', vibeHome: 'vibe-home', tmp: 'tmp' } as const;
-export const TOOL_PERMISSION = 'ask';
+export const TOOL_PERMISSION = PINNED_WIRE.toolPermission;
 export const LOG_LEVEL = 'ERROR';
 
 const AGENT_SAFETY: Readonly<Record<RunMode, 'safe' | 'destructive'>> = { review: 'safe', edit: 'destructive' };
@@ -23,35 +21,9 @@ const SECRET_FILE_PATTERNS = ['.env', '.env.*', '.envrc', '.envrc.*', '*.pem', '
 const RESERVED_DIRECTORIES = ['.git', '.vibe', '.agents'];
 const RESERVED_FILES = ['.vibeignore'];
 
-type SettingValue = boolean | string | readonly string[];
-
-interface RuntimeSetting {
-  key: string;
-  value: SettingValue;
-  match?: 'includes';
-}
-
-const RUNTIME_SETTINGS: readonly RuntimeSetting[] = [
-  { key: 'enable_subagents', value: false },
-  { key: 'enable_background_processes', value: false },
-  { key: 'managed_shell_tools_enabled', value: false },
-  { key: 'enable_connectors', value: false },
-  { key: 'disabled_skills', value: ['*'], match: 'includes' },
-  { key: 'mcp_servers', value: [] },
-  { key: 'enable_telemetry', value: false },
-  { key: 'enable_otel', value: false },
-  { key: 'enable_update_checks', value: false },
-  { key: 'enable_auto_update', value: false },
-  { key: 'experimental_enable_model_catalog', value: false },
-  { key: 'experimental_enable_registry_skills', value: false },
-  { key: 'experiments.enable', value: false },
-  { key: 'session_logging.enabled', value: false },
-  { key: 'session_logging.generate_titles', value: false },
-  { key: 'bypass_tool_permissions', value: false }
-];
-
-function runtimeSettings(agent: string): readonly RuntimeSetting[] {
-  return [...RUNTIME_SETTINGS, { key: 'default_agent', value: agent }, { key: 'enabled_agents', value: [agent] }];
+function runtimeSettings(agent: string): readonly WireSetting[] {
+  const { defaultAgent, enabledAgents } = PINNED_WIRE.agentSettingKeys;
+  return [...PINNED_WIRE.runtimeSettings, { key: defaultAgent, value: agent }, { key: enabledAgents, value: [agent] }];
 }
 
 export interface SessionDirectories {
@@ -128,11 +100,11 @@ export function sessionDirectories(runDirectory: string): SessionDirectories {
   return { home: path.join(root, PRIVATE_DIRECTORY_NAMES.home), vibeHome: path.join(root, PRIVATE_DIRECTORY_NAMES.vibeHome), tmp: path.join(root, PRIVATE_DIRECTORY_NAMES.tmp) };
 }
 
-function settingEnvironmentName(key: string): string {
+export function settingEnvironmentName(key: string): string {
   return `VIBE_${key.split('.').join('__').toUpperCase()}`;
 }
 
-function encodeSettingValue(value: SettingValue): string {
+function encodeSettingValue(value: WireSettingValue): string {
   if (typeof value === 'string') return value;
   return typeof value === 'boolean' ? String(value) : JSON.stringify(value);
 }
@@ -152,7 +124,7 @@ function buildEnvironment(directories: SessionDirectories, agent: string): Recor
 function buildExpectation(workspace: string, agent: string, tools: readonly string[], denylist: readonly string[]): ReadbackExpectation {
   const toolPolicies: Record<string, ToolPolicyExpectation> = Object.fromEntries(tools.map((tool) => [tool, { permission: TOOL_PERMISSION, denylist }]));
   const settings: SettingExpectation[] = runtimeSettings(agent).map((setting) => ({ path: setting.key.split('.'), value: setting.value, match: setting.match ?? 'equal' }));
-  return { harness: 'unified', agent, cwd: workspace, tools, disabledTools: DISABLED_TOOLS, toolPolicies, settings };
+  return { harness: PINNED_WIRE.harness, agent, cwd: workspace, tools, disabledTools: DISABLED_TOOLS, toolPolicies, settings };
 }
 
 export function buildSessionConfig(input: SessionConfigInput): SessionConfigPlan {

@@ -40,6 +40,16 @@ Historical report for that earlier six-tool trial snapshot: four local hosted tr
 
 Historical candidate tooling labeled 2.26.1 `supported` and 3.0.2 `unqualified`. Current source accepts only 3.0.2 but still requires candidate-specific qualification. Runtime installation creates a separate versioned executable and hashes its installed files. It never changes the shared `vibe` command. Installation identity is not protocol qualification and does not authorize dispatch.
 
+## Wire facts and re-pinning
+
+Every fact the app-server client assumes about the accepted version is one entry in `src/backends/app-server/vibe-wire.ts`, keyed by the version string: the config tool names (`read_file`, `write_file`, `edit`) and the approval-wire names, effect kinds and fingerprint material they map to; the review and edit profiles; the disabled tools; the `permission = "ask"` value; the `unified` harness name; the `VIBE_*` runtime settings written and read back, with the `default_agent` and `enabled_agents` keys; the managed-config route and its `vibe_base_url` setting; whether `config/read` may omit `harnessSelectionSource`; the bundled plugin skills and their provenance ([ADR 0006](adr/0006-bundled-vibe-skills.md)); and the history entry kinds and notification methods treated as known. `approvals.ts`, `session-config.ts`, `readback.ts`, `bundled-skills.ts`, `protocol.ts`, `events.ts`, `managed-config.ts` and `app-server.ts` read the pinned entry; `tests/unit/vibe-wire.test.ts` checks that the table holds exactly the selectable versions and that no wire literal remains in `src/` outside it. The version itself stays in `supported-vibe.ts`, and the pin manifest is still checked at launch.
+
+A re-pin is owner-triggered and runs in this order:
+
+1. Review the new tag's source the way the [source basis](#source-basis) above was read, and record the hashes and facts in this document. Add the version's entry to the table from that review; a changed approval-wire name, effect kind, setting key or route changes only that entry. Move `SUPPORTED_VIBE` to the new version; the table's `Record` type then requires the entry and refuses an entry for a version that is not selectable.
+2. Regenerate the per-candidate pin manifest on the machine that runs Vibe with `vibe-supervisor pin-manifest`; the old manifest fails `manifest-version-mismatch` by design.
+3. Run the lighter re-pin qualification: a preparation PASS for the installed candidate ([preparation](preparation.md)), one fixture review and one fixture edit on the target. A re-pin is a new candidate, so the earlier candidate's hosted evidence does not transfer, and the full [target acceptance](target-acceptance.md) still gates the gates it names.
+
 ## Search tool facts
 
 Read on 2026-10-28 from the same `v3.0.2` tag commit for the [review search tool design](../planning/2.1-designs.md#5-search-tool-for-reviews). Source reading only: no Vibe was installed or run, and no fact here is hosted evidence.

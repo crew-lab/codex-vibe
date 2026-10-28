@@ -20,6 +20,7 @@ import {
   type SessionState,
   type Turn
 } from './protocol.js';
+import { PINNED_WIRE } from './vibe-wire.js';
 
 export const DEFAULT_MAX_RETAINED_EFFECTS = 10_000;
 export const DEFAULT_MAX_RETAINED_MESSAGES = 64;
@@ -652,8 +653,7 @@ export class EventProcessor {
   }
 
   private countUnknownIfUnrecognized(method: string, result: EventResult): void {
-    const known = ['history/entryAdded', 'history/entryUpdated', 'turn/started', 'turn/completed', 'session/statsUpdated', 'session/compacted', 'session/contextCleared', 'turn/retrying', 'warning', 'error'];
-    if (known.includes(method)) this.latch(fatalOf('malformed_notification', `notification ${printable(method)} does not match its schema`), result);
+    if (PINNED_WIRE.notificationMethods.includes(method)) this.latch(fatalOf('malformed_notification', `notification ${printable(method)} does not match its schema`), result);
     else this.recordUnknownMethod(method);
   }
 

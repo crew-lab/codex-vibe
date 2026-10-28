@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { z } from 'zod';
-import { VIBE_3_CANDIDATE } from './supported-vibe.js';
+import { SUPPORTED_VIBE } from './supported-vibe.js';
+import { wireFactsFor } from './vibe-wire.js';
 
 export const CLIENT_ENTRYPOINT = 'programmatic';
 export const MAX_PAGE_LIMIT = 500;
@@ -623,9 +624,9 @@ export interface ConfigReadResult {
 }
 
 export function parseConfigReadResult(value: unknown, options?: ConfigReadOptions | string): ConfigReadResult {
-  const version = (typeof options === 'string' ? options : options?.vibeVersion) ?? VIBE_3_CANDIDATE;
-  const isVibe3 = version === VIBE_3_CANDIDATE;
-  const harnessSchema = isVibe3 ? z.string().nullable().optional() : z.string().nullable();
+  const version = (typeof options === 'string' ? options : options?.vibeVersion) ?? SUPPORTED_VIBE;
+  const harnessSelectionSourceOptional = wireFactsFor(version)?.configRead.harnessSelectionSourceOptional ?? false;
+  const harnessSchema = harnessSelectionSourceOptional ? z.string().nullable().optional() : z.string().nullable();
   const raw = parseWith(z.object({ harnessSelectionSource: harnessSchema, hooksCount: nonNegativeInt.nullish(), skillsCount: nonNegativeInt.nullish() }), value, 'config/read result');
   return { harnessSelectionSource: raw.harnessSelectionSource ?? null, hooksCount: raw.hooksCount ?? null, skillsCount: raw.skillsCount ?? null };
 }
