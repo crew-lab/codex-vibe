@@ -47,6 +47,24 @@ const EXCEPTIONS: Exception[] = [
     reason: "the clientInfo entrypoint value is part of Vibe's wire protocol, not project history"
   },
   {
+    file: 'docs/compatibility-v3.md',
+    name: 'programmatic',
+    line: '| `harness/core/src/core/features/programmatic_tool_calling/tools.rs` | `930e6dd4030ee23e692a86ced0c2793d58a3eadcf2f57e6bedeb2ec1b5ccbd1b` | `run_typescript` is the only direct wrapper tool |',
+    reason: 'a Vibe 3.0.2 source path in the search tool facts, not project history'
+  },
+  {
+    file: 'docs/compatibility-v3.md',
+    name: 'programmatic',
+    line: '| `harness/core/src/core/features/programmatic_tool_calling/descriptor.rs` | `76757115bb9e83bf4a38559ce4a5f4d238603f60de2dc62da60c2495a172ac8d` | members are named `tools.<namespace>.<name>` |',
+    reason: 'a Vibe 3.0.2 source path in the search tool facts, not project history'
+  },
+  {
+    file: 'docs/compatibility-v3.md',
+    name: 'programmatic',
+    line: '| `harness/core/src/tests/acceptance_scenarios/permissions/programmatic.rs` | `d863b003ab080d8562ba96069e188bf10cb3325e2caf303fae371a118808af4d` | a nested call asks for approval with `tool_id` as the route and a `tools.`-prefixed display name; a rejection reaches the program |',
+    reason: 'a Vibe 3.0.2 source path in the search tool facts, not project history'
+  },
+  {
     file: 'docs/compatibility.md',
     name: 'programmatic',
     line: '| `harness/core/src/core/features/programmatic_tool_calling/execution.rs` | `181795b9211b36ad075fb55a069882f466902f067b2bd86fb8d03d6f345ce4f8` |',

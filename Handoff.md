@@ -14,9 +14,9 @@
 | 2 | Clean-account installation (postponed 2026-10-19); a release is marked latest only after it | Owner |
 | 3 | Broader real-task qualification beyond the two bounded trials | Owner allowance; target agent |
 | 4 | Antigravity on `main` (2026-10-28): agy 1.4.7, 1.4.8 and 1.4.9 (from the target's `018f17b`), with `--dangerously-skip-permissions` as an opt-in, logged switch (`[experimental] antigravity_skip_permissions`, default off, ADR 0008 amendment). The target reports all five probes passing on agy 1.4.9 with the flag on; the evidence is not in the repository yet, so the `antigravity-*` gates stay unverified until it is committed | Target agent commits probe evidence |
-| 5 | The newer Vibe release (3.0.3, on the target's PATH): a new candidate only after its own tagged-source review and target sitting | Owner decides |
-| 6 | Review search sidecar: draft ADR 0007 for the MCP stdio route (Vibe 3.0.2's client-provided tools are host-embedding only, so not usable over the wire); building it needs the owner's approval and a hosted review carrying the nested `run_typescript` probe | Coordinator drafts; owner approves |
-| 7 | Byte-reproducible archives: one SBOM and acceptance date from `SOURCE_DATE_EPOCH`, else the HEAD commit time (owner, 2026-10-27), and no SBOM regeneration after packing | Coordinator |
+| 5 | The newer Vibe release (3.0.3, on the target's PATH): assessed on 2026-10-28, recommendation: wait (see the 2026-10-28 assessment under `research/`); it renames the edit tool on the approval wire, so a re-pin needs a code change and a new candidate | Owner decides |
+| 6 | Review search tool: the design is in [2.1-designs §5](planning/2.1-designs.md#5-search-tool-for-reviews) (MCP stdio route, source-checked against Vibe 3.0.2). Building it needs the owner's decision, recorded in the strategy and here, and a hosted review carrying the nested `run_typescript` probe | Owner decides |
+| 7 | Done 2026-10-28: byte-reproducible `package:rc` (one source date, lockfile-derived SBOM namespace); two clean builds matched. The target build of the next candidate can be compared by `SHA256SUMS` | — |
 
 <details>
 <summary>Historical checkpoints and superseded executable runbooks — evidence only</summary>
