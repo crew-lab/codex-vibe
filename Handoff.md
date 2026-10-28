@@ -54,7 +54,7 @@ Behaviour on a running Vibe is proven only by the [target acceptance procedure](
 
 ## Evidence
 
-The rules are in [AGENTS.md](AGENTS.md#recording-target-evidence) (the placeholders, the private-path grep, what never reaches a committed file) and its [code-fix rule](AGENTS.md#code-changes-on-the-target-machine); the two-machine principle is in the [strategy's working rules](planning/development-strategy.md#working-rules). Evidence names the exact source, archive and installed distribution it belongs to and never transfers to other bytes; missing evidence stays unverified; `docs/acceptance.json` is the per-build observed ledger.
+The rules are in [target acceptance](docs/target-acceptance.md#recording-evidence) (the placeholders, the private-path grep, what never reaches a committed file) and its [code-fix rule](AGENTS.md#code-changes-on-the-target-machine); the two-machine principle is in the [strategy's working rules](planning/development-strategy.md#working-rules). Evidence names the exact source, archive and installed distribution it belongs to and never transfers to other bytes; missing evidence stays unverified; `docs/acceptance.json` is the per-build observed ledger.
 
 Sanitized evidence folders under `research/evidence/`:
 
