@@ -64,7 +64,7 @@ Patches are never applied automatically. The worker has no shell or network tool
 
 ## Skills and references
 
-The package ships one coordinator skill at `skills/vibe-supervisor`. It describes the explicit config workflow, five-tool catalog, one-shot limits, verification, and close procedure. `examples/codex/agents/vibe-reviewer.toml` is a Codex custom agent that runs that sequence for one bounded review or edit; copy it into `~/.codex/agents/` yourself (see [the reference](docs/reference.md#codex-custom-agent)), the supervisor never writes there.
+The package ships one coordinator skill at `.agents/skills/vibe-supervisor`, where Codex and Antigravity load it from this repository; `.claude/skills/vibe-supervisor` links to it for Claude Code. It describes the explicit config workflow, five-tool catalog, one-shot limits, verification, and close procedure. `.codex/agents/vibe-reviewer.toml` is a Codex custom agent that runs that sequence for one bounded review or edit; copy it into `~/.codex/agents/` yourself (see [the reference](docs/reference.md#codex-custom-agent)), the supervisor never writes there.
 
 - [Tool, config, and CLI reference](docs/reference.md)
 - [Behavior and lifecycle](docs/functionality.md)

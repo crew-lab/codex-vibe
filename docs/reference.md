@@ -200,11 +200,11 @@ Use `vibe-supervisor <command> --help` for current options. The explicit selecte
 
 ### Codex custom agent
 
-[`examples/codex/agents/vibe-reviewer.toml`](../examples/codex/agents/vibe-reviewer.toml) is a Codex custom agent whose instructions run the readiness, request file, grant, start, status and close sequence for one bounded review or edit. Install it by copying the file into Codex's agents directory, which the supervisor never writes:
+[`.codex/agents/vibe-reviewer.toml`](../.codex/agents/vibe-reviewer.toml) is a Codex custom agent whose instructions run the readiness, request file, grant, start, status and close sequence for one bounded review or edit. Codex loads it automatically when it works in this repository as a trusted project. To use it elsewhere, copy it into Codex's user agents directory, which the supervisor never writes:
 
 ```sh
 mkdir -p ~/.codex/agents
-cp examples/codex/agents/vibe-reviewer.toml ~/.codex/agents/
+cp .codex/agents/vibe-reviewer.toml ~/.codex/agents/
 ```
 
 Codex reads `~/.codex/agents/*.toml` on its next start. The agent uses only the five registered tools and the returned `task_authorize` command; it grants no permission by itself, and the host's command prompt for that command remains the owner's per-start check.

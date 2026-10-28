@@ -6,7 +6,7 @@ import { SUPPORTED_VIBE } from '../../src/backends/app-server/supported-vibe.js'
 const repo = path.resolve(import.meta.dirname, '..', '..');
 const SELF = 'tests/unit/no-legacy-references.test.ts';
 const SKIPPED_DIRECTORIES = new Set(['node_modules', 'dist', '.git']);
-const SCANNED_DIRECTORIES = ['src', 'tests', 'scripts', 'skills', 'examples', 'schemas', 'docs'];
+const SCANNED_DIRECTORIES = ['src', 'tests', 'scripts', '.agents', '.codex', 'examples', 'schemas', 'docs'];
 const SCANNED_ROOT_FILES = ['README.md', 'SECURITY.md', 'CHANGELOG.md', 'AGENTS.md', 'Handoff.md'];
 const CHANGELOG_START = /^## \d+\.\d+\.\d+\b/;
 
