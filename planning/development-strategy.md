@@ -31,6 +31,8 @@ The experimental Antigravity backend is a second vendor with weekly releases who
 | 10 | Thin the documents | `planning/development-plan.md` goes to Git history (its live content is this section and the Handoff); the Handoff keeps the current state and its collapsed history, and superseded briefs are deleted rather than kept | Coordinator agent | Nothing | S |
 | 11 | Release 2.2.1 when it carries something the owner uses | A candidate from `main` after step 4 lands, not for the Antigravity changes alone: preparation PASS, one review and one edit, then a pre-release; latest once step 2's rule applies | Target agent builds and runs; owner publishes | A hosted allowance of two | M |
 
+**Progress, end of 2026-10-28.** Done on `main` (`e9a162c`, unreleased 2.2.1): steps 1, 4, 6 and 10, the coordinator half of step 8 (freeze note) and the preparation for step 9 (one per-version wire table). Limits 2 and 4 above are therefore addressed in source: `vibe_status` returns the bound `task authorize` command, and the ledger carries 2.2.0. Open: step 2 (mark latest), step 3 (ten real starts, carrying step 5), step 7 after them, step 11, the Antigravity evidence, and persisting the `context_files` count so step 3 measures step 6. The Handoff table carries the status.
+
 **Owner decisions.** The owner accepted D1–D6 as recommended on 2026-10-28; standing authorization stays declined until after the ten starts.
 
 - **D1, simplify the ledger: yes.** It is two releases behind, so today it informs nobody; a per-build observed list that stays true is worth more than eighteen gates that do not. It changes the "Verification and reporting" text in AGENTS.md, not a boundary.
