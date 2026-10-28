@@ -1,10 +1,15 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { sourceDate } from './source-date.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json'), 'utf8'));
+const lockBytes = await readFile(path.join(root, 'package-lock.json'));
+const lock = JSON.parse(lockBytes.toString('utf8'));
+const packageJson = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+const lockSha256 = createHash('sha256').update(lockBytes).digest('hex');
+const created = sourceDate(root);
 const packages = [];
 for (const [relative, metadata] of Object.entries(lock.packages ?? {})) {
   if (!relative) continue;
@@ -27,10 +32,10 @@ const sbom = {
   dataLicense: 'CC0-1.0',
   SPDXID: 'SPDXRef-DOCUMENT',
   name: 'vibe-supervisor-source-lockfile',
-  documentNamespace: `https://spdx.org/spdxdocs/vibe-supervisor-${randomUUID()}`,
-  creationInfo: { creators: ['Tool: vibe-supervisor-sbom-script'], created: new Date().toISOString() },
+  documentNamespace: `https://spdx.org/spdxdocs/${packageJson.name}-${packageJson.version}-${lockSha256}`,
+  creationInfo: { creators: ['Tool: vibe-supervisor-sbom-script'], created },
   packages,
-  annotations: [{ annotationType: 'OTHER', annotator: 'Tool: vibe-supervisor-sbom-script', annotationDate: new Date().toISOString(), comment: 'Generated from package-lock.json. Missing license metadata is recorded as NOASSERTION and requires release review.' }],
+  annotations: [{ annotationType: 'OTHER', annotator: 'Tool: vibe-supervisor-sbom-script', annotationDate: created, comment: 'Generated from package-lock.json. Missing license metadata is recorded as NOASSERTION and requires release review.' }],
 };
 const output = path.join(root, 'dist', 'sbom.spdx.json');
 await writeFile(output, `${JSON.stringify(sbom, null, 2)}\n`, { mode: 0o600 });

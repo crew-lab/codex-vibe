@@ -51,3 +51,17 @@ node scripts/prepare-reviewed-baseline.mjs /absolute/private/manifest.json --con
 Creation writes only to the coordinator-owned private snapshot repository. It does not stage, commit, or change refs in the original checkout. Independently verify the complete snapshot and returned `base_ref` before starting an edit. If source bytes or refs changed since dry-run, preparation must refuse the stale manifest. Failure receipts identify the failed stage and exact retained or removed helper-owned resources.
 
 Other release scripts run deterministic lint, type, build, test, acceptance, secret-scan, SBOM, checksum, and offline installed-package smoke checks. They do not run hosted inference or prove native desktop registration, clean-account installation, or platform support.
+
+## Reproducible release outputs
+
+`package:rc` writes the same bytes for the same commit. The SBOM and the acceptance report take one date, `SOURCE_DATE_EPOCH` when it is set and otherwise the HEAD commit time; the build fails when neither is available. The SBOM namespace is derived from the package name, the version and the SHA-256 of `package-lock.json`. The SBOM is not inside the archive: `npm pack` runs `prepare` even with `--ignore-scripts`, which rebuilds `dist`, so `package:rc` writes `release/sbom.spdx.json` after packing.
+
+To check an archive built elsewhere, rebuild it in a clean clone at the same commit and compare the checksums:
+
+```sh
+git clone https://github.com/crew-lab/codex-vibe.git rebuild && cd rebuild && git checkout --detach <commit>
+npm ci && VIBE_SUPERVISOR_TEST_NPM_CACHE=/absolute/path/to/populated/npm-cache npm run package:rc
+diff release/SHA256SUMS /path/to/other/release/SHA256SUMS
+```
+
+Use the same Node and npm versions as the other build; a different `npm pack` can change the archive bytes.
