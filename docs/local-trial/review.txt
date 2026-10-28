@@ -1,0 +1,5 @@
+Read only CONTRACT.md and src/limit.mjs. Do not open other files.
+Decide whether below(value, limit) implements the strict comparison in CONTRACT.md.
+Evaluate these five labeled cases: below (699,700), equal (700,700), above (701,700), negative-below (-3,-2), negative-above (-1,-2).
+For each case return the value, limit, Boolean result and source reference. Return a concise conclusion first.
+No invented defect, unrelated recommendations, scratch files, shell, network or test execution.

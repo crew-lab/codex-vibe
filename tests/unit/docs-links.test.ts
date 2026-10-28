@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repo = path.resolve(import.meta.dirname, '..', '..');
-const skipped = new Set(['node_modules', '.git', 'dist', 'release', 'coverage', '.claude', 'history']);
+const skipped = new Set(['node_modules', '.git', 'dist', 'release', 'coverage', '.claude', 'history', 'tmp']);
 
 async function markdownFiles(directory: string): Promise<string[]> {
   const found: string[] = [];

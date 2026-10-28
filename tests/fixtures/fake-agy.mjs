@@ -11,7 +11,15 @@ const modes = new Set((modeArg ? modeArg.slice('--fake-mode='.length) : '').spli
 const args = rawArgs.filter((arg) => arg !== modeArg);
 
 if (args[0] === '--version') {
-  process.stdout.write('1.4.0\n');
+  if (modes.has('version-1.4.8')) {
+    process.stdout.write('1.4.8\n');
+  } else if (modes.has('version-1.4.7')) {
+    process.stdout.write('1.4.7\n');
+  } else if (modes.has('version-1.4.4')) {
+    process.stdout.write('1.4.4\n');
+  } else {
+    process.stdout.write('1.4.0\n');
+  }
   process.exit(0);
 }
 
@@ -46,7 +54,12 @@ if (slash.includes(prompt)) {
   if (prompt === '/permissions') out('permissions', { permissions: [{ scope: 'global', allow: settings.permissions?.allow ?? [], deny: settings.permissions?.deny ?? [] }] });
   if (prompt === '/skills') {
     const planted = modes.has('load-project-config') ? (plantedText(process.cwd()).match(/vsup-planted-[a-z0-9-]+/g) ?? []) : [];
-    out('skills', { skills: planted.map((name) => ({ name })) });
+    const skills = modes.has('builtin-skill')
+      ? [{ name: 'unknown-built-in', builtin: true }]
+      : modes.has('allowed-builtin-skills')
+        ? [{ name: 'agy-customizations', builtin: true }, { name: 'automation', builtin: true }]
+        : planted.map((name) => ({ name }));
+    out('skills', { skills });
   }
   if (prompt === '/agents') out('agents', { agents: [] });
   process.exit(0);
@@ -87,7 +100,7 @@ function connectThroughProxy() {
 
 function hookAllows(call) {
   if (modes.has('ignore-hooks')) return true;
-  const config = readJson(path.join(home, '.gemini', 'config', 'hooks.json'), {});
+  const config = readJson(path.join(home, '.gemini', modes.has('cli-hooks') ? 'antigravity-cli' : 'config', 'hooks.json'), {});
   let allowed = true;
   for (const entry of Object.values(config)) {
     if (!entry || entry.enabled === false) continue;
@@ -127,7 +140,7 @@ const declarations = [
   { name: 'list_dir', parameters: { type: 'object', properties: { DirectoryPath: { type: 'string' } } } }
 ];
 const contents = [{ role: 'user', parts: [{ text: prompt }] }];
-const first = await post(base, { systemInstruction: { parts: [{ text: systemText }] }, contents, tools: [{ functionDeclarations: declarations }] });
+const first = await post(base, { systemInstruction: { parts: [{ text: systemText }] }, contents, tools: [{ functionDeclarations: modes.has('json-schema-read') ? [{ name: 'read_file', parameters: {}, parametersJsonSchema: { type: 'object', properties: { Path: { type: 'string' } }, required: ['Path'] } }] : declarations }] });
 emit({ event: 'step_update', step_update: { step_index: 0, step_type: 'planner_response', state: 'DONE' } });
 const call = first.candidates?.[0]?.content?.parts?.find((part) => part.functionCall)?.functionCall;
 if (call) {
@@ -144,7 +157,7 @@ if (call) {
   }
   contents.push({ role: 'model', parts: [{ functionCall: call }] });
   contents.push({ role: 'user', parts: [{ functionResponse: { name: call.name, response } }] });
-  await post(base, { systemInstruction: { parts: [{ text: systemText }] }, contents, tools: [{ functionDeclarations: declarations }] });
+  await post(base, { systemInstruction: { parts: [{ text: systemText }] }, contents, tools: [{ functionDeclarations: modes.has('json-schema-read') ? [{ name: 'read_file', parameters: {}, parametersJsonSchema: { type: 'object', properties: { Path: { type: 'string' } }, required: ['Path'] } }] : declarations }] });
 }
 emit({ event: 'result', result: { status: 'SUCCESS', response: 'done', num_turns: 2 } });
 process.exit(0);

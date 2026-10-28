@@ -1,0 +1,6 @@
+Read CONTRACT.md and src/limit.mjs first.
+Add exactly two new files: src/at-least.mjs and tests/at-least.test.mjs. Change no existing file.
+Export a named function atLeast(value, limit) returning value >= limit.
+Use node:test and node:assert/strict to cover below, equal, above, negatives and negative equality.
+Do not modify the strict below function or its contract. No scratch files, shell, network or test execution.
+Finish with a concise summary and changed-file inventory.
