@@ -175,6 +175,16 @@ describe("app-server keys", () => {
     expect(validateConfig({ version: 1, backend: "antigravity", experimental: { antigravity: true } }).backend).toBe("antigravity");
   });
 
+  it("accepts antigravity_skip_permissions only with the Antigravity opt-in, and treats it as boot-bound", () => {
+    expect(() => validateConfig({ ...appServer, experimental: { antigravity_skip_permissions: true } })).toThrow(/antigravity_skip_permissions/);
+    const bypassed = validateConfig({ version: 1, backend: "antigravity", experimental: { antigravity: true, antigravity_skip_permissions: true } });
+    expect(bypassed.experimental).toEqual({ antigravity: true, antigravitySkipPermissions: true });
+    const enforced = validateConfig({ version: 1, backend: "antigravity", experimental: { antigravity: true } });
+    expect(enforced.experimental?.antigravitySkipPermissions).toBeUndefined();
+    expect(bootBoundDrift(enforced, bypassed)).toEqual(["experimental.antigravity_skip_permissions"]);
+    expect(configFingerprint(enforced)).not.toBe(configFingerprint(bypassed));
+  });
+
   it("maps paths.antigravity and validates it like the other executable paths", () => {
     expect(validateConfig({ ...appServer, paths: { ...appServer.paths, antigravity: "/usr/local/bin/agy" } }).paths?.antigravity).toBe("/usr/local/bin/agy");
     expect(validateConfig({ ...appServer, paths: { ...appServer.paths, antigravity: "agy" } }).paths?.antigravity).toBe("agy");

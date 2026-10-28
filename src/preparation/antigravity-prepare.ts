@@ -63,6 +63,7 @@ export interface AntigravityPreparationReport {
     total_tokens: number;
   };
   agy_probes: AgyProbeReport;
+  agy_permission_layer: 'enforced' | 'bypassed';
   findings: Array<{ level: 'info' | 'fail'; code: string; message: string }>;
 }
 
@@ -618,6 +619,7 @@ export async function runAntigravityPreparationCheck(
         executablePath,
         root: tempRoot,
         proxy,
+        skipPermissions: config.experimental?.antigravitySkipPermissions === true,
         readback: (slashCommand, cwd, childHome, childTmp) =>
           runCliSlashCommandReadback(executablePath, slashCommand, cwd, childHome, childTmp, proxy.port)
       });
@@ -701,6 +703,7 @@ export async function runAntigravityPreparationCheck(
       total_tokens: totalTokensObserved
     },
     agy_probes: probeReport,
+    agy_permission_layer: config.experimental?.antigravitySkipPermissions === true ? 'bypassed' : 'enforced',
     findings
   };
 

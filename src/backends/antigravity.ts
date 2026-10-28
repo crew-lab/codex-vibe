@@ -66,6 +66,17 @@ export function onlyAllowedAntigravityBuiltinSkills(value: readonly unknown[]): 
   });
 }
 
+export type AntigravityPermissionLayer = 'enforced' | 'bypassed';
+export const PERMISSION_LAYER_BYPASSED_MESSAGE = "agy ran with --dangerously-skip-permissions because [experimental] antigravity_skip_permissions = true: agy's own permission layer was off and the supervisor's PreToolUse hook was the only tool gate.";
+
+export function antigravityPermissionLayer(config: Pick<SupervisorConfig, 'experimental'>): AntigravityPermissionLayer {
+  return config.experimental?.antigravitySkipPermissions === true ? 'bypassed' : 'enforced';
+}
+
+function permissionLayerWarnings(layer: AntigravityPermissionLayer): { warnings?: string[] } {
+  return layer === 'bypassed' ? { warnings: [PERMISSION_LAYER_BYPASSED_MESSAGE] } : {};
+}
+
 export function isSupportedAntigravityVersion(version: string | null | undefined): version is SupportedAntigravityVersion {
   return typeof version === 'string' && (SUPPORTED_ANTIGRAVITY_VERSIONS as readonly string[]).includes(version);
 }
@@ -776,10 +787,11 @@ export class AntigravityBackend implements SupervisorBackend {
       prompt = `${prompt}\n\n${FINDINGS_OUTPUT_CONTRACT}`;
     }
 
+    const permissionLayer = antigravityPermissionLayer(this.config);
     const args = [
       '-p', prompt,
       ...(input.mode === 'edit' ? ['--mode', 'accept-edits'] : []),
-      '--dangerously-skip-permissions',
+      ...(permissionLayer === 'bypassed' ? ['--dangerously-skip-permissions'] : []),
       '--output-format', 'stream-json',
       '--disable-slash-commands',
       '--sandbox',
@@ -848,6 +860,7 @@ export class AntigravityBackend implements SupervisorBackend {
           data: {
             tool: redact(denied.tool),
             reason: redact(denied.reason),
+            agy_permission_layer: permissionLayer,
             ...(denied.path ? { path: redact(denied.path) } : {})
           }
         });
@@ -888,6 +901,16 @@ export class AntigravityBackend implements SupervisorBackend {
         `Antigravity binary digest changed before launch (expected ${binaryDigest}, got ${launchDigest ?? 'unreadable'}).`,
         { reason: 'binary_digest_drift' }
       );
+    }
+
+    if (permissionLayer === 'bypassed') {
+      process.stderr.write(`[vibe-supervisor] run ${input.runId}: ${PERMISSION_LAYER_BYPASSED_MESSAGE}\n`);
+      await callbacks.onEvent({
+        source: 'supervisor',
+        type: 'diagnostic',
+        severity: 'warning',
+        data: { reason: 'antigravity_permission_layer_bypassed', agy_permission_layer: permissionLayer, text: PERMISSION_LAYER_BYPASSED_MESSAGE }
+      });
     }
 
     const child = spawnManaged(executablePath, args, {
@@ -1066,6 +1089,7 @@ export class AntigravityBackend implements SupervisorBackend {
               severity: 'info',
               data: {
                 tool: redact(entry.tool ?? 'tool'),
+                agy_permission_layer: permissionLayer,
                 ...(entry.path ? { path: redact(entry.path) } : {})
               }
             });
@@ -1080,6 +1104,7 @@ export class AntigravityBackend implements SupervisorBackend {
               data: {
                 tool: redact(entry.tool ?? 'tool'),
                 reason: redact(entry.reason ?? 'denied'),
+                agy_permission_layer: permissionLayer,
                 ...(entry.path ? { path: redact(entry.path) } : {})
               }
             });
@@ -1114,7 +1139,7 @@ export class AntigravityBackend implements SupervisorBackend {
           await callbacks.onState('completed', {
             usage: finalUsage,
             approvals,
-            result: { stopReason: limitStopReason, summary: opaque.latestSummary || 'Antigravity run stopped at configured limit.' }
+            result: { stopReason: limitStopReason, summary: opaque.latestSummary || 'Antigravity run stopped at configured limit.', ...permissionLayerWarnings(permissionLayer) }
           });
         } else if (code === 0 && (envelopeStatus === 'ERROR' || envelopeStatus === 'INVALID')) {
           const detail = envelopeError ? `: ${redact(envelopeError).slice(0, 300)}` : '';
@@ -1132,7 +1157,7 @@ export class AntigravityBackend implements SupervisorBackend {
           await callbacks.onState('completed', {
             usage: finalUsage,
             approvals,
-            result: { stopReason: 'end_turn', summary: opaque.latestSummary || 'Antigravity run completed.' }
+            result: { stopReason: 'end_turn', summary: opaque.latestSummary || 'Antigravity run completed.', ...permissionLayerWarnings(permissionLayer) }
           });
         } else if (code === 0) {
           await callbacks.onState('failed', {
