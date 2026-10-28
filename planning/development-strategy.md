@@ -194,6 +194,7 @@ Existing releases are never replaced or retagged, and only the latest release is
 - Ship no unreachable code on a live path. The deferred correction mode was off everywhere, yet its edits to turn completion and deadline handling broke every one-shot run's finalization.
 - Bind what matters, not what is cheap to read. A review grant bound to file timestamps was spent by any editor or build touching the tree; content of the files Git can see is what the review reads.
 - An authorization needs diagnostics from the start. A single "invalid or unavailable" hid a Node-runtime mismatch between `task authorize` and the server; per-field hashes name the cause without exposing values.
+- Read the vendor's spawn path before trusting a process boundary. Vibe's MCP SDK starts stdio servers in a new session, so a sidecar escapes the worker's process group and the reaper and needs its own lifetime check.
 - A source review can retire a design. Vibe 3.0.2's client-provided tools looked like a simpler search route; its own source marks them internal to embedding hosts, so the MCP route stands.
 
 **About working with agents.**
