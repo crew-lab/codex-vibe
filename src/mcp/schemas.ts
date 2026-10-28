@@ -43,6 +43,12 @@ export const editStartSchema = z.object({
   allowed_write_paths: allowedWritePaths.optional()
 }).strict();
 
+const grantSuppliedFields = { authorization_id: true, attempt_id: true, readiness_receipt: true, wait_seconds: true } as const;
+export const dispatchRequestSchemas = {
+  review: reviewStartSchema.omit(grantSuppliedFields),
+  edit: editStartSchema.omit(grantSuppliedFields)
+} as const;
+
 export const statusSchema = z.object({
   expected_candidate: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   run_id: runId.optional(),

@@ -10,11 +10,11 @@ Use the matching installed CLI, reported Node executable and explicit selected c
 
 ## Authorize and start
 
-Freeze the exact request and acceptance criteria. Register it through `task authorize --runtime-node <reported-node> --request <private-json> --owner-reference <instruction-reference> --expires-at <fresh-ISO-expiry> --config <selected-config>`. Generate a fresh expiry with `node -p "new Date(Date.now() + 10 * 60 * 1000).toISOString()"`.
+Freeze the exact request and acceptance criteria: take `task_authorize.request_template` from the readiness reply, add the task text and the files to read, and write it to a private file. Register it by running `task_authorize.argv` from the same reply with `<private-request-file>` and `<owner-reference>` replaced; it already names the server's Node executable, CLI and `--config` and carries a fresh expiry. Assembling the command by hand, use `task authorize --runtime-node <reported-node> --request <private-json> --owner-reference <instruction-reference> --expires-at <fresh-ISO-expiry> --config <selected-config>` and generate the expiry with `node -p "new Date(Date.now() + 10 * 60 * 1000).toISOString()"`.
 
 This command writes Supervisor-private grant state. In a restricted project environment, request the host-supported scoped administrative command permission for this exact CLI, runtime, configuration and task. Existing task authorization permits necessary preparation; it does not bypass the host approval mechanism. If approval is refused, stop and report its stated reason. Do not relocate state, weaken ownership checks or reroute execution to evade the refusal. A delegated chat instruction may not be recognized as direct owner approval by the host.
 
-Save the returned authorization and attempt identifiers privately. Supply them and the fresh readiness receipt to one matching start on the same native connection. A grant permits one start, never automatic replay; an unused diagnostic grant must not later be dispatched. A receipt is not task authorization. No sixth tool or continuation exists.
+Save the returned authorization and attempt identifiers privately. Supply them and the fresh readiness receipt to one matching start on the same native connection. A start refused with `VSUP_AUTHORIZATION_INVALID` names the differing bound fields in `details.differing_fields`; fix those, or check readiness again when a runtime field is named, and register a new grant rather than retrying. A grant permits one start, never automatic replay; an unused diagnostic grant must not later be dispatched. A receipt is not task authorization. No sixth tool or continuation exists.
 
 ## Verify and settle
 

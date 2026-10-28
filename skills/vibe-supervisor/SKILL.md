@@ -43,11 +43,19 @@ Every delegation starts with a native workspace readiness call on the connection
 
 ## Run one bounded task
 
-Collect the desired outcome, concrete acceptance criteria, canonical allowed workspace, exact file scope, exclusions, and explicit Git base for edits. Never put credentials in task text. Check the real connected tool schemas and do not invoke fields or tools absent from that catalog. Read `supervisor_runtime.executable` from readiness. After readiness passes, create a private one-start grant from the exact request with `vibe-supervisor task authorize --runtime-node <that-absolute-executable>`; pass its returned `authorization_id` and `attempt_id` with the same request to the matching start tool. The readiness receipt is admission evidence and does not replace this task authorization. One started run owns the instance's active slot until backend close verifies termination. If close reports termination unverified, keep the run inspectable and do not start another run on that slot. Do not queue, retry automatically, or replay a task after restart or failure.
+Collect the desired outcome, concrete acceptance criteria, canonical allowed workspace, exact file scope, exclusions, and explicit Git base for edits. Never put credentials in task text. Check the real connected tool schemas and do not invoke fields or tools absent from that catalog. The sequence is fixed:
+
+1. Readiness, as above. The eligible reply carries `task_authorize`: `argv` is the exact `task authorize` command bound to the connected server (its Node executable, its CLI entrypoint and its `--config`), `request_template` is `{ "operation", "request": { cwd, context_files | base_ref } }` for this workspace and operation, and `expires_at` is the grant expiry the command carries (30 minutes). No `--runtime-node` is needed with it.
+2. Write the request file: `request_template` plus `task` (and the `context_files` to read), as a private file outside the repository. This is the exact final request; what the start sends must equal it field for field.
+3. Run `task_authorize.argv` with only `<private-request-file>` and `<owner-reference>` replaced. The host's command permission is the owner's per-start check: a refusal is a stop, not something to route around. The command prints `authorization_id` and `attempt_id`; keep them private.
+4. Start with exactly the same request plus `authorization_id`, `attempt_id` and the `readiness_receipt`, before `receipt_expires_at`, on the same connection. On `VSUP_AUTHORIZATION_INVALID`, read `details.differing_fields`: fix the named request fields, or re-run readiness when a runtime field (`candidate`, `node_executable`, `node_version`, `policy`, `pin_manifest`) is listed, then register a new grant. Never retry with the same identifiers or a guessed change.
+5. Follow the run with cursor-based `vibe_status` calls, read `vibe_result`, then close as described below.
+
+The readiness receipt is admission evidence and does not replace the grant; the grant authorizes one start of one exact request. One started run owns the instance's active slot until backend close verifies termination. If close reports termination unverified, keep the run inspectable and do not start another run on that slot. Do not queue, retry automatically, or replay a task after restart or failure. The Codex custom agent in [examples/codex/agents/vibe-reviewer.toml](../../examples/codex/agents/vibe-reviewer.toml) runs this sequence for one bounded task.
 
 Files matched by the root's `excluded_globs` or the fixed secret denylist are refused to the worker; leave them out of the file scope. A root with a daily budget refuses a start with `VSUP_BUDGET_EXCEEDED` once its 24-hour spending reaches the ceiling; do not move the task to another root to get around it.
 
-Start one review or edit with bounded turns, deadline, output limits, wait, and the readiness receipt. Use cursor-based `vibe_status` calls on the same connection, then read `vibe_result`. Do not raise limits or rotate accounts after a failure. Write the task text from a template below.
+Start one review or edit with bounded turns, deadline, output limits, wait, and the readiness receipt. Do not raise limits or rotate accounts after a failure. Write the task text from a template below.
 
 ## Write the task from a template
 
