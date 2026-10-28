@@ -1,3 +1,6 @@
+import { mkdir, writeFile, chmod } from 'node:fs/promises';
+import path from 'node:path';
+
 export const CHILD_MARKER = 'VIBE_SUPERVISOR_CHILD';
 
 const DEFAULT_FORWARD = new Set(['HOME', 'PATH', 'LANG', 'TMPDIR', 'MISTRAL_API_KEY']);
@@ -35,4 +38,15 @@ export function assertNotSupervisorChild(env: NodeJS.ProcessEnv = process.env): 
     Object.assign(error, { code: 'VSUP_RECURSION_BLOCKED' });
     throw error;
   }
+}
+
+export async function setupHeadlessBrowserNeutralizer(binDir: string): Promise<string> {
+  await mkdir(binDir, { recursive: true, mode: 0o700 });
+  const script = '#!/bin/sh\necho "[vibe-supervisor] Blocked unauthorized headless browser launch attempt: $(basename "$0")" >&2\nexit 1\n';
+  for (const name of ['open', 'xdg-open']) {
+    const target = path.join(binDir, name);
+    await writeFile(target, script, { mode: 0o700 });
+    await chmod(target, 0o700);
+  }
+  return binDir;
 }

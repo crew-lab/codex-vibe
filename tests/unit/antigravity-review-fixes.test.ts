@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFile, chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AntigravityBackend,
   antigravityChildEnvironment,
@@ -28,8 +28,16 @@ const passedPreparation: AntigravityBackendOptions = {
   }
 };
 
+const originalGeminiApiKey = process.env.GEMINI_API_KEY;
+
+beforeEach(() => {
+  process.env.GEMINI_API_KEY = 'test-fake-gemini-key';
+});
+
 afterEach(async () => {
   vi.restoreAllMocks();
+  if (originalGeminiApiKey !== undefined) process.env.GEMINI_API_KEY = originalGeminiApiKey;
+  else delete process.env.GEMINI_API_KEY;
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
@@ -199,8 +207,8 @@ describe('Antigravity child environment and redaction (F3, F4/F10)', () => {
       MISTRAL_API_KEY: 'm', ANTIGRAVITY_HOME: '/elsewhere', XDG_CONFIG_HOME: '/xdg', GEMINI_CLI_HOME: '/gh', UNRELATED: 'x'
     }, '/run/home', '/run/tmp');
     expect(env).toEqual({
-      PATH: '/bin', LANG: 'C', LC_ALL: 'C', GEMINI_API_KEY: 'g', GOOGLE_API_KEY: 'k', ANTIGRAVITY_API_KEY: 'a',
-      HOME: '/run/home', TMPDIR: '/run/tmp', AGY_CLI_OSC7501: 'off'
+      PATH: '/bin', LANG: 'C', LC_ALL: 'C', GEMINI_API_KEY: 'g', GOOGLE_API_KEY: 'g',
+      HOME: '/run/home', TMPDIR: '/run/tmp', AGY_CLI_OSC7501: 'off', BROWSER: 'false'
     });
   });
 
@@ -233,7 +241,7 @@ console.log(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', respo
       expect(final?.state).toBe('completed');
 
       const childEnv = JSON.parse(await readFile(envFile, 'utf8')) as Record<string, string>;
-      const allowed = new Set(['PATH', 'LANG', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'ANTIGRAVITY_API_KEY', 'HOME', 'TMPDIR', 'AGY_CLI_OSC7501', 'VIBE_SUPERVISOR_CHILD', '__CF_USER_TEXT_ENCODING']);
+      const allowed = new Set(['PATH', 'LANG', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'ANTIGRAVITY_API_KEY', 'HOME', 'TMPDIR', 'AGY_CLI_OSC7501', 'BROWSER', 'VIBE_SUPERVISOR_CHILD', '__CF_USER_TEXT_ENCODING']);
       expect(Object.keys(childEnv).filter((key) => !allowed.has(key) && !key.startsWith('LC_'))).toEqual([]);
       expect(childEnv.MISTRAL_API_KEY).toBeUndefined();
       expect(childEnv.ANTIGRAVITY_HOME).toBeUndefined();
@@ -323,7 +331,8 @@ console.log('1.4.0');
     expect(probe.env.GEMINI_API_KEY).toBeUndefined();
     expect(probe.env.MISTRAL_API_KEY).toBeUndefined();
     expect(probe.env.ANTIGRAVITY_HOME).toBeUndefined();
-    expect(probe.env.PATH).toBe(process.env.PATH);
+    expect(probe.env.PATH).toBe(`${path.join(probe.cwd, '.bin')}${path.delimiter}${process.env.PATH}`);
+    expect(probe.env.BROWSER).toBe('false');
     expect(probe.env.HOME).not.toBe(process.env.HOME);
     expect(probe.env.HOME).toBe(probe.cwd);
     await expect(lstat(probe.env.HOME!)).rejects.toMatchObject({ code: 'ENOENT' });

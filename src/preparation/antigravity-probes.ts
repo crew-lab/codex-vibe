@@ -6,6 +6,7 @@ import path from 'node:path';
 import { extractEnvelopeMeta, writeIsolatedSettings } from '../backends/antigravity.js';
 import { writeAntigravityPreToolHook } from '../backends/antigravity-hook.js';
 import { WorkspacePathError, createPrivateDir } from '../security/paths.js';
+import { setupHeadlessBrowserNeutralizer } from '../security/environment.js';
 import { assertNoProjectAntigravityExtensions } from '../security/workspace-guard.js';
 
 export const AGY_PROBE_PROMPT = 'vibe-supervisor no-inference preparation probe. Read the probe file in the workspace, then reply done.';
@@ -143,14 +144,22 @@ export function declaredFunctionNames(body: unknown): string[] {
 
 export function chooseProbeCall(body: unknown, probePath: string): { name: string; args: Record<string, string> } | null {
   const declarations = functionDeclarations(body);
-  const declaration = PROBE_TOOL_PREFERENCE
-    .map((name) => declarations.find((item) => item.name === name))
-    .find((item) => item !== undefined);
-  if (!declaration) return null;
-  const schema = asRecord(declaration.parameters) ?? asRecord(declaration.parametersJsonSchema) ?? asRecord(declaration.parameters_json_schema);
-  const properties = asRecord(schema?.properties) ?? {};
-  const pathKey = PROBE_PATH_KEYS.find((key) => key in properties) ?? 'AbsolutePath';
-  return { name: String(declaration.name), args: { [pathKey]: probePath } };
+  for (const name of PROBE_TOOL_PREFERENCE) {
+    const declaration = declarations.find((item) => item.name === name);
+    if (!declaration) continue;
+    const schemas = [declaration.parametersJsonSchema, declaration.parameters_json_schema, declaration.parameters];
+    const schema = schemas.map(asRecord).find((candidate) => asRecord(candidate?.properties) !== null);
+    const properties = asRecord(schema?.properties);
+    if (!properties) continue;
+    const pathKey = PROBE_PATH_KEYS.find((key) => key in properties);
+    if (!pathKey) continue;
+    const pathSchema = asRecord(properties[pathKey]);
+    if (!pathSchema || (pathSchema.type !== undefined && pathSchema.type !== 'string')) continue;
+    const required = schema?.required;
+    if (required !== undefined && (!Array.isArray(required) || required.some((key) => key !== pathKey))) continue;
+    return { name, args: { [pathKey]: probePath } };
+  }
+  return null;
 }
 
 export function carriesFunctionResponse(body: unknown): boolean {
@@ -607,10 +616,10 @@ function runAgy(executablePath: string, cwd: string, env: NodeJS.ProcessEnv): Pr
   });
 }
 
-function probeEnvironment(childHome: string, childTmp: string, proxyPort: number, modelUrl: string | null): NodeJS.ProcessEnv {
+function probeEnvironment(childHome: string, childTmp: string, proxyPort: number, modelUrl: string | null, neutralizerBinDir?: string): NodeJS.ProcessEnv {
   const proxy = `http://127.0.0.1:${proxyPort}`;
   return {
-    PATH: process.env.PATH,
+    PATH: neutralizerBinDir ? `${neutralizerBinDir}${path.delimiter}${process.env.PATH ?? ''}` : process.env.PATH,
     HOME: childHome,
     TMPDIR: childTmp,
     GEMINI_API_KEY: NO_INFERENCE_GOOGLE_API_KEY,
@@ -623,6 +632,7 @@ function probeEnvironment(childHome: string, childTmp: string, proxyPort: number
     NO_PROXY: '127.0.0.1,localhost',
     no_proxy: '127.0.0.1,localhost',
     AGY_CLI_OSC7501: 'off',
+    BROWSER: 'false',
     NO_COLOR: '1',
     ...(modelUrl ? Object.fromEntries(SCRIPTED_MODEL_ENDPOINT_VARIABLES.map((name) => [name, modelUrl])) : {})
   };
@@ -644,6 +654,7 @@ interface ToolProbeRun {
 
 async function createProbeWorkspace(workspace: string, nonce: string): Promise<string> {
   await mkdir(workspace, { recursive: true });
+  await createGitRoot(workspace);
   const probePath = path.join(workspace, PROBE_FILE_NAME);
   await writeFile(probePath, `${nonce}\n`, { mode: 0o600 });
   return probePath;
@@ -661,21 +672,20 @@ async function runToolProbe(
   const childTmp = path.join(context.root, `tmp-${label}`);
   await createPrivateDir(childHome);
   await createPrivateDir(childTmp);
+  const neutralizerBin = await setupHeadlessBrowserNeutralizer(path.join(childHome, '.bin'));
   await writeIsolatedSettings(childHome, 'review', workspace, [], { modelProvider: 'gemini' });
   await writeAntigravityPreToolHook(childHome, { mode: 'review', workerWorkspace: workspace, excludedAnchors: [] });
   const marker = path.join(context.root, `marker-${label}.jsonl`);
   if (hook.kind === 'variant') {
-    await writeFile(
-      path.join(childHome, '.gemini', 'config', 'hooks.json'),
-      JSON.stringify(hooksDocument('supervisor-policy-gate', hookCommand(context.hookScript, hook.variant, marker)), null, 2) + '\n',
-      { mode: 0o600 }
-    );
+    const hookDoc = JSON.stringify(hooksDocument('supervisor-policy-gate', hookCommand(context.hookScript, hook.variant, marker)), null, 2) + '\n';
+    await writeFile(path.join(childHome, '.gemini', 'config', 'hooks.json'), hookDoc, { mode: 0o600 });
+    await writeFile(path.join(childHome, '.gemini', 'antigravity-cli', 'hooks.json'), hookDoc, { mode: 0o600 });
   }
 
   const run = `probe-${label}`;
   context.proxy.setRun(run);
   context.model.beginRun(run, nonce, probePath);
-  const output = await runAgy(context.executablePath, workspace, probeEnvironment(childHome, childTmp, context.proxy.port, context.model.url));
+  const output = await runAgy(context.executablePath, workspace, probeEnvironment(childHome, childTmp, context.proxy.port, context.model.url, neutralizerBin));
   const requests = context.model.requests.filter((request) => request.run === run);
   const probeTool = context.model.issuedTool(run);
 
@@ -864,10 +874,11 @@ export async function runAgyProbes(options: {
     await createPrivateDir(egressHome);
     await createPrivateDir(egressTmp);
     await mkdir(egressWorkspace, { recursive: true });
+    const neutralizerBin = await setupHeadlessBrowserNeutralizer(path.join(egressHome, '.bin'));
     await writeIsolatedSettings(egressHome, 'review', egressWorkspace, [], { modelProvider: 'gemini' });
     await writeAntigravityPreToolHook(egressHome, { mode: 'review', workerWorkspace: egressWorkspace, excludedAnchors: [] });
     options.proxy.setRun('egress-probe');
-    const egressOutput = await runAgy(options.executablePath, egressWorkspace, probeEnvironment(egressHome, egressTmp, options.proxy.port, null));
+    const egressOutput = await runAgy(options.executablePath, egressWorkspace, probeEnvironment(egressHome, egressTmp, options.proxy.port, null, neutralizerBin));
     const egressAttempts = options.proxy.attemptsFor('egress-probe');
     const proxyEvaluation = evaluateProxyProbe(egressAttempts.map((attempt) => attempt.host));
     if (egressOutput.timedOut) {

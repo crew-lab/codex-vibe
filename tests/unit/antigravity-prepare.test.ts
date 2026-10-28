@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
-import { runAntigravityPreparationCheck } from '../../src/preparation/antigravity-prepare.js';
+import { antigravityPermissionsMatch, runAntigravityPreparationCheck } from '../../src/preparation/antigravity-prepare.js';
 import { WorkspacePathError } from '../../src/security/paths.js';
 import {
   admissionRefusedForPlantedConfiguration,
@@ -116,6 +116,34 @@ describe('Antigravity preparation probe classification', () => {
     expect(chooseProbeCall(wrapped, '/w/p.txt')).toEqual({ name: 'read_file', args: { path: '/w/p.txt' } });
     expect(declaredFunctionNames(wrapped)).toEqual(['read_file']);
     expect(chooseProbeCall({ tools: [{ functionDeclarations: [{ name: 'run_command' }] }] }, '/w/p.txt')).toBeNull();
+  });
+
+  it('binds probe arguments to the actual declared schema without inventing a path argument', () => {
+    const body = (declaration: unknown) => ({ tools: [{ functionDeclarations: [declaration] }] });
+    expect(chooseProbeCall(body({ name: 'read_file', parameters: {}, parametersJsonSchema: { properties: { Path: { type: 'string' } }, required: ['Path'] } }), '/w/p.txt')).toEqual({ name: 'read_file', args: { Path: '/w/p.txt' } });
+    expect(chooseProbeCall(body({ name: 'read_file', parameters: { properties: { Path: { type: 'string' } } }, parametersJsonSchema: { properties: { Path: { type: 'integer' } } } }), '/w/p.txt')).toBeNull();
+    for (const schema of [
+      {},
+      { properties: { unknown: { type: 'string' } } },
+      { properties: { Path: { type: 'integer' } } },
+      { properties: { Path: { type: 'string' } }, required: ['Path', 'Unspecified'] }
+    ]) expect(chooseProbeCall(body({ name: 'read_file', parametersJsonSchema: schema }), '/w/p.txt')).toBeNull();
+  });
+
+  it('requires exact global permissions and empty untrusted scopes without filtering malformed entries', () => {
+    const allow = ['read_file(/w/**)'];
+    const deny = ['command(*)'];
+    const global = { scope: 'global', allow, deny };
+    expect(antigravityPermissionsMatch([global, { scope: 'project' }, { scope: 'shared' }], allow, deny)).toBe(true);
+    for (const actual of [
+      [global, { scope: 'project', allow: ['command(*)'] }],
+      [global, { scope: 'shared', deny: ['read_file(*)'] }],
+      [global, global],
+      [{ ...global, allow: [...allow, {}] }],
+      [{ ...global, deny: undefined }],
+      [global, { scope: 'unknown' }],
+      []
+    ]) expect(antigravityPermissionsMatch(actual, allow, deny)).toBe(false);
   });
 
   it('accepts only the WorkspacePathError that names the planted ancestor configuration', () => {
@@ -249,6 +277,41 @@ describe('Antigravity preparation probes through a fake agy', () => {
     expect(probes.project_config_not_loaded).toMatchObject({ result: 'pass', loaded: [], readbacks_ok: true, run: { outcome: 'executed' } });
     expect(probes.scripted_model.declared_tools).toEqual(['view_file', 'read_file', 'list_dir']);
     expect(out.report.network_observation.verdict).toBe('none-observed-control-validated');
+  }, 90_000);
+
+  it('exercises every replacement hook through the alternate registration and JSON Schema read dialect', async () => {
+    const out = await prepareWith('cli-hooks,json-schema-read');
+    expect(out.status).toBe('passed');
+    expect(out.report.agy_probes.hook_invoked_and_deny_honoured).toMatchObject({
+      result: 'pass', control: { probe_tool: 'read_file', hook_invocations: 1 }, deny_all: { hook_invocations: 1 }
+    });
+    expect(out.report.agy_probes.hook_failure_denies.result).toBe('pass');
+  }, 90_000);
+
+  it('does not accept arbitrary built-in skills as a substitute for the disabled-skill policy', async () => {
+    const out = await prepareWith('builtin-skill');
+    expect(out.status).toBe('failed');
+    expect(out.report.profiles.review.cli_readback_passed).toBe(false);
+    expect(out.report.findings.map((f) => f.code)).toContain('review_cli_readback_mismatch');
+  }, 90_000);
+
+  it('accepts pinned built-in skills with provenance while rejecting arbitrary skills', async () => {
+    const out = await prepareWith('allowed-builtin-skills');
+    expect(out.status).toBe('passed');
+    expect(out.report.profiles.review.cli_readback_passed).toBe(true);
+    expect(out.report.profiles.edit.cli_readback_passed).toBe(true);
+  }, 90_000);
+
+  it('accepts agy 1.4.7 executable during preparation', async () => {
+    const out = await prepareWith('version-1.4.7');
+    expect(out.status).toBe('passed');
+    expect(out.report.executable.version).toBe('1.4.7');
+  }, 90_000);
+
+  it('accepts agy 1.4.8 executable during preparation', async () => {
+    const out = await prepareWith('version-1.4.8');
+    expect(out.status).toBe('passed');
+    expect(out.report.executable.version).toBe('1.4.8');
   }, 90_000);
 
   it('fails the receipt when agy lets a failed hook allow the call', async () => {

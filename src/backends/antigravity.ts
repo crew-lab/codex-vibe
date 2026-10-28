@@ -16,12 +16,12 @@ import { startReaper, type ReaperHandle } from '../process/reaper.js';
 import { assertNoProjectAntigravityExtensions, assertNoProjectVibeExtensions } from '../security/workspace-guard.js';
 import {
   environmentSecrets,
-  GOOGLE_CREDENTIAL_VARIABLES,
   googleCredentialSecrets,
   redactSecrets,
   StreamingRedactor
 } from '../security/redaction.js';
 import { resolveExecutableFile } from '../security/executable.js';
+import { setupHeadlessBrowserNeutralizer } from '../security/environment.js';
 import { createPrivateDir } from '../security/paths.js';
 import { turnBackstop } from './app-server/usage.js';
 import { buildWorkspaceListing } from './app-server/workspace-listing.js';
@@ -38,31 +38,72 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-export const SUPPORTED_ANTIGRAVITY_VERSIONS = ['1.4.0', '1.4.3', '1.4.4'] as const;
+export const SUPPORTED_ANTIGRAVITY_VERSIONS = ['1.4.0', '1.4.3', '1.4.4', '1.4.7', '1.4.8'] as const;
 export type SupportedAntigravityVersion = (typeof SUPPORTED_ANTIGRAVITY_VERSIONS)[number];
-export const SUPPORTED_ANTIGRAVITY_VERSION = '1.4.4';
+export const SUPPORTED_ANTIGRAVITY_VERSION = '1.4.8';
+
+export const ALLOWED_ANTIGRAVITY_BUILTIN_SKILLS = [
+  'agy-customizations',
+  'antigravity_guide',
+  'automation',
+  'generative_ui',
+  'migrate-workflows',
+  'permissioned-github',
+  'plugin',
+  'run-workflow',
+  'ui-plugin-navigation'
+] as const;
+
+export function onlyAllowedAntigravityBuiltinSkills(value: readonly unknown[]): boolean {
+  const seen = new Set<string>();
+  return value.every((entry) => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return false;
+    const skill = entry as Record<string, unknown>;
+    if (typeof skill.name !== 'string' || !(ALLOWED_ANTIGRAVITY_BUILTIN_SKILLS as readonly string[]).includes(skill.name) || seen.has(skill.name)) return false;
+    seen.add(skill.name);
+    return skill.builtin === true;
+  });
+}
 
 export function isSupportedAntigravityVersion(version: string | null | undefined): version is SupportedAntigravityVersion {
   return typeof version === 'string' && (SUPPORTED_ANTIGRAVITY_VERSIONS as readonly string[]).includes(version);
 }
 
-export const ANTIGRAVITY_FORWARDED_VARIABLES = ['PATH', 'LANG', ...GOOGLE_CREDENTIAL_VARIABLES] as const;
+export function selectAntigravityApiKey(source: NodeJS.ProcessEnv = process.env): string | undefined {
+  const gemini = source.GEMINI_API_KEY?.trim();
+  if (gemini) return gemini;
+  const google = source.GOOGLE_API_KEY?.trim();
+  if (google) return google;
+  const antigravity = source.ANTIGRAVITY_API_KEY?.trim();
+  if (antigravity) return antigravity;
+  return undefined;
+}
 
 export function antigravityChildEnvironment(
   source: NodeJS.ProcessEnv,
   childHome: string,
-  childTmp: string
+  childTmp: string,
+  neutralizerBinDir?: string,
+  selectedApiKey?: string
 ): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = {};
-  for (const name of ANTIGRAVITY_FORWARDED_VARIABLES) {
-    if (source[name] !== undefined) env[name] = source[name];
-  }
+  if (source.PATH !== undefined) env.PATH = source.PATH;
+  if (source.LANG !== undefined) env.LANG = source.LANG;
   for (const [key, value] of Object.entries(source)) {
     if (key.startsWith('LC_') && value !== undefined) env[key] = value;
+  }
+  const effectiveApiKey = selectedApiKey?.trim() || selectAntigravityApiKey(source);
+  if (effectiveApiKey) {
+    env.GEMINI_API_KEY = effectiveApiKey;
+    env.GOOGLE_API_KEY = effectiveApiKey;
+  }
+  if (neutralizerBinDir) {
+    env.PATH = `${neutralizerBinDir}${path.delimiter}${source.PATH ?? ''}`;
   }
   env.HOME = childHome;
   env.TMPDIR = childTmp;
   env.AGY_CLI_OSC7501 = 'off';
+  env.BROWSER = 'false';
   return env;
 }
 
@@ -181,12 +222,14 @@ export async function resolveAntigravityExecutable(configuredCommand: string): P
 async function probeAntigravityVersion(resolvedExecutable: string): Promise<{ stdout: string; stderr: string }> {
   const probeHome = await realpath(await mkdtemp(path.join(os.tmpdir(), 'vsup-agy-version-')));
   try {
+    const neutralizerBin = await setupHeadlessBrowserNeutralizer(path.join(probeHome, '.bin'));
     const env: NodeJS.ProcessEnv = {
       HOME: probeHome,
       TMPDIR: probeHome,
       AGY_CLI_OSC7501: 'off',
+      BROWSER: 'false',
       NO_COLOR: '1',
-      ...(process.env.PATH === undefined ? {} : { PATH: process.env.PATH })
+      PATH: `${neutralizerBin}${path.delimiter}${process.env.PATH ?? ''}`
     };
     const result = await execFileAsync(resolvedExecutable, ['--version'], {
       cwd: probeHome,
@@ -620,6 +663,15 @@ export class AntigravityBackend implements SupervisorBackend {
   }
 
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
+    const apiKey = selectAntigravityApiKey(process.env);
+    if (!apiKey) {
+      throw supervisorError(
+        'VSUP_BACKEND_ERROR',
+        'Antigravity backend requires GEMINI_API_KEY, GOOGLE_API_KEY or ANTIGRAVITY_API_KEY in the environment for headless execution.',
+        { reason: 'missing_gemini_api_key' }
+      );
+    }
+
     const cmd = executable(this.config);
     const resolved = await resolveAntigravityExecutable(cmd);
     if (!resolved.resolvedPath || !resolved.version) {
@@ -683,28 +735,29 @@ export class AntigravityBackend implements SupervisorBackend {
     await assertNoProjectAntigravityExtensions(input.cwd);
     await assertNoProjectAntigravityExtensions(input.workerWorkspace);
 
-    const baseDir = input.runDirectory ?? path.join(os.tmpdir(), `vsup-run-${input.runId}`);
+    const baseDir = input.runDirectory ?? path.join(await realpath(os.tmpdir()), `vsup-run-${input.runId}`);
     const childHome = path.join(baseDir, 'antigravity-home');
     const childTmp = path.join(baseDir, 'antigravity-tmp');
     await createPrivateDir(childHome);
     await createPrivateDir(childTmp);
+
+    const neutralizerBin = await setupHeadlessBrowserNeutralizer(path.join(childHome, '.bin'));
+    const childEnv = antigravityChildEnvironment(process.env, childHome, childTmp, neutralizerBin, apiKey);
 
     const anchors = workspaceAnchors(input.exclusions ?? [], input.cwd);
     const denylist = denylistAnchors(input.exclusions ?? [], input.cwd, input.workerWorkspace);
     const maxTurns = input.limits.maxTurns;
     const maxModelCalls = input.limits.maxModelCalls ?? turnBackstop(maxTurns);
 
-    const childEnv = antigravityChildEnvironment(process.env, childHome, childTmp);
     const sentinels = [...googleCredentialSecrets(childEnv), ...environmentSecrets(process.env)];
     const redact = (text: string): string => redactSecrets(text, sentinels);
 
-    const hasGeminiApiKey = Boolean(childEnv.GEMINI_API_KEY || childEnv.GOOGLE_API_KEY);
     await writeIsolatedSettings(
       childHome,
       input.mode,
       input.workerWorkspace,
       denylist,
-      hasGeminiApiKey ? { modelProvider: 'gemini' } : {}
+      { modelProvider: 'gemini' }
     );
     await writeAntigravityPreToolHook(childHome, {
       mode: input.mode,

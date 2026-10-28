@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "allowed_changed_paths": ["src/at-least.mjs", "tests/at-least.test.mjs"],
+  "required_changed_paths": ["src/at-least.mjs", "tests/at-least.test.mjs"],
+  "checks": [
+    {"id": "module", "kind": "file_exists", "path": "src/at-least.mjs"},
+    {"id": "tests", "kind": "file_exists", "path": "tests/at-least.test.mjs"},
+    {"id": "native-test-runner", "kind": "text_contains", "path": "tests/at-least.test.mjs", "value": "node:test"},
+    {"id": "strict-assertions", "kind": "text_contains", "path": "tests/at-least.test.mjs", "value": "node:assert/strict"}
+  ],
+  "required_validations": ["fixture-semantics", "worker-tests", "complete-diff"]
+}

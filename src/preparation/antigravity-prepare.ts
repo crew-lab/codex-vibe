@@ -7,6 +7,7 @@ import path from 'node:path';
 import { digest } from '../acceptance/schema.js';
 import {
   isSupportedAntigravityVersion,
+  onlyAllowedAntigravityBuiltinSkills,
   resolveAntigravityExecutable,
   SUPPORTED_ANTIGRAVITY_VERSION,
   SUPPORTED_ANTIGRAVITY_VERSIONS,
@@ -20,6 +21,7 @@ import type { SupervisorConfig } from '../contracts.js';
 import { atomicWriteJson } from '../persistence/atomic.js';
 import { publicValue } from '../reporting/export.js';
 import { denylistAnchors, workspaceAnchors } from '../security/globs.js';
+import { setupHeadlessBrowserNeutralizer } from '../security/environment.js';
 import { createPrivateDir, createPrivateFile } from '../security/paths.js';
 import { candidateIdentity, preparationIdentity, receiptPath } from './evidence.js';
 import {
@@ -209,6 +211,7 @@ async function runCliSlashCommandReadback(
   childTmp: string,
   proxyPort: number
 ): Promise<{ code: number; parsed: Record<string, unknown> | null }> {
+  const neutralizerBin = await setupHeadlessBrowserNeutralizer(path.join(childHome, '.bin'));
   return new Promise((resolve) => {
     const child = spawn(
       executablePath,
@@ -217,7 +220,7 @@ async function runCliSlashCommandReadback(
         cwd,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: {
-          PATH: process.env.PATH,
+          PATH: `${neutralizerBin}${path.delimiter}${process.env.PATH ?? ''}`,
           HOME: childHome,
           TMPDIR: childTmp,
           GEMINI_API_KEY: NO_INFERENCE_GOOGLE_API_KEY,
@@ -228,6 +231,7 @@ async function runCliSlashCommandReadback(
           http_proxy: `http://127.0.0.1:${proxyPort}`,
           all_proxy: `http://127.0.0.1:${proxyPort}`,
           AGY_CLI_OSC7501: 'off',
+          BROWSER: 'false',
           NO_COLOR: '1'
         },
         timeout: 10_000
@@ -469,7 +473,6 @@ export async function runAntigravityPreparationCheck(
 
             const innerConfig = cfgCmd?.data?.config ?? {};
             const innerHooks = hooksCmd?.data?.hooks ?? [];
-            const globalPerms = permsCmd?.data?.permissions?.find((p) => p.scope === 'global');
             const innerSkills = skillsCmd?.data?.skills;
             const innerAgents = agentsCmd?.data?.agents;
 
@@ -500,28 +503,19 @@ export async function runAntigravityPreparationCheck(
               hookActions.some((e) => e.event === 'PreToolUse' && e.matcher === '*')
             );
 
-            const normSort = (arr: unknown[]): string[] =>
-              arr.filter((x): x is string => typeof x === 'string').map((s) => s.trim()).sort();
-            const actualAllow = normSort(globalPerms?.allow ?? []);
-            const expectedAllow = normSort([...allowList]);
-            const actualDeny = normSort(globalPerms?.deny ?? []);
-            const expectedDeny = normSort([...denyList]);
+            const permsMatches = antigravityPermissionsMatch(permsCmd?.data?.permissions, allowList, denyList);
 
-            const allowMatches = actualAllow.length === expectedAllow.length && actualAllow.every((val, idx) => val === expectedAllow[idx]);
-            const denyMatches = actualDeny.length === expectedDeny.length && actualDeny.every((val, idx) => val === expectedDeny[idx]);
-            const permsMatches = Boolean(globalPerms && allowMatches && denyMatches);
-
-            const skillsEmpty = Boolean(Array.isArray(innerSkills) && innerSkills.length === 0);
+            const skillsMatches = Boolean(Array.isArray(innerSkills) && onlyAllowedAntigravityBuiltinSkills(innerSkills));
             const agentsEmpty = Boolean(!innerAgents || (Array.isArray(innerAgents) && innerAgents.length === 0));
 
             profileResults[mode].cli_readback_passed =
-              configMatches && hooksMatches && permsMatches && skillsEmpty && agentsEmpty;
+              configMatches && hooksMatches && permsMatches && skillsMatches && agentsEmpty;
 
             if (!profileResults[mode].cli_readback_passed) {
               findings.push({
                 level: 'fail',
                 code: `${mode}_cli_readback_mismatch`,
-                message: `Antigravity CLI zero-inference read-back for ${mode} mode did not match expected policy (config=${String(configMatches)}, hooks=${String(hooksMatches)}, perms=${String(permsMatches)}, skills=${String(skillsEmpty)}, agents=${String(agentsEmpty)}).`
+                message: `Antigravity CLI zero-inference read-back for ${mode} mode did not match expected policy (config=${String(configMatches)}, hooks=${String(hooksMatches)}, perms=${String(permsMatches)}, skills=${String(skillsMatches)}, agents=${String(agentsEmpty)}).`
               });
             }
           } catch (error) {
@@ -736,4 +730,27 @@ export async function runAntigravityPreparationCheck(
     report_sha256: reportSha256,
     report: sanitizedReport
   };
+}
+
+export function antigravityPermissionsMatch(value: unknown, expectedAllow: readonly string[], expectedDeny: readonly string[]): boolean {
+  if (!Array.isArray(value)) return false;
+  const scopes = new Set<string>();
+  let globalMatched = false;
+  const matches = (actual: unknown, expected: readonly string[]): boolean => {
+    if (!Array.isArray(actual) || actual.some((rule) => typeof rule !== 'string')) return false;
+    const normalized = actual.map((rule: string) => rule.trim()).sort();
+    const wanted = [...expected].sort();
+    return normalized.length === wanted.length && normalized.every((rule, index) => rule === wanted[index]);
+  };
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+    const scope = entry as { scope?: unknown; allow?: unknown; deny?: unknown };
+    if (typeof scope.scope !== 'string' || !['global', 'project', 'shared'].includes(scope.scope) || scopes.has(scope.scope)) return false;
+    scopes.add(scope.scope);
+    if (scope.scope === 'global') {
+      globalMatched = matches(scope.allow, expectedAllow) && matches(scope.deny, expectedDeny);
+      if (!globalMatched) return false;
+    } else if (!matches(scope.allow ?? [], []) || !matches(scope.deny ?? [], [])) return false;
+  }
+  return globalMatched;
 }

@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { appendFile, chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AntigravityBackend,
   SUPPORTED_ANTIGRAVITY_VERSION,
@@ -46,7 +46,18 @@ const passedPreparation: AntigravityBackendOptions = {
   }
 };
 
+const originalGeminiApiKey = process.env.GEMINI_API_KEY;
+const originalGoogleApiKey = process.env.GOOGLE_API_KEY;
+
+beforeEach(() => {
+  process.env.GEMINI_API_KEY = 'test-fake-gemini-key';
+});
+
 afterEach(async () => {
+  if (originalGeminiApiKey !== undefined) process.env.GEMINI_API_KEY = originalGeminiApiKey;
+  else delete process.env.GEMINI_API_KEY;
+  if (originalGoogleApiKey !== undefined) process.env.GOOGLE_API_KEY = originalGoogleApiKey;
+  else delete process.env.GOOGLE_API_KEY;
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
@@ -1827,5 +1838,134 @@ process.exit(0);
     const cliStat = await lstat(cliHooksPath);
     expect(configStat.mode & 0o777).toBe(0o600);
     expect(cliStat.mode & 0o777).toBe(0o600);
+  });
+
+  it('refuses headless dispatch when GEMINI_API_KEY and GOOGLE_API_KEY are missing or whitespace-only', async () => {
+    const root = await makeRoot();
+    const fakeAgy = path.join(root, 'agy');
+    await writeExecutable(fakeAgy, `#!/bin/sh\necho "1.4.4"\n`);
+    const backend = new AntigravityBackend(
+      {
+        ...DEFAULT_CONFIG,
+        backend: 'antigravity',
+        paths: { antigravity: fakeAgy }
+      },
+      passedPreparation
+    );
+
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
+
+    const workspace = path.join(root, 'workspace');
+    const runDir = path.join(root, 'run');
+    await mkdir(workspace, { recursive: true });
+    await mkdir(runDir, { recursive: true });
+    await execSync('git init -b main', { cwd: workspace });
+
+    await expect(
+      backend.start(
+        {
+          runId: 'missing-key-run',
+          task: 'review task',
+          mode: 'review',
+          cwd: workspace,
+          workerWorkspace: workspace,
+          runDirectory: path.join(runDir, 'missing'),
+          output: 'summary',
+          limits: { timeoutSeconds: 5, maxTurns: 1, maxEventBytes: 1024, maxTranscriptBytes: 1024 }
+        },
+        { onEvent: async () => {}, onState: async () => {} }
+      )
+    ).rejects.toMatchObject({
+      code: 'VSUP_BACKEND_ERROR',
+      message: expect.stringContaining('Antigravity backend requires GEMINI_API_KEY, GOOGLE_API_KEY or ANTIGRAVITY_API_KEY'),
+      details: { reason: 'missing_gemini_api_key' }
+    });
+
+    process.env.GEMINI_API_KEY = '   ';
+    await expect(
+      backend.start(
+        {
+          runId: 'blank-key-run',
+          task: 'review task',
+          mode: 'review',
+          cwd: workspace,
+          workerWorkspace: workspace,
+          runDirectory: path.join(runDir, 'blank'),
+          output: 'summary',
+          limits: { timeoutSeconds: 5, maxTurns: 1, maxEventBytes: 1024, maxTranscriptBytes: 1024 }
+        },
+        { onEvent: async () => {}, onState: async () => {} }
+      )
+    ).rejects.toMatchObject({
+      code: 'VSUP_BACKEND_ERROR',
+      message: expect.stringContaining('Antigravity backend requires GEMINI_API_KEY, GOOGLE_API_KEY or ANTIGRAVITY_API_KEY'),
+      details: { reason: 'missing_gemini_api_key' }
+    });
+  });
+
+  it('accepts GOOGLE_API_KEY when GEMINI_API_KEY is unset and explicitly writes modelProvider: gemini and neutralizer shim in PATH', async () => {
+    const root = await makeRoot();
+    const fakeAgy = path.join(root, 'agy');
+    const runnerScript = path.join(root, 'capture-runner.mjs');
+    await writeFile(
+      runnerScript,
+      `import fs from 'node:fs';
+import path from 'node:path';
+const settingsPath = path.join(process.env.HOME, '.gemini', 'antigravity-cli', 'settings.json');
+const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+const out = {
+  modelProvider: settings.modelProvider,
+  pathHasNeutralizer: process.env.PATH.includes(path.join(process.env.HOME, '.bin')),
+  browserVar: process.env.BROWSER
+};
+fs.writeFileSync(path.join(process.cwd(), 'captured.json'), JSON.stringify(out));
+console.log(JSON.stringify({ type: 'result', status: 'SUCCESS', response: 'done' }));
+`
+    );
+    await writeExecutable(fakeAgy, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "1.4.4"; exit 0; fi\nexec "${process.execPath}" "${runnerScript}" "$@"\n`);
+    const backend = new AntigravityBackend(
+      {
+        ...DEFAULT_CONFIG,
+        backend: 'antigravity',
+        paths: { antigravity: fakeAgy }
+      },
+      passedPreparation
+    );
+
+    delete process.env.GEMINI_API_KEY;
+    process.env.GOOGLE_API_KEY = 'mock-google-api-key-value';
+
+    const workspace = path.join(root, 'workspace');
+    const runDir = path.join(root, 'run-google-key');
+    await mkdir(workspace, { recursive: true });
+    await mkdir(runDir, { recursive: true });
+    await execSync('git init -b main', { cwd: workspace });
+
+    let finalState: string | undefined;
+    const { handle, process: childProcess } = await backend.start(
+      {
+        runId: 'google-key-run',
+        task: 'check provider',
+        mode: 'review',
+        cwd: workspace,
+        workerWorkspace: workspace,
+        runDirectory: runDir,
+        output: 'summary',
+        limits: { timeoutSeconds: 5, maxTurns: 1, maxEventBytes: 1024, maxTranscriptBytes: 1024 }
+      },
+      {
+        onEvent: async () => {},
+        onState: async (state) => { finalState = state; }
+      }
+    );
+    await childProcess.done;
+    await backend.close(handle);
+
+    const captured = JSON.parse(await readFile(path.join(workspace, 'captured.json'), 'utf8'));
+    expect(captured.modelProvider).toBe('gemini');
+    expect(captured.pathHasNeutralizer).toBe(true);
+    expect(captured.browserVar).toBe('false');
+    expect(finalState).toBe('completed');
   });
 });
