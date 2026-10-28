@@ -19,7 +19,7 @@ The resulting archive was installed side by side under Node 24.21.0. Its matched
 
 # Current state — 2026-10-26
 
-Exactly Vibe 3.0.2, five one-shot MCP tools, one single-use dispatch grant per owner-authorized task ([ADR 0010](../docs/adr/0010-dispatch-attempt-authorization.md)). v2.1.0 is published as a pre-release; 2.1.1 is on `main` at `5751d85` and is the next candidate. [Section 3](#3-the-critical-path-and-your-touchpoints) has the path; the [Handoff](../Handoff.md#current-state--2026-10-26) has the target brief.
+Exactly Vibe 3.0.2, five one-shot MCP tools, one single-use dispatch grant per owner-authorized task ([ADR 0010](../docs/adr/0010-dispatch-attempt-authorization.md)). v2.1.0 is published as a pre-release; 2.1.1 is on `main` at `5751d85` and is the next candidate. [Section 3](#3-the-critical-path-and-your-touchpoints) has the path; the [Handoff](../Handoff.md#current-state--2026-10-28) has the target brief.
 
 Dated plans further down are history. They authorize no installation, hosted run, publication or retry. Candidate, runtime, archive, preparation and connected-server identities stay separate.
 
@@ -72,7 +72,7 @@ Do not reschedule these as future work. Aggregated usefulness, SARIF, a daily co
 
 ## 3. The critical path and your touchpoints
 
-The 2.0.x path is done, and 2.1.0 is published as a pre-release. The 2.1.1 path, in the [Handoff](../Handoff.md#current-state--2026-10-26)'s order:
+The 2.0.x path is done, and 2.1.0 is published as a pre-release. The 2.1.1 path, in the [Handoff](../Handoff.md#current-state--2026-10-28)'s order:
 
 | # | Step | Who | Your touchpoint |
 |---|---|---|---|
