@@ -1,15 +1,29 @@
-# Current local stabilization — 2026-10-27
+# Current state — 2026-10-28
 
-The local workflow passed its two bounded native hosted trials on candidate `81df8140eb49afbebfb5202bc3186c97f9ea8b57a7243d108ce376cbdcc73b90` (2.2.0, Node 24.21.0, isolated exact Vibe 3.0.2). Administrative registration uses the host-supported scoped command permission. Trial A's one-file edit passed the automated contract and ten independent numeric cases; Trial B's three-boundary UARoots review was independently accepted. Both workers exited, private state was removed and the slot is free. A's dirty worktree is intentionally retained with its verified export. Both authorized starts are consumed; no replay or fallback occurred.
+**Source and release.** `main` at `cea6bed` is 2.2.0, published on 2026-10-27 as the `v2.2.0` pre-release (not latest) from [crew-lab/codex-vibe#11](https://github.com/crew-lab/codex-vibe/pull/11). Archive SHA-256 `6b0a120d1ae16bb102af4bc07bfa11522684f536a3a17fce3f9f93dc70d44984`, candidate `81df8140eb49afbebfb5202bc3186c97f9ea8b57a7243d108ce376cbdcc73b90`; the kit, SBOM, qualification report and run ledger are release assets. Beyond the 2.2.0 features (`allowed_write_paths`, per-field authorization diagnostics), the release carries `919fd3c` (`task authorize` binds the server's selected Node runtime) and `45dc907` (grant storage, prepared-input and private-directory repairs, and [the local operating procedure](docs/local-operation.md)). No functional source changed after qualification.
 
-The regular PATH Vibe CLI is 3.0.3; it is separate from the supervised runtime and is not qualified by this evidence. Two successes establish these local flows, not general reliability or clean-account qualification. The source is `919fd3c` plus uncommitted repairs and this later status update; frozen source/archive/kit identities and full qualification records are retained outside the public tree in the task's private durable `local-workflow-proof-20261027` evidence packet. Its `HOSTED-QUALIFICATION.md` and `HOSTED-RUN-LEDGER.json` record exact run identities, provenance, usage, assessments and limitations. Archive SHA-256 is `6b0a120d1ae16bb102af4bc07bfa11522684f536a3a17fce3f9f93dc70d44984`.
+**Qualification.** Two native hosted trials on that archive, Node 24.21.0 on macOS arm64 with an isolated exact Vibe 3.0.2: Trial A, a one-file edit, accepted on its contract and ten independent numeric cases; Trial B, a review, accepted on three evidence-backed boundaries with all 274 project-file hashes unchanged. Both workers exited, private state was removed and the slot is free; Trial A's dirty worktree is retained with its verified export; both authorized starts are consumed, with no replay or fallback. Package verification on Node 20.19.0: 109 files, 1,567 tests. The [evidence](research/evidence/v2.2.0-local-workflow-20261027/README.md) does not certify general reliability, a clean account, the newer Vibe CLI on the target's PATH (3.0.3, separate from the supervised runtime) or Antigravity. The trials did not carry the nested `run_typescript` probe, so `nested-run-typescript-shape-and-gating` stays unverified.
 
-Follow [the single local operating procedure](docs/local-operation.md). Preserve the qualified installation, existing settings and rollback. No source commit, push or publication is included. Broader tasks, Vibe upgrades and promotion require their own scope/allowance; feature expansion remains deferred pending the owner's next development decision.
+**Operating.** Follow [the local operating procedure](docs/local-operation.md). Preserve the qualified installation, settings and rollback.
+
+**What remains.**
+
+| # | Step | Who |
+|---|---|---|
+| 1 | 2.1.1: superseded. It was never packaged; the target qualified 2.2.0 instead | — |
+| 2 | Clean-account installation (postponed 2026-10-19); a release is marked latest only after it | Owner |
+| 3 | Broader real-task qualification beyond the two bounded trials | Owner allowance; target agent |
+| 4 | Review and merge `codex/consolidated-candidate-20261027` (agy 1.4.7 and 1.4.8, Antigravity built-in skill policy), then the five Antigravity probes on a candidate that contains it | Coordinator, then target agent |
+| 5 | The newer Vibe release (3.0.3, on the target's PATH): a new candidate only after its own tagged-source review and target sitting | Owner decides |
+| 6 | Review search sidecar: draft ADR 0007 for the MCP stdio route (Vibe 3.0.2's client-provided tools are host-embedding only, so not usable over the wire); building it needs the owner's approval and a hosted review carrying the nested `run_typescript` probe | Coordinator drafts; owner approves |
+| 7 | Byte-reproducible archives: one SBOM and acceptance date from `SOURCE_DATE_EPOCH`, else the HEAD commit time (owner, 2026-10-27), and no SBOM regeneration after packing | Coordinator |
 
 <details>
 <summary>Historical checkpoints and superseded executable runbooks — evidence only</summary>
 
-# Current state — 2026-10-26
+# State on 2026-10-26 (superseded)
+
+Superseded on 2026-10-27: 2.1.1 was never packaged, and the target qualified and published 2.2.0 instead.
 
 **Source.** `main` is version 2.2.0, unreleased (owner, 2026-10-27: merge 2.2.0 now rather than after 2.1.1 is published). The 2.1.1 candidate is commit `5751d85` on `main`'s history: the 2.1.0 source of [crew-lab/codex-vibe#10](https://github.com/crew-lab/codex-vibe/pull/10) plus the 2.1.1 fixes. The target builds 2.1.1 from that pinned commit, never from `main`'s tip.
 
