@@ -1,6 +1,6 @@
 # Story sources
 
-The facts the dev.to article and its [editor notes](article/editor-notes.md) take from the development history that the 2.0.1 cleanup removed from the tree. Each row gives the fact in a sentence and where it was read. Citations are plain text: read one with `git show d360f28:<path>`, and the line number is the line in that file at commit d360f28. Nothing here ships in the package.
+The facts the dev.to article and its [editor notes](article/editor-notes.md) take from the development history that the 2.0.1 cleanup removed from the tree. Each row gives the fact in a sentence and where it was read. Citations are plain text: read one with `git show d360f28:<path>`, and the line number is the line in that file at commit d360f28. Facts from 2.0.1 onwards live in the tree (`CHANGELOG.md`, `planning/development-strategy.md`, `Handoff.md`, `research/evidence/`) and are cited from there in the editor notes. Nothing here ships in the package.
 
 ## The two 2.0 engines
 
@@ -34,6 +34,7 @@ The facts the dev.to article and its [editor notes](article/editor-notes.md) tak
 |---|---|
 | Six real-project runs on 1.x-era versions, three accepted and three not. Every accepted run had a narrow scope and an enumerated set of inputs or rejections; the two edits differ only in how explicitly the edge cases were listed. A pattern to test, not a rate. | commit d360f28, `docs/history/usefulness-log.md:5-16` |
 | The skill's edit template says "Must reject or preserve" because of those runs. | commit d360f28, `docs/history/usefulness-log.md:20` |
+| The record continues in the tree: the 2.0.1 hosted review reversed two of five cases and its edit missed its contract; the 2.1.0 fixture edit was accepted; the two 2.2.0 native trials (one edit, one review) were accepted on 2026-10-27. Still a pattern, not a rate. | `planning/development-strategy.md` ("Where things stand", "Risks and dependencies"); `research/evidence/v2.2.0-local-workflow-20261027/HOSTED-QUALIFICATION.md` |
 
 ## Positioning and platform rules
 
