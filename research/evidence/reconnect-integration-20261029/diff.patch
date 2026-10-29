@@ -1,0 +1,31 @@
+diff --git a/discount.mjs b/discount.mjs
+index 98d8a04..26a638d 100644
+--- a/discount.mjs
++++ b/discount.mjs
+@@ -1 +1 @@
+-export function qualifies(total) { return total > 100; }
++export function qualifies(total) { return total >= 100; }
+diff --git a/discount.test.mjs b/discount.test.mjs
+new file mode 100644
+index 0000000..87e48bd
+--- /dev/null
++++ b/discount.test.mjs
+@@ -0,0 +1,18 @@
++import { qualifies } from './discount.mjs';
++import assert from 'node:assert';
++
++// Below 100
++assert.strictEqual(qualifies(99), false, '99 should not qualify');
++
++// Equal to 100
++assert.strictEqual(qualifies(100), true, '100 should qualify');
++
++// Above 100
++assert.strictEqual(qualifies(101), true, '101 should qualify');
++
++// Zero
++assert.strictEqual(qualifies(0), false, '0 should not qualify');
++
++// Fractional total
++assert.strictEqual(qualifies(99.99), false, '99.99 should not qualify');
++assert.strictEqual(qualifies(100.01), true, '100.01 should qualify');
