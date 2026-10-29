@@ -129,3 +129,7 @@ The mechanism review separates explicit caller inputs from private state. Local 
 ## Resilience candidate installation — 2026-10-29
 
 Commit 12bc355 pushed to codex/vibe-usability-20261028. Offline package:rc passed release verification, installed-package smoke and matched kit checks. Archive SHA-256 360d704905a12acb36b3cbc53c182adcfa56d79907190124d3c02a609d4c3b4f; candidate a535e3263de76a2fca01eb54329a8af7f8ecc41995cd0971d5578be27ce16423. Side-by-side installation and matched preparation passed under Node 24.21.0. Installed CLI accepts an unchanged 0644 patch, reconstructs exact copies and cleans them with fingerprint checks. Registration selects the new candidate and retains its prior backup. The existing native connection still reports old candidate 65dbafd0 and refuses expected-candidate admission; restart Codex before hosted testing. No hosted start was spent on the wrong candidate. Prior installation remains available for rollback. No release publication or merge to main occurred.
+
+## Reconnected integration — 2026-10-29
+
+New candidate connected. Artifact/request intake and copy-only validation passed with normal0644 inputs. Review accepted; edit rejected for omitted named node:test cases despite passing behavior and negative control. Both closed; temporary allowlist restored. See [test evidence](research/evidence/reconnect-integration-20261029/RESULT.md). Requirement enforcement and validation feedback remain open.
