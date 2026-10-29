@@ -5,11 +5,11 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { digest, canonical } from '../acceptance/schema.js';
-import { readOwnedFile, assertOwnedDirectory } from '../reporting/private-files.js';
+import { readInputFile, readOwnedFile, assertOwnedDirectory } from '../reporting/private-files.js';
 import { resolveBaseCommit, resolveGitRoot } from '../git/worktree.js';
 import { createPrivateDir } from '../security/paths.js';
 
-const manifestSchema = z.object({schema_version:z.literal(1),owner:z.literal('vibe-supervisor-validation'),id:z.string().uuid(),root:z.string(),device:z.number(),inode:z.number(),base_commit:z.string().regex(/^[a-f0-9]{40,64}$/),patch_sha256:z.string().regex(/^[a-f0-9]{64}$/),node:z.string(),manager:z.object({kind:z.enum(['npm','pnpm']),version:z.string(),executable:z.string()}),lockfiles:z.array(z.object({workspace:z.enum(['baseline','candidate']),path:z.string(),sha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict()).length(2),tree_sha256:z.string().regex(/^[a-f0-9]{64}$/),dependencies:z.enum(['installed','not-requested']),created_at:z.string().datetime()}).strict();
+const manifestSchema = z.object({schema_version:z.literal(1),owner:z.literal('vibe-supervisor-validation'),id:z.string().uuid(),root:z.string(),device:z.number(),inode:z.number(),base_commit:z.string().regex(/^[a-f0-9]{40,64}$/),patch_sha256:z.string().regex(/^[a-f0-9]{64}$/),node:z.string(),manager:z.object({kind:z.enum(['npm','pnpm']),version:z.string(),executable:z.string()}).optional(),lockfiles:z.array(z.object({workspace:z.enum(['baseline','candidate']),path:z.string(),sha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict()).refine(items=>items.length===0||items.length===2),tree_sha256:z.string().regex(/^[a-f0-9]{64}$/),dependencies:z.enum(['installed','not-requested']),created_at:z.string().datetime()}).strict().refine(manifest=>manifest.dependencies!=='installed'||(manifest.manager!==undefined&&manifest.lockfiles.length===2));
 const MAX_FILES=200_000, MAX_BYTES=2*1024*1024*1024;
 function env(root:string):NodeJS.ProcessEnv{return {PATH:process.env.PATH,HOME:path.join(root,'home'),TMPDIR:path.join(root,'tmp'),CI:'true',GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_COUNT:'3',GIT_CONFIG_KEY_0:'core.hooksPath',GIT_CONFIG_VALUE_0:'/dev/null',GIT_CONFIG_KEY_1:'protocol.file.allow',GIT_CONFIG_VALUE_1:'always',GIT_CONFIG_KEY_2:'core.fsmonitor',GIT_CONFIG_VALUE_2:'false',GIT_TERMINAL_PROMPT:'0',npm_config_userconfig:path.join(root,'home','user.npmrc'),npm_config_globalconfig:path.join(root,'home','global.npmrc'),npm_config_update_notifier:'false',npm_config_ignore_scripts:'true',npm_config_offline:'true',COREPACK_ENABLE_NETWORK:'0',COREPACK_ENABLE_DOWNLOAD_PROMPT:'0'};}
 async function run(command:string,args:string[],cwd:string,root:string,input?:Buffer):Promise<string>{
@@ -64,10 +64,10 @@ async function assertProject(directory:string):Promise<{manager:string;lockfile:
   if(lockfileNeedsUnsupportedProfile(lock))throw new Error('Lockfile requires unsupported local dependencies or build scripts');
   return {manager:pkg.packageManager,lockfile};
 }
-export async function prepareValidation(options:{source:string;base:string;patchFile:string;output:string;manager:string;cache?:string;install:boolean}):Promise<unknown>{
+export async function prepareValidation(options:{source:string;base:string;patchFile:string;output:string;manager?:string;cache?:string;install:boolean}):Promise<unknown>{
   const source=await resolveGitRoot(options.source);const base=await resolveBaseCommit(source,options.base);
   if(base!==options.base)throw new Error('An immutable full base commit is required');
-  const patch=await readOwnedFile(options.patchFile,16*1024*1024);
+  const patch=await readInputFile(options.patchFile,16*1024*1024,'patch');
   const output=path.resolve(options.output);await assertOwnedDirectory(path.dirname(output));
   if(output===source||source.startsWith(output+path.sep)||output.startsWith(source+path.sep))throw new Error('Validation must be outside the source checkout');
   await mkdir(output,{mode:0o700});
@@ -75,20 +75,22 @@ export async function prepareValidation(options:{source:string;base:string;patch
   try{
     for(const name of ['home','tmp','cache'])await createPrivateDir(path.join(output,name));
     for (const name of ['user.npmrc','global.npmrc']) await writeFile(path.join(output,'home',name),'',{mode:0o600,flag:'wx'});
-    if(!path.isAbsolute(options.manager))throw new Error("Absolute manager path required");
-    const manager=await realpath(options.manager);const executable=await lstat(manager);if(!executable.isFile()||!(executable.mode&constants.S_IXUSR))throw new Error('Absolute executable manager required');
-    const version=(await run(manager,['--version'],output,output)).trim();
-    const profiles=[];
+    let managerInfo:{kind:'npm'|'pnpm';version:string;executable:string}|undefined;
+    const profiles:{manager:string;lockfile:string}[]=[];
     for(const name of ['baseline','candidate']){
       const directory=path.join(output,name);
       await run('git',['clone','--no-local','--no-checkout','--',source,directory],output,output);
       await run('git',['checkout','--detach',base],directory,output);
       if(name==='candidate'&&patch.length)await run('git',['apply','--binary','--whitespace=nowarn','-'],directory,output,patch);
-      profiles.push(await assertProject(directory));
+      if(options.install)profiles.push(await assertProject(directory));
     }
-    const kind=profiles[0]!.manager.split('@')[0] as 'npm'|'pnpm';
-    if(profiles.some(profile=>profile.manager!==`${kind}@${version}`))throw new Error('Manager binary does not match exact project pin');
     if(options.install){
+      if(!options.manager||!path.isAbsolute(options.manager))throw new Error('Absolute manager path required');
+      const manager=await realpath(options.manager);const executable=await lstat(manager);if(!executable.isFile()||!(executable.mode&constants.S_IXUSR))throw new Error('Absolute executable manager required');
+      const version=(await run(manager,['--version'],output,output)).trim();
+      const kind=profiles[0]!.manager.split('@')[0] as 'npm'|'pnpm';
+      if(profiles.some(profile=>profile.manager!==`${kind}@${version}`))throw new Error('Manager binary does not match exact project pin');
+      managerInfo={kind,version,executable:manager};
       if(!options.cache)throw new Error('Populated offline cache required');
       const cache=await realpath(options.cache);const sourceCache=kind==='npm'?path.join(cache,'_cacache'):cache;
       let copiedBytes=0,copiedFiles=0;
@@ -100,7 +102,7 @@ export async function prepareValidation(options:{source:string;base:string;patch
       }
     }
     const info=await lstat(output);
-    const manifest=manifestSchema.parse({schema_version:1,owner:'vibe-supervisor-validation',id,root:output,device:info.dev,inode:info.ino,base_commit:base,patch_sha256:digest(patch),node:process.version,manager:{kind,version,executable:manager},lockfiles:await Promise.all(profiles.map(async (profile,index)=>({workspace:index===0?"baseline":"candidate",path:profile.lockfile,sha256:digest(await readFile(path.join(output,index===0?"baseline":"candidate",profile.lockfile)))}))),tree_sha256:await fingerprint(output),dependencies:options.install?'installed':'not-requested',created_at:new Date().toISOString()});
+    const manifest=manifestSchema.parse({schema_version:1,owner:'vibe-supervisor-validation',id,root:output,device:info.dev,inode:info.ino,base_commit:base,patch_sha256:digest(patch),node:process.version,...(managerInfo?{manager:managerInfo}:{}),lockfiles:await Promise.all(profiles.map(async (profile,index)=>({workspace:index===0?"baseline":"candidate",path:profile.lockfile,sha256:digest(await readFile(path.join(output,index===0?"baseline":"candidate",profile.lockfile)))}))),tree_sha256:await fingerprint(output),dependencies:options.install?'installed':'not-requested',created_at:new Date().toISOString()});
     await writeFile(path.join(output,'manifest.json'),JSON.stringify(manifest,null,2)+'\n',{mode:0o600,flag:'wx'});
     return {status:'prepared',root:output,base_commit:base,patch_sha256:digest(patch),dependencies:manifest.dependencies,project_checks:'not-run'};
   }catch(error){

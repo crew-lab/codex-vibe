@@ -1,0 +1,29 @@
+{
+  "review": {
+    "run_id": "bf6eca97-4c5f-446c-9f46-0d593510703f",
+    "state": "closed",
+    "execution_state": "completed",
+    "stop_reason": "end_turn"
+  },
+  "edit": {
+    "run_id": "6ed771c3-ba20-4242-9e73-d3a6e02e1460",
+    "state": "closed",
+    "execution_state": "completed",
+    "stop_reason": "end_turn"
+  },
+  "readiness": {
+    "server_version": "2.2.1",
+    "candidate": {
+      "version": "2.2.1",
+      "sha256": "65dbafd0700891c72978e35df8a599a1c110ba37d13ff68bb19a3004cbe1e716"
+    },
+    "preparation": "passed",
+    "active_slot": {
+      "busy": false
+    },
+    "workspace_eligible": false,
+    "blockers": [
+      "VSUP_WORKSPACE_INVALID"
+    ]
+  }
+}

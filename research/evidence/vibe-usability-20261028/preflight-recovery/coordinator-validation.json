@@ -1,0 +1,10 @@
+{
+  "attribution": "coordinator-only diagnostic repair; not Vibe output",
+  "change": "add the missing node:test import only",
+  "original_test_sha256": "458bfba514a8d708c1fd0bfacab079eed56e2bd0a6d25fccb47884e7b487988d",
+  "repaired_test_sha256": "b4ba467d89d18f15d8376dcf2396d3992de1d0bae11942f84903ffb32fb38146",
+  "tests": "5 passed",
+  "mutation": "unfixed baseline fails specifically at 100",
+  "original_output_changed": false,
+  "integration": false
+}

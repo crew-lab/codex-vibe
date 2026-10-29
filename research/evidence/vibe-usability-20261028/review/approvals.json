@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "run_id": "7ec365ea-3701-4266-a89f-4eef5477d0f5",
+  "truncated": false,
+  "records": [
+    {
+      "callback_id": "approval-upEpW9CGX",
+      "related_entry_id": "effect-136fb416-68b3-534c-a064-33f37dce0da4",
+      "turn_id": "turn-97d0898e210cc069c60d7282ed269a89",
+      "tool": "file_system.read_file",
+      "path": "CONTRACT.md",
+      "fingerprint": "61e147ed0157c9319bce1f22fdc38000ed1d48352be9a421e3bfd4ef66ecacfa",
+      "decision": "approve",
+      "reason": null
+    },
+    {
+      "callback_id": "approval-FAgrhb7zr",
+      "related_entry_id": "effect-ea1b95a9-8034-5721-ba9d-746bdd74f592",
+      "turn_id": "turn-97d0898e210cc069c60d7282ed269a89",
+      "tool": "file_system.read_file",
+      "path": "limit.mjs",
+      "fingerprint": "07913b728728d094d9cffe33ad07758dfdb7cc7b7b2fbcd3bffd64b9f2d475ef",
+      "decision": "approve",
+      "reason": null
+    }
+  ]
+}

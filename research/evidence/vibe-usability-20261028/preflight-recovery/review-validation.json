@@ -1,0 +1,34 @@
+{
+  "run_id": "bf6eca97-4c5f-446c-9f46-0d593510703f",
+  "execution_state": "completed",
+  "state": "completed",
+  "stop_reason": "end_turn",
+  "summary": "Defect found in delivery.mjs: `qualifiesForFreeDelivery` uses `>` instead of `>=`.\n- 99: actual false, required false\n- 99.99: actual false, required false\n- 100: actual false, required true\n- 100.01: actual true, required true\n- 101: actual true, required true",
+  "integrity": {
+    "status": "verified",
+    "write_tool_observed": false
+  },
+  "usage": {
+    "prompt_tokens": 21501,
+    "completion_tokens": 154,
+    "cached_tokens": 14464,
+    "model_calls": 3,
+    "cost_source": "runtime-stats-prices",
+    "price_availability": "available",
+    "price_source": "runtime/read",
+    "cost_availability": "available",
+    "tokens_used": 21655,
+    "context_size": 209715,
+    "cost": {
+      "amount": 0.013880100000000001,
+      "currency": "USD",
+      "authoritative": false
+    },
+    "tool_calls": {
+      "executed": 2,
+      "denied_by_handler": 0,
+      "denied_by_policy": 0
+    }
+  },
+  "context_file_count": 2
+}

@@ -1,0 +1,10 @@
+{
+  "complete": true,
+  "sequence_gaps": 0,
+  "counts": {
+    "tool_call:write_file:executed": 2,
+    "tool_call:read_file:executed": 2,
+    "message:unknown:unknown": 1,
+    "diagnostic:unknown:unknown": 3
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "runtime": "Node 24.21.0 macOS arm64",
+  "checks": [
+    {
+      "id": "round2-worker-tests",
+      "command": "<nvm-home>/versions/node/v24.21.0/bin/node --test <private-validation>/edit-round2-validation/docs/local-trial/generated/at-least.test.mjs",
+      "exit_code": 0,
+      "log": "round2-worker-tests.log"
+    },
+    {
+      "id": "round2-semantics",
+      "command": "<nvm-home>/versions/node/v24.21.0/bin/node <private-validation>/verify-edit.mjs <private-validation>/edit-round2-validation/docs/local-trial/generated/at-least.mjs",
+      "exit_code": 0,
+      "log": "round2-semantics.log"
+    },
+    {
+      "id": "skill-validation",
+      "command": "<private-supervisor-home>/runtimes/vibe-3.0.2/bin/python <target-home>/.codex/skills/.system/skill-creator/scripts/quick_validate.py <candidate-source>/.agents/skills/vibe-supervisor",
+      "exit_code": 0,
+      "log": "skill-validation.log"
+    },
+    {
+      "id": "diff-check",
+      "command": "git diff --check",
+      "exit_code": 0,
+      "log": "diff-check.log"
+    },
+    {
+      "id": "adapter-toml-parse",
+      "command": "python3: tomllib.loads(Path(\".codex/agents/vibe-reviewer.toml\").read_text()); assert name == \"vibe-reviewer\" and isinstance(developer_instructions, str)",
+      "runtime": "Python 3.15.2",
+      "exit_code": 0,
+      "log": "adapter-toml-parse.log"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+file://<private-integration-root>/edit-validation/candidate/delivery.test.mjs:4
+test('99 does not qualify', () => {
+^
+
+ReferenceError: test is not defined
+    at file://<private-integration-root>/edit-validation/candidate/delivery.test.mjs:4:1
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.21.0
+✖ delivery.test.mjs (40.941209ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 44.749125
+
+✖ failing tests:
+
+test at delivery.test.mjs:1:1
+✖ delivery.test.mjs (40.941209ms)
+  'test failed'

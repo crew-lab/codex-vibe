@@ -1,0 +1,2 @@
+Python 3.15.2; stdlib tomllib.loads
+PASS: .codex/agents/vibe-reviewer.toml parses; name=vibe-reviewer; developer_instructions is string

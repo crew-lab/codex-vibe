@@ -10,7 +10,7 @@ import { resolveBaseCommit, resolveGitRoot } from '../git/worktree.js';
 import { judgeWorkspacePath } from '../backends/app-server/approvals.js';
 import { workspaceAnchors } from '../security/globs.js';
 import { resolveAdmittedWorkspace, resolveCanonicalWorkspaceRoot } from '../security/paths.js';
-import { assertOwnedDirectory, readOwnedFile } from '../reporting/private-files.js';
+import { assertOwnedDirectory, parseInputJson, readInputFile, readOwnedFile } from '../reporting/private-files.js';
 import { sanitizeForPersistence } from '../persistence/atomic.js';
 
 export const MAX_TASK_INPUT_FILES = 12;
@@ -28,6 +28,24 @@ export const taskInputManifestSchema = z.object({
 });
 export type TaskInputManifest = z.infer<typeof taskInputManifestSchema>;
 
+type InputFailureReason = 'source_status' | 'source_path' | 'source_changed' | 'source_content' | 'policy' | 'manifest' | 'base' | 'required_files' | 'copy_changed' | 'inventory' | 'totals';
+
+function inputFailure(reason: InputFailureReason, message: string): Error {
+  return Object.assign(new Error(message), { code: 'VSUP_INVALID_ARGUMENT', details: { role: 'prepared_inputs', reason } });
+}
+
+function artifactFailure(message: string): Error {
+  return Object.assign(new Error(message), { code: 'VSUP_ARTIFACT_ERROR', details: { role: 'artifact', reason: 'unsafe' } });
+}
+
+async function sourceStat(file: string): Promise<Awaited<ReturnType<typeof lstat>>> {
+  try { return await lstat(file); }
+  catch (error) {
+    if (['ENOENT', 'ENOTDIR', 'ELOOP', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) throw inputFailure('source_path', 'Task input source cannot be accessed safely');
+    throw error;
+  }
+}
+
 function runGit(root: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: process.env.HOME, LANG: 'C', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_OPTIONAL_LOCKS: '0' };
@@ -43,10 +61,10 @@ function runGit(root: string, args: string[]): Promise<string> {
 async function currentStatus(root: string, relative: string): Promise<'committed' | 'dirty-tracked' | 'untracked'> {
   const status = await runGit(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', relative]);
   const record = status.slice(0, 2);
-  if (record.includes('U') || record === 'AA' || record === 'DD') throw new Error(`Conflicted source file refused: ${relative}`);
+  if (record.includes('U') || record === 'AA' || record === 'DD') throw inputFailure('source_status', `Conflicted source file refused: ${relative}`);
   if (!record) {
     const tracked = await runGit(root, ['ls-files', '-z', '--', relative]);
-    if (!tracked) throw new Error(`Selected input is ignored or absent from Git discovery: ${relative}. Use a reviewed non-ignored evidence document; do not disable ignore rules or force-add private evidence.`);
+    if (!tracked) throw inputFailure('source_status', `Selected input is ignored or absent from Git discovery: ${relative}. Use a reviewed non-ignored evidence document; do not disable ignore rules or force-add private evidence.`);
     return 'committed';
   }
   if (record === '??') return 'untracked';
@@ -54,24 +72,40 @@ async function currentStatus(root: string, relative: string): Promise<'committed
 }
 
 async function readSourceFile(root: string, relative: string): Promise<Buffer> {
+  try { return await readSourceFileChecked(root, relative); }
+  catch (error) {
+    if (['ENOENT', 'ENOTDIR', 'ELOOP', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) throw inputFailure('source_path', 'Task input source cannot be accessed safely');
+    throw error;
+  }
+}
+
+async function readSourceFileChecked(root: string, relative: string): Promise<Buffer> {
   const parsed = safeRelativePath.parse(relative);
   let current = root;
   for (const segment of parsed.split('/')) {
     current = path.join(current, segment);
-    const info = await lstat(current);
-    if (info.isSymbolicLink()) throw new Error(`Linked source path refused: ${relative}`);
+    const info = await sourceStat(current);
+    if (info.isSymbolicLink()) throw inputFailure('source_path', `Linked source path refused: ${relative}`);
   }
-  const before = await lstat(current);
-  if (!before.isFile() || before.nlink !== 1 || before.size > MAX_TASK_INPUT_BYTES || (typeof process.getuid === 'function' && before.uid !== process.getuid())) throw new Error(`Unsafe or oversized source file: ${relative}`);
-  if (await realpath(current) !== current) throw new Error(`Noncanonical source path refused: ${relative}`);
+  const before = await sourceStat(current);
+  if (!before.isFile() || before.nlink !== 1 || before.size > MAX_TASK_INPUT_BYTES || (typeof process.getuid === 'function' && before.uid !== process.getuid())) throw inputFailure('source_path', `Unsafe or oversized source file: ${relative}`);
+  if (await realpath(current) !== current) throw inputFailure('source_path', `Noncanonical source path refused: ${relative}`);
   const handle = await open(current, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
     const opened = await handle.stat();
-    if (opened.ino !== before.ino || opened.dev !== before.dev || !opened.isFile() || opened.nlink !== 1) throw new Error(`Source file changed: ${relative}`);
-    const bytes = await handle.readFile(); const after = await handle.stat();
-    if (bytes.length > MAX_TASK_INPUT_BYTES || after.ino !== opened.ino || after.dev !== opened.dev || after.size !== opened.size || after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs) throw new Error(`Source file changed while reading: ${relative}`);
+    if (opened.ino !== before.ino || opened.dev !== before.dev || !opened.isFile() || opened.nlink !== 1) throw inputFailure('source_changed', `Source file changed: ${relative}`);
+    const buffer = Buffer.alloc(Math.min(MAX_TASK_INPUT_BYTES + 1, opened.size + 1));
+    let length = 0;
+    while (length < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, length, buffer.length - length, length);
+      if (!bytesRead) break;
+      length += bytesRead;
+    }
+    const after = await handle.stat();
+    if (length > MAX_TASK_INPUT_BYTES || length !== opened.size || after.ino !== opened.ino || after.dev !== opened.dev || after.size !== opened.size || after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs) throw inputFailure('source_changed', `Source file changed while reading: ${relative}`);
+    const bytes = buffer.subarray(0, length);
     const text = bytes.toString('utf8');
-    if (!Buffer.from(text, 'utf8').equals(bytes) || JSON.stringify(sanitizeForPersistence(text)) !== JSON.stringify(text)) throw new Error(`Source file is not safe to persist: ${relative}`);
+    if (!Buffer.from(text, 'utf8').equals(bytes) || JSON.stringify(sanitizeForPersistence(text)) !== JSON.stringify(text)) throw inputFailure('source_content', `Source file is not safe to persist: ${relative}`);
     return bytes;
   } finally { await handle.close(); }
 }
@@ -81,7 +115,7 @@ function manifestHash(value: Omit<TaskInputManifest, 'manifest_sha256'>): string
 async function resolveSource(source: string): Promise<string> {
   const root = await resolveGitRoot(source);
   const canonicalRoot = await resolveCanonicalWorkspaceRoot(root);
-  if (root !== canonicalRoot || path.resolve(source) !== root) throw new Error('Source must be the canonical Git repository root');
+  if (root !== canonicalRoot || path.resolve(source) !== root) throw inputFailure('source_path', 'Source must be the canonical Git repository root');
   return root;
 }
 
@@ -89,7 +123,7 @@ function policyDigest(allowedRoots: readonly string[], scopes: readonly Exclusio
 
 async function assertInputPolicy(source: string, relative: string, anchors: ReturnType<typeof workspaceAnchors>): Promise<void> {
   const judged = await judgeWorkspacePath(source, relative, anchors);
-  if (!judged.allowed) throw new Error(`Task input path refused (${judged.reason}): ${relative}`);
+  if (!judged.allowed) throw inputFailure('policy', `Task input path refused (${judged.reason}): ${relative}`);
 }
 
 export async function prepareTaskInputs(options: { source: string; base: string; files: readonly string[]; outputPaths?: readonly string[]; output: string; contractFile?: string; allowedRoots: readonly string[]; exclusions?: readonly ExclusionScope[] }): Promise<Record<string, unknown>> {
@@ -113,9 +147,10 @@ export async function prepareTaskInputs(options: { source: string; base: string;
   try { await lstat(output); problems.push('Prepared output already exists; select a new directory'); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') problems.push('Prepared output cannot be inspected'); }
   let contractSha256: string | null = null;
+  let contractError: (Error & { code: string; details: { role: string; reason: string } }) | undefined;
   if (options.contractFile) {
-    try { contractSha256 = contractDigest(acceptanceContractSchema.parse(JSON.parse((await readOwnedFile(options.contractFile, 256 * 1024)).toString('utf8')))); }
-    catch { problems.push('Acceptance contract is unsafe or invalid; require an owned canonical single-link file with mode 0600 and a valid acceptance-contract JSON schema'); }
+    try { contractSha256 = contractDigest(parseInputJson(await readInputFile(options.contractFile, 256 * 1024, 'contract'), 'contract', acceptanceContractSchema)); }
+    catch (error) { if (typeof error === 'object' && error !== null && 'details' in error && typeof error.details === 'object' && error.details !== null && 'reason' in error.details && (error.details.reason === 'invalid_json' || error.details.reason === 'invalid_schema')) { contractError = error as typeof contractError; problems.push('Acceptance contract must be valid acceptance-contract JSON'); } else throw error; }
   }
   for (const relative of options.files) {
     try { await assertInputPolicy(source, relative, anchors); safeRelativePath.parse(relative); await currentStatus(source, relative); }
@@ -125,7 +160,7 @@ export async function prepareTaskInputs(options: { source: string; base: string;
     try { await assertInputPolicy(source, relative, anchors); safeRelativePath.parse(relative); }
     catch (error) { problems.push((error as Error).message); }
   }
-  if (problems.length) throw new Error(`Task preparation preflight failed:\n${problems.map(problem => `- ${problem}`).join('\n')}`);
+  if (problems.length) { const error = new Error(`Task preparation preflight failed:\n${problems.map(problem => `- ${problem}`).join('\n')}`); throw contractError ? Object.assign(error, { code: contractError.code, details: contractError.details }) : error; }
   const files = [];
   let totalBytes = 0;
   for (const relative of options.files) {
@@ -163,14 +198,22 @@ export async function prepareTaskInputs(options: { source: string; base: string;
 export async function verifyTaskInputs(directory: string, policy: { allowedRoots: readonly string[]; exclusions: readonly ExclusionScope[] }, requiredFiles?: readonly string[]): Promise<Record<string, unknown>> {
   const root = path.resolve(directory);
   await assertOwnedDirectory(root);
-  const manifest = taskInputManifestSchema.parse(JSON.parse((await readOwnedFile(path.join(root, 'manifest.json'), 256 * 1024)).toString('utf8')));
+  const manifestBytes = await readOwnedFile(path.join(root, 'manifest.json'), 256 * 1024);
+  const manifestText = manifestBytes.toString('utf8');
+  if (!Buffer.from(manifestText, 'utf8').equals(manifestBytes)) throw inputFailure('manifest', 'Invalid task input manifest');
+  let manifestValue: unknown;
+  try { manifestValue = JSON.parse(manifestText); }
+  catch (error) { if (error instanceof SyntaxError) throw inputFailure('manifest', 'Invalid task input manifest'); throw error; }
+  const parsedManifest = taskInputManifestSchema.safeParse(manifestValue);
+  if (!parsedManifest.success) throw inputFailure('manifest', 'Invalid task input manifest');
+  const manifest = parsedManifest.data;
   const { manifest_sha256: claimed, ...body } = manifest;
-  if (manifestHash(body) !== claimed) throw new Error('Task input manifest digest mismatch');
+  if (manifestHash(body) !== claimed) throw inputFailure('manifest', 'Task input manifest digest mismatch');
   const source = await resolveSource(manifest.source);
   const admitted = await resolveAdmittedWorkspace(source, policy.allowedRoots);
-  if (admitted.workspace !== source || policyDigest(policy.allowedRoots, policy.exclusions) !== manifest.policy_sha256) throw new Error('Task input authorization policy changed');
-  if (source !== manifest.source || await resolveBaseCommit(source, 'HEAD') !== manifest.base_commit) throw new Error('Prepared task inputs are stale: source base changed');
-  if (requiredFiles && (requiredFiles.length !== manifest.files.length || requiredFiles.some((file, index) => file !== manifest.files[index]?.path))) throw new Error('Required task input file list differs from the prepared manifest');
+  if (admitted.workspace !== source || policyDigest(policy.allowedRoots, policy.exclusions) !== manifest.policy_sha256) throw inputFailure('policy', 'Task input authorization policy changed');
+  if (source !== manifest.source || await resolveBaseCommit(source, 'HEAD') !== manifest.base_commit) throw inputFailure('base', 'Prepared task inputs are stale: source base changed');
+  if (requiredFiles && (requiredFiles.length !== manifest.files.length || requiredFiles.some((file, index) => file !== manifest.files[index]?.path))) throw inputFailure('required_files', 'Required task input file list differs from the prepared manifest');
   const dirty = [];
   const anchors = workspaceAnchors(policy.exclusions, source);
   const expectedCopies = new Set(manifest.files.map((entry) => entry.path.split('/').join(path.sep)));
@@ -184,11 +227,11 @@ export async function verifyTaskInputs(directory: string, policy: { allowedRoots
     await assertInputPolicy(source, entry.path, anchors);
     const sourceBytes = await readSourceFile(source, entry.path);
     const provenance = await currentStatus(source, entry.path);
-    if (digest(sourceBytes) !== entry.sha256 || sourceBytes.length !== entry.bytes || provenance !== entry.provenance) throw new Error(`Required source changed: ${entry.path}`);
+    if (digest(sourceBytes) !== entry.sha256 || sourceBytes.length !== entry.bytes || provenance !== entry.provenance) throw inputFailure('source_changed', `Required source changed: ${entry.path}`);
     const copyPath = path.join(root, 'context', entry.path);
     await assertPrivateCopyPath(root, copyPath);
     const copied = await readOwnedFile(copyPath, MAX_TASK_INPUT_BYTES);
-    if (digest(copied) !== entry.sha256 || copied.length !== entry.bytes) throw new Error(`Prepared context bytes changed: ${entry.path}`);
+    if (digest(copied) !== entry.sha256 || copied.length !== entry.bytes) throw inputFailure('copy_changed', `Prepared context bytes changed: ${entry.path}`);
     totalBytes += copied.length;
     if (provenance !== 'committed') dirty.push({ path: entry.path, sha256: entry.sha256, bytes: entry.bytes });
   }
@@ -199,18 +242,18 @@ export async function verifyTaskInputs(directory: string, policy: { allowedRoots
       const child = path.join(relative, name);
       const absolute = path.join(root, 'context', child);
       const info = await lstat(absolute);
-      if (info.isSymbolicLink() || (typeof process.getuid === 'function' && info.uid !== process.getuid()) || (info.mode & 0o077) !== 0) throw new Error('Unsafe prepared context inventory');
+      if (info.isSymbolicLink() || (typeof process.getuid === 'function' && info.uid !== process.getuid()) || (info.mode & 0o077) !== 0) throw artifactFailure('Unsafe prepared context inventory');
       if (info.isDirectory() && expectedDirectories.has(child)) await walkCopies(child);
       else if (info.isFile() && info.nlink === 1) actualCopies.push(child);
-      else throw new Error('Unsupported prepared context inventory entry');
+      else throw inputFailure('inventory', 'Unsupported prepared context inventory entry');
     }
   };
   await walkCopies('');
-  if (actualCopies.length !== expectedCopies.size || actualCopies.some((file) => !expectedCopies.has(file))) throw new Error('Prepared context contains missing or unlisted files');
+  if (actualCopies.length !== expectedCopies.size || actualCopies.some((file) => !expectedCopies.has(file))) throw inputFailure('inventory', 'Prepared context contains missing or unlisted files');
   const topLevel = await readdir(root);
-  if (topLevel.length !== 2 || !topLevel.includes('context') || !topLevel.includes('manifest.json')) throw new Error('Prepared directory contains unlisted files');
+  if (topLevel.length !== 2 || !topLevel.includes('context') || !topLevel.includes('manifest.json')) throw inputFailure('inventory', 'Prepared directory contains unlisted files');
   for (const relative of manifest.allowed_output_paths) await assertInputPolicy(source, relative, anchors);
-  if (totalBytes !== manifest.total_bytes || digest(canonical(dirty)) !== manifest.dirty_overlay_sha256) throw new Error('Prepared context totals or dirty overlay changed');
+  if (totalBytes !== manifest.total_bytes || digest(canonical(dirty)) !== manifest.dirty_overlay_sha256) throw inputFailure('totals', 'Prepared context totals or dirty overlay changed');
   return { status: 'verified', files: manifest.total_files, bytes: manifest.total_bytes, token_count: null, manifest_sha256: claimed };
 }
 
@@ -221,8 +264,13 @@ async function assertPrivateCopyPath(root: string, file: string): Promise<void> 
   let current = root;
   for (const part of relative.split(path.sep)) {
     current = path.join(current, part);
-    const info = await lstat(current);
-    if (info.isSymbolicLink() || (typeof process.getuid === 'function' && info.uid !== process.getuid())) throw new Error('Unsafe prepared context path');
-    if (current !== file && (!info.isDirectory() || (info.mode & 0o077) !== 0)) throw new Error('Unsafe prepared context directory');
+    let info: Awaited<ReturnType<typeof lstat>>;
+    try { info = await lstat(current); }
+    catch (error) {
+      if (['ENOENT', 'ENOTDIR', 'ELOOP', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) throw artifactFailure('Prepared context path cannot be accessed safely');
+      throw error;
+    }
+    if (info.isSymbolicLink() || (typeof process.getuid === 'function' && info.uid !== process.getuid())) throw artifactFailure('Unsafe prepared context path');
+    if (current !== file && (!info.isDirectory() || (info.mode & 0o077) !== 0)) throw artifactFailure('Unsafe prepared context directory');
   }
 }

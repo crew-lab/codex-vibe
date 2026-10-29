@@ -1,0 +1,8 @@
+{
+  "status": "prepared",
+  "root": "<private-validation-root>/after",
+  "base_commit": "2778426546843721eb95a1e2744b01af8c9b6ae2",
+  "patch_sha256": "4c125179c3b31f91479a2a995d4c9a9fd16036ee6f99b597e5527177f3dab72b",
+  "dependencies": "not-requested",
+  "project_checks": "not-run"
+}

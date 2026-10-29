@@ -1,0 +1,38 @@
+diff --git a/delivery.mjs b/delivery.mjs
+index 366c02f..fcd9234 100644
+--- a/delivery.mjs
++++ b/delivery.mjs
+@@ -1,3 +1,3 @@
+ export function qualifiesForFreeDelivery(total) {
+-  return total > 100
++  return total >= 100
+ }
+diff --git a/delivery.test.mjs b/delivery.test.mjs
+new file mode 100644
+index 0000000..5bcd7f0
+--- /dev/null
++++ b/delivery.test.mjs
+@@ -0,0 +1,23 @@
++import { test } from 'node:test'
++import { strict as assert } from 'node:assert'
++import { qualifiesForFreeDelivery } from './delivery.mjs'
++
++test('returns false for 99', () => {
++  assert.equal(qualifiesForFreeDelivery(99), false)
++})
++
++test('returns true for 100', () => {
++  assert.equal(qualifiesForFreeDelivery(100), true)
++})
++
++test('returns true for 101', () => {
++  assert.equal(qualifiesForFreeDelivery(101), true)
++})
++
++test('returns false for 99.99', () => {
++  assert.equal(qualifiesForFreeDelivery(99.99), false)
++})
++
++test('returns true for 100.01', () => {
++  assert.equal(qualifiesForFreeDelivery(100.01), true)
++})

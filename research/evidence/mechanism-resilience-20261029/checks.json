@@ -1,0 +1,29 @@
+{
+  "node": "v24.22.1",
+  "round1": {
+    "command": "npm run verify:release",
+    "exit_code": 1,
+    "passed": 1655,
+    "failed": 2,
+    "skipped": 1,
+    "cause": "missing receipt became stale after typed error mapping"
+  },
+  "affected_repair": {
+    "test_files": 2,
+    "passed": 29,
+    "exit_code": 0
+  },
+  "round2": {
+    "command": "npm run verify:release",
+    "exit_code": 0,
+    "test_files": 118,
+    "passed": 1657,
+    "skipped": 1
+  },
+  "skill_validation": "PASS",
+  "local_links_anchors": 72,
+  "adapter_toml": "PASS",
+  "example_json": "PASS",
+  "diff_check": "PASS",
+  "hosted_starts": 0
+}

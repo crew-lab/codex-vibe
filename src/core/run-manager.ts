@@ -1,5 +1,5 @@
 import { captureVerification, verifySaved } from "../acceptance/verify.js";
-import { contractDigest, verificationSummary, type AcceptanceContract, type AssessmentInput } from "../acceptance/schema.js";
+import { canonical, contractDigest, digest, verificationSummary, type AcceptanceContract, type AssessmentInput } from "../acceptance/schema.js";
 import { readOwnedFile } from "../reporting/private-files.js";
 import { createHash, randomUUID } from "node:crypto";
 import { open, readFile, readdir, realpath, rename, rm, lstat, unlink } from "node:fs/promises";
@@ -46,8 +46,8 @@ import { taskAuthorizeCommand } from "./dispatch-command.js";
 import { verifyTaskInputs, taskInputManifestSchema, type TaskInputManifest } from "../preparation/task-inputs.js";
 
 function assertPreparedManifestScope(manifest: TaskInputManifest, contract: AcceptanceContract | undefined): void {
-  if (!contract || manifest.contract_sha256 !== contractDigest(contract) || manifest.allowed_output_paths.some((relative) => !contract.allowed_changed_paths.includes(relative))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs do not bind the frozen acceptance contract and output scope.");
-  if (manifest.files.some((file) => file.provenance !== "committed" && manifest.allowed_output_paths.includes(file.path))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input overlaps an editable output with dirty source bytes; re-prepare from the worker base or select read-only context files.");
+  if (!contract || manifest.contract_sha256 !== contractDigest(contract) || manifest.allowed_output_paths.some((relative) => !contract.allowed_changed_paths.includes(relative))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs do not bind the frozen acceptance contract and output scope.", { role: "prepared_inputs", reason: "scope" });
+  if (manifest.files.some((file) => file.provenance !== "committed" && manifest.allowed_output_paths.includes(file.path))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input overlaps an editable output with dirty source bytes; re-prepare from the worker base or select read-only context files.", { role: "prepared_inputs", reason: "dirty_output" });
 }
 
 interface Runtime {
@@ -265,7 +265,6 @@ export class RunManager {
     const input = parseInput(editStartSchema, value);
     if (input.prepared_inputs && this.activeBackendKind !== "app-server") throw codedError("VSUP_INVALID_STATE", "Prepared task inputs are supported only by the app-server backend.");
     if (input.prepared_inputs && !input.acceptance_contract) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs require an acceptance_contract to bind their output scope before dispatch.");
-    if (input.prepared_inputs) await this.assertPreparedInputAdmission(input.prepared_inputs, input.acceptance_contract!);
     if (input.allowed_write_paths && this.activeBackendKind !== "app-server") throw codedError("VSUP_INVALID_STATE", "allowed_write_paths is supported only by the app-server backend.");
     const started = await this.start("edit", input.task, input.cwd, {
       authorizationId: input.authorization_id, attemptId: input.attempt_id,
@@ -293,7 +292,7 @@ export class RunManager {
     if (allowedWritePaths && this.activeBackendKind !== "app-server") throw codedError("VSUP_INVALID_STATE", "allowed_write_paths is supported only by the app-server backend.");
     if (preparedInputs) {
       if (!acceptanceContract) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs require an acceptance contract.");
-      await this.assertPreparedInputAdmission(preparedInputs, acceptanceContract);
+      await this.assertPreparedInputAdmission({ directory: preparedInputs.directory, manifestSha256: preparedInputs.manifest_sha256 }, acceptanceContract, admitted, baseCommit, policy, deadline);
     }
     const limits = this.dispatchLimits(mode, parsed.max_turns, parsed.timeout_seconds);
     const binding = await withDeadline(dispatchBinding({ config: policy.config, policyRevision: policy.revision, mode, workspace: admitted.workspace, task: parsed.task, ...(baseCommit ? { baseCommit } : {}), contextFiles, ...("output" in parsed ? { output: parsed.output } : {}), ...(acceptanceContract ? { acceptanceContract } : {}), ...(preparedInputs ? { preparedManifestSha256: preparedInputs.manifest_sha256 } : {}), ...(allowedWritePaths ? { allowedWritePaths } : {}), limits }), deadline - Date.now(), "Authorization binding exceeded its deadline.");
@@ -311,16 +310,28 @@ export class RunManager {
     return { timeoutSeconds: timeoutSeconds ?? (mode === "review" ? this.config.limits.reviewTimeoutSeconds : this.config.limits.editTimeoutSeconds), maxTurns: turns, maxEventBytes: this.config.limits.maxEventBytes, maxTranscriptBytes: this.config.limits.maxTranscriptBytes, maxArtifactBytes: this.config.limits.maxArtifactBytes, ...(this.config.limits.maxTokens === undefined ? {} : { maxTokens: this.config.limits.maxTokens }), ...(this.config.limits.maxCostUsd === undefined ? {} : { maxCostUsd: this.config.limits.maxCostUsd }), maxModelCalls: turnBackstop(turns) };
   }
 
-  private async assertPreparedInputAdmission(prepared: { directory: string; manifest_sha256: string }, contract: AcceptanceContract): Promise<void> {
-    const directory = path.resolve(prepared.directory);
-    let manifest;
-    try {
-      manifest = taskInputManifestSchema.parse(JSON.parse((await readOwnedFile(path.join(directory, "manifest.json"), 256 * 1024)).toString("utf8")));
-    } catch {
-      throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs are not a safe, readable task context.");
-    }
-    if (manifest.manifest_sha256 !== prepared.manifest_sha256) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input manifest digest differs from the selected start request.");
-    assertPreparedManifestScope(manifest, contract);
+  private async assertPreparedInputAdmission(prepared: { directory: string; manifestSha256: string }, contract: AcceptanceContract | undefined, admitted: { workspace: string; exclusions: readonly ExclusionScope[] }, baseCommit: string | undefined, policy: CurrentPolicy, deadline: number): Promise<TaskInputManifest> {
+    if (this.activeBackendKind !== "app-server") throw codedError("VSUP_INVALID_STATE", "Prepared task inputs are supported only by the app-server backend.");
+    const verify = async (): Promise<TaskInputManifest> => {
+      const verified = await verifyTaskInputs(prepared.directory, { allowedRoots: policy.config.allowedWorkspaceRoots, exclusions: admitted.exclusions });
+      const bytes = await readOwnedFile(path.join(prepared.directory, "manifest.json"), 256 * 1024);
+      let value: unknown;
+      try {
+        value = JSON.parse(bytes.toString("utf8"));
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+        throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input manifest is not valid JSON; prepare the task context again.", { role: "prepared_inputs", reason: "manifest_invalid" });
+      }
+      const parsed = taskInputManifestSchema.safeParse(value);
+      if (!parsed.success) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input manifest does not match its required schema; prepare the task context again.", { role: "prepared_inputs", reason: "manifest_invalid" });
+      const manifest = parsed.data;
+      const { manifest_sha256: selected, ...body } = manifest;
+      if (verified.manifest_sha256 !== prepared.manifestSha256 || selected !== prepared.manifestSha256 || digest(canonical(body)) !== selected) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input manifest digest differs from the selected start request.", { role: "prepared_inputs", reason: "manifest" });
+      if (!baseCommit || manifest.base_commit !== baseCommit || manifest.source !== admitted.workspace) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs are stale for this edit source or base; prepare them again from the current base.", { role: "prepared_inputs", reason: "base" });
+      assertPreparedManifestScope(manifest, contract);
+      return manifest;
+    };
+    return withDeadline(verify(), deadline - Date.now(), "Prepared input verification exceeded its preparation deadline.");
   }
 
   private async awaitStartOutcome(started: StartResult, waitSeconds: number, signal?: AbortSignal): Promise<StartResult> {
@@ -380,6 +391,7 @@ export class RunManager {
       if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
       const limits = this.dispatchLimits(mode, options.maxTurns, options.timeoutSeconds);
       const baseCommit = mode === "edit" ? checkedBase ?? await this.editBaseCommit(source, options.baseRef ?? "HEAD", preparationDeadline) : undefined;
+      if (options.preparedInputs) await this.assertPreparedInputAdmission(options.preparedInputs, options.acceptanceContract, admitted, baseCommit, policy, preparationDeadline);
       const binding = await withDeadline(dispatchBinding({ config: policy.config, policyRevision: policy.revision, mode, workspace: source, task, ...(baseCommit ? { baseCommit } : {}), contextFiles: options.contextFiles ?? [], ...(options.output ? { output: options.output } : {}), ...(options.acceptanceContract ? { acceptanceContract: options.acceptanceContract } : {}), ...(options.preparedInputs ? { preparedManifestSha256: options.preparedInputs.manifestSha256 } : {}), ...(options.allowedWritePaths ? { allowedWritePaths: options.allowedWritePaths } : {}), limits }), preparationDeadline - Date.now(), "Dispatch binding exceeded its preparation deadline.");
       await new DispatchGrants(path.join(this.usageDataDir, "dispatch-grants")).consume({ authorizationId: options.authorizationId, attemptId: options.attemptId, requestSha256: binding.requestSha256, binding: binding.fields, runId: id });
       if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor stopped after consuming this attempt; it will not be replayed.");
@@ -1112,14 +1124,11 @@ export class RunManager {
       if (runtime.preparedInputDirectory) {
         const selectedPolicy = await this.admissionPolicy();
         if (selectedPolicy.revision !== runtime.record.policyRevision || !baseRef) throw codedError("VSUP_READINESS_RECEIPT_INVALID", "Prepared input authorization or edit base changed before dispatch.");
-        const verified = await verifyTaskInputs(runtime.preparedInputDirectory, { allowedRoots: selectedPolicy.config.allowedWorkspaceRoots, exclusions: runtime.record.exclusions ?? [] });
-        if (verified.manifest_sha256 !== runtime.record.preparedContextManifestSha256) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input manifest digest differs from the selected start request.");
-        const manifest = taskInputManifestSchema.parse(JSON.parse((await readOwnedFile(path.join(runtime.preparedInputDirectory, "manifest.json"), 256 * 1024)).toString("utf8")));
-        if (manifest.base_commit !== baseRef || manifest.source !== runtime.record.sourceWorkspace) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs are stale for this edit base; prepare them again from the current base.");
-        assertPreparedManifestScope(manifest, runtime.record.acceptanceContract);
+        const manifest = await this.assertPreparedInputAdmission({ directory: runtime.preparedInputDirectory, manifestSha256: runtime.record.preparedContextManifestSha256! }, runtime.record.acceptanceContract, { workspace: runtime.record.sourceWorkspace, exclusions: runtime.record.exclusions ?? [] }, baseRef, selectedPolicy, runtime.deadlineAt!);
         preparedContextFiles = [];
         for (const file of manifest.files) {
           const content = await readOwnedFile(path.join(runtime.preparedInputDirectory, "context", file.path), 128 * 1024);
+          if (content.length !== file.bytes || digest(content) !== file.sha256) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared context changed before worker launch; prepare the task context again.", { role: "prepared_inputs", reason: "copy_changed" });
           const text = content.toString("utf8");
           if (!Buffer.from(text, "utf8").equals(content)) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared context is not valid UTF-8 text.");
           preparedContextFiles.push({ ...file, content: text });

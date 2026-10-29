@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "run_id": "ee4f8b14-a3a7-41d4-ab11-a77317772d5f",
+  "truncated": false,
+  "records": [
+    {
+      "callback_id": "approval-u0V8ceDmo",
+      "related_entry_id": "effect-9608d0e7-7a4b-5153-a048-526f1e25f50b",
+      "turn_id": "turn-418387a9a808ba718c5ef87255e2fce1",
+      "tool": "file_system.write_file",
+      "path": "docs/local-trial/generated/at-least.mjs",
+      "fingerprint": "f1e6ceab7cf52156e397d555d1d32983a6d8864e9f4422e6e270cd84bd450053",
+      "decision": "approve",
+      "reason": null
+    },
+    {
+      "callback_id": "approval-Y7FM0Ch1O",
+      "related_entry_id": "effect-8ef310b5-a4bf-5460-9ffc-5b8929d85e64",
+      "turn_id": "turn-418387a9a808ba718c5ef87255e2fce1",
+      "tool": "file_system.write_file",
+      "path": "docs/local-trial/generated/at-least.test.mjs",
+      "fingerprint": "fa69c762f52a06264170859464a7cc78e1917d0cf515fd29a35b945910145513",
+      "decision": "approve",
+      "reason": null
+    }
+  ]
+}

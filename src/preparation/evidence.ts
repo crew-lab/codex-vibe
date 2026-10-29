@@ -64,5 +64,9 @@ export async function checkPreparation(config: SupervisorConfig, dataDirOverride
     if (digest(await readOwnedFile(path.join(path.dirname(targetReceiptPath), 'preparation-reports', `${receipt.report_sha256}.json`), 4*1024*1024)) !== receipt.report_sha256) throw new Error('Preparation report changed');
     if (receipt.identity !== identity) return {status:'stale',candidate_sha256:candidate,version:APP_VERSION,reason:'Candidate, pin, runtime or policy changed'};
     return {status:receipt.result,candidate_sha256:candidate,version:APP_VERSION,reason:'Version-matched no-inference evidence; hosted acceptance remains separate'};
-  } catch(error) { return {status:(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'missing' : 'stale',candidate_sha256:candidate,version:APP_VERSION,reason:'No usable matching preparation receipt'}; }
+  } catch(error) {
+    const failure = error as NodeJS.ErrnoException & { details?: { reason?: string } };
+    const missing = failure.code === 'ENOENT' || (failure.code === 'VSUP_ARTIFACT_ERROR' && failure.details?.reason === 'missing');
+    return {status:missing ? 'missing' : 'stale',candidate_sha256:candidate,version:APP_VERSION,reason:'No usable matching preparation receipt'};
+  }
 }
