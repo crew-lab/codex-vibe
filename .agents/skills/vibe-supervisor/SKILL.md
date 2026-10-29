@@ -13,7 +13,7 @@ Vibe's packaged plugin skills are accepted only when the runtime reports their r
 
 ## Prepared installation: short path
 
-Match this skill to the selected installed candidate; updating skill text does not update a connected server. If the installation predates the artifact-intake repair described below, upgrade the candidate before relying on that behavior; see [current state](../../../Handoff.md). For an already prepared installation, call `vibe_status` on the intended connection with the canonical workspace, operation, immutable edit base and expected candidate. Require the expected candidate, preparation PASS, eligibility and a free slot. Freeze the complete request and acceptance criteria, authorize it with the returned `task_authorize.argv`, then send that exact request with the grant identifiers and fresh readiness receipt. Follow status, inspect the result and exported artifact, independently verify it, and close. Each grant permits one start; a refusal or failure is not permission for an additional hosted attempt. For setup, blockers and details, follow the sections below and [local operation](../../../docs/local-operation.md).
+Match this skill to the selected installed candidate; updating skill text does not update a connected server. If the installation predates the artifact-intake repair described below, upgrade the candidate before relying on that behavior; see [current state](../../../Handoff.md). For an already prepared installation, call `vibe_status` on the intended connection with the canonical workspace, operation, immutable edit base and expected candidate. Require the expected candidate, preparation PASS, eligibility and a free slot. Freeze the complete request and acceptance criteria, authorize it with the returned `task_authorize.argv`, then forward the returned complete `start_request` with a fresh readiness receipt. Follow status, inspect the result and exported artifact, independently verify it, and close. Each grant permits one start; a refusal or failure is not permission for an additional hosted attempt. For setup, blockers and details, follow the sections below and [local operation](../../../docs/local-operation.md).
 
 
 ## Coordinator, acceptance and fallback
@@ -121,3 +121,10 @@ Close the run after verification. Request cleanup only when the exported artifac
 - [Compatibility and unverified gates](../../../docs/compatibility.md)
 - [Errors](../../../docs/errors.md)
 - [Agent Skills specification](https://agentskills.io/specification)
+
+
+## Contract-bound repair candidate
+
+Builds implementing ADR0011 deliver structured contracts automatically. Encode named Node cases with a node_test check (path,min_cases), then run independent behavior checks. Use `validation check` for the explicitly authorized fixed Node test profile in owned copies. A failed contract must never be accepted because assertions happened to pass.
+
+For a closed completed rejected edit, `task repair --run ID --request ORIGINAL.json --out NEW.json --max-corrections 2 --config CONFIG` prepares a complete fresh request from verified failures and unchanged scope/base/contract. It consumes a durable bounded preparation slot, never grants/starts/applies. Authorize the generated request with a fresh grant; forward its returned start_request plus new readiness receipt. No unchanged retry or budget reset. Stop at exhaustion and preserve original output. Check installed candidate identity before relying on these new capabilities.

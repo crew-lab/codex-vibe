@@ -10,7 +10,7 @@ Edit requests may supply an optional strict `acceptance_contract` before dispatc
 {"schema_version":1,"allowed_changed_paths":["src/app/page.tsx"],"required_changed_paths":["src/app/page.tsx"],"checks":[{"id":"heading","kind":"text_contains","path":"src/app/page.tsx","value":"Release notes"}],"required_validations":["build"]}
 ```
 
-Supported assertions are `file_exists`, `file_absent`, `text_contains`, `text_not_contains`, and `file_sha256`. Paths are exact repository-relative names, not globs. The normalized contract is hashed and frozen before launch. Exact checks inspect the committed base plus exported patch using a private Git index; worker summaries and subsequent worktree edits are not evidence. Checks never execute project code. Private bounded file snapshots allow re-verification after worktree cleanup. Missing, unsafe or changed inputs produce `incomplete`, never PASS.
+Supported assertions are `file_exists`, `file_absent`, `text_contains`, `text_not_contains`, `file_sha256`, and `node_test` (see below). Paths are exact repository-relative names, not globs. The normalized contract is hashed and frozen before launch. Exact checks inspect the committed base plus exported patch using a private Git index; worker summaries and subsequent worktree edits are not evidence. Checks never execute project code. Private bounded file snapshots allow re-verification after worktree cleanup. Missing, unsafe or changed inputs produce `incomplete`, never PASS.
 
 ## Choose checks that express the requirement
 
@@ -58,3 +58,23 @@ The rate measures the coordinator's decision, not whether the worker was right; 
 Closing a run is a resource lifecycle action. The run record keeps the terminal outcome (`completed`, `failed` or `cancelled`) as `execution_state` beside `state`, which becomes `closing` and `closed`; restart recovery records `failed` in both. `started_at` is written when the run is first observed running and is never moved by later callbacks or close. The report's `execution.state` takes the verification snapshot's outcome, then `execution_state`, and is `unknown` only for a closed record written without a saved outcome; `timestamps.started` is null when no start was recorded. Coordinator rejection of a completed answer is a separate assessment and must not relabel execution as failed. Inference-only duration is not estimated from total wall time.
 
 The `reasoning_observation` diagnostic, recorded once when the turn concludes, contains only structured-entry counts: `streamed_entries`, `history_entries` (or null) and `history_audited`. Export with `--include events` to retain those fields. Content is discarded, and existing reasoning/secret filtering remains unchanged. Stream/history counts overlap and must not be summed. A count of zero means none observed, not proof that no provider reasoning was generated. Private-file word searches are not a measurement of reasoning generation.
+
+
+## Contract delivery and fresh repairs
+
+Both engines receive the frozen contract automatically, including exact paths, checks and validation IDs. A terse task does not remove those requirements. Validation IDs remain coordinator evidence, never commands.
+
+A structured check such as `{"id":"named-tests","kind":"node_test","path":"discount.test.mjs","min_cases":5}` checks JavaScript syntax with the pinned TypeScript parser without executing it. Supported cases are explicit top-level imported `test`/`it` calls (including aliases or namespace bindings), with literal nonempty names and function callbacks containing recognized strict assertion calls. Awaited calls work. Equivalent strict imports and strictEqual methods work. Comments, strings, top-level assertions, shadowed bindings, skipped/options cases and nested helper functions do not satisfy it. Dynamic names, nested registration, CommonJS imports and unsupported shapes cannot establish this contract. This proves structure, not execution, path coverage or truthful assertions; retain independent behavior checks.
+
+After closing a completed rejected edit, prepare one bounded correction:
+
+```sh
+vibe-supervisor task repair --run RUN_UUID --request ORIGINAL_REQUEST.json --out NEW_REQUEST.json --max-corrections 2 --config CONFIG
+```
+
+The helper verifies the exact saved patch, immutable original base, contract, task, scope and latest hash-bound rejection. It accepts only actual failed automated checks or failed required coordinator validations. It embeds bounded failure data and the previous patch as untrusted context, and requires a complete new delta from the original base. It never applies a patch or starts a model. Patches larger than32KiB, non-UTF8 or credential-bearing feedback stop safely. Original output stays unchanged.
+
+A private durable ledger allows one or two corrections, fixed on first preparation. Concurrent forks, resets and spent slots fail closed; even an output-write failure does not refund a reserved slot. Each descendant uses its own complete request file and rejected run ID. Each correction still needs a fresh administrative grant and fresh readiness receipt. Grant registration durably reserves that correction once; repeating registration or changing its scope/limits is refused. Invalid grant arguments are rejected before this reservation. A storage failure after reservation does not refund it. Restart never resumes/replays it. The CLI returns a complete normalized `start_request` from `task authorize`; forward it unchanged and add only the fresh connection receipt. Input receipts and invalid transport values are rejected before issuance. See [ADR0011](adr/0011-contract-bound-fresh-repairs.md).
+
+
+Frozen checks are rendered as per-file human requirements after the task and untrusted diagnostic data, alongside the exact JSON. Node test requirements include valid syntax and explicit exclusions for comment labels/top-level assertions. Repair preparation appends the same deterministic requirements after previous-patch evidence; callers do not rewrite task prose or weaken the contract to get a pass.

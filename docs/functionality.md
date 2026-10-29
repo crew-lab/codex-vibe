@@ -128,3 +128,6 @@ The server always registers exactly five tools. Edit start may freeze an [accept
 ## Caller inputs and internal artifacts
 
 [Artifact intake](artifact-handling.md) separates ordinary caller-selected files from strict saved state. Normal owned 0644 request/contract/patch/validation inputs are read without a chmod prerequisite; unsafe or changed inputs yield actionable typed errors. Internal state keeps its private-file requirements. Full prepared-input verification precedes grant issuance and consumption and is repeated at launch; no attempt is automatically replayed.
+
+
+Contract delivery, structured Node test checks, complete authorization payloads and bounded fresh repair preparation are described in [contract workflow](workflow-acceptance.md). Explicit coordinator test execution uses the [validation profile](validation-workspace.md). These mechanisms preserve separate grants, one-shot runs and coordinator acceptance.

@@ -27,7 +27,7 @@ async function run(command:string,args:string[],cwd:string,root:string,input?:Bu
     child.stdin.on('error',()=>{});child.stdin.end(input);
   });
 }
-async function fingerprint(root:string):Promise<string>{
+export async function validationFingerprint(root:string):Promise<string>{
   const entries:[string,string][]=[];let total=0;let count=0;const deadline=Date.now()+120_000;const links=new Map<string,{expected:number;seen:number}>();
   const walk=async(directory:string):Promise<void>=>{
     for(const name of (await readdir(path.join(root,directory))).sort()){
@@ -95,14 +95,14 @@ export async function prepareValidation(options:{source:string;base:string;patch
       const cache=await realpath(options.cache);const sourceCache=kind==='npm'?path.join(cache,'_cacache'):cache;
       let copiedBytes=0,copiedFiles=0;
       await cp(sourceCache,path.join(output,'cache',kind==='npm'?'_cacache':'store'),{recursive:true,dereference:false,force:false,errorOnExist:true,filter:async file=>{const info=await lstat(file);if(info.isFile()){copiedBytes+=info.size;if(copiedBytes>MAX_BYTES)throw new Error("Cache exceeds copy budget");}if(++copiedFiles>MAX_FILES)throw new Error("Cache exceeds file budget");return true;}});
-      await fingerprint(output);
+      await validationFingerprint(output);
       for(const name of ['baseline','candidate']){
         const args=kind==='npm'?['ci','--offline','--ignore-scripts','--no-audit','--no-fund','--cache',path.join(output,'cache')]:['install','--offline','--frozen-lockfile','--ignore-scripts','--config.ignore-pnpmfile=true','--config.side-effects-cache=false','--store-dir',path.join(output,'cache','store')];
         await run(manager,args,path.join(output,name),output);
       }
     }
     const info=await lstat(output);
-    const manifest=manifestSchema.parse({schema_version:1,owner:'vibe-supervisor-validation',id,root:output,device:info.dev,inode:info.ino,base_commit:base,patch_sha256:digest(patch),node:process.version,...(managerInfo?{manager:managerInfo}:{}),lockfiles:await Promise.all(profiles.map(async (profile,index)=>({workspace:index===0?"baseline":"candidate",path:profile.lockfile,sha256:digest(await readFile(path.join(output,index===0?"baseline":"candidate",profile.lockfile)))}))),tree_sha256:await fingerprint(output),dependencies:options.install?'installed':'not-requested',created_at:new Date().toISOString()});
+    const manifest=manifestSchema.parse({schema_version:1,owner:'vibe-supervisor-validation',id,root:output,device:info.dev,inode:info.ino,base_commit:base,patch_sha256:digest(patch),node:process.version,...(managerInfo?{manager:managerInfo}:{}),lockfiles:await Promise.all(profiles.map(async (profile,index)=>({workspace:index===0?"baseline":"candidate",path:profile.lockfile,sha256:digest(await readFile(path.join(output,index===0?"baseline":"candidate",profile.lockfile)))}))),tree_sha256:await validationFingerprint(output),dependencies:options.install?'installed':'not-requested',created_at:new Date().toISOString()});
     await writeFile(path.join(output,'manifest.json'),JSON.stringify(manifest,null,2)+'\n',{mode:0o600,flag:'wx'});
     return {status:'prepared',root:output,base_commit:base,patch_sha256:digest(patch),dependencies:manifest.dependencies,project_checks:'not-run'};
   }catch(error){
@@ -113,6 +113,6 @@ export async function cleanValidation(root:string):Promise<unknown>{
   await assertOwnedDirectory(root);
   const manifest=manifestSchema.parse(JSON.parse((await readOwnedFile(path.join(root,'manifest.json'),16*1024)).toString('utf8')));
   const info=await lstat(root);
-  if(manifest.root!==root||manifest.device!==info.dev||manifest.inode!==info.ino||await fingerprint(root)!==manifest.tree_sha256)throw new Error('Validation ownership or content changed; retained for inspection');
+  if(manifest.root!==root||manifest.device!==info.dev||manifest.inode!==info.ino||await validationFingerprint(root)!==manifest.tree_sha256)throw new Error('Validation ownership or content changed; retained for inspection');
   await rm(root,{recursive:true,force:false});return {status:'removed',id:manifest.id};
 }

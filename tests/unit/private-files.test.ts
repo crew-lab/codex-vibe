@@ -40,10 +40,10 @@ describe('selected and private file intake', () => {
   it('validates request JSON at the task authorization boundary without exposing contents', async () => {
     const root = await fixture(); const file = path.join(root, 'request');
     const args = ['authorize', '--request', file, '--owner-reference', 'owner', '--expires-at', '2026-12-01T00:00:00Z', '--config', path.join(root, 'missing-config')];
-    await writeFile(file, JSON.stringify({ operation: 'review', request: {} }), { mode: 0o644 }); await chmod(file, 0o644);
+    await writeFile(file, JSON.stringify({ operation: 'review', request: { cwd: root, task: 'Inspect the fixture.' } }), { mode: 0o644 }); await chmod(file, 0o644);
     await expect(taskCommand(args)).rejects.not.toMatchObject({ details: { role: 'request' } });
     expect((await lstat(file)).mode & 0o777).toBe(0o644);
-    expect(await readFile(file, 'utf8')).toBe(JSON.stringify({ operation: 'review', request: {} }));
+    expect(await readFile(file, 'utf8')).toBe(JSON.stringify({ operation: 'review', request: { cwd: root, task: 'Inspect the fixture.' } }));
     await writeFile(file, '{ sensitive-marker');
     await expect(taskCommand(args)).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', details: { role: 'request', reason: 'invalid_json' } });
     try { await taskCommand(args); } catch (error) { expect(String(error)).not.toContain('sensitive-marker'); }

@@ -1,0 +1,44 @@
+diff --git a/discount.mjs b/discount.mjs
+index 98d8a04..26a638d 100644
+--- a/discount.mjs
++++ b/discount.mjs
+@@ -1 +1 @@
+-export function qualifies(total) { return total > 100; }
++export function qualifies(total) { return total >= 100; }
+diff --git a/discount.test.mjs b/discount.test.mjs
+new file mode 100644
+index 0000000..1919748
+--- /dev/null
++++ b/discount.test.mjs
+@@ -0,0 +1,31 @@
++import test from 'node:test';
++import assert from 'node:assert';
++import { qualifies } from './discount.mjs';
++
++test('exactly 100 qualifies', () => {
++  assert.strictEqual(qualifies(100), true, '100 should qualify');
++});
++
++test('above 100 qualifies', () => {
++  assert.strictEqual(qualifies(150), true, '150 should qualify');
++});
++
++test('just below 100 does not qualify', () => {
++  assert.strictEqual(qualifies(99), false, '99 should not qualify');
++});
++
++test('far below 100 does not qualify', () => {
++  assert.strictEqual(qualifies(50), false, '50 should not qualify');
++});
++
++test('far above 100 qualifies', () => {
++  assert.strictEqual(qualifies(1000), true, '1000 should qualify');
++});
++
++test('zero does not qualify', () => {
++  assert.strictEqual(qualifies(0), false, '0 should not qualify');
++});
++
++test('negative number does not qualify', () => {
++  assert.strictEqual(qualifies(-10), false, '-10 should not qualify');
++});

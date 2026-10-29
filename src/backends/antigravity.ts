@@ -25,7 +25,7 @@ import { setupHeadlessBrowserNeutralizer } from '../security/environment.js';
 import { createPrivateDir } from '../security/paths.js';
 import { turnBackstop } from './app-server/usage.js';
 import { buildWorkspaceListing } from './app-server/workspace-listing.js';
-import { FINDINGS_OUTPUT_CONTRACT } from '../core/findings.js';
+import { buildTaskPrompt } from '../core/task-prompt.js';
 import { anchoredDenylistPatterns, denylistAnchors, workspaceAnchors, type DenylistAnchor } from '../security/globs.js';
 import {
   parseToolArguments,
@@ -780,12 +780,7 @@ export class AntigravityBackend implements SupervisorBackend {
     });
 
     const listing = input.mode === 'review' ? await buildWorkspaceListing(input.workerWorkspace, {}, anchors) : null;
-    const contextPrefix = (input.contextFiles ?? []).map((file) => `Approved context path: ${file}`).join('\n');
-    const prefixParts = [listing?.text ?? null, contextPrefix].filter((part): part is string => Boolean(part && part.length > 0));
-    let prompt = prefixParts.length > 0 ? `${prefixParts.join('\n\n')}\n\nTask:\n${input.task}` : input.task;
-    if (input.mode === 'review' && input.output === 'findings') {
-      prompt = `${prompt}\n\n${FINDINGS_OUTPUT_CONTRACT}`;
-    }
+    const prompt = buildTaskPrompt(input, listing?.text ?? null);
 
     const permissionLayer = antigravityPermissionLayer(this.config);
     const args = [

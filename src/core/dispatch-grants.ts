@@ -73,7 +73,7 @@ export class DispatchGrants {
   private readonly root: string;
   constructor(root: string) { this.root = path.resolve(root); }
 
-  async issue(input: GrantInput): Promise<IssuedGrant> {
+  async issue(input: GrantInput, beforeIssue?: () => Promise<void>): Promise<IssuedGrant> {
     if (!input || !SHA256.test(input.requestSha256) || !validBinding(input.binding) || typeof input.ownerReference !== 'string' || input.ownerReference.length < 1 || input.ownerReference.length > 256 || /[\u0000-\u001f\u007f]/.test(input.ownerReference) || redactSecrets(input.ownerReference) !== input.ownerReference) throw invalid();
     const expiresAt = normalizeExpiry(input.expiresAt);
     const now = Date.now();
@@ -81,6 +81,7 @@ export class DispatchGrants {
     if (Date.parse(expiresAt) - now > MAX_GRANT_LIFETIME_MS) throw fail('VSUP_AUTHORIZATION_INVALID', 'A dispatch authorization must expire within 24 hours of registration.');
     try {
       await this.ensureRoot();
+      await beforeIssue?.();
       const authorizationId = uuid();
       const attemptId = uuid();
       const issuedAt = new Date().toISOString();

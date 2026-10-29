@@ -1,0 +1,67 @@
+import { Client } from '<supervisor-repository>/node_modules/@modelcontextprotocol/client/dist/index.mjs';
+import { StdioClientTransport } from '<supervisor-repository>/node_modules/@modelcontextprotocol/client/dist/stdio.mjs';
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
+import path from 'node:path';
+const [config,cli,candidate,requestFile,out] = process.argv.slice(2);
+await mkdir(out,{mode:0o700});
+const document=JSON.parse(await readFile(requestFile,'utf8'));
+const client=new Client({name:'contract-integration',version:'1'});
+const transport=new StdioClientTransport({command:process.execPath,args:[cli,'serve','--stdio','--isolated','--config',config],stderr:'pipe'});
+const hash=b=>createHash('sha256').update(b).digest('hex');
+const save=async(name,value)=>writeFile(path.join(out,name),typeof value==='string'?value:JSON.stringify(value,null,2)+'\n',{mode:0o600});
+const call=async(name,args)=>{const r=await client.callTool({name,arguments:args},{timeout:330000});const v=JSON.parse(r.content.find(c=>c.type==='text').text);if(r.isError)throw new Error(JSON.stringify(v));return v;};
+const command=(args)=>{const r=spawnSync(process.execPath,[cli,...args],{encoding:'utf8',timeout:150000,maxBuffer:2000000});if(r.status!==0)throw new Error('Coordinator command failed: '+r.stderr.slice(0,2000));return JSON.parse(r.stdout);};
+let runId;let closed=false;
+try{
+ await client.connect(transport);
+ const catalog=await client.listTools();if(catalog.tools.length!==5)throw new Error('Unexpected tool count');
+ const ready=await call('vibe_status',{workspace:document.request.cwd,operation:document.operation,...(document.operation==='edit'?{base_ref:document.request.base_ref}:{}),expected_candidate:candidate});
+ if(!ready.eligible||ready.active_slot.busy||ready.preparation.status!=='passed')throw new Error('Not ready');
+ const args=ready.task_authorize.argv.map(v=>v==='<private-request-file>'?requestFile:v==='<owner-reference>'?'owner-autonomous-contract-integration':v);
+ const registration=spawnSync(args[0],args.slice(1),{encoding:'utf8',timeout:30000,maxBuffer:2000000});if(registration.status!==0)throw new Error('Authorization failed: '+registration.stderr.slice(0,1000));
+ const grant=JSON.parse(registration.stdout);if(!grant.start_request)throw new Error('Complete start payload absent');
+ const start=await call(document.operation==='edit'?'vibe_edit_start':'vibe_review_start',{...grant.start_request,readiness_receipt:ready.readiness_receipt});runId=start.run_id;
+ console.log(JSON.stringify({phase:'started',run_id:runId,candidate}));
+ let status;let cursor=0;
+ for(let i=0;i<20;i++){
+  status=await call('vibe_status',{run_id:runId,after_seq:cursor,wait_seconds:120,max_events:5});cursor=status.next_after_seq??cursor;
+  if(['completed','failed','cancelled','closed'].includes(status.state))break;
+ }
+ const result=await call('vibe_result',{run_id:runId,detail:'full'});await save('result.private.json',result);
+ if(result.state!=='completed'||result.stop_reason!=='end_turn')throw new Error('Worker execution failed');
+ if(document.operation==='review'){
+  const accepted=result.integrity?.status==='verified'&&result.usage?.tool_calls?.executed>=2&&result.summary.includes('100');
+  await call('vibe_close',{run_id:runId});closed=true;
+  const summary={run_id:runId,candidate,execution:result.execution_state,stop_reason:result.stop_reason,warnings:result.warnings,integrity:result.integrity,tool_calls:result.usage?.tool_calls,context_file_count:document.request.context_files.length,decision:accepted?'accepted':'rejected'};
+  await save('SUMMARY.json',summary);console.log(JSON.stringify(summary));if(!accepted)process.exitCode=2;
+ }else{
+ const artifact=result.artifacts.find(v=>v.name==='diff.patch');const patch=await readFile(artifact.path);if(hash(patch)!==artifact.sha256)throw new Error('Patch digest mismatch');
+ const patchFile=path.join(out,'diff.patch');await writeFile(patchFile,patch,{mode:0o644});
+ const validation=path.join(out,'validation');command(['validation','prepare','--source',document.request.cwd,'--base',document.request.base_ref,'--patch',patchFile,'--out',validation,'--no-install']);
+ const behavior=command(['validation','check','--dir',validation,'--tests','discount.test.mjs','--id','behavior','--out',path.join(out,'validation.json')]);
+ const {inspectNodeTests}=await import(pathToFileURL(path.join(path.dirname(cli),'acceptance/node-test.js')).href);
+ const testBytes=await readFile(path.join(validation,'candidate/discount.test.mjs'));
+ const structure=inspectNodeTests(testBytes.toString('utf8'),5);
+ const env={PATH:path.dirname(process.execPath),HOME:path.join(validation,'home'),TMPDIR:path.join(validation,'tmp')};
+ const boundaries=spawnSync(process.execPath,['--input-type=module','-e',"import{qualifies}from'./discount.mjs';import assert from'node:assert/strict';for(const[x,y]of[[-1,false],[0,false],[99.999,false],[100,true],[100.001,true],[101,true]])assert.equal(qualifies(x),y);"],{cwd:path.join(validation,'candidate'),env,encoding:'utf8',timeout:10000});
+ await writeFile(path.join(validation,'baseline/discount.test.mjs'),testBytes,{mode:0o600});
+ const negative=spawnSync(process.execPath,['--test','discount.test.mjs'],{cwd:path.join(validation,'baseline'),env,encoding:'utf8',timeout:10000});
+ await rm(path.join(validation,'baseline/discount.test.mjs'));
+ await save('negative-control.log',negative.stdout+negative.stderr);
+ const validations=[{id:'behavior',status:behavior.validations[0].status==='passed'&&boundaries.status===0?'passed':'failed'},{id:'test-framework',status:structure.passed?'passed':'failed'},{id:'negative-control',status:negative.status!==0&&negative.status!==null?'passed':'failed'}];
+ const accepted=result.verification.status==='passed'&&validations.every(v=>v.status==='passed');
+ const reason=accepted?'Exact patch passes automatic contract, named strict Node cases, generated tests, six independent boundaries and original-bug negative control.':'Exact patch did not satisfy all frozen requirements; see independent validation evidence.';
+ const close=await call('vibe_close',{run_id:runId,cleanup_worktree:true,assessment:{decision:accepted?'accepted':'rejected',reason,patch_sha256:artifact.sha256,contract_sha256:result.verification.contract_sha256,validations}});closed=true;
+ const final=await call('vibe_status',{workspace:document.request.cwd,operation:document.operation,...(document.operation==='edit'?{base_ref:document.request.base_ref}:{}),expected_candidate:candidate});
+ const summary={run_id:runId,candidate,execution:result.execution_state,stop_reason:result.stop_reason,warnings:result.warnings,changed_files:result.changed_files,patch_sha256:artifact.sha256,contract_sha256:result.verification.contract_sha256,automated:result.verification.status,structure,validations,decision:accepted?'accepted':'rejected',slot_busy:final.active_slot.busy,worktree_retained_reason:close.worktree_retained_reason??null};
+ await save('SUMMARY.json',summary);console.log(JSON.stringify(summary));
+ try{command(['validation','clean',validation]);}catch{console.log(JSON.stringify({validation_retained:true}));}
+ if(!accepted)process.exitCode=2;
+ }
+}finally{
+ if(runId&&!closed)await call('vibe_close',{run_id:runId}).catch(()=>{});
+ await client.close();
+}

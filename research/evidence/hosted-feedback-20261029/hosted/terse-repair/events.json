@@ -1,0 +1,105 @@
+[
+  {
+    "seq": 1,
+    "timestamp": "2026-10-29T15:00:43.978Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 2,
+    "timestamp": "2026-10-29T15:00:43.981Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 3,
+    "timestamp": "2026-10-29T15:00:43.983Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 4,
+    "timestamp": "2026-10-29T15:00:47.731Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "edit",
+    "outcome": "executed"
+  },
+  {
+    "seq": 5,
+    "timestamp": "2026-10-29T15:00:47.734Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "write_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 6,
+    "timestamp": "2026-10-29T15:00:49.387Z",
+    "type": "tool_denied",
+    "severity": "warning",
+    "name": "unknown",
+    "outcome": "permission_denied_by_policy",
+    "reason": "permission_denied_by_policy"
+  },
+  {
+    "seq": 7,
+    "timestamp": "2026-10-29T15:00:49.392Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 8,
+    "timestamp": "2026-10-29T15:00:49.394Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 9,
+    "timestamp": "2026-10-29T15:00:52.710Z",
+    "type": "message",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown"
+  },
+  {
+    "seq": 10,
+    "timestamp": "2026-10-29T15:00:52.710Z",
+    "type": "diagnostic",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown",
+    "reason": "reasoning_observation",
+    "streamed_entries": 0,
+    "history_entries": 0,
+    "history_audited": true
+  },
+  {
+    "seq": 11,
+    "timestamp": "2026-10-29T15:00:52.710Z",
+    "type": "diagnostic",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown",
+    "reason": "ignored_notifications"
+  },
+  {
+    "seq": 12,
+    "timestamp": "2026-10-29T15:00:54.365Z",
+    "type": "diagnostic",
+    "severity": "warning",
+    "name": "unknown",
+    "outcome": "unknown",
+    "reason": "worktree_retained"
+  }
+]

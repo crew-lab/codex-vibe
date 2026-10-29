@@ -1,0 +1,26 @@
+{
+  "contract_sha256": "ee0c49e71a442220aa8743a28a6e47c53a1bf44d86e5528db9f203cb494260ab",
+  "checked_at": "2026-10-29T15:04:42.875Z",
+  "patch_sha256": "2a90ab6190c49573244ad22b15313a322662fb38aadde2cd6681551502b79712",
+  "base_commit": "2da2bdce9cf7745710cc652d82ceb0b2a1a65c7d",
+  "execution_state": "completed",
+  "status": "failed",
+  "checks": [
+    {
+      "id": "$scope",
+      "status": "passed",
+      "reason": "changed-path-allowlist"
+    },
+    {
+      "id": "$required_changes",
+      "status": "passed",
+      "reason": "required-changed-paths"
+    },
+    {
+      "id": "named-tests",
+      "path": "discount.test.mjs",
+      "status": "failed",
+      "reason": "node-test-insufficient-cases"
+    }
+  ]
+}

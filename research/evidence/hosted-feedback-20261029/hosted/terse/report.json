@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "report_version": 2,
+  "run_id": "753a7d3e-0a0f-4666-bc4d-f56a41a3e519",
+  "supervisor_version": "2.2.1",
+  "mode": "edit",
+  "execution": {
+    "state": "completed",
+    "stop_reason": "end_turn"
+  },
+  "verification": {
+    "contract_sha256": "ee0c49e71a442220aa8743a28a6e47c53a1bf44d86e5528db9f203cb494260ab",
+    "checked_at": "2026-10-29T15:04:42.637Z",
+    "patch_sha256": "de690c145c346abf04096dd65deb01d69521cb864e1c371a4cc02e62f108173a",
+    "base_commit": "2da2bdce9cf7745710cc652d82ceb0b2a1a65c7d",
+    "execution_state": "completed",
+    "status": "failed",
+    "check_count": 3,
+    "failed_checks": [
+      "named-tests"
+    ]
+  },
+  "assessment": "rejected",
+  "assessments": [
+    {
+      "decision": "rejected",
+      "reason": "Exact patch did not satisfy all frozen requirements; see independent validation evidence.",
+      "patch_sha256": "de690c145c346abf04096dd65deb01d69521cb864e1c371a4cc02e62f108173a",
+      "contract_sha256": "ee0c49e71a442220aa8743a28a6e47c53a1bf44d86e5528db9f203cb494260ab",
+      "validations": [
+        {
+          "id": "behavior",
+          "status": "passed"
+        },
+        {
+          "id": "test-framework",
+          "status": "failed"
+        },
+        {
+          "id": "negative-control",
+          "status": "passed"
+        }
+      ],
+      "assessed_at": "2026-10-29T14:59:33.432Z"
+    }
+  ],
+  "provenance": {
+    "dispatch": {
+      "grant_id": "d25437e5-e903-4a3b-8971-ee6e9a1e8555",
+      "attempt_id": "7938e651-2600-4137-9bbf-ec55be666ab8",
+      "request_sha256": "7541fef66e1a2aa58ab3bb61a84b789fbb448ea870c32d4257b310b51d6482fa"
+    },
+    "task_sha256": "690cc521261686d9e468ac60d31aefbfa60ecc5774647f8ff7a65a9d4ed3162c",
+    "base_commit": "2da2bdce9cf7745710cc652d82ceb0b2a1a65c7d",
+    "patch_sha256": "de690c145c346abf04096dd65deb01d69521cb864e1c371a4cc02e62f108173a",
+    "contract_sha256": "ee0c49e71a442220aa8743a28a6e47c53a1bf44d86e5528db9f203cb494260ab",
+    "policy_revision": "ab352a0006bb50fe308b2a739936f189d4304ba728f79291aaeecb021ae3b84b"
+  },
+  "timestamps": {
+    "created": "2026-10-29T14:59:20.963Z",
+    "launched": "2026-10-29T14:59:20.995Z",
+    "started": "2026-10-29T14:59:22.962Z",
+    "finished": "2026-10-29T14:59:32.580Z"
+  },
+  "preparation": {
+    "status": "passed",
+    "candidate_sha256": "46b2a13bd4982f247784f6c645ee0c92cd3197449fed268b8cd7a8d2e07c6220",
+    "version": "2.2.1",
+    "reason": "Version-matched no-inference evidence; hosted acceptance remains separate"
+  },
+  "models": {
+    "observations": [
+      {
+        "observed_at": "2026-10-29T14:59:22.946Z",
+        "source": "runtime/read",
+        "session_model": null,
+        "alias": "mistral-medium-3.5",
+        "thinking": "off",
+        "requested_thinking": "off",
+        "requested_thinking_source": "supervisor-session-config",
+        "requested_model": null,
+        "requested_model_source": "unavailable",
+        "reported_name": "mistral-vibe-cli-latest",
+        "prices_per_million": {
+          "input": 1.5,
+          "output": 7.5,
+          "cached_input": 0.15
+        }
+      }
+    ],
+    "display_labels": [
+      {
+        "session_model": null,
+        "alias": "mistral-medium-3.5",
+        "reported_name": "mistral-vibe-cli-latest"
+      }
+    ],
+    "requested_model": {
+      "value": null,
+      "source": "unavailable"
+    },
+    "thinking": {
+      "requested": {
+        "value": "off",
+        "source": "supervisor-session-config"
+      },
+      "status": "matched",
+      "observations": [
+        {
+          "observed_at": "2026-10-29T14:59:22.946Z",
+          "value": "off",
+          "source": "runtime/read"
+        }
+      ]
+    },
+    "provider": null,
+    "underlying_model": null,
+    "unavailable_reason": "Runtime-reported model names, aliases and thinking are labels only; provider and underlying weights remain unverified."
+  },
+  "durations_ms": {
+    "inference": null,
+    "finalization": null,
+    "preparation": 32,
+    "startup": 1967,
+    "execution_and_finalization": 9618,
+    "total": 11617
+  },
+  "pin": {
+    "vibe_version": "3.0.2",
+    "manifest_sha256": "3221c7dc42b95092a0a347d05cab9f850c673b0b64f62d27de6954fb82e72f48",
+    "record_sha256": "c3238b982fe256e0c9dd2a2059ded853f2fdaa5ac12acda572b9e6deeaed084d"
+  },
+  "approvals": {
+    "file": "approvals.json",
+    "source_sha256": "691fb3d6dbcac7e8a096033dc9b3558d180ae6a49a2fcb22f30e48b97042c003",
+    "exported_sha256": "691fb3d6dbcac7e8a096033dc9b3558d180ae6a49a2fcb22f30e48b97042c003",
+    "records": 7,
+    "truncated": false
+  },
+  "usage": {
+    "tokensUsed": 42420,
+    "contextSize": 209715,
+    "promptTokens": 41418,
+    "completionTokens": 1002,
+    "cachedTokens": 32256,
+    "modelCalls": 5,
+    "priceAvailability": "available",
+    "priceSource": "runtime/read",
+    "costAvailability": "available",
+    "toolCalls": {
+      "executed": 7,
+      "deniedByHandler": 0,
+      "deniedByPolicy": 1
+    },
+    "cost": {
+      "amount": 0.026096400000000002,
+      "currency": "USD",
+      "authoritative": false
+    },
+    "costSource": "runtime-stats-prices"
+  },
+  "limits": {
+    "timeoutSeconds": 240,
+    "maxTurns": 20,
+    "maxEventBytes": 52428800,
+    "maxTranscriptBytes": 10485760,
+    "maxArtifactBytes": 104857600,
+    "maxModelCalls": 25
+  },
+  "warnings": [],
+  "error": null,
+  "cleanup": {
+    "worktree": "retained",
+    "checked_at": "2026-10-29T14:59:33.677Z",
+    "reason": "Uncommitted or untracked files remain after export; worktree retained"
+  },
+  "external_validation": null
+}

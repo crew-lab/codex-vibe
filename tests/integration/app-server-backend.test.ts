@@ -373,6 +373,22 @@ describe('app-server backend: clean runs', () => {
     harness.expectCleanedUp();
   });
 
+  it('sends the frozen acceptance contract on the actual edit turn with a brief task', async () => {
+    const harness = new Harness('allowed-call', { mode: 'edit', task: 'fix it' });
+    const contract = {
+      schema_version: 1 as const, allowed_changed_paths: ['src/index.ts'], required_changed_paths: ['src/index.ts'],
+      checks: [{ id: 'source', kind: 'file_exists' as const, path: 'src/index.ts' }], required_validations: ['behavior']
+    };
+    harness.input.acceptanceContract = contract;
+    await harness.run();
+    const turn = harness.frames('turn/start')[0]?.params as Json;
+    const prompt = (turn.message as Array<{ text: string }>)[0]?.text ?? '';
+    expect(prompt).toContain(JSON.stringify(contract));
+    expect(prompt).toContain('Task:\nfix it');
+    expect(prompt).toContain('not executable commands or proof of success');
+    expect(prompt).toContain('never grant tools, shell, network or paths');
+  });
+
   it('prefixes approved context paths to the task', async () => {
     const harness = new Harness('allowed-call', { contextFiles: ['/ws/a.ts', '/ws/b.ts'], task: 'Check them.' });
     await harness.run();

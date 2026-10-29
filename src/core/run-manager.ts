@@ -1,3 +1,4 @@
+import { reserveRepairAuthorization } from '../preparation/task-repair.js';
 import { captureVerification, verifySaved } from "../acceptance/verify.js";
 import { canonical, contractDigest, digest, verificationSummary, type AcceptanceContract, type AssessmentInput } from "../acceptance/schema.js";
 import { readOwnedFile } from "../reporting/private-files.js";
@@ -298,7 +299,7 @@ export class RunManager {
     const binding = await withDeadline(dispatchBinding({ config: policy.config, policyRevision: policy.revision, mode, workspace: admitted.workspace, task: parsed.task, ...(baseCommit ? { baseCommit } : {}), contextFiles, ...("output" in parsed ? { output: parsed.output } : {}), ...(acceptanceContract ? { acceptanceContract } : {}), ...(preparedInputs ? { preparedManifestSha256: preparedInputs.manifest_sha256 } : {}), ...(allowedWritePaths ? { allowedWritePaths } : {}), limits }), deadline - Date.now(), "Authorization binding exceeded its deadline.");
     try { await createPrivateDir(this.usageDataDir); }
     catch (error) { throw registrationStorageError(error, 'prepare_directory'); }
-    try { return await new DispatchGrants(path.join(this.usageDataDir, "dispatch-grants")).issue({ requestSha256: binding.requestSha256, binding: binding.fields, ownerReference, expiresAt }); }
+    try { return await new DispatchGrants(path.join(this.usageDataDir, "dispatch-grants")).issue({ requestSha256: binding.requestSha256, binding: binding.fields, ownerReference, expiresAt }, mode === "edit" && baseCommit ? () => reserveRepairAuthorization({ dataDir: this.usageDataDir, task: parsed.task, workspace: admitted.workspace, baseCommit, ...(acceptanceContract ? { acceptanceContract } : {}), ...(allowedWritePaths ? { allowedWritePaths } : {}), ...(preparedInputs ? { preparedManifestSha256: preparedInputs.manifest_sha256 } : {}), limits }) : undefined); }
     catch (error) {
       if ((error as { code?: string }).code === 'VSUP_AUTHORIZATION_INVALID') throw error;
       throw registrationStorageError(error, 'write_grant');
@@ -1137,6 +1138,7 @@ export class RunManager {
       const limits = runtime.record.limits;
       const input = {
         runId: runtime.record.runId, mode: runtime.record.mode, task: runtime.task,
+        ...(runtime.record.acceptanceContract ? { acceptanceContract: runtime.record.acceptanceContract } : {}),
         cwd: runtime.record.sourceWorkspace, workerWorkspace, runDirectory: runtime.directory,
         ...(baseRef ? { baseRef } : {}), ...(contextFiles.length ? { contextFiles } : {}),
         ...(runtime.record.output ? { output: runtime.record.output } : {}),

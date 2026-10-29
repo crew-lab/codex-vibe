@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "patch_sha256": "5df70fe80ff1b8823147ce08ef0ee31cf715cd96c5700ce8a37f5003158f4642",
+  "validations": [
+    {
+      "id": "behavior",
+      "status": "passed",
+      "evidence_sha256": "e749ca0ed7ff34eb1d222834c2daea391f6586cf0f0d38136296d372db6117b5"
+    }
+  ]
+}

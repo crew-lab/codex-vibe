@@ -19,7 +19,7 @@ import { denylistAnchors, workspaceAnchors } from '../security/globs.js';
 import { assertNoProjectVibeExtensions } from '../security/workspace-guard.js';
 import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { APP_VERSION } from '../version.js';
-import { FINDINGS_OUTPUT_CONTRACT } from '../core/findings.js';
+import { buildTaskPrompt } from '../core/task-prompt.js';
 import { ApprovalHandler, type ApprovalHandlerOptions, type ApprovalRecord, type PendingApproval } from './app-server/approvals.js';
 import { resolveCredential, type CredentialResolution, type ResolvedCredential } from './app-server/credentials.js';
 import { EventProcessor, auditSessionHistory, unfinishedEffectFatal, type EffectRecord, type EventFatal, type EventSignal, type HistoryAudit } from './app-server/events.js';
@@ -181,18 +181,6 @@ function toSupervisorError(error: unknown, secrets: readonly string[]): Supervis
   if (error instanceof WorkspacePathError) return supervisorError('VSUP_WORKSPACE_INVALID', safe(error.message));
   if (error instanceof ReaperStartError) return supervisorError('VSUP_INTERNAL', safe(error.message));
   return supervisorError('VSUP_INTERNAL', safe(describeFailure(error)));
-}
-
-function promptFor(input: StartRunInput, listing: string | null): string {
-  const context = (input.contextFiles ?? []).map((file) => `Approved context path: ${file}`).join('\n');
-  const prepared = (input.preparedContextFiles ?? []).map((file) => `Reviewed prepared context (${file.provenance}; sha256 ${file.sha256}; ${file.bytes} bytes) at ${file.path}:\n<untrusted-context>\n${file.content}\n</untrusted-context>`).join('\n\n');
-  const writable = input.allowedWritePaths ? `Writable paths (a write anywhere else is refused; a path ending in / covers everything beneath it): ${input.allowedWritePaths.join(', ')}` : null;
-  const prefix = [listing, context, prepared, writable].filter((part): part is string => part !== null && part.length > 0).join('\n\n');
-  let prompt = prefix ? `${prefix}\n\nTask:\n${input.task}` : input.task;
-  if (input.mode === 'review' && input.output === 'findings') {
-    prompt = `${prompt}\n\n${FINDINGS_OUTPUT_CONTRACT}`;
-  }
-  return prompt;
 }
 
 function usageFaultError(fault: UsageFault): SupervisorError {
@@ -520,7 +508,7 @@ class AppServerRun {
 
   private async beginTurn(): Promise<void> {
     this.turnStarting = true;
-    const started = await this.rpc(buildTurnStart(this.sessionId, promptFor(this.input, this.listing.text)), parseTurnStartResult, this.startupTimeout());
+    const started = await this.rpc(buildTurnStart(this.sessionId, buildTaskPrompt(this.input, this.listing.text)), parseTurnStartResult, this.startupTimeout());
     if (this.startAbort) throw this.startAbort;
     this.turnId = started.turn.id;
     await settlesWithin(this.client.drained(), this.startupTimeout());

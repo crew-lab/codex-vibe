@@ -133,3 +133,9 @@ Commit 12bc355 pushed to codex/vibe-usability-20261028. Offline package:rc passe
 ## Reconnected integration — 2026-10-29
 
 New candidate connected. Artifact/request intake and copy-only validation passed with normal0644 inputs. Review accepted; edit rejected for omitted named node:test cases despite passing behavior and negative control. Both closed; temporary allowlist restored. See [test evidence](research/evidence/reconnect-integration-20261029/RESULT.md). Requirement enforcement and validation feedback remain open.
+
+## Contract enforcement and hosted recovery — 2026-10-29
+
+Current installed candidate: `cfb9cc2164fa569ec7d237c37b6fda3b69a981fe2f29e1297913400fe04a22c8` (Supervisor 2.2.1). Archive SHA-256: `883025a63d3ff7ceba743a71c754470ee5e6bb645b6a8bdb4d4ab05b8db9eae9`. Matched preparation, 1,715 tests with one skipped, offline installation smoke and independent local acceptance passed. Codex registration selects the new feedback installation; the existing native connection needs a restart. Previous installations and registration backup are retained.
+
+The tool delivers human-readable frozen contracts, checks named strict Node cases, returns complete normalized start payloads, prepares verified corrective feedback and limits each correction to one durable grant. Fixed coordinator validation preserves sanitized failure evidence and bounded cleanup. The weak “Fix it.” output and its first correction were rejected; after the feedback repair, the same lineage succeeded in slot 2 of 2 with seven named cases, behavior and negative-control checks passing. The final build also passed hosted review and installed authorization negatives. Independent outcome-evidence review VERIFIED the narrow recovery. No fixture patch integration or public release. [Exact evidence and qualification limits](research/evidence/hosted-feedback-20261029/RESULT.md).

@@ -8,6 +8,8 @@ import { selectedConfigPolicy } from '../config/policy.js';
 import { z } from 'zod';
 import { resolveAdmittedWorkspace } from '../security/paths.js';
 import { authorizeWithNode } from './task-runtime.js';
+import { editStartSchema, reviewStartSchema } from '../mcp/schemas.js';
+import { prepareTaskRepair } from '../preparation/task-repair.js';
 
 function parse(args: string[], allowed: readonly string[]): Map<string, string> {
   const values = new Map<string, string>();
@@ -20,6 +22,14 @@ function parse(args: string[], allowed: readonly string[]): Map<string, string> 
 }
 
 export async function taskCommand(args: string[]): Promise<unknown> {
+  if (args[0] === 'repair') {
+    const values = parse(args.slice(1), ['--run', '--request', '--out', '--max-corrections', '--config']);
+    for (const key of ['--run', '--request', '--out', '--max-corrections', '--config']) if (!values.has(key)) throw new Error(`Missing ${key}`);
+    const maxCorrections = Number(values.get('--max-corrections'));
+    if (maxCorrections !== 1 && maxCorrections !== 2) throw new Error('max-corrections must be 1 or 2');
+    const resolved = await loadResolvedConfig({ configPath: path.resolve(values.get('--config')!), createDataDir: false, requirePinManifest: false });
+    return prepareTaskRepair({ dataDir: resolved.dataDir, runId: values.get('--run')!, requestFile: path.resolve(values.get('--request')!), output: path.resolve(values.get('--out')!), maxCorrections });
+  }
   if (args[0] === 'authorize') {
     const values = parse(args.slice(1), ['--request', '--owner-reference', '--expires-at', '--config', '--runtime-node']);
     for (const key of ['--request', '--owner-reference', '--expires-at', '--config']) if (!values.has(key)) throw new Error(`Missing ${key}`);
@@ -29,9 +39,13 @@ export async function taskCommand(args: string[]): Promise<unknown> {
       if (result !== undefined) return result;
     }
     const document = parseInputJson(await readInputFile(path.resolve(values.get('--request')!), 256 * 1024, 'request'), 'request', z.object({ operation: z.enum(['review', 'edit']), request: z.record(z.string(), z.unknown()) }).strict());
+    const bytes = Buffer.from(JSON.stringify(document.request));
+    const omitted = { authorization_id: true, attempt_id: true, readiness_receipt: true } as const;
+    const request = document.operation === 'review' ? parseInputJson(bytes, 'request', reviewStartSchema.omit(omitted)) : parseInputJson(bytes, 'request', editStartSchema.omit(omitted));
     const resolved = await loadResolvedConfig({ configPath: path.resolve(values.get('--config')!), createDataDir: false, requirePinManifest: false });
     const manager = new RunManager(resolved.config, resolved.dataDir, [], undefined, { policy: selectedConfigPolicy(resolved.configPath), usageDataDir: resolved.dataDir });
-    return manager.authorizeDispatch(document.operation, document.request as unknown as Parameters<RunManager['authorizeDispatch']>[1], values.get('--owner-reference')!, values.get('--expires-at')!);
+    const grant = await manager.authorizeDispatch(document.operation, request as Parameters<RunManager['authorizeDispatch']>[1], values.get('--owner-reference')!, values.get('--expires-at')!);
+    return { ...grant, start_request: { ...request, authorization_id: grant.authorization_id, attempt_id: grant.attempt_id } };
   }
   if (args[0] === 'prepare') {
     const values = parse(args.slice(1), ['--source', '--base', '--files', '--output-paths', '--out', '--contract', '--config']);
