@@ -1,0 +1,403 @@
+diff --git a/.agents/skills/vibe-supervisor/SKILL.md b/.agents/skills/vibe-supervisor/SKILL.md
+index 311ce0a..d766ec7 100644
+--- a/.agents/skills/vibe-supervisor/SKILL.md
++++ b/.agents/skills/vibe-supervisor/SKILL.md
+@@ -6,18 +6,23 @@ license: MIT
+ 
+ # Vibe Supervisor
+ 
+-The supervisor exposes exactly five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. It accepts only Vibe 3.0.2 through its pinned `vibe-app-server`; the server version and installed files must match the per-candidate pin manifest, and any other version or file drift fails closed. The current Vibe 3.0.2 candidate remains unqualified for hosted dispatch until its target gates pass. Each review or edit start requires a short-lived local dispatch grant created with `vibe-supervisor task authorize` and the grant's unique `attempt_id`; the grant authorizes one exact request and one start. This is not an interactive Vibe permission or continuation protocol. Each owning server/storage instance accepts one active run; a competing start is rejected immediately. A run is one-shot: there are no follow-up prompts or restart recovery. If the supervisor restarts during work, the run is marked failed and its task is never replayed. Completed means execution ended; the coordinator still owns acceptance and cleanup. The Antigravity backend is experimental and opt-in (`experimental.antigravity = true`); use it only when the configuration selects it, and see [security](../../../docs/security.md#antigravity-backend-experimental).
++The supervisor exposes exactly five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. It accepts only Vibe 3.0.2 through its pinned `vibe-app-server`; the server version and installed files must match the per-candidate pin manifest, and any other version or file drift fails closed. Check the selected candidate’s hosted qualification against its recorded target-gate evidence; preparation alone does not establish it. Each review or edit start requires a short-lived local dispatch grant created with `vibe-supervisor task authorize` and the grant's unique `attempt_id`; the grant authorizes one exact request and one start. This is not an interactive Vibe permission or continuation protocol. Each owning server/storage instance accepts one active run; a competing start is rejected immediately. A run is one-shot: there are no follow-up prompts or restart recovery. If the supervisor restarts during work, the run is marked failed and its task is never replayed. Completed means execution ended; the coordinator still owns acceptance and cleanup. The Antigravity backend is experimental and opt-in (`experimental.antigravity = true`); use it only when the configuration selects it, and see [security](../../../docs/security.md#antigravity-backend-experimental).
+ 
+ Vibe's packaged plugin skills are accepted only when the runtime reports their required plugin provenance; user/project/registry skill entries are refused. Skill instructions never grant extra tool or path permissions. Shell and network tools are disabled. The supervisor's policy is not an OS sandbox. Reviews are read-only (`read_file`) over an allowlisted workspace, with a bounded workspace file listing in the prompt and no search tool; edits can read, write and edit inside the worktree, need a Git repository root and explicit `base_ref`, and run in a detached supervisor-owned worktree. The worker's patch is exported for review and is never applied, committed, merged, or pushed automatically.
+ 
+ 
++## Prepared installation: short path
++
++For an already prepared installation, call `vibe_status` on the intended connection with the canonical workspace, operation, immutable edit base and expected candidate. Require the expected candidate, preparation PASS, eligibility and a free slot. Freeze the complete request and acceptance criteria, authorize it with the returned `task_authorize.argv`, then send that exact request with the grant identifiers and fresh readiness receipt. Follow status, inspect the result and exported artifact, independently verify it, and close. Each grant permits one start; a refusal or failure is not permission for an additional hosted attempt. For setup, blockers and details, follow the sections below and [local operation](../../../docs/local-operation.md).
++
++
+ ## Coordinator, acceptance and fallback
+ 
+ The main chat coordinates and independently verifies. Vibe is the bounded implementer. A fallback implementer is used only after verified artifact rejection and within the user's authorized workflow; do not appoint it coordinator by default. Never infer failure from an abbreviated worker summary. Preserve the original patch/export hashes and inspect deterministic checks first. If the patch is correct, validate it unchanged. A mistaken rejection must be corrected in append-only assessment history, with the review error attributed to the coordinator. Keep Vibe and fallback changes/evidence separate; never claim fallback edits were applied when they were discarded.
+ 
+ The owner's implementation request already authorizes necessary task-scoped installation/switching, no-inference preparation and adding only the named task root while preserving settings and rollback. Do not ask again for these steps. It does not authorize extra hosted starts, broader access, commit/push/merge/deploy or publication. Keep original budgets and no-replay rules. A deterministic preparation failure stops that check: diagnose and repair, then verify the changed artifact. Preparation/infrastructure failure is not implementation rejection and does not automatically trigger fallback.
+ 
+-Before dispatch, freeze an acceptance_contract with exact allowed/required paths, required text/hash assertions and coordinator validation IDs. For an edit, also pass `allowed_write_paths` naming the files or `dir/` prefixes the worker may write, so the handler refuses writes elsewhere during the run. Require version-matched preparation PASS via `prepare check --kit ... --config ...`; inspect workspace_eligible, preparation, candidate and optional expected_candidate on the native connection. These checks are separate from hosted acceptance. Use `validation prepare` for owned baseline/candidate copies and explicit offline dependency preparation; blockers do not authorize scripts or network fetches.
++Before dispatch, map every required acceptance criterion to the user request, an applicable repository rule or an explicit task constraint. Keep coordinator preferences advisory. Use text/hash assertions only when the exact bytes are required; check behavior and equivalent implementations through named coordinator validations. For example, both `import assert from "node:assert/strict"` and `import { strict as assert } from "node:assert"` provide strict assertions. A requirement for named `node:test` cases still requires named callbacks; an import string or a passing `node --test` command alone does not prove that structure. Freeze an acceptance_contract with exact allowed/required paths, genuinely required text/hash assertions and coordinator validation IDs. For an edit, also pass `allowed_write_paths` naming the files or `dir/` prefixes the worker may write, so the handler refuses writes elsewhere during the run. Require version-matched preparation PASS via `prepare check --kit ... --config ...`; inspect workspace_eligible, preparation, candidate and optional expected_candidate on the native connection. These checks are separate from hosted acceptance. Preflight the selected validation path on the actual baseline before any hosted start: establish required manifests, manager/cache availability and executable checks. Use `validation prepare` for owned baseline/candidate copies and explicit offline dependency preparation; blockers do not authorize scripts or network fetches. In a build supporting copy-only preparation, `--no-install` needs no package manifest, lockfile or manager and records no dependency readiness; older installations may still require these inputs. Diagnose that mismatch before dispatch, rather than discovering it after a hosted edit.
+ 
+ After the bounded run, compare exported bytes and hashes, then run the declared coordinator checks. Record execution outcome, automated verification and coordinator decision separately. `vibe_close` assessments bind patch/contract hashes and coordinator validation results; accepted requires automated PASS plus all required validations. Preserve failed/incomplete evidence. Use `runs export --out ...` for sanitized reporting, with optional patch/projected events only. Never collect raw transcripts, reasoning, credentials or private receipt histories for reports. New hosted attempts require remaining explicit allowance; no summary-driven rejection or blind retry. See [acceptance](../../../docs/workflow-acceptance.md), [preparation](../../../docs/preparation.md) and [validation workspaces](../../../docs/validation-workspace.md).
+ 
+@@ -46,9 +51,9 @@ Every delegation starts with a native workspace readiness call on the connection
+ Collect the desired outcome, concrete acceptance criteria, canonical allowed workspace, exact file scope, exclusions, and explicit Git base for edits. Never put credentials in task text. Check the real connected tool schemas and do not invoke fields or tools absent from that catalog. The sequence is fixed:
+ 
+ 1. Readiness, as above. The eligible reply carries `task_authorize`: `argv` is the exact `task authorize` command bound to the connected server (its Node executable, its CLI entrypoint and its `--config`), `request_template` is `{ "operation", "request": { cwd, context_files | base_ref } }` for this workspace and operation, and `expires_at` is the grant expiry the command carries (30 minutes). No `--runtime-node` is needed with it.
+-2. Write the request file: `request_template` plus `task` and, for a review, the `context_files` chosen as described under [choose the review context](#choose-the-review-context), as a private file outside the repository. This is the exact final request; what the start sends must equal it field for field.
++2. Write the request file privately outside the repository (mode 0600): start with `request_template`, then add every intended field supported by that operation: `task`, `max_turns`, `timeout_seconds` and `wait_seconds`; for reviews, any `context_files` and `output`; for edits, `acceptance_contract`, `allowed_write_paths` and any `prepared_inputs`. Freeze omissions and values before authorization. The start must forward the complete `request` unchanged, not just the template and task.
+ 3. Run `task_authorize.argv` with only `<private-request-file>` and `<owner-reference>` replaced. The host's command permission is the owner's per-start check: a refusal is a stop, not something to route around. The command prints `authorization_id` and `attempt_id`; keep them private.
+-4. Start with exactly the same request plus `authorization_id`, `attempt_id` and the `readiness_receipt`, before `receipt_expires_at`, on the same connection. On `VSUP_AUTHORIZATION_INVALID`, read `details.differing_fields`: fix the named request fields, or re-run readiness when a runtime field (`candidate`, `node_executable`, `node_version`, `policy`, `pin_manifest`) is listed, then register a new grant. Never retry with the same identifiers or a guessed change.
++4. Start with exactly the same request plus `authorization_id`, `attempt_id` and the `readiness_receipt`, before `receipt_expires_at`, on the same connection. On `VSUP_AUTHORIZATION_INVALID`, inspect `details.differing_fields` and determine the cause; re-check readiness for runtime drift. Only after an identified correction and within the authorized attempt budget may a new grant be registered. Never retry blindly or reuse identifiers; stop if the cause or allowance is unclear.
+ 5. Follow the run with cursor-based `vibe_status` calls, read `vibe_result`, then close as described below.
+ 
+ The readiness receipt is admission evidence and does not replace the grant; the grant authorizes one start of one exact request. One started run owns the instance's active slot until backend close verifies termination. If close reports termination unverified, keep the run inspectable and do not start another run on that slot. Do not queue, retry automatically, or replay a task after restart or failure. The Codex custom agent in [.codex/agents/vibe-reviewer.toml](../../../.codex/agents/vibe-reviewer.toml) runs this sequence for one bounded task.
+@@ -67,9 +72,9 @@ The worker cannot search: it has `read_file` and a bounded file listing, nothing
+ 4. Name the same files in the task text, in reading order, with one clause each on why they matter, so the worker reads them first and knows what to look for in each.
+ 5. Never include a secret-named file (`.env*`, `.envrc*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`), an excluded file (`VSUP_WORKSPACE_INVALID` refuses the start) or a generated one (`dist/`, lockfiles, build output): a generated file spends a read on nothing and never answers a question about the source.
+ 
+-The list must be final before `task authorize`: adding, removing or reordering an entry, or a change to a listed file's content, after registration refuses the start with `VSUP_AUTHORIZATION_INVALID` and `differing_fields: ['context_files']`, and a new grant is needed.
++The list must be final before `task authorize`: adding, removing or reordering an entry, or a change to a listed file's content, after registration refuses the start with `VSUP_AUTHORIZATION_INVALID` and `differing_fields: ['context_files']`, and a new grant is needed only after the cause is corrected and within the authorized attempt budget.
+ 
+-For each real review, log beside its usefulness entry how many context files were passed and how many `read_file` calls the run executed (`usage.tool_calls.executed` in the result, or the `tool_call:read_file:executed` count in `runs export`), with whether the answer was accepted. The run record does not keep `context_files`, so this count is recorded by hand.
++For each real review, log beside its usefulness entry how many context files were passed and how many `read_file` calls the run executed (`usage.tool_calls.executed` in the result, or the `tool_call:read_file:executed` count in `runs export`), with whether the answer was accepted. New review records and sanitized exports report `context_file_count` (including zero); older exports report `null` for unknown. Preserve the request-side count when available and never interpret unknown as zero.
+ 
+ ## Write the task from a template
+ 
+@@ -94,7 +99,8 @@ Read <file>, <file> first.
+ Then create or change only: <path>, <path>. Do not touch any other file.
+ Change: <what to add or change, with the exact function names and semantics>.
+ Must reject or preserve: <each edge case, e.g. a trailing blank line, CRLF, an unsafe path>.
+-Tests: <test file> using <framework>, covering <cases>.
++Tests: <test file> using <framework>, covering <cases>. Match named or default imports to the declared exports.
++Before the final answer, check the source and tests for consistent export and import names without executing tests.
+ No shell, network or test execution.
+ Final answer: what changed, then an inventory of changed and scratch files.
+ ```
+@@ -103,7 +109,7 @@ Match the limits to the template: a review of two or three files fits `max_turns
+ 
+ ## Check the result
+ 
+-For a review, check the final answer, stop reason, warnings, integrity result and `usage.tool_calls` (a review that read nothing answered from nothing); `vibe-supervisor runs sarif <run-id>` exports its findings as SARIF. For an edit, inspect the full transcript and fresh exported patch, changed and residual files, and hashes while the worktree remains available. Verify the exact candidate in a separate disposable copy; do not run commands or tests inside the worker worktree or original source checkout. Accept only the reviewed delta. Coordinator verification does not turn an unsuccessful Vibe run into a Vibe success.
++For a review, check the final answer, stop reason, warnings, integrity result and `usage.tool_calls` (a review that read nothing answered from nothing); `vibe-supervisor runs sarif <run-id>` exports its findings as SARIF. For an edit, inspect the result, fresh exported patch, changed and residual files, and hashes while the worktree remains available. Request a transcript only if needed to resolve a specific uncertainty; keep it private and out of reports. Verify the exact candidate in a separate disposable copy; do not run commands or tests inside the worker worktree or original source checkout. Accept only the reviewed delta. Coordinator verification does not turn an unsuccessful Vibe run into a Vibe success.
+ 
+ Close the run after verification. Request cleanup only when the exported artifact is current. A pristine worktree can be removed after ownership checks; a dirty or uncertain one is retained with its path and reason for review. Keep the exported patch available and do not force-delete retained data. Report the server version, source/base, actual checks, stop reason, authentication outcome if observed, and any unresolved cleanup or acceptance gate. macOS Apple silicon is the supported platform; a clean-account installation is not yet verified. A run proves execution, not that the answer is correct.
+ 
+diff --git a/.codex/agents/vibe-reviewer.toml b/.codex/agents/vibe-reviewer.toml
+index 43bb380..484c0e9 100644
+--- a/.codex/agents/vibe-reviewer.toml
++++ b/.codex/agents/vibe-reviewer.toml
+@@ -2,7 +2,7 @@ name = "vibe-reviewer"
+ description = "Runs one bounded Mistral Vibe review or isolated edit through the vibe-supervisor MCP tools: readiness, grant, start, status, close. Use for a narrow, checkable question about named files, or a small edit from an immutable Git base."
+ 
+ developer_instructions = """
+-You run exactly one bounded Vibe task through the vibe-supervisor MCP tools (vibe_status, vibe_review_start, vibe_edit_start, vibe_result, vibe_close). You never apply, commit, merge or push the worker's output, never put credentials in task text, never raise limits or retry after a failure, and never substitute another implementer.
++You run exactly one bounded Vibe task through the vibe-supervisor MCP tools (vibe_status, vibe_review_start, vibe_edit_start, vibe_result, vibe_close). You never apply, commit, merge or push the worker's output, never put credentials in task text, never raise limits, replay an actual run after failure, or substitute another implementer. A refused pre-start authorization is not an actual run; handle it only as described below and within the authorized budget. Read and follow the full shipped vibe-supervisor skill, including verification and cleanup.
+ 
+ Sequence, in this order:
+ 
+@@ -10,15 +10,15 @@ Sequence, in this order:
+ 
+ 2. Context, for a review. The worker cannot search, so search the repository yourself (rg or your own tools) for the symbols the question names, their call sites and their tests. Choose at most 8 files: definitions, the callers the question depends on, the tests that pin the contract. Never a secret-named, excluded or generated file. Put their repository-relative paths in context_files and name the same files, in reading order with one clause each on why, in the task text. The list is final before the grant: a later change to the list or to a listed file's content refuses the start with differing_fields ['context_files'].
+ 
+-3. Request file. Take task_authorize.request_template from the reply, add task (for a review, also context_files), and write {"operation": ..., "request": {...}} to a private file (mode 0600) outside the repository. This is the exact final request; do not change it afterwards.
++3. Request file. First map each required criterion to the request or repository rules; keep coordinator preferences advisory. Use literal text/hash checks only for required bytes, and coordinator validations for behavior, framework structure and equivalent strict imports. Preflight validation on the baseline before spending a hosted start. Take task_authorize.request_template from the reply, add every intended field supported by that operation: task, max_turns, timeout_seconds and wait_seconds; for reviews, any context_files and output; for edits, acceptance_contract, allowed_write_paths and any prepared_inputs; freeze all values and omissions, then write {"operation": ..., "request": {...}} to a private file (mode 0600) outside the repository. This is the exact final request; do not change it afterwards.
+ 
+ 4. Grant. Run task_authorize.argv exactly as returned, replacing only <private-request-file> with that file and <owner-reference> with a short reference to the user's instruction. The host's command permission prompt is the owner's per-start check: if it is refused, stop and report the refusal; do not run the command another way. Keep authorization_id and attempt_id private; the grant authorizes one start of this exact request.
+ 
+-5. Start. Call the matching start tool with exactly the request_template fields plus task (and context_files), the returned authorization_id and attempt_id, and the readiness_receipt before receipt_expires_at. On VSUP_AUTHORIZATION_INVALID read details.differing_fields, fix the named fields (or re-run readiness if a runtime field is listed), register a new grant and start once more; never retry with the same identifiers or guess.
++5. Start. Call the matching start tool with every field of the frozen request unchanged, plus the returned authorization_id and attempt_id, and the readiness_receipt before receipt_expires_at. On VSUP_AUTHORIZATION_INVALID inspect details.differing_fields and determine the cause; re-check readiness for runtime drift. Register a new grant only after an identified correction and within the authorized attempt budget. Stop if the cause or allowance is unclear; never retry blindly or reuse identifiers.
+ 
+-6. Follow. Poll vibe_status with run_id and wait_seconds 120-300, passing next_after_seq back as after_seq. Read stop_reason and warnings before trusting a completed result; read vibe_result for the full record. For a review, a run that read nothing answered from nothing. For an edit, inspect the exported patch and changed files; it is never applied for you.
++6. Follow. Poll vibe_status with run_id and wait_seconds 120-300, passing next_after_seq back as after_seq. Read stop_reason and warnings before trusting a completed result; inspect vibe_result and retrieve a transcript only to resolve a specific uncertainty, keeping it private. For a review, a run that read nothing answered from nothing. For an edit, inspect the exported patch and changed files; it is never applied for you.
+ 
+-7. Close. Call vibe_close with run_id; for an edit after verification pass an assessment. Report the server version, the stop reason, what the worker read or changed, and whether the answer was accepted; for a review also the number of context files passed and the read_file calls executed (usage.tool_calls.executed), since the run record does not keep them. Completed means execution ended, not that the answer is correct.
++7. Close. Call vibe_close with run_id; for an edit after verification pass an assessment. Report the server version, the stop reason, what the worker read or changed, and whether the answer was accepted; for a review also the number of context files passed and the read_file calls executed (usage.tool_calls.executed). New review records and sanitized exports expose context_file_count, including zero; older exports report null for unknown. Do not treat unknown as zero. Completed means execution ended, not that the answer is correct.
+ 
+-Write the task from the skill's template: name the exact files, one question or one change, the edge cases to check, "no defect found" as a valid answer, and a line budget. A review of two or three files fits max_turns 12.
++Use the skill's operation-specific template. For a review, name the exact files, one question, edge cases, "no defect found" as a valid answer, and a line budget. A review of two or three files fits max_turns 12. For an edit, specify exact files, change and edge cases, and require consistent exports and imports with a source consistency check before the final answer.
+ """
+diff --git a/docs/local-operation.md b/docs/local-operation.md
+index 40e8293..962d2d6 100644
+--- a/docs/local-operation.md
++++ b/docs/local-operation.md
+@@ -10,15 +10,17 @@ Use the matching installed CLI, reported Node executable and explicit selected c
+ 
+ ## Authorize and start
+ 
+-Freeze the exact request and acceptance criteria: take `task_authorize.request_template` from the readiness reply, add the task text and the files to read, and write it to a private file. Register it by running `task_authorize.argv` from the same reply with `<private-request-file>` and `<owner-reference>` replaced; it already names the server's Node executable, CLI and `--config` and carries a fresh expiry. Assembling the command by hand, use `task authorize --runtime-node <reported-node> --request <private-json> --owner-reference <instruction-reference> --expires-at <fresh-ISO-expiry> --config <selected-config>` and generate the expiry with `node -p "new Date(Date.now() + 10 * 60 * 1000).toISOString()"`.
++Before dispatch, trace required criteria to the request or repository rules. Keep optional spelling/style preferences advisory, and use coordinator validations for semantic equivalence. Preflight the selected validation command on the baseline, including its actual package/lockfile/manager requirements; a preparation PASS for Vibe does not prove the project validation path is ready.
++
++Freeze the exact request and acceptance criteria: take `task_authorize.request_template` from the readiness reply, add every intended field supported by that operation: `task`, `max_turns`, `timeout_seconds` and `wait_seconds`; for reviews, any `context_files` and `output`; for edits, `acceptance_contract`, `allowed_write_paths` and any `prepared_inputs`. Freeze values and omissions, then write the complete request to a private file (mode 0600). Register it by running `task_authorize.argv` from the same reply with `<private-request-file>` and `<owner-reference>` replaced; it already names the server's Node executable, CLI and `--config` and carries a fresh expiry. Assembling the command by hand, use `task authorize --runtime-node <reported-node> --request <private-json> --owner-reference <instruction-reference> --expires-at <fresh-ISO-expiry> --config <selected-config>` and generate the expiry with `node -p "new Date(Date.now() + 10 * 60 * 1000).toISOString()"`.
+ 
+ This command writes Supervisor-private grant state. In a restricted project environment, request the host-supported scoped administrative command permission for this exact CLI, runtime, configuration and task. Existing task authorization permits necessary preparation; it does not bypass the host approval mechanism. If approval is refused, stop and report its stated reason. Do not relocate state, weaken ownership checks or reroute execution to evade the refusal. A delegated chat instruction may not be recognized as direct owner approval by the host.
+ 
+-Save the returned authorization and attempt identifiers privately. Supply them and the fresh readiness receipt to one matching start on the same native connection. A start refused with `VSUP_AUTHORIZATION_INVALID` names the differing bound fields in `details.differing_fields`; fix those, or check readiness again when a runtime field is named, and register a new grant rather than retrying. A grant permits one start, never automatic replay; an unused diagnostic grant must not later be dispatched. A receipt is not task authorization. No sixth tool or continuation exists.
++Save the returned authorization and attempt identifiers privately. Forward every frozen request field unchanged with those identifiers and the fresh readiness receipt to one matching start on the same native connection. A start refused with `VSUP_AUTHORIZATION_INVALID` names the differing bound fields in `details.differing_fields`; identify and correct the cause, checking readiness again for runtime drift. Register a new grant only after an identified correction and within the authorized attempt budget; stop if either is unclear. Never retry blindly or reuse identifiers. A grant permits one start, never automatic replay; an unused diagnostic grant must not later be dispatched. A receipt is not task authorization. No sixth tool or continuation exists.
+ 
+ ## Verify and settle
+ 
+-Observe cursor-based status and inspect the actual result/export. Independently verify exported bytes, changed scope and declared semantics in an owned reconstruction. Execution completed, verification passed and coordinator acceptance are separate outcomes. Record actual model/usage only where reported; unavailable values remain unavailable.
++Observe cursor-based status and inspect the actual result/export. Retrieve a transcript only when needed to resolve a specific uncertainty; keep it private and out of reports. New review exports report context_file_count, including zero; older exports use null for unknown, which is not zero. Independently verify exported bytes, changed scope and declared semantics in an owned reconstruction. Execution completed, verification passed and coordinator acceptance are separate outcomes. Record actual model/usage only where reported; unavailable values remain unavailable.
+ 
+ Close with the supported assessment, preserve the original patch and verify process/private-state cleanup and slot release. Retain uncertain or dirty worktrees with a reason rather than forcing deletion. No automatic integration, commit or publication follows acceptance.
+ 
+diff --git a/docs/local-trial/acceptance-contract.json b/docs/local-trial/acceptance-contract.json
+index 19a26c7..7edaab9 100644
+--- a/docs/local-trial/acceptance-contract.json
++++ b/docs/local-trial/acceptance-contract.json
+@@ -1,12 +1,35 @@
+ {
+   "schema_version": 1,
+-  "allowed_changed_paths": ["src/at-least.mjs", "tests/at-least.test.mjs"],
+-  "required_changed_paths": ["src/at-least.mjs", "tests/at-least.test.mjs"],
++  "allowed_changed_paths": [
++    "src/at-least.mjs",
++    "tests/at-least.test.mjs"
++  ],
++  "required_changed_paths": [
++    "src/at-least.mjs",
++    "tests/at-least.test.mjs"
++  ],
+   "checks": [
+-    {"id": "module", "kind": "file_exists", "path": "src/at-least.mjs"},
+-    {"id": "tests", "kind": "file_exists", "path": "tests/at-least.test.mjs"},
+-    {"id": "native-test-runner", "kind": "text_contains", "path": "tests/at-least.test.mjs", "value": "node:test"},
+-    {"id": "strict-assertions", "kind": "text_contains", "path": "tests/at-least.test.mjs", "value": "node:assert/strict"}
++    {
++      "id": "module",
++      "kind": "file_exists",
++      "path": "src/at-least.mjs"
++    },
++    {
++      "id": "tests",
++      "kind": "file_exists",
++      "path": "tests/at-least.test.mjs"
++    },
++    {
++      "id": "native-test-runner",
++      "kind": "text_contains",
++      "path": "tests/at-least.test.mjs",
++      "value": "node:test"
++    }
+   ],
+-  "required_validations": ["fixture-semantics", "worker-tests", "complete-diff"]
++  "required_validations": [
++    "fixture-semantics",
++    "worker-tests",
++    "test-framework",
++    "complete-diff"
++  ]
+ }
+diff --git a/docs/local-trial/edit.txt b/docs/local-trial/edit.txt
+index 1b6f8a1..32dc3db 100644
+--- a/docs/local-trial/edit.txt
++++ b/docs/local-trial/edit.txt
+@@ -1,6 +1,8 @@
+ Read CONTRACT.md and src/limit.mjs first.
+ Add exactly two new files: src/at-least.mjs and tests/at-least.test.mjs. Change no existing file.
+ Export a named function atLeast(value, limit) returning value >= limit.
+-Use node:test and node:assert/strict to cover below, equal, above, negatives and negative equality.
++Import atLeast as a named import from src/at-least.mjs.
++Use named node:test cases with assertions inside their callbacks. Use strict assertions: either the default import from node:assert/strict or the strict named export from node:assert is valid. Cover below, equal, above, negatives and negative equality.
++Before the final answer, check the source and test imports for matching export and import names without executing tests.
+ Do not modify the strict below function or its contract. No scratch files, shell, network or test execution.
+ Finish with a concise summary and changed-file inventory.
+diff --git a/docs/validation-workspace.md b/docs/validation-workspace.md
+index be986a3..9d0aef3 100644
+--- a/docs/validation-workspace.md
++++ b/docs/validation-workspace.md
+@@ -2,9 +2,15 @@
+ 
+ `vibe-supervisor validation prepare --source /canonical/repository --base FULL_COMMIT --patch /private/diff.patch --out /private/new-validation --manager /absolute/npm-or-pnpm --cache /populated/cache`
+ 
+-The helper creates independent Git baseline/candidate copies outside the source and worker checkout. It uses the immutable base and exact patch bytes, disables Git hooks/global configuration, filters child environment, and verifies the installed manager version against an exact project packageManager pin. It never commits or changes the source checkout. The output parent must be canonical and owner-private; output must not exist.
++The helper creates independent Git baseline/candidate copies outside the source and worker checkout. It uses the immutable base and exact patch bytes, disables Git hooks/global configuration, and filters child environment. When installing dependencies, it verifies the manager version against an exact project packageManager pin. It never commits or changes the source checkout. The output parent must be canonical and owner-private; output must not exist.
+ 
+-Dependencies install from a private copy of a populated cache with offline/frozen options and lifecycle scripts disabled. pnpm project hooks and side-effect caches are disabled. Project manager configuration, workspace hooks, local/Git dependency specifications and packages marked as requiring build scripts currently produce explicit blockers; support needs a reviewed preparation profile. No automatic fetch, script approval or substitute manager is attempted. Node and manager versions, base/patch hashes and dependency disposition are recorded in a private manifest. `--no-install` creates copies only and records dependencies as not-requested; it does not imply build readiness.
++Dependencies install from a private copy of a populated cache with offline/frozen options and lifecycle scripts disabled. pnpm project hooks and side-effect caches are disabled. Project manager configuration, workspace hooks, local/Git dependency specifications and packages marked as requiring build scripts currently produce explicit blockers; support needs a reviewed preparation profile. No automatic fetch, script approval or substitute manager is attempted. Node and manager versions, base/patch hashes and dependency disposition are recorded in a private manifest. `--no-install` creates copies only and records dependencies as not-requested; it requires no package manifest, manager pin, lockfile or cache and never executes a package manager, even if `--manager` is supplied. It does not imply build readiness. Omit `--manager` and `--cache` for copy-only preparation.
++
++For a generic Git project without dependency installation:
++
++```sh
++vibe-supervisor validation prepare --source /canonical/repository --base FULL_COMMIT --patch /private/diff.patch --out /private/new-validation --no-install
++```
+ 
+ The helper is not a project command runner: lint, build, measurement and browser checks remain deliberate coordinator actions with their own evidence. Dependencies must resolve within the validation root; external links and unsupported filesystem entries block preparation. Copying and inspection have file/byte/time/output limits.
+ 
+diff --git a/docs/workflow-acceptance.md b/docs/workflow-acceptance.md
+index cfd6a20..b2fc929 100644
+--- a/docs/workflow-acceptance.md
++++ b/docs/workflow-acceptance.md
+@@ -12,6 +12,12 @@ Edit requests may supply an optional strict `acceptance_contract` before dispatc
+ 
+ Supported assertions are `file_exists`, `file_absent`, `text_contains`, `text_not_contains`, and `file_sha256`. Paths are exact repository-relative names, not globs. The normalized contract is hashed and frozen before launch. Exact checks inspect the committed base plus exported patch using a private Git index; worker summaries and subsequent worktree edits are not evidence. Checks never execute project code. Private bounded file snapshots allow re-verification after worktree cleanup. Missing, unsafe or changed inputs produce `incomplete`, never PASS.
+ 
++## Choose checks that express the requirement
++
++Trace every required criterion to the user request, applicable repository rules or an explicit task constraint before authorization. Coordinator preferences stay advisory. Exact checks are appropriate for paths, required protocol strings and fixed content; use `required_validations` for behavior and semantics that permit equivalent code. The local trial requires named `node:test` cases and strict assertions, so its `test-framework` validation inspects the callbacks and assertion mode. Both the strict export of `node:assert` and `node:assert/strict` satisfy the assertion requirement. A passing `node --test` invocation can also execute top-level assertions, so it does not by itself prove named cases.
++
++Preflight the selected validation command against the immutable baseline before hosted dispatch. A harness prerequisite failure is separate from worker correctness. Keep the frozen contract and rejected assessment when an unnecessary literal check is discovered after a run. Record a separate diagnostic against the intended requirement, with unchanged artifact hashes, the faulty check and negative controls; do not relabel the original contract PASS. Change future contracts before their grants are created.
++
+ Same-session corrections ([ADR 0009](adr/0009-vibe-3-supervised-corrections.md)) are not available: every run is one-shot and the catalogue has five tools. Records from the earlier correction experiment stay readable in state `awaiting_validation`; an assessment of one must name its `candidate_revision` and both hashes, and closing it after an accepted assessment of the latest revision marks it completed.
+ 
+ Execution state, automated verification, and coordinator assessment are separate. Normal `completed/end_turn` is required for automated PASS. Existing callers without a contract receive `not_requested`. `vibe_close` accepts an optional `assessment` containing decision, reason, patch_sha256, contract_sha256 and validations. Acceptance requires matching artifact hashes, a fresh automated PASS and passed coordinator validations for every required ID. Assessments append; corrections after closure preserve earlier decisions and do not restart inference. Coordinator validations are reported evidence, not independently executed by Supervisor.
+diff --git a/planning/development-strategy.md b/planning/development-strategy.md
+index 7d80f19..71d5bb7 100644
+--- a/planning/development-strategy.md
++++ b/planning/development-strategy.md
+@@ -258,3 +258,7 @@ Existing releases are never replaced or retagged, and only the latest release is
+ ## Qualification follow-up — 2026-10-28
+ 
+ The qualification worktree implements persisted review context counts, with zero for new empty lists and unknown for older records; its live review exported 2. Two separately authorized S05 design trials on 2.2.0 were rejected and recorded without retroactive D3 allowance debit. Candidate 65dbafd0 (2.2.1) passed Node 20 release checks, offline packaging, side-by-side installation, matched preparation and native readiness. Both qualification starts are consumed: review accepted independently; edit arithmetic and tests pass but its equivalent strict assertion import fails the unchanged literal contract, so it is closed rejected. The nested probe was unavailable; no sidecar permission follows. Evidence is linked from Handoff and the per-build ledger. No publication, extra start or integration follows these results.
++
++## Validation and acceptance repair — 2026-10-28
++
++Repeated boundary trials exposed two coordinator-workflow defects: an unnecessary literal strict-assert import check rejected equivalent code, and copy-only validation still required dependency-installation metadata. The local usability follow-up removes that incidental literal from future example contracts, requires criterion provenance and baseline preflight, and separates named test-framework inspection from behavioral checks. Copy-only preparation must reconstruct generic Git fixtures without invoking a package manager; dependency installation keeps the reviewed offline profile. Original frozen-contract failures and exact patches remain unchanged. This is a local source repair; installed/archive qualification and publication remain separate. See [the EDD follow-up](vibe-usability-edd-20261028.md#follow-up-amendment-4--reported-integration-test-failures).
+diff --git a/src/cli/validation.ts b/src/cli/validation.ts
+index 050bc8b..4134344 100644
+--- a/src/cli/validation.ts
++++ b/src/cli/validation.ts
+@@ -1,12 +1,12 @@
+ import { prepareValidation, cleanValidation } from '../validation/workspace.js';
+ export async function validationCommand(args:string[]):Promise<unknown>{
+  if(args[0]==='clean'&&args.length===2)return cleanValidation(args[1]!);
+- if(args[0]!=='prepare')throw new Error('Usage: validation prepare --source <root> --base <commit> --patch <file> --out <directory> --manager <executable> [--cache <populated-cache>] [--no-install] | validation clean <directory>');
++ if(args[0]!=='prepare')throw new Error('Usage: validation prepare --source <root> --base <commit> --patch <file> --out <directory> [--manager <executable>] [--cache <populated-cache>] [--no-install] | validation clean <directory>');
+  const values=new Map<string,string>();let install=true;
+  for(let i=1;i<args.length;i++){
+   const key=args[i]!;if(key==='--no-install'&&install){install=false;continue;}
+   const value=args[++i];if(!['--source','--base','--patch','--out','--manager','--cache'].includes(key)||!value||value.startsWith('--')||values.has(key))throw new Error('Invalid validation arguments');values.set(key,value);
+  }
+- for(const key of ['--source','--base','--patch','--out','--manager'])if(!values.has(key))throw new Error(`Missing ${key}`);
+- return prepareValidation({source:values.get('--source')!,base:values.get('--base')!,patchFile:values.get('--patch')!,output:values.get('--out')!,manager:values.get('--manager')!,install,...(values.has('--cache')?{cache:values.get('--cache')!}:{})});
++ for(const key of ['--source','--base','--patch','--out',...(install?['--manager']:[])])if(!values.has(key))throw new Error(`Missing ${key}`);
++ return prepareValidation({source:values.get('--source')!,base:values.get('--base')!,patchFile:values.get('--patch')!,output:values.get('--out')!,install,...(values.has('--manager')?{manager:values.get('--manager')!}:{}),...(values.has('--cache')?{cache:values.get('--cache')!}:{})});
+ }
+diff --git a/src/validation/workspace.ts b/src/validation/workspace.ts
+index 767cc86..f969178 100644
+--- a/src/validation/workspace.ts
++++ b/src/validation/workspace.ts
+@@ -9,7 +9,7 @@ import { readOwnedFile, assertOwnedDirectory } from '../reporting/private-files.
+ import { resolveBaseCommit, resolveGitRoot } from '../git/worktree.js';
+ import { createPrivateDir } from '../security/paths.js';
+ 
+-const manifestSchema = z.object({schema_version:z.literal(1),owner:z.literal('vibe-supervisor-validation'),id:z.string().uuid(),root:z.string(),device:z.number(),inode:z.number(),base_commit:z.string().regex(/^[a-f0-9]{40,64}$/),patch_sha256:z.string().regex(/^[a-f0-9]{64}$/),node:z.string(),manager:z.object({kind:z.enum(['npm','pnpm']),version:z.string(),executable:z.string()}),lockfiles:z.array(z.object({workspace:z.enum(['baseline','candidate']),path:z.string(),sha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict()).length(2),tree_sha256:z.string().regex(/^[a-f0-9]{64}$/),dependencies:z.enum(['installed','not-requested']),created_at:z.string().datetime()}).strict();
++const manifestSchema = z.object({schema_version:z.literal(1),owner:z.literal('vibe-supervisor-validation'),id:z.string().uuid(),root:z.string(),device:z.number(),inode:z.number(),base_commit:z.string().regex(/^[a-f0-9]{40,64}$/),patch_sha256:z.string().regex(/^[a-f0-9]{64}$/),node:z.string(),manager:z.object({kind:z.enum(['npm','pnpm']),version:z.string(),executable:z.string()}).optional(),lockfiles:z.array(z.object({workspace:z.enum(['baseline','candidate']),path:z.string(),sha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict()).refine(items=>items.length===0||items.length===2),tree_sha256:z.string().regex(/^[a-f0-9]{64}$/),dependencies:z.enum(['installed','not-requested']),created_at:z.string().datetime()}).strict().refine(manifest=>manifest.dependencies!=='installed'||(manifest.manager!==undefined&&manifest.lockfiles.length===2));
+ const MAX_FILES=200_000, MAX_BYTES=2*1024*1024*1024;
+ function env(root:string):NodeJS.ProcessEnv{return {PATH:process.env.PATH,HOME:path.join(root,'home'),TMPDIR:path.join(root,'tmp'),CI:'true',GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_COUNT:'3',GIT_CONFIG_KEY_0:'core.hooksPath',GIT_CONFIG_VALUE_0:'/dev/null',GIT_CONFIG_KEY_1:'protocol.file.allow',GIT_CONFIG_VALUE_1:'always',GIT_CONFIG_KEY_2:'core.fsmonitor',GIT_CONFIG_VALUE_2:'false',GIT_TERMINAL_PROMPT:'0',npm_config_userconfig:path.join(root,'home','user.npmrc'),npm_config_globalconfig:path.join(root,'home','global.npmrc'),npm_config_update_notifier:'false',npm_config_ignore_scripts:'true',npm_config_offline:'true',COREPACK_ENABLE_NETWORK:'0',COREPACK_ENABLE_DOWNLOAD_PROMPT:'0'};}
+ async function run(command:string,args:string[],cwd:string,root:string,input?:Buffer):Promise<string>{
+@@ -64,7 +64,7 @@ async function assertProject(directory:string):Promise<{manager:string;lockfile:
+   if(lockfileNeedsUnsupportedProfile(lock))throw new Error('Lockfile requires unsupported local dependencies or build scripts');
+   return {manager:pkg.packageManager,lockfile};
+ }
+-export async function prepareValidation(options:{source:string;base:string;patchFile:string;output:string;manager:string;cache?:string;install:boolean}):Promise<unknown>{
++export async function prepareValidation(options:{source:string;base:string;patchFile:string;output:string;manager?:string;cache?:string;install:boolean}):Promise<unknown>{
+   const source=await resolveGitRoot(options.source);const base=await resolveBaseCommit(source,options.base);
+   if(base!==options.base)throw new Error('An immutable full base commit is required');
+   const patch=await readOwnedFile(options.patchFile,16*1024*1024);
+@@ -75,20 +75,22 @@ export async function prepareValidation(options:{source:string;base:string;patch
+   try{
+     for(const name of ['home','tmp','cache'])await createPrivateDir(path.join(output,name));
+     for (const name of ['user.npmrc','global.npmrc']) await writeFile(path.join(output,'home',name),'',{mode:0o600,flag:'wx'});
+-    if(!path.isAbsolute(options.manager))throw new Error("Absolute manager path required");
+-    const manager=await realpath(options.manager);const executable=await lstat(manager);if(!executable.isFile()||!(executable.mode&constants.S_IXUSR))throw new Error('Absolute executable manager required');
+-    const version=(await run(manager,['--version'],output,output)).trim();
+-    const profiles=[];
++    let managerInfo:{kind:'npm'|'pnpm';version:string;executable:string}|undefined;
++    const profiles:{manager:string;lockfile:string}[]=[];
+     for(const name of ['baseline','candidate']){
+       const directory=path.join(output,name);
+       await run('git',['clone','--no-local','--no-checkout','--',source,directory],output,output);
+       await run('git',['checkout','--detach',base],directory,output);
+       if(name==='candidate'&&patch.length)await run('git',['apply','--binary','--whitespace=nowarn','-'],directory,output,patch);
+-      profiles.push(await assertProject(directory));
++      if(options.install)profiles.push(await assertProject(directory));
+     }
+-    const kind=profiles[0]!.manager.split('@')[0] as 'npm'|'pnpm';
+-    if(profiles.some(profile=>profile.manager!==`${kind}@${version}`))throw new Error('Manager binary does not match exact project pin');
+     if(options.install){
++      if(!options.manager||!path.isAbsolute(options.manager))throw new Error('Absolute manager path required');
++      const manager=await realpath(options.manager);const executable=await lstat(manager);if(!executable.isFile()||!(executable.mode&constants.S_IXUSR))throw new Error('Absolute executable manager required');
++      const version=(await run(manager,['--version'],output,output)).trim();
++      const kind=profiles[0]!.manager.split('@')[0] as 'npm'|'pnpm';
++      if(profiles.some(profile=>profile.manager!==`${kind}@${version}`))throw new Error('Manager binary does not match exact project pin');
++      managerInfo={kind,version,executable:manager};
+       if(!options.cache)throw new Error('Populated offline cache required');
+       const cache=await realpath(options.cache);const sourceCache=kind==='npm'?path.join(cache,'_cacache'):cache;
+       let copiedBytes=0,copiedFiles=0;
+@@ -100,7 +102,7 @@ export async function prepareValidation(options:{source:string;base:string;patch
+       }
+     }
+     const info=await lstat(output);
+-    const manifest=manifestSchema.parse({schema_version:1,owner:'vibe-supervisor-validation',id,root:output,device:info.dev,inode:info.ino,base_commit:base,patch_sha256:digest(patch),node:process.version,manager:{kind,version,executable:manager},lockfiles:await Promise.all(profiles.map(async (profile,index)=>({workspace:index===0?"baseline":"candidate",path:profile.lockfile,sha256:digest(await readFile(path.join(output,index===0?"baseline":"candidate",profile.lockfile)))}))),tree_sha256:await fingerprint(output),dependencies:options.install?'installed':'not-requested',created_at:new Date().toISOString()});
++    const manifest=manifestSchema.parse({schema_version:1,owner:'vibe-supervisor-validation',id,root:output,device:info.dev,inode:info.ino,base_commit:base,patch_sha256:digest(patch),node:process.version,...(managerInfo?{manager:managerInfo}:{}),lockfiles:await Promise.all(profiles.map(async (profile,index)=>({workspace:index===0?"baseline":"candidate",path:profile.lockfile,sha256:digest(await readFile(path.join(output,index===0?"baseline":"candidate",profile.lockfile)))}))),tree_sha256:await fingerprint(output),dependencies:options.install?'installed':'not-requested',created_at:new Date().toISOString()});
+     await writeFile(path.join(output,'manifest.json'),JSON.stringify(manifest,null,2)+'\n',{mode:0o600,flag:'wx'});
+     return {status:'prepared',root:output,base_commit:base,patch_sha256:digest(patch),dependencies:manifest.dependencies,project_checks:'not-run'};
+   }catch(error){
+diff --git a/tests/unit/validation.test.ts b/tests/unit/validation.test.ts
+index 7f516e9..5a47958 100644
+--- a/tests/unit/validation.test.ts
++++ b/tests/unit/validation.test.ts
+@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
+ import path from 'node:path';
+ import { it, expect } from 'vitest';
+ import { prepareValidation, cleanValidation, lockfileNeedsUnsupportedProfile } from '../../src/validation/workspace.js';
++import { validationCommand } from '../../src/cli/validation.js';
+ it.each([false,true])('creates independent copies and safely cleans up (offline install=%s)',async(install)=>{
+  const root=await realpath(await mkdtemp(path.join(tmpdir(),'validation-fixture-')));
+  try{
+@@ -45,3 +46,65 @@ it.each([
+ ])('blocks a lockfile with %s', (_name, lock) => {
+   expect(lockfileNeedsUnsupportedProfile(lock)).toBe(true);
+ });
++
++
++it.each(['package-free', 'no-lock'])('prepares %s copies without running a manager and preserves cleanup safeguards',async(fixture)=>{
++ const root=await realpath(await mkdtemp(path.join(tmpdir(),'validation-copy-')));
++ try{
++  const source=path.join(root,'source');await mkdir(source);
++  const git=(...args:string[])=>execFileSync('git',args,{cwd:source,encoding:'utf8'});
++  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
++  if(fixture==='no-lock')await writeFile(path.join(source,'package.json'),JSON.stringify({name:'fixture',packageManager:'npm@1.2.3'}));
++  await writeFile(path.join(source,'page.txt'),'baseline\n');git('add','.');git('commit','-qm','fixture');
++  const base=git('rev-parse','HEAD').trim();await writeFile(path.join(source,'page.txt'),'candidate\n');
++  const patch=path.join(root,'patch');await writeFile(patch,git('diff','--binary'),{mode:0o600});
++  const output=path.join(root,'validation');const marker=path.join(root,'manager-ran');const manager=path.join(root,'manager');
++  await writeFile(manager,`#!/bin/sh\ntouch "${marker}"\nexit 1\n`);await chmod(manager,0o700);
++  const args=['prepare','--source',source,'--base',base,'--patch',patch,'--out',output,'--no-install'];
++  if(fixture==='no-lock')args.push('--manager',manager);
++  expect(await validationCommand(args)).toMatchObject({status:'prepared',dependencies:'not-requested'});
++  await expect(readFile(marker)).rejects.toMatchObject({code:'ENOENT'});
++  expect(await readFile(path.join(output,'baseline','page.txt'),'utf8')).toBe('baseline\n');
++  expect(await readFile(path.join(output,'candidate','page.txt'),'utf8')).toBe('candidate\n');
++  await writeFile(path.join(output,'extra'),'tamper');await expect(cleanValidation(output)).rejects.toThrow(/retained/);
++  await rm(path.join(output,'extra'));expect(await cleanValidation(output)).toMatchObject({status:'removed'});
++  await expect(validationCommand(['prepare','--source',source,'--base',base,'--patch',patch,'--out',path.join(root,'missing-manager')])).rejects.toThrow(/Missing --manager/);
++  await expect(prepareValidation({source,base,patchFile:patch,output:path.join(root,'install'),manager,install:true})).rejects.toThrow(/blocked/);
++  await expect(readFile(marker)).rejects.toMatchObject({code:'ENOENT'});
++ }finally{await rm(root,{recursive:true,force:true});}
++},30_000);
++
++it('reads legacy copy-only manifests during cleanup',async()=>{
++ const root=await realpath(await mkdtemp(path.join(tmpdir(),'validation-legacy-')));
++ try{
++  const source=path.join(root,'source');await mkdir(source);
++  const git=(...args:string[])=>execFileSync('git',args,{cwd:source,encoding:'utf8'});
++  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
++  await writeFile(path.join(source,'file'),'x');git('add','.');git('commit','-qm','fixture');
++  const patch=path.join(root,'patch');await writeFile(patch,'',{mode:0o600});const output=path.join(root,'out');
++  await prepareValidation({source,base:git('rev-parse','HEAD').trim(),patchFile:patch,output,install:false});
++  const file=path.join(output,'manifest.json');const manifest=JSON.parse(await readFile(file,'utf8')) as Record<string,unknown>;
++  manifest.manager={kind:'npm',version:'1.2.3',executable:'/legacy/npm'};
++  manifest.lockfiles=[{workspace:'baseline',path:'package-lock.json',sha256:'a'.repeat(64)},{workspace:'candidate',path:'package-lock.json',sha256:'b'.repeat(64)}];
++  await writeFile(file,JSON.stringify(manifest));expect(await cleanValidation(output)).toMatchObject({status:'removed'});
++ }finally{await rm(root,{recursive:true,force:true});}
++},30_000);
++
++
++it('requires the exact manager pin, supported lockfile and offline cache for installation',async()=>{
++ const root=await realpath(await mkdtemp(path.join(tmpdir(),'validation-install-')));
++ try{
++  const source=path.join(root,'source');await mkdir(source);
++  const git=(...args:string[])=>execFileSync('git',args,{cwd:source,encoding:'utf8'});
++  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
++  await writeFile(path.join(source,'package.json'),JSON.stringify({name:'fixture',packageManager:'npm@1.2.3'}));
++  await writeFile(path.join(source,'package-lock.json'),JSON.stringify({lockfileVersion:3,packages:{}}));git('add','.');git('commit','-qm','fixture');
++  const base=git('rev-parse','HEAD').trim();const patch=path.join(root,'patch');await writeFile(patch,'',{mode:0o600});
++  const manager=path.join(root,'manager');await writeFile(manager,'#!/bin/sh\necho 1.2.3\n');await chmod(manager,0o700);
++  await expect(prepareValidation({source,base,patchFile:patch,output:path.join(root,'no-cache'),manager,install:true})).rejects.toThrow(/Populated offline cache required/);
++  await writeFile(manager,'#!/bin/sh\necho 2.0.0\n');
++  await expect(prepareValidation({source,base,patchFile:patch,output:path.join(root,'wrong-manager'),manager,install:true})).rejects.toThrow(/does not match exact project pin/);
++  await writeFile(path.join(source,'package-lock.json'),'file:../local');git('add','.');git('commit','-qm','unsupported');
++  await expect(prepareValidation({source,base:git('rev-parse','HEAD').trim(),patchFile:patch,output:path.join(root,'unsupported'),manager,install:true})).rejects.toThrow(/unsupported local dependencies/);
++ }finally{await rm(root,{recursive:true,force:true});}
++},30_000);

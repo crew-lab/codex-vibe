@@ -2,7 +2,7 @@ import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { loadConfig, loadResolvedConfig } from '../config/config.js';
 import { configExclusions, prepareTaskInputs, taskInputManifestSchema, verifyTaskInputs } from '../preparation/task-inputs.js';
-import { readOwnedFile } from '../reporting/private-files.js';
+import { parseInputJson, readInputFile, readOwnedFile } from '../reporting/private-files.js';
 import { RunManager } from '../core/run-manager.js';
 import { selectedConfigPolicy } from '../config/policy.js';
 import { z } from 'zod';
@@ -28,7 +28,7 @@ export async function taskCommand(args: string[]): Promise<unknown> {
       const result = await authorizeWithNode(values.get('--runtime-node')!, forwarded);
       if (result !== undefined) return result;
     }
-    const document = z.object({ operation: z.enum(['review', 'edit']), request: z.record(z.string(), z.unknown()) }).strict().parse(JSON.parse((await readOwnedFile(path.resolve(values.get('--request')!), 256 * 1024)).toString('utf8')));
+    const document = parseInputJson(await readInputFile(path.resolve(values.get('--request')!), 256 * 1024, 'request'), 'request', z.object({ operation: z.enum(['review', 'edit']), request: z.record(z.string(), z.unknown()) }).strict());
     const resolved = await loadResolvedConfig({ configPath: path.resolve(values.get('--config')!), createDataDir: false, requirePinManifest: false });
     const manager = new RunManager(resolved.config, resolved.dataDir, [], undefined, { policy: selectedConfigPolicy(resolved.configPath), usageDataDir: resolved.dataDir });
     return manager.authorizeDispatch(document.operation, document.request as unknown as Parameters<RunManager['authorizeDispatch']>[1], values.get('--owner-reference')!, values.get('--expires-at')!);

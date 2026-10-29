@@ -1,0 +1,8 @@
+{
+  "classification": "coordinator preparation",
+  "original_mode": "0644",
+  "repaired_mode": "0600",
+  "patch_sha256": "75602a0d3e304afdcd3e92151e4bbf232150771919858da8b351842cfa8067ac",
+  "content_changed": false,
+  "hosted_starts_before_recovery": 0
+}

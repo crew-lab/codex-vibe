@@ -1,0 +1,11 @@
+{
+  "requested_role": "edd_verifier",
+  "requested_model": "gpt-6.1-sol",
+  "requested_reasoning": "high",
+  "result": "agent type is currently not available",
+  "agent_started": false,
+  "attempts": 1,
+  "role_file_present": true,
+  "filesystem_enforcement": "not established; dispatch unavailable",
+  "source": "https://learn.chatgpt.com/docs/agent-configuration/subagents#approvals-and-sandbox-controls"
+}

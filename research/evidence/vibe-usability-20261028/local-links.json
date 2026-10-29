@@ -1,0 +1,72 @@
+[
+  {
+    "source": ".agents/skills/vibe-supervisor/SKILL.md",
+    "target": "../../../docs/security.md#antigravity-backend-experimental",
+    "pass": true
+  },
+  {
+    "source": ".agents/skills/vibe-supervisor/SKILL.md",
+    "target": "../../../docs/local-operation.md",
+    "pass": true
+  },
+  {
+    "source": ".agents/skills/vibe-supervisor/SKILL.md",
+    "target": "../../../docs/workflow-acceptance.md",
+    "pass": true
+  },
+  {
+    "source": ".agents/skills/vibe-supervisor/SKILL.md",
+    "target": "../../../docs/preparation.md",
+    "pass": true
+  },
+  {
+    "source": ".agents/skills/vibe-supervisor/SKILL.md",
+    "target": "../../../docs/validation-workspace.md",
+    "pass": true
+  },
+  {
+    "source": ".agents/skills/vibe-supervisor/SKILL.md",
+    "target": "../../../docs/local-operation.md",
+    "pass": true
+  },
+  {
+    "source": ".agents/skills/vibe-supervisor/SKILL.md",
+    "target": "../../../.codex/agents/vibe-reviewer.toml",
+    "pass": true
+  },
+  {
+    "source": ".agents/skills/vibe-supervisor/SKILL.md",
+    "target": "../../../docs/reference.md",
+    "pass": true
+  },
+  {
+    "source": ".agents/skills/vibe-supervisor/SKILL.md",
+    "target": "../../../docs/functionality.md",
+    "pass": true
+  },
+  {
+    "source": ".agents/skills/vibe-supervisor/SKILL.md",
+    "target": "../../../docs/security.md",
+    "pass": true
+  },
+  {
+    "source": ".agents/skills/vibe-supervisor/SKILL.md",
+    "target": "../../../docs/compatibility.md",
+    "pass": true
+  },
+  {
+    "source": ".agents/skills/vibe-supervisor/SKILL.md",
+    "target": "../../../docs/errors.md",
+    "pass": true
+  },
+  {
+    "source": "docs/local-operation.md",
+    "target": "../Handoff.md",
+    "pass": true
+  },
+  {
+    "source": "docs/local-operation.md",
+    "target": "task-inputs.md",
+    "pass": true
+  }
+]

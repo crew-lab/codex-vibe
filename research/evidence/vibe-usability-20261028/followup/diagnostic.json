@@ -1,0 +1,18 @@
+{
+  "node": "v24.22.1",
+  "patch_sha256": "5723b5e04558a63b4b7f601afbfabfade16547257198bebcd3276bd731fe3e7b",
+  "copy_preparation": "prepared",
+  "dependency_state": "not-requested",
+  "generated_tests": 5,
+  "independent_boundary_cases": 8,
+  "strict_imports_identical": true,
+  "framework_original": "PASS",
+  "framework_equivalent_import": "PASS",
+  "negative_missing_named_cases": "REJECTED",
+  "negative_unregistered_cases": "REJECTED",
+  "negative_unfixed_threshold": "REJECTED",
+  "original_baseline_clean": true,
+  "original_frozen_contract": "FAIL (unchanged)",
+  "diagnostic_requirement_result": "PASS",
+  "new_hosted_starts": 0
+}

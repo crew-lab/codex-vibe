@@ -1,0 +1,30 @@
+diff --git a/docs/local-trial/generated/at-least.mjs b/docs/local-trial/generated/at-least.mjs
+new file mode 100644
+index 0000000..5d692bd
+--- /dev/null
++++ b/docs/local-trial/generated/at-least.mjs
+@@ -0,0 +1,3 @@
++export function atLeast(value, limit) {
++  return value >= limit;
++}
+diff --git a/docs/local-trial/generated/at-least.test.mjs b/docs/local-trial/generated/at-least.test.mjs
+new file mode 100644
+index 0000000..bbdd0e4
+--- /dev/null
++++ b/docs/local-trial/generated/at-least.test.mjs
+@@ -0,0 +1,15 @@
++import atLeast from './at-least.mjs';
++import { describe, it } from 'node:test';
++import { strictEqual } from 'node:assert/strict';
++
++describe('atLeast', () => {
++  it('below', () => { strictEqual(atLeast(3, 5), false); }); 
++  it('equality', () => { strictEqual(atLeast(5, 5), true); }); 
++  it('above', () => { strictEqual(atLeast(7, 5), true); }); 
++  it('negative-below', () => { strictEqual(atLeast(-3, -1), false); }); 
++  it('negative-equality', () => { strictEqual(atLeast(-3, -3), true); }); 
++  it('negative-above', () => { strictEqual(atLeast(-1, -3), true); }); 
++  it('NaN', () => { strictEqual(atLeast(NaN, 5), false); }); 
++  it('positive infinity', () => { strictEqual(atLeast(Infinity, 5), true); }); 
++  it('negative infinity', () => { strictEqual(atLeast(-Infinity, 5), false); });
++});

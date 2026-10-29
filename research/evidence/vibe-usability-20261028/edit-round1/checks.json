@@ -1,0 +1,44 @@
+{
+  "contract_sha256": "93b428db4dcc9f76467f109aff94202777d2388f9498265dd577c6373216f3e0",
+  "checked_at": "2026-10-28T17:29:38.552Z",
+  "patch_sha256": "ec630a3291a01667906ce55137efda29f98773f52277958a5ce62793b4159b53",
+  "base_commit": "939ba8a860e5fad5fd682d0dc7f061bda048aa0a",
+  "execution_state": "completed",
+  "status": "passed",
+  "checks": [
+    {
+      "id": "$scope",
+      "status": "passed",
+      "reason": "changed-path-allowlist"
+    },
+    {
+      "id": "$required_changes",
+      "status": "passed",
+      "reason": "required-changed-paths"
+    },
+    {
+      "id": "module",
+      "path": "docs/local-trial/generated/at-least.mjs",
+      "status": "passed",
+      "reason": "file_exists"
+    },
+    {
+      "id": "tests",
+      "path": "docs/local-trial/generated/at-least.test.mjs",
+      "status": "passed",
+      "reason": "file_exists"
+    },
+    {
+      "id": "native-tests",
+      "path": "docs/local-trial/generated/at-least.test.mjs",
+      "status": "passed",
+      "reason": "text_contains"
+    },
+    {
+      "id": "strict-import",
+      "path": "docs/local-trial/generated/at-least.test.mjs",
+      "status": "passed",
+      "reason": "text_contains"
+    }
+  ]
+}

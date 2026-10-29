@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, rm, readFile, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, readFile, realpath, chmod, lstat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -102,6 +102,17 @@ describe('audit bundle approval ledger and pin', () => {
     expect(report.pin).toEqual({ vibe_version: '2.26.1', manifest_sha256: HASH, record_sha256: OTHER_HASH });
     expect(report.approvals).toMatchObject({ file: 'approvals.json', records: 2, truncated: false });
     expect(result.files).not.toContain('transcript.md');
+  });
+
+  it('reads normal validation input and safely rejects malformed JSON', async () => {
+    const { root, directory } = await savedRun({}); const file = path.join(root, 'validation.json');
+    const bytes = JSON.stringify({ schema_version: 1, patch_sha256: HASH, validations: [] });
+    await writeFile(file, bytes, { mode: 0o644 }); await chmod(file, 0o644);
+    await expect(exportReport({ directory, output: path.join(root, 'bundle'), validationFile: file })).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', details: { role: 'validation', reason: 'mismatch' } });
+    expect(await readFile(file, 'utf8')).toBe(bytes);
+    expect((await lstat(file)).mode & 0o777).toBe(0o644);
+    await writeFile(file, '{ sensitive-marker');
+    await expect(exportReport({ directory, output: path.join(root, 'bundle'), validationFile: file })).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', details: { role: 'validation', reason: 'invalid_json' } });
   });
 
   it('keeps an absent ledger and an absent pin absent', async () => {

@@ -1,0 +1,13 @@
+{
+  ".agents/skills/vibe-supervisor/SKILL.md": "3cc51d7beb7b3879c4a8e618647e86ab105b11d8ae152b8da6da87a6909c7546",
+  ".codex/agents/vibe-reviewer.toml": "396b35d464a1cdc42c03eb42478e6a99398694a4b47f705f5fb3304105341d66",
+  "docs/local-operation.md": "3b731f0f90d51686415b4a2009d57e700a73af536f79f5170c41fb1a96149cb9",
+  "docs/local-trial/acceptance-contract.json": "2dd034c7298831ea9822d32e6ee655b7ce0f654f1ab258828e563a537b2452e5",
+  "docs/local-trial/edit.txt": "26b14ae4fe4d8ec8f70407bd4c0406e7be7c8658dc284bc0db9984d721f462d2",
+  "docs/validation-workspace.md": "b0ae170e56a82eea079844275ecf528985d0e0c26be20d643df0b8472b0cbfb6",
+  "docs/workflow-acceptance.md": "d0796d9c627946bc6b8bf2d10f0e37a871c627b1c40e4aa839ff123efe607ec8",
+  "planning/development-strategy.md": "38fec0d6d70a28e48ad7e7a7aa42b736691e6fbd89c8b564c7bb314b6b17fb86",
+  "src/cli/validation.ts": "64ecd291da5f40ec0f00c38567e196cfa4d1777e72a6f55b37a448ed113080cd",
+  "src/validation/workspace.ts": "e92fb96fab7d2d415cf8f919128075ac31b695426c80dc1990403f0871d63716",
+  "tests/unit/validation.test.ts": "833d4b2f7a3cc6ea2264a38e4d03eb2dc05d2e8bbc03b44f1e4c822016435c92"
+}

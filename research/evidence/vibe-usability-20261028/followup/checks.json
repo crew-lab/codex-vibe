@@ -1,0 +1,19 @@
+{
+  "node": "v24.22.1",
+  "command": "npm run verify:release",
+  "exit_code": 0,
+  "focused_validation_tests": 13,
+  "skill_validation": "PASS",
+  "local_links_and_anchors": 53,
+  "adapter_toml": "PASS",
+  "example_contract_json": "PASS",
+  "diff_check": "PASS",
+  "hosted_starts": 0,
+  "release_test_files": 115,
+  "release_tests_passed": 1627,
+  "release_tests_skipped": 1,
+  "additional_handoff_evidence_links": 33,
+  "private_path_scan": "no matches",
+  "disposable_validation_cleanup": "removed after fingerprint verification",
+  "cleanup_history": "First attempt retained the known injected negative-test file; removed that owned file, then cleanup succeeded."
+}

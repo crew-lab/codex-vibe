@@ -1,0 +1,136 @@
+diff --git a/.agents/skills/vibe-supervisor/SKILL.md b/.agents/skills/vibe-supervisor/SKILL.md
+index 311ce0a..56f462d 100644
+--- a/.agents/skills/vibe-supervisor/SKILL.md
++++ b/.agents/skills/vibe-supervisor/SKILL.md
+@@ -6,11 +6,16 @@ license: MIT
+ 
+ # Vibe Supervisor
+ 
+-The supervisor exposes exactly five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. It accepts only Vibe 3.0.2 through its pinned `vibe-app-server`; the server version and installed files must match the per-candidate pin manifest, and any other version or file drift fails closed. The current Vibe 3.0.2 candidate remains unqualified for hosted dispatch until its target gates pass. Each review or edit start requires a short-lived local dispatch grant created with `vibe-supervisor task authorize` and the grant's unique `attempt_id`; the grant authorizes one exact request and one start. This is not an interactive Vibe permission or continuation protocol. Each owning server/storage instance accepts one active run; a competing start is rejected immediately. A run is one-shot: there are no follow-up prompts or restart recovery. If the supervisor restarts during work, the run is marked failed and its task is never replayed. Completed means execution ended; the coordinator still owns acceptance and cleanup. The Antigravity backend is experimental and opt-in (`experimental.antigravity = true`); use it only when the configuration selects it, and see [security](../../../docs/security.md#antigravity-backend-experimental).
++The supervisor exposes exactly five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. It accepts only Vibe 3.0.2 through its pinned `vibe-app-server`; the server version and installed files must match the per-candidate pin manifest, and any other version or file drift fails closed. Check the selected candidate’s hosted qualification against its recorded target-gate evidence; preparation alone does not establish it. Each review or edit start requires a short-lived local dispatch grant created with `vibe-supervisor task authorize` and the grant's unique `attempt_id`; the grant authorizes one exact request and one start. This is not an interactive Vibe permission or continuation protocol. Each owning server/storage instance accepts one active run; a competing start is rejected immediately. A run is one-shot: there are no follow-up prompts or restart recovery. If the supervisor restarts during work, the run is marked failed and its task is never replayed. Completed means execution ended; the coordinator still owns acceptance and cleanup. The Antigravity backend is experimental and opt-in (`experimental.antigravity = true`); use it only when the configuration selects it, and see [security](../../../docs/security.md#antigravity-backend-experimental).
+ 
+ Vibe's packaged plugin skills are accepted only when the runtime reports their required plugin provenance; user/project/registry skill entries are refused. Skill instructions never grant extra tool or path permissions. Shell and network tools are disabled. The supervisor's policy is not an OS sandbox. Reviews are read-only (`read_file`) over an allowlisted workspace, with a bounded workspace file listing in the prompt and no search tool; edits can read, write and edit inside the worktree, need a Git repository root and explicit `base_ref`, and run in a detached supervisor-owned worktree. The worker's patch is exported for review and is never applied, committed, merged, or pushed automatically.
+ 
+ 
++## Prepared installation: short path
++
++For an already prepared installation, call `vibe_status` on the intended connection with the canonical workspace, operation, immutable edit base and expected candidate. Require the expected candidate, preparation PASS, eligibility and a free slot. Freeze the complete request and acceptance criteria, authorize it with the returned `task_authorize.argv`, then send that exact request with the grant identifiers and fresh readiness receipt. Follow status, inspect the result and exported artifact, independently verify it, and close. Each grant permits one start; a refusal or failure is not permission for an additional hosted attempt. For setup, blockers and details, follow the sections below and [local operation](../../../docs/local-operation.md).
++
++
+ ## Coordinator, acceptance and fallback
+ 
+ The main chat coordinates and independently verifies. Vibe is the bounded implementer. A fallback implementer is used only after verified artifact rejection and within the user's authorized workflow; do not appoint it coordinator by default. Never infer failure from an abbreviated worker summary. Preserve the original patch/export hashes and inspect deterministic checks first. If the patch is correct, validate it unchanged. A mistaken rejection must be corrected in append-only assessment history, with the review error attributed to the coordinator. Keep Vibe and fallback changes/evidence separate; never claim fallback edits were applied when they were discarded.
+@@ -46,9 +51,9 @@ Every delegation starts with a native workspace readiness call on the connection
+ Collect the desired outcome, concrete acceptance criteria, canonical allowed workspace, exact file scope, exclusions, and explicit Git base for edits. Never put credentials in task text. Check the real connected tool schemas and do not invoke fields or tools absent from that catalog. The sequence is fixed:
+ 
+ 1. Readiness, as above. The eligible reply carries `task_authorize`: `argv` is the exact `task authorize` command bound to the connected server (its Node executable, its CLI entrypoint and its `--config`), `request_template` is `{ "operation", "request": { cwd, context_files | base_ref } }` for this workspace and operation, and `expires_at` is the grant expiry the command carries (30 minutes). No `--runtime-node` is needed with it.
+-2. Write the request file: `request_template` plus `task` and, for a review, the `context_files` chosen as described under [choose the review context](#choose-the-review-context), as a private file outside the repository. This is the exact final request; what the start sends must equal it field for field.
++2. Write the request file privately outside the repository (mode 0600): start with `request_template`, then add every intended field supported by that operation: `task`, `max_turns`, `timeout_seconds` and `wait_seconds`; for reviews, any `context_files` and `output`; for edits, `acceptance_contract`, `allowed_write_paths` and any `prepared_inputs`. Freeze omissions and values before authorization. The start must forward the complete `request` unchanged, not just the template and task.
+ 3. Run `task_authorize.argv` with only `<private-request-file>` and `<owner-reference>` replaced. The host's command permission is the owner's per-start check: a refusal is a stop, not something to route around. The command prints `authorization_id` and `attempt_id`; keep them private.
+-4. Start with exactly the same request plus `authorization_id`, `attempt_id` and the `readiness_receipt`, before `receipt_expires_at`, on the same connection. On `VSUP_AUTHORIZATION_INVALID`, read `details.differing_fields`: fix the named request fields, or re-run readiness when a runtime field (`candidate`, `node_executable`, `node_version`, `policy`, `pin_manifest`) is listed, then register a new grant. Never retry with the same identifiers or a guessed change.
++4. Start with exactly the same request plus `authorization_id`, `attempt_id` and the `readiness_receipt`, before `receipt_expires_at`, on the same connection. On `VSUP_AUTHORIZATION_INVALID`, inspect `details.differing_fields` and determine the cause; re-check readiness for runtime drift. Only after an identified correction and within the authorized attempt budget may a new grant be registered. Never retry blindly or reuse identifiers; stop if the cause or allowance is unclear.
+ 5. Follow the run with cursor-based `vibe_status` calls, read `vibe_result`, then close as described below.
+ 
+ The readiness receipt is admission evidence and does not replace the grant; the grant authorizes one start of one exact request. One started run owns the instance's active slot until backend close verifies termination. If close reports termination unverified, keep the run inspectable and do not start another run on that slot. Do not queue, retry automatically, or replay a task after restart or failure. The Codex custom agent in [.codex/agents/vibe-reviewer.toml](../../../.codex/agents/vibe-reviewer.toml) runs this sequence for one bounded task.
+@@ -67,9 +72,9 @@ The worker cannot search: it has `read_file` and a bounded file listing, nothing
+ 4. Name the same files in the task text, in reading order, with one clause each on why they matter, so the worker reads them first and knows what to look for in each.
+ 5. Never include a secret-named file (`.env*`, `.envrc*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`), an excluded file (`VSUP_WORKSPACE_INVALID` refuses the start) or a generated one (`dist/`, lockfiles, build output): a generated file spends a read on nothing and never answers a question about the source.
+ 
+-The list must be final before `task authorize`: adding, removing or reordering an entry, or a change to a listed file's content, after registration refuses the start with `VSUP_AUTHORIZATION_INVALID` and `differing_fields: ['context_files']`, and a new grant is needed.
++The list must be final before `task authorize`: adding, removing or reordering an entry, or a change to a listed file's content, after registration refuses the start with `VSUP_AUTHORIZATION_INVALID` and `differing_fields: ['context_files']`, and a new grant is needed only after the cause is corrected and within the authorized attempt budget.
+ 
+-For each real review, log beside its usefulness entry how many context files were passed and how many `read_file` calls the run executed (`usage.tool_calls.executed` in the result, or the `tool_call:read_file:executed` count in `runs export`), with whether the answer was accepted. The run record does not keep `context_files`, so this count is recorded by hand.
++For each real review, log beside its usefulness entry how many context files were passed and how many `read_file` calls the run executed (`usage.tool_calls.executed` in the result, or the `tool_call:read_file:executed` count in `runs export`), with whether the answer was accepted. New review records and sanitized exports report `context_file_count` (including zero); older exports report `null` for unknown. Preserve the request-side count when available and never interpret unknown as zero.
+ 
+ ## Write the task from a template
+ 
+@@ -94,7 +99,8 @@ Read <file>, <file> first.
+ Then create or change only: <path>, <path>. Do not touch any other file.
+ Change: <what to add or change, with the exact function names and semantics>.
+ Must reject or preserve: <each edge case, e.g. a trailing blank line, CRLF, an unsafe path>.
+-Tests: <test file> using <framework>, covering <cases>.
++Tests: <test file> using <framework>, covering <cases>. Match named or default imports to the declared exports.
++Before the final answer, check the source and tests for consistent export and import names without executing tests.
+ No shell, network or test execution.
+ Final answer: what changed, then an inventory of changed and scratch files.
+ ```
+@@ -103,7 +109,7 @@ Match the limits to the template: a review of two or three files fits `max_turns
+ 
+ ## Check the result
+ 
+-For a review, check the final answer, stop reason, warnings, integrity result and `usage.tool_calls` (a review that read nothing answered from nothing); `vibe-supervisor runs sarif <run-id>` exports its findings as SARIF. For an edit, inspect the full transcript and fresh exported patch, changed and residual files, and hashes while the worktree remains available. Verify the exact candidate in a separate disposable copy; do not run commands or tests inside the worker worktree or original source checkout. Accept only the reviewed delta. Coordinator verification does not turn an unsuccessful Vibe run into a Vibe success.
++For a review, check the final answer, stop reason, warnings, integrity result and `usage.tool_calls` (a review that read nothing answered from nothing); `vibe-supervisor runs sarif <run-id>` exports its findings as SARIF. For an edit, inspect the result, fresh exported patch, changed and residual files, and hashes while the worktree remains available. Request a transcript only if needed to resolve a specific uncertainty; keep it private and out of reports. Verify the exact candidate in a separate disposable copy; do not run commands or tests inside the worker worktree or original source checkout. Accept only the reviewed delta. Coordinator verification does not turn an unsuccessful Vibe run into a Vibe success.
+ 
+ Close the run after verification. Request cleanup only when the exported artifact is current. A pristine worktree can be removed after ownership checks; a dirty or uncertain one is retained with its path and reason for review. Keep the exported patch available and do not force-delete retained data. Report the server version, source/base, actual checks, stop reason, authentication outcome if observed, and any unresolved cleanup or acceptance gate. macOS Apple silicon is the supported platform; a clean-account installation is not yet verified. A run proves execution, not that the answer is correct.
+ 
+diff --git a/.codex/agents/vibe-reviewer.toml b/.codex/agents/vibe-reviewer.toml
+index 43bb380..777d7dd 100644
+--- a/.codex/agents/vibe-reviewer.toml
++++ b/.codex/agents/vibe-reviewer.toml
+@@ -2,7 +2,7 @@ name = "vibe-reviewer"
+ description = "Runs one bounded Mistral Vibe review or isolated edit through the vibe-supervisor MCP tools: readiness, grant, start, status, close. Use for a narrow, checkable question about named files, or a small edit from an immutable Git base."
+ 
+ developer_instructions = """
+-You run exactly one bounded Vibe task through the vibe-supervisor MCP tools (vibe_status, vibe_review_start, vibe_edit_start, vibe_result, vibe_close). You never apply, commit, merge or push the worker's output, never put credentials in task text, never raise limits or retry after a failure, and never substitute another implementer.
++You run exactly one bounded Vibe task through the vibe-supervisor MCP tools (vibe_status, vibe_review_start, vibe_edit_start, vibe_result, vibe_close). You never apply, commit, merge or push the worker's output, never put credentials in task text, never raise limits, replay an actual run after failure, or substitute another implementer. A refused pre-start authorization is not an actual run; handle it only as described below and within the authorized budget. Read and follow the full shipped vibe-supervisor skill, including verification and cleanup.
+ 
+ Sequence, in this order:
+ 
+@@ -10,15 +10,15 @@ Sequence, in this order:
+ 
+ 2. Context, for a review. The worker cannot search, so search the repository yourself (rg or your own tools) for the symbols the question names, their call sites and their tests. Choose at most 8 files: definitions, the callers the question depends on, the tests that pin the contract. Never a secret-named, excluded or generated file. Put their repository-relative paths in context_files and name the same files, in reading order with one clause each on why, in the task text. The list is final before the grant: a later change to the list or to a listed file's content refuses the start with differing_fields ['context_files'].
+ 
+-3. Request file. Take task_authorize.request_template from the reply, add task (for a review, also context_files), and write {"operation": ..., "request": {...}} to a private file (mode 0600) outside the repository. This is the exact final request; do not change it afterwards.
++3. Request file. Take task_authorize.request_template from the reply, add every intended field supported by that operation: task, max_turns, timeout_seconds and wait_seconds; for reviews, any context_files and output; for edits, acceptance_contract, allowed_write_paths and any prepared_inputs; freeze all values and omissions, then write {"operation": ..., "request": {...}} to a private file (mode 0600) outside the repository. This is the exact final request; do not change it afterwards.
+ 
+ 4. Grant. Run task_authorize.argv exactly as returned, replacing only <private-request-file> with that file and <owner-reference> with a short reference to the user's instruction. The host's command permission prompt is the owner's per-start check: if it is refused, stop and report the refusal; do not run the command another way. Keep authorization_id and attempt_id private; the grant authorizes one start of this exact request.
+ 
+-5. Start. Call the matching start tool with exactly the request_template fields plus task (and context_files), the returned authorization_id and attempt_id, and the readiness_receipt before receipt_expires_at. On VSUP_AUTHORIZATION_INVALID read details.differing_fields, fix the named fields (or re-run readiness if a runtime field is listed), register a new grant and start once more; never retry with the same identifiers or guess.
++5. Start. Call the matching start tool with every field of the frozen request unchanged, plus the returned authorization_id and attempt_id, and the readiness_receipt before receipt_expires_at. On VSUP_AUTHORIZATION_INVALID inspect details.differing_fields and determine the cause; re-check readiness for runtime drift. Register a new grant only after an identified correction and within the authorized attempt budget. Stop if the cause or allowance is unclear; never retry blindly or reuse identifiers.
+ 
+-6. Follow. Poll vibe_status with run_id and wait_seconds 120-300, passing next_after_seq back as after_seq. Read stop_reason and warnings before trusting a completed result; read vibe_result for the full record. For a review, a run that read nothing answered from nothing. For an edit, inspect the exported patch and changed files; it is never applied for you.
++6. Follow. Poll vibe_status with run_id and wait_seconds 120-300, passing next_after_seq back as after_seq. Read stop_reason and warnings before trusting a completed result; inspect vibe_result and retrieve a transcript only to resolve a specific uncertainty, keeping it private. For a review, a run that read nothing answered from nothing. For an edit, inspect the exported patch and changed files; it is never applied for you.
+ 
+-7. Close. Call vibe_close with run_id; for an edit after verification pass an assessment. Report the server version, the stop reason, what the worker read or changed, and whether the answer was accepted; for a review also the number of context files passed and the read_file calls executed (usage.tool_calls.executed), since the run record does not keep them. Completed means execution ended, not that the answer is correct.
++7. Close. Call vibe_close with run_id; for an edit after verification pass an assessment. Report the server version, the stop reason, what the worker read or changed, and whether the answer was accepted; for a review also the number of context files passed and the read_file calls executed (usage.tool_calls.executed). New review records and sanitized exports expose context_file_count, including zero; older exports report null for unknown. Do not treat unknown as zero. Completed means execution ended, not that the answer is correct.
+ 
+-Write the task from the skill's template: name the exact files, one question or one change, the edge cases to check, "no defect found" as a valid answer, and a line budget. A review of two or three files fits max_turns 12.
++Use the skill's operation-specific template. For a review, name the exact files, one question, edge cases, "no defect found" as a valid answer, and a line budget. A review of two or three files fits max_turns 12. For an edit, specify exact files, change and edge cases, and require consistent exports and imports with a source consistency check before the final answer.
+ """
+diff --git a/docs/local-operation.md b/docs/local-operation.md
+index 40e8293..b3f0dc2 100644
+--- a/docs/local-operation.md
++++ b/docs/local-operation.md
+@@ -10,15 +10,15 @@ Use the matching installed CLI, reported Node executable and explicit selected c
+ 
+ ## Authorize and start
+ 
+-Freeze the exact request and acceptance criteria: take `task_authorize.request_template` from the readiness reply, add the task text and the files to read, and write it to a private file. Register it by running `task_authorize.argv` from the same reply with `<private-request-file>` and `<owner-reference>` replaced; it already names the server's Node executable, CLI and `--config` and carries a fresh expiry. Assembling the command by hand, use `task authorize --runtime-node <reported-node> --request <private-json> --owner-reference <instruction-reference> --expires-at <fresh-ISO-expiry> --config <selected-config>` and generate the expiry with `node -p "new Date(Date.now() + 10 * 60 * 1000).toISOString()"`.
++Freeze the exact request and acceptance criteria: take `task_authorize.request_template` from the readiness reply, add every intended field supported by that operation: `task`, `max_turns`, `timeout_seconds` and `wait_seconds`; for reviews, any `context_files` and `output`; for edits, `acceptance_contract`, `allowed_write_paths` and any `prepared_inputs`. Freeze values and omissions, then write the complete request to a private file (mode 0600). Register it by running `task_authorize.argv` from the same reply with `<private-request-file>` and `<owner-reference>` replaced; it already names the server's Node executable, CLI and `--config` and carries a fresh expiry. Assembling the command by hand, use `task authorize --runtime-node <reported-node> --request <private-json> --owner-reference <instruction-reference> --expires-at <fresh-ISO-expiry> --config <selected-config>` and generate the expiry with `node -p "new Date(Date.now() + 10 * 60 * 1000).toISOString()"`.
+ 
+ This command writes Supervisor-private grant state. In a restricted project environment, request the host-supported scoped administrative command permission for this exact CLI, runtime, configuration and task. Existing task authorization permits necessary preparation; it does not bypass the host approval mechanism. If approval is refused, stop and report its stated reason. Do not relocate state, weaken ownership checks or reroute execution to evade the refusal. A delegated chat instruction may not be recognized as direct owner approval by the host.
+ 
+-Save the returned authorization and attempt identifiers privately. Supply them and the fresh readiness receipt to one matching start on the same native connection. A start refused with `VSUP_AUTHORIZATION_INVALID` names the differing bound fields in `details.differing_fields`; fix those, or check readiness again when a runtime field is named, and register a new grant rather than retrying. A grant permits one start, never automatic replay; an unused diagnostic grant must not later be dispatched. A receipt is not task authorization. No sixth tool or continuation exists.
++Save the returned authorization and attempt identifiers privately. Forward every frozen request field unchanged with those identifiers and the fresh readiness receipt to one matching start on the same native connection. A start refused with `VSUP_AUTHORIZATION_INVALID` names the differing bound fields in `details.differing_fields`; identify and correct the cause, checking readiness again for runtime drift. Register a new grant only after an identified correction and within the authorized attempt budget; stop if either is unclear. Never retry blindly or reuse identifiers. A grant permits one start, never automatic replay; an unused diagnostic grant must not later be dispatched. A receipt is not task authorization. No sixth tool or continuation exists.
+ 
+ ## Verify and settle
+ 
+-Observe cursor-based status and inspect the actual result/export. Independently verify exported bytes, changed scope and declared semantics in an owned reconstruction. Execution completed, verification passed and coordinator acceptance are separate outcomes. Record actual model/usage only where reported; unavailable values remain unavailable.
++Observe cursor-based status and inspect the actual result/export. Retrieve a transcript only when needed to resolve a specific uncertainty; keep it private and out of reports. New review exports report context_file_count, including zero; older exports use null for unknown, which is not zero. Independently verify exported bytes, changed scope and declared semantics in an owned reconstruction. Execution completed, verification passed and coordinator acceptance are separate outcomes. Record actual model/usage only where reported; unavailable values remain unavailable.
+ 
+ Close with the supported assessment, preserve the original patch and verify process/private-state cleanup and slot release. Retain uncertain or dirty worktrees with a reason rather than forcing deletion. No automatic integration, commit or publication follows acceptance.
+ 
+diff --git a/docs/local-trial/edit.txt b/docs/local-trial/edit.txt
+index 1b6f8a1..a13bd3f 100644
+--- a/docs/local-trial/edit.txt
++++ b/docs/local-trial/edit.txt
+@@ -1,6 +1,8 @@
+ Read CONTRACT.md and src/limit.mjs first.
+ Add exactly two new files: src/at-least.mjs and tests/at-least.test.mjs. Change no existing file.
+ Export a named function atLeast(value, limit) returning value >= limit.
+-Use node:test and node:assert/strict to cover below, equal, above, negatives and negative equality.
++Import atLeast as a named import from src/at-least.mjs.
++Import using the literal module specifiers "node:test" and "node:assert/strict" in the test file; these exact strings are required by the acceptance contract. Cover below, equal, above, negatives and negative equality.
++Before the final answer, check the source and test imports for matching export and import names without executing tests.
+ Do not modify the strict below function or its contract. No scratch files, shell, network or test execution.
+ Finish with a concise summary and changed-file inventory.

@@ -11,7 +11,7 @@ import { sanitizeForPersistence } from '../persistence/atomic.js';
 import { environmentSecrets, patchContainsCredential } from '../security/redaction.js';
 import { contractDigest, digest, validationSchema, verificationSummary } from '../acceptance/schema.js';
 import { verifySaved } from '../acceptance/verify.js';
-import { assertOwnedDirectory, readOwnedFile } from './private-files.js';
+import { assertOwnedDirectory, invalidValidationInput, parseInputJson, readInputFile, readOwnedFile } from './private-files.js';
 
 const uuid = z.string().uuid({ version: 'v4' });
 const ledgerText = z.string().max(4096).nullable();
@@ -46,7 +46,7 @@ export async function locateSavedRun(dataDir: string, runId: string): Promise<st
   await inspect(dataDir);
   const sessions = path.join(dataDir, 'mcp-sessions');
   try {
-    await assertOwnedDirectory(sessions); const entries = await readdir(sessions);
+    await lstat(sessions); await assertOwnedDirectory(sessions); const entries = await readdir(sessions);
     if (entries.length > 128) throw new Error('Too many isolated sessions');
     for (const name of entries.filter((entry) => /^session-[A-Za-z0-9]{6}$/.test(entry))) await inspect(path.join(sessions, name));
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
@@ -139,9 +139,9 @@ export async function exportReport(options: { directory: string; output: string;
   const exportedApprovals = approvals ? Buffer.from(JSON.stringify(publicValue(exportedLedger(approvals.ledger, record)), null, 2) + '\n') : undefined;
   let external: unknown = null;
   if (options.validationFile) {
-    const manifest = validationManifest.parse(JSON.parse((await readOwnedFile(options.validationFile, 256 * 1024)).toString('utf8')));
-    if (manifest.patch_sha256 !== patchArtifact?.sha256) throw new Error('External validation refers to another patch');
-    if (new Set(manifest.validations.map((item) => item.id)).size !== manifest.validations.length) throw new Error('Duplicate validation IDs');
+    const manifest = parseInputJson(await readInputFile(options.validationFile, 256 * 1024, 'validation'), 'validation', validationManifest);
+    if (manifest.patch_sha256 !== patchArtifact?.sha256) throw invalidValidationInput('mismatch');
+    if (new Set(manifest.validations.map((item) => item.id)).size !== manifest.validations.length) throw invalidValidationInput('duplicate');
     external = { source: 'coordinator-reported', ...manifest };
   }
   const assessments = record.assessments ?? [];

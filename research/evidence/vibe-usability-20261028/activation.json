@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-28",
+  "skill_link": "<target-home>/.agents/skills/vibe-supervisor",
+  "resolved_skill": "<candidate-source>/.agents/skills/vibe-supervisor",
+  "rollback_link": "<target-home>/.agents/skills/.vibe-supervisor-before-usability-20261028",
+  "rollback_target_preserved": true,
+  "source_base": "939ba8a860e5fad5fd682d0dc7f061bda048aa0a",
+  "branch": "codex/vibe-usability-20261028",
+  "product_hashes_verified": {
+    ".agents/skills/vibe-supervisor/SKILL.md": "84572d21665786443d9563f90e2b5f5d1474eab8231e48d21a5bb81ab5a05d0e",
+    ".codex/agents/vibe-reviewer.toml": "4a87389d06d40476980f3c7fb01310166906a33fe4105f2c1f4f1ef2fec7493e",
+    "docs/local-operation.md": "f90c2b9d9169ef57cf4d8d998ccf90ce927bd8ec9fee415c7d06e2dbab22774d",
+    "docs/local-trial/edit.txt": "94044c920ce9aebf3ff9ae9fa8c949d08f3a0666cc17b6ac0b33ebae32a05639"
+  },
+  "link_readback": "passed",
+  "installed_server_bytes_changed": false,
+  "commit_push_publication": false
+}

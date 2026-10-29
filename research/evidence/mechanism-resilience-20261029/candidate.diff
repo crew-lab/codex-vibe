@@ -1,0 +1,1231 @@
+diff --git a/.agents/skills/vibe-supervisor/SKILL.md b/.agents/skills/vibe-supervisor/SKILL.md
+index 311ce0a..67ac656 100644
+--- a/.agents/skills/vibe-supervisor/SKILL.md
++++ b/.agents/skills/vibe-supervisor/SKILL.md
+@@ -6,18 +6,23 @@ license: MIT
+ 
+ # Vibe Supervisor
+ 
+-The supervisor exposes exactly five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. It accepts only Vibe 3.0.2 through its pinned `vibe-app-server`; the server version and installed files must match the per-candidate pin manifest, and any other version or file drift fails closed. The current Vibe 3.0.2 candidate remains unqualified for hosted dispatch until its target gates pass. Each review or edit start requires a short-lived local dispatch grant created with `vibe-supervisor task authorize` and the grant's unique `attempt_id`; the grant authorizes one exact request and one start. This is not an interactive Vibe permission or continuation protocol. Each owning server/storage instance accepts one active run; a competing start is rejected immediately. A run is one-shot: there are no follow-up prompts or restart recovery. If the supervisor restarts during work, the run is marked failed and its task is never replayed. Completed means execution ended; the coordinator still owns acceptance and cleanup. The Antigravity backend is experimental and opt-in (`experimental.antigravity = true`); use it only when the configuration selects it, and see [security](../../../docs/security.md#antigravity-backend-experimental).
++The supervisor exposes exactly five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. It accepts only Vibe 3.0.2 through its pinned `vibe-app-server`; the server version and installed files must match the per-candidate pin manifest, and any other version or file drift fails closed. Check the selected candidate’s hosted qualification against its recorded target-gate evidence; preparation alone does not establish it. Each review or edit start requires a short-lived local dispatch grant created with `vibe-supervisor task authorize` and the grant's unique `attempt_id`; the grant authorizes one exact request and one start. This is not an interactive Vibe permission or continuation protocol. Each owning server/storage instance accepts one active run; a competing start is rejected immediately. A run is one-shot: there are no follow-up prompts or restart recovery. If the supervisor restarts during work, the run is marked failed and its task is never replayed. Completed means execution ended; the coordinator still owns acceptance and cleanup. The Antigravity backend is experimental and opt-in (`experimental.antigravity = true`); use it only when the configuration selects it, and see [security](../../../docs/security.md#antigravity-backend-experimental).
+ 
+ Vibe's packaged plugin skills are accepted only when the runtime reports their required plugin provenance; user/project/registry skill entries are refused. Skill instructions never grant extra tool or path permissions. Shell and network tools are disabled. The supervisor's policy is not an OS sandbox. Reviews are read-only (`read_file`) over an allowlisted workspace, with a bounded workspace file listing in the prompt and no search tool; edits can read, write and edit inside the worktree, need a Git repository root and explicit `base_ref`, and run in a detached supervisor-owned worktree. The worker's patch is exported for review and is never applied, committed, merged, or pushed automatically.
+ 
+ 
++## Prepared installation: short path
++
++Match this skill to the selected installed candidate; updating skill text does not update a connected server. If the installation predates the artifact-intake repair described below, upgrade the candidate before relying on that behavior; see [current state](../../../Handoff.md). For an already prepared installation, call `vibe_status` on the intended connection with the canonical workspace, operation, immutable edit base and expected candidate. Require the expected candidate, preparation PASS, eligibility and a free slot. Freeze the complete request and acceptance criteria, authorize it with the returned `task_authorize.argv`, then send that exact request with the grant identifiers and fresh readiness receipt. Follow status, inspect the result and exported artifact, independently verify it, and close. Each grant permits one start; a refusal or failure is not permission for an additional hosted attempt. For setup, blockers and details, follow the sections below and [local operation](../../../docs/local-operation.md).
++
++
+ ## Coordinator, acceptance and fallback
+ 
+ The main chat coordinates and independently verifies. Vibe is the bounded implementer. A fallback implementer is used only after verified artifact rejection and within the user's authorized workflow; do not appoint it coordinator by default. Never infer failure from an abbreviated worker summary. Preserve the original patch/export hashes and inspect deterministic checks first. If the patch is correct, validate it unchanged. A mistaken rejection must be corrected in append-only assessment history, with the review error attributed to the coordinator. Keep Vibe and fallback changes/evidence separate; never claim fallback edits were applied when they were discarded.
+ 
+ The owner's implementation request already authorizes necessary task-scoped installation/switching, no-inference preparation and adding only the named task root while preserving settings and rollback. Do not ask again for these steps. It does not authorize extra hosted starts, broader access, commit/push/merge/deploy or publication. Keep original budgets and no-replay rules. A deterministic preparation failure stops that check: diagnose and repair, then verify the changed artifact. Preparation/infrastructure failure is not implementation rejection and does not automatically trigger fallback.
+ 
+-Before dispatch, freeze an acceptance_contract with exact allowed/required paths, required text/hash assertions and coordinator validation IDs. For an edit, also pass `allowed_write_paths` naming the files or `dir/` prefixes the worker may write, so the handler refuses writes elsewhere during the run. Require version-matched preparation PASS via `prepare check --kit ... --config ...`; inspect workspace_eligible, preparation, candidate and optional expected_candidate on the native connection. These checks are separate from hosted acceptance. Use `validation prepare` for owned baseline/candidate copies and explicit offline dependency preparation; blockers do not authorize scripts or network fetches.
++Before dispatch, map every required acceptance criterion to the user request, an applicable repository rule or an explicit task constraint. Keep coordinator preferences advisory. Use text/hash assertions only when the exact bytes are required; check behavior and equivalent implementations through named coordinator validations. For example, both `import assert from "node:assert/strict"` and `import { strict as assert } from "node:assert"` provide strict assertions. A requirement for named `node:test` cases still requires named callbacks; an import string or a passing `node --test` command alone does not prove that structure. Freeze an acceptance_contract with exact allowed/required paths, genuinely required text/hash assertions and coordinator validation IDs. For an edit, also pass `allowed_write_paths` naming the files or `dir/` prefixes the worker may write, so the handler refuses writes elsewhere during the run. Require version-matched preparation PASS via `prepare check --kit ... --config ...`; inspect workspace_eligible, preparation, candidate and optional expected_candidate on the native connection. These checks are separate from hosted acceptance. Caller-selected request/contract/patch/validation files use the tool's bounded input reader: normal owned, canonical, single-link `0644` or `0600` files are accepted without manual permission repair when group/other write access is absent. Internal grants, manifests, receipts and saved artifacts remain private and strictly validated. Do not chmod unknown files or parents; follow typed input/artifact diagnoses. See [artifact handling](../../../docs/artifact-handling.md). Preflight the selected validation path on the actual baseline before any hosted start: establish required manifests, manager/cache availability and executable checks. Use `validation prepare` for owned baseline/candidate copies and explicit offline dependency preparation; blockers do not authorize scripts or network fetches. In a build supporting copy-only preparation, `--no-install` needs no package manifest, lockfile or manager and records no dependency readiness; older installations may still require these inputs. Diagnose that mismatch before dispatch, rather than discovering it after a hosted edit.
+ 
+ After the bounded run, compare exported bytes and hashes, then run the declared coordinator checks. Record execution outcome, automated verification and coordinator decision separately. `vibe_close` assessments bind patch/contract hashes and coordinator validation results; accepted requires automated PASS plus all required validations. Preserve failed/incomplete evidence. Use `runs export --out ...` for sanitized reporting, with optional patch/projected events only. Never collect raw transcripts, reasoning, credentials or private receipt histories for reports. New hosted attempts require remaining explicit allowance; no summary-driven rejection or blind retry. See [acceptance](../../../docs/workflow-acceptance.md), [preparation](../../../docs/preparation.md) and [validation workspaces](../../../docs/validation-workspace.md).
+ 
+@@ -46,9 +51,9 @@ Every delegation starts with a native workspace readiness call on the connection
+ Collect the desired outcome, concrete acceptance criteria, canonical allowed workspace, exact file scope, exclusions, and explicit Git base for edits. Never put credentials in task text. Check the real connected tool schemas and do not invoke fields or tools absent from that catalog. The sequence is fixed:
+ 
+ 1. Readiness, as above. The eligible reply carries `task_authorize`: `argv` is the exact `task authorize` command bound to the connected server (its Node executable, its CLI entrypoint and its `--config`), `request_template` is `{ "operation", "request": { cwd, context_files | base_ref } }` for this workspace and operation, and `expires_at` is the grant expiry the command carries (30 minutes). No `--runtime-node` is needed with it.
+-2. Write the request file: `request_template` plus `task` and, for a review, the `context_files` chosen as described under [choose the review context](#choose-the-review-context), as a private file outside the repository. This is the exact final request; what the start sends must equal it field for field.
++2. Write the request file privately outside the repository (mode 0600): start with `request_template`, then add every intended field supported by that operation: `task`, `max_turns`, `timeout_seconds` and `wait_seconds`; for reviews, any `context_files` and `output`; for edits, `acceptance_contract`, `allowed_write_paths` and any `prepared_inputs`. Freeze omissions and values before authorization. The start must forward the complete `request` unchanged, not just the template and task.
+ 3. Run `task_authorize.argv` with only `<private-request-file>` and `<owner-reference>` replaced. The host's command permission is the owner's per-start check: a refusal is a stop, not something to route around. The command prints `authorization_id` and `attempt_id`; keep them private.
+-4. Start with exactly the same request plus `authorization_id`, `attempt_id` and the `readiness_receipt`, before `receipt_expires_at`, on the same connection. On `VSUP_AUTHORIZATION_INVALID`, read `details.differing_fields`: fix the named request fields, or re-run readiness when a runtime field (`candidate`, `node_executable`, `node_version`, `policy`, `pin_manifest`) is listed, then register a new grant. Never retry with the same identifiers or a guessed change.
++4. Start with exactly the same request plus `authorization_id`, `attempt_id` and the `readiness_receipt`, before `receipt_expires_at`, on the same connection. On `VSUP_AUTHORIZATION_INVALID`, inspect `details.differing_fields` and determine the cause; re-check readiness for runtime drift. Only after an identified correction and within the authorized attempt budget may a new grant be registered. Never retry blindly or reuse identifiers; stop if the cause or allowance is unclear.
+ 5. Follow the run with cursor-based `vibe_status` calls, read `vibe_result`, then close as described below.
+ 
+ The readiness receipt is admission evidence and does not replace the grant; the grant authorizes one start of one exact request. One started run owns the instance's active slot until backend close verifies termination. If close reports termination unverified, keep the run inspectable and do not start another run on that slot. Do not queue, retry automatically, or replay a task after restart or failure. The Codex custom agent in [.codex/agents/vibe-reviewer.toml](../../../.codex/agents/vibe-reviewer.toml) runs this sequence for one bounded task.
+@@ -67,9 +72,9 @@ The worker cannot search: it has `read_file` and a bounded file listing, nothing
+ 4. Name the same files in the task text, in reading order, with one clause each on why they matter, so the worker reads them first and knows what to look for in each.
+ 5. Never include a secret-named file (`.env*`, `.envrc*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`), an excluded file (`VSUP_WORKSPACE_INVALID` refuses the start) or a generated one (`dist/`, lockfiles, build output): a generated file spends a read on nothing and never answers a question about the source.
+ 
+-The list must be final before `task authorize`: adding, removing or reordering an entry, or a change to a listed file's content, after registration refuses the start with `VSUP_AUTHORIZATION_INVALID` and `differing_fields: ['context_files']`, and a new grant is needed.
++The list must be final before `task authorize`: adding, removing or reordering an entry, or a change to a listed file's content, after registration refuses the start with `VSUP_AUTHORIZATION_INVALID` and `differing_fields: ['context_files']`, and a new grant is needed only after the cause is corrected and within the authorized attempt budget.
+ 
+-For each real review, log beside its usefulness entry how many context files were passed and how many `read_file` calls the run executed (`usage.tool_calls.executed` in the result, or the `tool_call:read_file:executed` count in `runs export`), with whether the answer was accepted. The run record does not keep `context_files`, so this count is recorded by hand.
++For each real review, log beside its usefulness entry how many context files were passed and how many `read_file` calls the run executed (`usage.tool_calls.executed` in the result, or the `tool_call:read_file:executed` count in `runs export`), with whether the answer was accepted. New review records and sanitized exports report `context_file_count` (including zero); older exports report `null` for unknown. Preserve the request-side count when available and never interpret unknown as zero.
+ 
+ ## Write the task from a template
+ 
+@@ -94,7 +99,8 @@ Read <file>, <file> first.
+ Then create or change only: <path>, <path>. Do not touch any other file.
+ Change: <what to add or change, with the exact function names and semantics>.
+ Must reject or preserve: <each edge case, e.g. a trailing blank line, CRLF, an unsafe path>.
+-Tests: <test file> using <framework>, covering <cases>.
++Tests: <test file> using <framework>, covering <cases>. Match named or default imports to the declared exports.
++Before the final answer, check the source and tests for consistent export and import names without executing tests.
+ No shell, network or test execution.
+ Final answer: what changed, then an inventory of changed and scratch files.
+ ```
+@@ -103,7 +109,7 @@ Match the limits to the template: a review of two or three files fits `max_turns
+ 
+ ## Check the result
+ 
+-For a review, check the final answer, stop reason, warnings, integrity result and `usage.tool_calls` (a review that read nothing answered from nothing); `vibe-supervisor runs sarif <run-id>` exports its findings as SARIF. For an edit, inspect the full transcript and fresh exported patch, changed and residual files, and hashes while the worktree remains available. Verify the exact candidate in a separate disposable copy; do not run commands or tests inside the worker worktree or original source checkout. Accept only the reviewed delta. Coordinator verification does not turn an unsuccessful Vibe run into a Vibe success.
++For a review, check the final answer, stop reason, warnings, integrity result and `usage.tool_calls` (a review that read nothing answered from nothing); `vibe-supervisor runs sarif <run-id>` exports its findings as SARIF. For an edit, inspect the result, fresh exported patch, changed and residual files, and hashes while the worktree remains available. Request a transcript only if needed to resolve a specific uncertainty; keep it private and out of reports. Verify the exact candidate in a separate disposable copy; do not run commands or tests inside the worker worktree or original source checkout. Accept only the reviewed delta. Coordinator verification does not turn an unsuccessful Vibe run into a Vibe success.
+ 
+ Close the run after verification. Request cleanup only when the exported artifact is current. A pristine worktree can be removed after ownership checks; a dirty or uncertain one is retained with its path and reason for review. Keep the exported patch available and do not force-delete retained data. Report the server version, source/base, actual checks, stop reason, authentication outcome if observed, and any unresolved cleanup or acceptance gate. macOS Apple silicon is the supported platform; a clean-account installation is not yet verified. A run proves execution, not that the answer is correct.
+ 
+diff --git a/docs/errors.md b/docs/errors.md
+index ab199ef..61bcbf7 100644
+--- a/docs/errors.md
++++ b/docs/errors.md
+@@ -24,8 +24,8 @@ When `retryable` is `false`, do not resend the same task with the same limits: t
+ | `VSUP_RATE_LIMITED` | Vibe or its provider answered with HTTP 429. | Wait for the service rate limit to clear and retry. | yes |
+ | `VSUP_CANCELLED` | No longer emitted. Kept so saved run records from older versions still read; this release records a stopped run as `cancelled` with no error. | Start another run if more work is needed. | no |
+ | `VSUP_OUTPUT_LIMIT` | The run exceeded an event, transcript or artifact byte limit, or a Git command produced more than 100 MiB of output. | Reduce the requested output or increase the configured limit. | no |
+-| `VSUP_ARTIFACT_ERROR` | A run artifact could not be written, read or exported, including a Git failure while capturing the edit snapshot (details.operation), a refused Git filter, or a worktree directory that no longer exists (details.kind `workspace_missing`, details.path). | Inspect the run directory permissions and available disk space; for a Git failure, see details.operation and the repository state. | no |
+-| `VSUP_INVALID_ARGUMENT` | The tool arguments failed schema validation. | Correct the tool arguments and try again. | no |
++| `VSUP_ARTIFACT_ERROR` | A saved artifact or private directory failed ownership, privacy, link, size, identity or read checks (details.role/reason), or a run artifact could not be written/exported, including a Git snapshot failure (details.operation), a refused filter or a missing worktree (details.kind workspace_missing). | Inspect the saved artifact or private directory identified by the failed operation and details.reason. Supervisor state must remain owned, private and unchanged; do not chmod or replace uncertain state automatically. Check available disk space; for a Git failure, see details.operation and the repository state. | no |
++| `VSUP_INVALID_ARGUMENT` | A tool argument or selected request/contract/patch/validation input is invalid. File input errors name details.role/reason; ordinary owned 0644 inputs are supported, while unsafe, changed or malformed inputs are refused. | Correct the reported argument or selected input. For file-input failures, use an owned canonical regular file with one hard link, no group/other write access and valid bounded content; ordinary 0644 input files are supported. Follow details.reason, preserve the input and do not retry an unchanged failure or a consumed attempt. | no |
+ | `VSUP_NOT_FOUND` | No run with that ID exists. | Check the run ID and try again. | no |
+ | `VSUP_BACKEND_ERROR` | The backend reported a failure that has no more specific code. | Inspect backend diagnostics and retry if the problem is transient. | no |
+ | `VSUP_LIMIT_EXCEEDED` | The owning server/storage instance already has an active run. | Wait for the active run to finish, then start another run. | no |
+diff --git a/docs/functionality.md b/docs/functionality.md
+index dda3f56..e49cc59 100644
+--- a/docs/functionality.md
++++ b/docs/functionality.md
+@@ -124,3 +124,7 @@ Pinned Vibe 3.0.2 bundled plugin skills are permitted by owner decision ([ADR 00
+ The server always registers exactly five tools. Edit start may freeze an [acceptance contract](workflow-acceptance.md); automated checks evaluate exact exported bytes separately from execution and coordinator assessment. Close accepts append-only assessment corrections. Read-only `runs verify` and `runs export` produce sanitized reports and optional patch/projected-event artifacts, and an export adds the run's approval ledger and pin identity when it has them. `runs usefulness` counts accepted and rejected edit runs from those assessments ([workflow acceptance](workflow-acceptance.md#measuring-usefulness)); reviews are not assessable.
+ 
+ [Version-matched preparation](preparation.md) is now a dispatch gate: workspace eligibility alone is insufficient. Native readiness reports candidate identity, preparation state and optional expected-candidate mismatch. Runtime pin verification remains independent at launch. Model observations and detailed usage are reported where exposed; unknown identities, costs and phase boundaries stay unknown. [Validation preparation](validation-workspace.md) creates independent owned copies and pinned offline dependencies without running project checks or integrating output.
++
++## Caller inputs and internal artifacts
++
++[Artifact intake](artifact-handling.md) separates ordinary caller-selected files from strict saved state. Normal owned 0644 request/contract/patch/validation inputs are read without a chmod prerequisite; unsafe or changed inputs yield actionable typed errors. Internal state keeps its private-file requirements. Full prepared-input verification precedes grant issuance and consumption and is repeated at launch; no attempt is automatically replayed.
+diff --git a/docs/local-operation.md b/docs/local-operation.md
+index 40e8293..fdcb75a 100644
+--- a/docs/local-operation.md
++++ b/docs/local-operation.md
+@@ -10,15 +10,17 @@ Use the matching installed CLI, reported Node executable and explicit selected c
+ 
+ ## Authorize and start
+ 
+-Freeze the exact request and acceptance criteria: take `task_authorize.request_template` from the readiness reply, add the task text and the files to read, and write it to a private file. Register it by running `task_authorize.argv` from the same reply with `<private-request-file>` and `<owner-reference>` replaced; it already names the server's Node executable, CLI and `--config` and carries a fresh expiry. Assembling the command by hand, use `task authorize --runtime-node <reported-node> --request <private-json> --owner-reference <instruction-reference> --expires-at <fresh-ISO-expiry> --config <selected-config>` and generate the expiry with `node -p "new Date(Date.now() + 10 * 60 * 1000).toISOString()"`.
++Before dispatch, trace required criteria to the request or repository rules. Keep optional spelling/style preferences advisory, and use coordinator validations for semantic equivalence. The tool distinguishes caller-selected request/contract/patch/validation files from saved supervisor state. Normal owned `0644` inputs are accepted without a chmod step, while unsafe links, foreign ownership, group/other writes, oversized or changed files fail with a specific input diagnosis. Generated state stays private. Prepare output only in an owned private parent; the tool must not change permissions on arbitrary existing directories. See [artifact handling](artifact-handling.md). Preflight the selected validation command on the baseline, including its actual artifact-permission and package/lockfile/manager requirements; a preparation PASS for Vibe does not prove the project validation path is ready.
++
++Freeze the exact request and acceptance criteria: take `task_authorize.request_template` from the readiness reply, add every intended field supported by that operation: `task`, `max_turns`, `timeout_seconds` and `wait_seconds`; for reviews, any `context_files` and `output`; for edits, `acceptance_contract`, `allowed_write_paths` and any `prepared_inputs`. Freeze values and omissions, then write the complete request to a private file (mode 0600). Register it by running `task_authorize.argv` from the same reply with `<private-request-file>` and `<owner-reference>` replaced; it already names the server's Node executable, CLI and `--config` and carries a fresh expiry. Assembling the command by hand, use `task authorize --runtime-node <reported-node> --request <private-json> --owner-reference <instruction-reference> --expires-at <fresh-ISO-expiry> --config <selected-config>` and generate the expiry with `node -p "new Date(Date.now() + 10 * 60 * 1000).toISOString()"`.
+ 
+ This command writes Supervisor-private grant state. In a restricted project environment, request the host-supported scoped administrative command permission for this exact CLI, runtime, configuration and task. Existing task authorization permits necessary preparation; it does not bypass the host approval mechanism. If approval is refused, stop and report its stated reason. Do not relocate state, weaken ownership checks or reroute execution to evade the refusal. A delegated chat instruction may not be recognized as direct owner approval by the host.
+ 
+-Save the returned authorization and attempt identifiers privately. Supply them and the fresh readiness receipt to one matching start on the same native connection. A start refused with `VSUP_AUTHORIZATION_INVALID` names the differing bound fields in `details.differing_fields`; fix those, or check readiness again when a runtime field is named, and register a new grant rather than retrying. A grant permits one start, never automatic replay; an unused diagnostic grant must not later be dispatched. A receipt is not task authorization. No sixth tool or continuation exists.
++Save the returned authorization and attempt identifiers privately. Forward every frozen request field unchanged with those identifiers and the fresh readiness receipt to one matching start on the same native connection. A start refused with `VSUP_AUTHORIZATION_INVALID` names the differing bound fields in `details.differing_fields`; identify and correct the cause, checking readiness again for runtime drift. Register a new grant only after an identified correction and within the authorized attempt budget; stop if either is unclear. Never retry blindly or reuse identifiers. A grant permits one start, never automatic replay; an unused diagnostic grant must not later be dispatched. A receipt is not task authorization. No sixth tool or continuation exists.
+ 
+ ## Verify and settle
+ 
+-Observe cursor-based status and inspect the actual result/export. Independently verify exported bytes, changed scope and declared semantics in an owned reconstruction. Execution completed, verification passed and coordinator acceptance are separate outcomes. Record actual model/usage only where reported; unavailable values remain unavailable.
++Observe cursor-based status and inspect the actual result/export. Retrieve a transcript only when needed to resolve a specific uncertainty; keep it private and out of reports. New review exports report context_file_count, including zero; older exports use null for unknown, which is not zero. Independently verify exported bytes, changed scope and declared semantics in an owned reconstruction. Execution completed, verification passed and coordinator acceptance are separate outcomes. Record actual model/usage only where reported; unavailable values remain unavailable.
+ 
+ Close with the supported assessment, preserve the original patch and verify process/private-state cleanup and slot release. Retain uncertain or dirty worktrees with a reason rather than forcing deletion. No automatic integration, commit or publication follows acceptance.
+ 
+diff --git a/docs/validation-workspace.md b/docs/validation-workspace.md
+index be986a3..217e056 100644
+--- a/docs/validation-workspace.md
++++ b/docs/validation-workspace.md
+@@ -2,9 +2,17 @@
+ 
+ `vibe-supervisor validation prepare --source /canonical/repository --base FULL_COMMIT --patch /private/diff.patch --out /private/new-validation --manager /absolute/npm-or-pnpm --cache /populated/cache`
+ 
+-The helper creates independent Git baseline/candidate copies outside the source and worker checkout. It uses the immutable base and exact patch bytes, disables Git hooks/global configuration, filters child environment, and verifies the installed manager version against an exact project packageManager pin. It never commits or changes the source checkout. The output parent must be canonical and owner-private; output must not exist.
++The helper creates independent Git baseline/candidate copies outside the source and worker checkout. It uses the immutable base and exact patch bytes, disables Git hooks/global configuration, and filters child environment. When installing dependencies, it verifies the manager version against an exact project packageManager pin. It never commits or changes the source checkout. The output parent must be canonical and owner-private; output must not exist.
+ 
+-Dependencies install from a private copy of a populated cache with offline/frozen options and lifecycle scripts disabled. pnpm project hooks and side-effect caches are disabled. Project manager configuration, workspace hooks, local/Git dependency specifications and packages marked as requiring build scripts currently produce explicit blockers; support needs a reviewed preparation profile. No automatic fetch, script approval or substitute manager is attempted. Node and manager versions, base/patch hashes and dependency disposition are recorded in a private manifest. `--no-install` creates copies only and records dependencies as not-requested; it does not imply build readiness.
++The selected patch is caller input, not supervisor state. Ordinary owned, canonical, single-link regular files with mode `0644`, `0640` or `0600` are accepted when group/other write permissions are absent. The tool reads a bounded, identity-checked byte snapshot without chmodding the original. A linked, foreign, writable-by-others, changed or oversized input is rejected with a specific input error. The output parent remains canonical and owner-private (`0700`); the output root must not exist. Internal manifests and exported artifacts retain strict private-state validation. See [artifact handling](artifact-handling.md).
++
++Dependencies install from a private copy of a populated cache with offline/frozen options and lifecycle scripts disabled. pnpm project hooks and side-effect caches are disabled. Project manager configuration, workspace hooks, local/Git dependency specifications and packages marked as requiring build scripts currently produce explicit blockers; support needs a reviewed preparation profile. No automatic fetch, script approval or substitute manager is attempted. Node and manager versions, base/patch hashes and dependency disposition are recorded in a private manifest. `--no-install` creates copies only and records dependencies as not-requested; it requires no package manifest, manager pin, lockfile or cache and never executes a package manager, even if `--manager` is supplied. It does not imply build readiness. Omit `--manager` and `--cache` for copy-only preparation.
++
++For a generic Git project without dependency installation:
++
++```sh
++vibe-supervisor validation prepare --source /canonical/repository --base FULL_COMMIT --patch /private/diff.patch --out /private/new-validation --no-install
++```
+ 
+ The helper is not a project command runner: lint, build, measurement and browser checks remain deliberate coordinator actions with their own evidence. Dependencies must resolve within the validation root; external links and unsupported filesystem entries block preparation. Copying and inspection have file/byte/time/output limits.
+ 
+diff --git a/planning/development-strategy.md b/planning/development-strategy.md
+index 7d80f19..3b76674 100644
+--- a/planning/development-strategy.md
++++ b/planning/development-strategy.md
+@@ -258,3 +258,11 @@ Existing releases are never replaced or retagged, and only the latest release is
+ ## Qualification follow-up — 2026-10-28
+ 
+ The qualification worktree implements persisted review context counts, with zero for new empty lists and unknown for older records; its live review exported 2. Two separately authorized S05 design trials on 2.2.0 were rejected and recorded without retroactive D3 allowance debit. Candidate 65dbafd0 (2.2.1) passed Node 20 release checks, offline packaging, side-by-side installation, matched preparation and native readiness. Both qualification starts are consumed: review accepted independently; edit arithmetic and tests pass but its equivalent strict assertion import fails the unchanged literal contract, so it is closed rejected. The nested probe was unavailable; no sidecar permission follows. Evidence is linked from Handoff and the per-build ledger. No publication, extra start or integration follows these results.
++
++## Validation and acceptance repair — 2026-10-28
++
++Repeated boundary trials exposed two coordinator-workflow defects: an unnecessary literal strict-assert import check rejected equivalent code, and copy-only validation still required dependency-installation metadata. The local usability follow-up removes that incidental literal from future example contracts, requires criterion provenance and baseline preflight, and separates named test-framework inspection from behavioral checks. Copy-only preparation must reconstruct generic Git fixtures without invoking a package manager; dependency installation keeps the reviewed offline profile. Original frozen-contract failures and exact patches remain unchanged. This is a local source repair; installed/archive qualification and publication remain separate. See [the EDD follow-up](vibe-usability-edd-20261028.md#follow-up-amendment-4--reported-integration-test-failures).
++
++## Mechanism resilience review — 2026-10-28
++
++The owner requests resilient tool-owned mechanics after repeated Unsafe artifact failures. Decision: distinguish external input from private state instead of asking coordinators to repair ordinary file modes. Validate bounded immutable bytes from owned non-writable-by-others regular single-link canonical inputs; retain all strict internal-state, workspace, grant and execution controls. Unknown/unsafe ownership is never automatically chmodded. Full prepared-context checks must precede grant issue and consumption, with the launch race check retained. The [mechanism EDD/specification](mechanism-resilience-20261028.md) records first-candidate criteria and source audit findings. Subsequent orchestration work is contract-derived worker requirements, canonical start payloads, structured task preflight and explicit reviewed validation profiles. Automatic inference replay, arbitrary script execution and automatic patch integration are excluded.
+diff --git a/scripts/errors-doc.mjs b/scripts/errors-doc.mjs
+index 974a41f..6ba129e 100644
+--- a/scripts/errors-doc.mjs
++++ b/scripts/errors-doc.mjs
+@@ -22,8 +22,8 @@ export const MEANINGS = {
+   VSUP_RATE_LIMITED: 'Vibe or its provider answered with HTTP 429.',
+   VSUP_CANCELLED: 'No longer emitted. Kept so saved run records from older versions still read; this release records a stopped run as `cancelled` with no error.',
+   VSUP_OUTPUT_LIMIT: 'The run exceeded an event, transcript or artifact byte limit, or a Git command produced more than 100 MiB of output.',
+-  VSUP_ARTIFACT_ERROR: 'A run artifact could not be written, read or exported, including a Git failure while capturing the edit snapshot (details.operation), a refused Git filter, or a worktree directory that no longer exists (details.kind `workspace_missing`, details.path).',
+-  VSUP_INVALID_ARGUMENT: 'The tool arguments failed schema validation.',
++  VSUP_ARTIFACT_ERROR: 'A saved artifact or private directory failed ownership, privacy, link, size, identity or read checks (details.role/reason), or a run artifact could not be written/exported, including a Git snapshot failure (details.operation), a refused filter or a missing worktree (details.kind workspace_missing).',
++  VSUP_INVALID_ARGUMENT: 'A tool argument or selected request/contract/patch/validation input is invalid. File input errors name details.role/reason; ordinary owned 0644 inputs are supported, while unsafe, changed or malformed inputs are refused.',
+   VSUP_NOT_FOUND: 'No run with that ID exists.',
+   VSUP_BACKEND_ERROR: 'The backend reported a failure that has no more specific code.',
+   VSUP_LIMIT_EXCEEDED: 'The owning server/storage instance already has an active run.',
+diff --git a/src/cli/task.ts b/src/cli/task.ts
+index 94702a8..17b26f3 100644
+--- a/src/cli/task.ts
++++ b/src/cli/task.ts
+@@ -2,7 +2,7 @@ import { realpath } from 'node:fs/promises';
+ import path from 'node:path';
+ import { loadConfig, loadResolvedConfig } from '../config/config.js';
+ import { configExclusions, prepareTaskInputs, taskInputManifestSchema, verifyTaskInputs } from '../preparation/task-inputs.js';
+-import { readOwnedFile } from '../reporting/private-files.js';
++import { parseInputJson, readInputFile, readOwnedFile } from '../reporting/private-files.js';
+ import { RunManager } from '../core/run-manager.js';
+ import { selectedConfigPolicy } from '../config/policy.js';
+ import { z } from 'zod';
+@@ -28,7 +28,7 @@ export async function taskCommand(args: string[]): Promise<unknown> {
+       const result = await authorizeWithNode(values.get('--runtime-node')!, forwarded);
+       if (result !== undefined) return result;
+     }
+-    const document = z.object({ operation: z.enum(['review', 'edit']), request: z.record(z.string(), z.unknown()) }).strict().parse(JSON.parse((await readOwnedFile(path.resolve(values.get('--request')!), 256 * 1024)).toString('utf8')));
++    const document = parseInputJson(await readInputFile(path.resolve(values.get('--request')!), 256 * 1024, 'request'), 'request', z.object({ operation: z.enum(['review', 'edit']), request: z.record(z.string(), z.unknown()) }).strict());
+     const resolved = await loadResolvedConfig({ configPath: path.resolve(values.get('--config')!), createDataDir: false, requirePinManifest: false });
+     const manager = new RunManager(resolved.config, resolved.dataDir, [], undefined, { policy: selectedConfigPolicy(resolved.configPath), usageDataDir: resolved.dataDir });
+     return manager.authorizeDispatch(document.operation, document.request as unknown as Parameters<RunManager['authorizeDispatch']>[1], values.get('--owner-reference')!, values.get('--expires-at')!);
+diff --git a/src/contracts.ts b/src/contracts.ts
+index 6d7cd9b..39948f2 100644
+--- a/src/contracts.ts
++++ b/src/contracts.ts
+@@ -378,8 +378,8 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
+   VSUP_RATE_LIMITED: "Wait for the service rate limit to clear and retry.",
+   VSUP_CANCELLED: "Start another run if more work is needed.",
+   VSUP_OUTPUT_LIMIT: "Reduce the requested output or increase the configured limit.",
+-  VSUP_ARTIFACT_ERROR: "Inspect the run directory permissions and available disk space; for a Git failure, see details.operation and the repository state.",
+-  VSUP_INVALID_ARGUMENT: "Correct the tool arguments and try again.",
++  VSUP_ARTIFACT_ERROR: "Inspect the saved artifact or private directory identified by the failed operation and details.reason. Supervisor state must remain owned, private and unchanged; do not chmod or replace uncertain state automatically. Check available disk space; for a Git failure, see details.operation and the repository state.",
++  VSUP_INVALID_ARGUMENT: "Correct the reported argument or selected input. For file-input failures, use an owned canonical regular file with one hard link, no group/other write access and valid bounded content; ordinary 0644 input files are supported. Follow details.reason, preserve the input and do not retry an unchanged failure or a consumed attempt.",
+   VSUP_NOT_FOUND: "Check the run ID and try again.",
+   VSUP_BACKEND_ERROR: "Inspect backend diagnostics and retry if the problem is transient.",
+   VSUP_LIMIT_EXCEEDED: "Wait for the active run to finish, then start another run.",
+diff --git a/src/core/run-manager.ts b/src/core/run-manager.ts
+index cef6653..f8ed67b 100644
+--- a/src/core/run-manager.ts
++++ b/src/core/run-manager.ts
+@@ -1,5 +1,5 @@
+ import { captureVerification, verifySaved } from "../acceptance/verify.js";
+-import { contractDigest, verificationSummary, type AcceptanceContract, type AssessmentInput } from "../acceptance/schema.js";
++import { canonical, contractDigest, digest, verificationSummary, type AcceptanceContract, type AssessmentInput } from "../acceptance/schema.js";
+ import { readOwnedFile } from "../reporting/private-files.js";
+ import { createHash, randomUUID } from "node:crypto";
+ import { open, readFile, readdir, realpath, rename, rm, lstat, unlink } from "node:fs/promises";
+@@ -46,8 +46,8 @@ import { taskAuthorizeCommand } from "./dispatch-command.js";
+ import { verifyTaskInputs, taskInputManifestSchema, type TaskInputManifest } from "../preparation/task-inputs.js";
+ 
+ function assertPreparedManifestScope(manifest: TaskInputManifest, contract: AcceptanceContract | undefined): void {
+-  if (!contract || manifest.contract_sha256 !== contractDigest(contract) || manifest.allowed_output_paths.some((relative) => !contract.allowed_changed_paths.includes(relative))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs do not bind the frozen acceptance contract and output scope.");
+-  if (manifest.files.some((file) => file.provenance !== "committed" && manifest.allowed_output_paths.includes(file.path))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input overlaps an editable output with dirty source bytes; re-prepare from the worker base or select read-only context files.");
++  if (!contract || manifest.contract_sha256 !== contractDigest(contract) || manifest.allowed_output_paths.some((relative) => !contract.allowed_changed_paths.includes(relative))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs do not bind the frozen acceptance contract and output scope.", { role: "prepared_inputs", reason: "scope" });
++  if (manifest.files.some((file) => file.provenance !== "committed" && manifest.allowed_output_paths.includes(file.path))) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input overlaps an editable output with dirty source bytes; re-prepare from the worker base or select read-only context files.", { role: "prepared_inputs", reason: "dirty_output" });
+ }
+ 
+ interface Runtime {
+@@ -265,7 +265,6 @@ export class RunManager {
+     const input = parseInput(editStartSchema, value);
+     if (input.prepared_inputs && this.activeBackendKind !== "app-server") throw codedError("VSUP_INVALID_STATE", "Prepared task inputs are supported only by the app-server backend.");
+     if (input.prepared_inputs && !input.acceptance_contract) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs require an acceptance_contract to bind their output scope before dispatch.");
+-    if (input.prepared_inputs) await this.assertPreparedInputAdmission(input.prepared_inputs, input.acceptance_contract!);
+     if (input.allowed_write_paths && this.activeBackendKind !== "app-server") throw codedError("VSUP_INVALID_STATE", "allowed_write_paths is supported only by the app-server backend.");
+     const started = await this.start("edit", input.task, input.cwd, {
+       authorizationId: input.authorization_id, attemptId: input.attempt_id,
+@@ -293,7 +292,7 @@ export class RunManager {
+     if (allowedWritePaths && this.activeBackendKind !== "app-server") throw codedError("VSUP_INVALID_STATE", "allowed_write_paths is supported only by the app-server backend.");
+     if (preparedInputs) {
+       if (!acceptanceContract) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs require an acceptance contract.");
+-      await this.assertPreparedInputAdmission(preparedInputs, acceptanceContract);
++      await this.assertPreparedInputAdmission({ directory: preparedInputs.directory, manifestSha256: preparedInputs.manifest_sha256 }, acceptanceContract, admitted, baseCommit, policy, deadline);
+     }
+     const limits = this.dispatchLimits(mode, parsed.max_turns, parsed.timeout_seconds);
+     const binding = await withDeadline(dispatchBinding({ config: policy.config, policyRevision: policy.revision, mode, workspace: admitted.workspace, task: parsed.task, ...(baseCommit ? { baseCommit } : {}), contextFiles, ...("output" in parsed ? { output: parsed.output } : {}), ...(acceptanceContract ? { acceptanceContract } : {}), ...(preparedInputs ? { preparedManifestSha256: preparedInputs.manifest_sha256 } : {}), ...(allowedWritePaths ? { allowedWritePaths } : {}), limits }), deadline - Date.now(), "Authorization binding exceeded its deadline.");
+@@ -311,16 +310,28 @@ export class RunManager {
+     return { timeoutSeconds: timeoutSeconds ?? (mode === "review" ? this.config.limits.reviewTimeoutSeconds : this.config.limits.editTimeoutSeconds), maxTurns: turns, maxEventBytes: this.config.limits.maxEventBytes, maxTranscriptBytes: this.config.limits.maxTranscriptBytes, maxArtifactBytes: this.config.limits.maxArtifactBytes, ...(this.config.limits.maxTokens === undefined ? {} : { maxTokens: this.config.limits.maxTokens }), ...(this.config.limits.maxCostUsd === undefined ? {} : { maxCostUsd: this.config.limits.maxCostUsd }), maxModelCalls: turnBackstop(turns) };
+   }
+ 
+-  private async assertPreparedInputAdmission(prepared: { directory: string; manifest_sha256: string }, contract: AcceptanceContract): Promise<void> {
+-    const directory = path.resolve(prepared.directory);
+-    let manifest;
+-    try {
+-      manifest = taskInputManifestSchema.parse(JSON.parse((await readOwnedFile(path.join(directory, "manifest.json"), 256 * 1024)).toString("utf8")));
+-    } catch {
+-      throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs are not a safe, readable task context.");
+-    }
+-    if (manifest.manifest_sha256 !== prepared.manifest_sha256) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input manifest digest differs from the selected start request.");
+-    assertPreparedManifestScope(manifest, contract);
++  private async assertPreparedInputAdmission(prepared: { directory: string; manifestSha256: string }, contract: AcceptanceContract | undefined, admitted: { workspace: string; exclusions: readonly ExclusionScope[] }, baseCommit: string | undefined, policy: CurrentPolicy, deadline: number): Promise<TaskInputManifest> {
++    if (this.activeBackendKind !== "app-server") throw codedError("VSUP_INVALID_STATE", "Prepared task inputs are supported only by the app-server backend.");
++    const verify = async (): Promise<TaskInputManifest> => {
++      const verified = await verifyTaskInputs(prepared.directory, { allowedRoots: policy.config.allowedWorkspaceRoots, exclusions: admitted.exclusions });
++      const bytes = await readOwnedFile(path.join(prepared.directory, "manifest.json"), 256 * 1024);
++      let value: unknown;
++      try {
++        value = JSON.parse(bytes.toString("utf8"));
++      } catch (error) {
++        if (!(error instanceof SyntaxError)) throw error;
++        throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input manifest is not valid JSON; prepare the task context again.", { role: "prepared_inputs", reason: "manifest_invalid" });
++      }
++      const parsed = taskInputManifestSchema.safeParse(value);
++      if (!parsed.success) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input manifest does not match its required schema; prepare the task context again.", { role: "prepared_inputs", reason: "manifest_invalid" });
++      const manifest = parsed.data;
++      const { manifest_sha256: selected, ...body } = manifest;
++      if (verified.manifest_sha256 !== prepared.manifestSha256 || selected !== prepared.manifestSha256 || digest(canonical(body)) !== selected) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input manifest digest differs from the selected start request.", { role: "prepared_inputs", reason: "manifest" });
++      if (!baseCommit || manifest.base_commit !== baseCommit || manifest.source !== admitted.workspace) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs are stale for this edit source or base; prepare them again from the current base.", { role: "prepared_inputs", reason: "base" });
++      assertPreparedManifestScope(manifest, contract);
++      return manifest;
++    };
++    return withDeadline(verify(), deadline - Date.now(), "Prepared input verification exceeded its preparation deadline.");
+   }
+ 
+   private async awaitStartOutcome(started: StartResult, waitSeconds: number, signal?: AbortSignal): Promise<StartResult> {
+@@ -380,6 +391,7 @@ export class RunManager {
+       if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
+       const limits = this.dispatchLimits(mode, options.maxTurns, options.timeoutSeconds);
+       const baseCommit = mode === "edit" ? checkedBase ?? await this.editBaseCommit(source, options.baseRef ?? "HEAD", preparationDeadline) : undefined;
++      if (options.preparedInputs) await this.assertPreparedInputAdmission(options.preparedInputs, options.acceptanceContract, admitted, baseCommit, policy, preparationDeadline);
+       const binding = await withDeadline(dispatchBinding({ config: policy.config, policyRevision: policy.revision, mode, workspace: source, task, ...(baseCommit ? { baseCommit } : {}), contextFiles: options.contextFiles ?? [], ...(options.output ? { output: options.output } : {}), ...(options.acceptanceContract ? { acceptanceContract: options.acceptanceContract } : {}), ...(options.preparedInputs ? { preparedManifestSha256: options.preparedInputs.manifestSha256 } : {}), ...(options.allowedWritePaths ? { allowedWritePaths: options.allowedWritePaths } : {}), limits }), preparationDeadline - Date.now(), "Dispatch binding exceeded its preparation deadline.");
+       await new DispatchGrants(path.join(this.usageDataDir, "dispatch-grants")).consume({ authorizationId: options.authorizationId, attemptId: options.attemptId, requestSha256: binding.requestSha256, binding: binding.fields, runId: id });
+       if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor stopped after consuming this attempt; it will not be replayed.");
+@@ -1112,14 +1124,11 @@ export class RunManager {
+       if (runtime.preparedInputDirectory) {
+         const selectedPolicy = await this.admissionPolicy();
+         if (selectedPolicy.revision !== runtime.record.policyRevision || !baseRef) throw codedError("VSUP_READINESS_RECEIPT_INVALID", "Prepared input authorization or edit base changed before dispatch.");
+-        const verified = await verifyTaskInputs(runtime.preparedInputDirectory, { allowedRoots: selectedPolicy.config.allowedWorkspaceRoots, exclusions: runtime.record.exclusions ?? [] });
+-        if (verified.manifest_sha256 !== runtime.record.preparedContextManifestSha256) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared input manifest digest differs from the selected start request.");
+-        const manifest = taskInputManifestSchema.parse(JSON.parse((await readOwnedFile(path.join(runtime.preparedInputDirectory, "manifest.json"), 256 * 1024)).toString("utf8")));
+-        if (manifest.base_commit !== baseRef || manifest.source !== runtime.record.sourceWorkspace) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs are stale for this edit base; prepare them again from the current base.");
+-        assertPreparedManifestScope(manifest, runtime.record.acceptanceContract);
++        const manifest = await this.assertPreparedInputAdmission({ directory: runtime.preparedInputDirectory, manifestSha256: runtime.record.preparedContextManifestSha256! }, runtime.record.acceptanceContract, { workspace: runtime.record.sourceWorkspace, exclusions: runtime.record.exclusions ?? [] }, baseRef, selectedPolicy, runtime.deadlineAt!);
+         preparedContextFiles = [];
+         for (const file of manifest.files) {
+           const content = await readOwnedFile(path.join(runtime.preparedInputDirectory, "context", file.path), 128 * 1024);
++          if (content.length !== file.bytes || digest(content) !== file.sha256) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared context changed before worker launch; prepare the task context again.", { role: "prepared_inputs", reason: "copy_changed" });
+           const text = content.toString("utf8");
+           if (!Buffer.from(text, "utf8").equals(content)) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared context is not valid UTF-8 text.");
+           preparedContextFiles.push({ ...file, content: text });
+diff --git a/src/preparation/evidence.ts b/src/preparation/evidence.ts
+index 62f5e43..eb004ae 100644
+--- a/src/preparation/evidence.ts
++++ b/src/preparation/evidence.ts
+@@ -64,5 +64,9 @@ export async function checkPreparation(config: SupervisorConfig, dataDirOverride
+     if (digest(await readOwnedFile(path.join(path.dirname(targetReceiptPath), 'preparation-reports', `${receipt.report_sha256}.json`), 4*1024*1024)) !== receipt.report_sha256) throw new Error('Preparation report changed');
+     if (receipt.identity !== identity) return {status:'stale',candidate_sha256:candidate,version:APP_VERSION,reason:'Candidate, pin, runtime or policy changed'};
+     return {status:receipt.result,candidate_sha256:candidate,version:APP_VERSION,reason:'Version-matched no-inference evidence; hosted acceptance remains separate'};
+-  } catch(error) { return {status:(error as NodeJS.ErrnoException).code === 'ENOENT' ? 'missing' : 'stale',candidate_sha256:candidate,version:APP_VERSION,reason:'No usable matching preparation receipt'}; }
++  } catch(error) {
++    const failure = error as NodeJS.ErrnoException & { details?: { reason?: string } };
++    const missing = failure.code === 'ENOENT' || (failure.code === 'VSUP_ARTIFACT_ERROR' && failure.details?.reason === 'missing');
++    return {status:missing ? 'missing' : 'stale',candidate_sha256:candidate,version:APP_VERSION,reason:'No usable matching preparation receipt'};
++  }
+ }
+diff --git a/src/preparation/task-inputs.ts b/src/preparation/task-inputs.ts
+index 70425d6..4a0cf6c 100644
+--- a/src/preparation/task-inputs.ts
++++ b/src/preparation/task-inputs.ts
+@@ -10,7 +10,7 @@ import { resolveBaseCommit, resolveGitRoot } from '../git/worktree.js';
+ import { judgeWorkspacePath } from '../backends/app-server/approvals.js';
+ import { workspaceAnchors } from '../security/globs.js';
+ import { resolveAdmittedWorkspace, resolveCanonicalWorkspaceRoot } from '../security/paths.js';
+-import { assertOwnedDirectory, readOwnedFile } from '../reporting/private-files.js';
++import { assertOwnedDirectory, parseInputJson, readInputFile, readOwnedFile } from '../reporting/private-files.js';
+ import { sanitizeForPersistence } from '../persistence/atomic.js';
+ 
+ export const MAX_TASK_INPUT_FILES = 12;
+@@ -28,6 +28,24 @@ export const taskInputManifestSchema = z.object({
+ });
+ export type TaskInputManifest = z.infer<typeof taskInputManifestSchema>;
+ 
++type InputFailureReason = 'source_status' | 'source_path' | 'source_changed' | 'source_content' | 'policy' | 'manifest' | 'base' | 'required_files' | 'copy_changed' | 'inventory' | 'totals';
++
++function inputFailure(reason: InputFailureReason, message: string): Error {
++  return Object.assign(new Error(message), { code: 'VSUP_INVALID_ARGUMENT', details: { role: 'prepared_inputs', reason } });
++}
++
++function artifactFailure(message: string): Error {
++  return Object.assign(new Error(message), { code: 'VSUP_ARTIFACT_ERROR', details: { role: 'artifact', reason: 'unsafe' } });
++}
++
++async function sourceStat(file: string): Promise<Awaited<ReturnType<typeof lstat>>> {
++  try { return await lstat(file); }
++  catch (error) {
++    if (['ENOENT', 'ENOTDIR', 'ELOOP', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) throw inputFailure('source_path', 'Task input source cannot be accessed safely');
++    throw error;
++  }
++}
++
+ function runGit(root: string, args: string[]): Promise<string> {
+   return new Promise((resolve, reject) => {
+     const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: process.env.HOME, LANG: 'C', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_OPTIONAL_LOCKS: '0' };
+@@ -43,10 +61,10 @@ function runGit(root: string, args: string[]): Promise<string> {
+ async function currentStatus(root: string, relative: string): Promise<'committed' | 'dirty-tracked' | 'untracked'> {
+   const status = await runGit(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', relative]);
+   const record = status.slice(0, 2);
+-  if (record.includes('U') || record === 'AA' || record === 'DD') throw new Error(`Conflicted source file refused: ${relative}`);
++  if (record.includes('U') || record === 'AA' || record === 'DD') throw inputFailure('source_status', `Conflicted source file refused: ${relative}`);
+   if (!record) {
+     const tracked = await runGit(root, ['ls-files', '-z', '--', relative]);
+-    if (!tracked) throw new Error(`Selected input is ignored or absent from Git discovery: ${relative}. Use a reviewed non-ignored evidence document; do not disable ignore rules or force-add private evidence.`);
++    if (!tracked) throw inputFailure('source_status', `Selected input is ignored or absent from Git discovery: ${relative}. Use a reviewed non-ignored evidence document; do not disable ignore rules or force-add private evidence.`);
+     return 'committed';
+   }
+   if (record === '??') return 'untracked';
+@@ -54,24 +72,40 @@ async function currentStatus(root: string, relative: string): Promise<'committed
+ }
+ 
+ async function readSourceFile(root: string, relative: string): Promise<Buffer> {
++  try { return await readSourceFileChecked(root, relative); }
++  catch (error) {
++    if (['ENOENT', 'ENOTDIR', 'ELOOP', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) throw inputFailure('source_path', 'Task input source cannot be accessed safely');
++    throw error;
++  }
++}
++
++async function readSourceFileChecked(root: string, relative: string): Promise<Buffer> {
+   const parsed = safeRelativePath.parse(relative);
+   let current = root;
+   for (const segment of parsed.split('/')) {
+     current = path.join(current, segment);
+-    const info = await lstat(current);
+-    if (info.isSymbolicLink()) throw new Error(`Linked source path refused: ${relative}`);
++    const info = await sourceStat(current);
++    if (info.isSymbolicLink()) throw inputFailure('source_path', `Linked source path refused: ${relative}`);
+   }
+-  const before = await lstat(current);
+-  if (!before.isFile() || before.nlink !== 1 || before.size > MAX_TASK_INPUT_BYTES || (typeof process.getuid === 'function' && before.uid !== process.getuid())) throw new Error(`Unsafe or oversized source file: ${relative}`);
+-  if (await realpath(current) !== current) throw new Error(`Noncanonical source path refused: ${relative}`);
++  const before = await sourceStat(current);
++  if (!before.isFile() || before.nlink !== 1 || before.size > MAX_TASK_INPUT_BYTES || (typeof process.getuid === 'function' && before.uid !== process.getuid())) throw inputFailure('source_path', `Unsafe or oversized source file: ${relative}`);
++  if (await realpath(current) !== current) throw inputFailure('source_path', `Noncanonical source path refused: ${relative}`);
+   const handle = await open(current, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+   try {
+     const opened = await handle.stat();
+-    if (opened.ino !== before.ino || opened.dev !== before.dev || !opened.isFile() || opened.nlink !== 1) throw new Error(`Source file changed: ${relative}`);
+-    const bytes = await handle.readFile(); const after = await handle.stat();
+-    if (bytes.length > MAX_TASK_INPUT_BYTES || after.ino !== opened.ino || after.dev !== opened.dev || after.size !== opened.size || after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs) throw new Error(`Source file changed while reading: ${relative}`);
++    if (opened.ino !== before.ino || opened.dev !== before.dev || !opened.isFile() || opened.nlink !== 1) throw inputFailure('source_changed', `Source file changed: ${relative}`);
++    const buffer = Buffer.alloc(Math.min(MAX_TASK_INPUT_BYTES + 1, opened.size + 1));
++    let length = 0;
++    while (length < buffer.length) {
++      const { bytesRead } = await handle.read(buffer, length, buffer.length - length, length);
++      if (!bytesRead) break;
++      length += bytesRead;
++    }
++    const after = await handle.stat();
++    if (length > MAX_TASK_INPUT_BYTES || length !== opened.size || after.ino !== opened.ino || after.dev !== opened.dev || after.size !== opened.size || after.mtimeMs !== opened.mtimeMs || after.ctimeMs !== opened.ctimeMs) throw inputFailure('source_changed', `Source file changed while reading: ${relative}`);
++    const bytes = buffer.subarray(0, length);
+     const text = bytes.toString('utf8');
+-    if (!Buffer.from(text, 'utf8').equals(bytes) || JSON.stringify(sanitizeForPersistence(text)) !== JSON.stringify(text)) throw new Error(`Source file is not safe to persist: ${relative}`);
++    if (!Buffer.from(text, 'utf8').equals(bytes) || JSON.stringify(sanitizeForPersistence(text)) !== JSON.stringify(text)) throw inputFailure('source_content', `Source file is not safe to persist: ${relative}`);
+     return bytes;
+   } finally { await handle.close(); }
+ }
+@@ -81,7 +115,7 @@ function manifestHash(value: Omit<TaskInputManifest, 'manifest_sha256'>): string
+ async function resolveSource(source: string): Promise<string> {
+   const root = await resolveGitRoot(source);
+   const canonicalRoot = await resolveCanonicalWorkspaceRoot(root);
+-  if (root !== canonicalRoot || path.resolve(source) !== root) throw new Error('Source must be the canonical Git repository root');
++  if (root !== canonicalRoot || path.resolve(source) !== root) throw inputFailure('source_path', 'Source must be the canonical Git repository root');
+   return root;
+ }
+ 
+@@ -89,7 +123,7 @@ function policyDigest(allowedRoots: readonly string[], scopes: readonly Exclusio
+ 
+ async function assertInputPolicy(source: string, relative: string, anchors: ReturnType<typeof workspaceAnchors>): Promise<void> {
+   const judged = await judgeWorkspacePath(source, relative, anchors);
+-  if (!judged.allowed) throw new Error(`Task input path refused (${judged.reason}): ${relative}`);
++  if (!judged.allowed) throw inputFailure('policy', `Task input path refused (${judged.reason}): ${relative}`);
+ }
+ 
+ export async function prepareTaskInputs(options: { source: string; base: string; files: readonly string[]; outputPaths?: readonly string[]; output: string; contractFile?: string; allowedRoots: readonly string[]; exclusions?: readonly ExclusionScope[] }): Promise<Record<string, unknown>> {
+@@ -113,9 +147,10 @@ export async function prepareTaskInputs(options: { source: string; base: string;
+   try { await lstat(output); problems.push('Prepared output already exists; select a new directory'); }
+   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') problems.push('Prepared output cannot be inspected'); }
+   let contractSha256: string | null = null;
++  let contractError: (Error & { code: string; details: { role: string; reason: string } }) | undefined;
+   if (options.contractFile) {
+-    try { contractSha256 = contractDigest(acceptanceContractSchema.parse(JSON.parse((await readOwnedFile(options.contractFile, 256 * 1024)).toString('utf8')))); }
+-    catch { problems.push('Acceptance contract is unsafe or invalid; require an owned canonical single-link file with mode 0600 and a valid acceptance-contract JSON schema'); }
++    try { contractSha256 = contractDigest(parseInputJson(await readInputFile(options.contractFile, 256 * 1024, 'contract'), 'contract', acceptanceContractSchema)); }
++    catch (error) { if (typeof error === 'object' && error !== null && 'details' in error && typeof error.details === 'object' && error.details !== null && 'reason' in error.details && (error.details.reason === 'invalid_json' || error.details.reason === 'invalid_schema')) { contractError = error as typeof contractError; problems.push('Acceptance contract must be valid acceptance-contract JSON'); } else throw error; }
+   }
+   for (const relative of options.files) {
+     try { await assertInputPolicy(source, relative, anchors); safeRelativePath.parse(relative); await currentStatus(source, relative); }
+@@ -125,7 +160,7 @@ export async function prepareTaskInputs(options: { source: string; base: string;
+     try { await assertInputPolicy(source, relative, anchors); safeRelativePath.parse(relative); }
+     catch (error) { problems.push((error as Error).message); }
+   }
+-  if (problems.length) throw new Error(`Task preparation preflight failed:\n${problems.map(problem => `- ${problem}`).join('\n')}`);
++  if (problems.length) { const error = new Error(`Task preparation preflight failed:\n${problems.map(problem => `- ${problem}`).join('\n')}`); throw contractError ? Object.assign(error, { code: contractError.code, details: contractError.details }) : error; }
+   const files = [];
+   let totalBytes = 0;
+   for (const relative of options.files) {
+@@ -163,14 +198,22 @@ export async function prepareTaskInputs(options: { source: string; base: string;
+ export async function verifyTaskInputs(directory: string, policy: { allowedRoots: readonly string[]; exclusions: readonly ExclusionScope[] }, requiredFiles?: readonly string[]): Promise<Record<string, unknown>> {
+   const root = path.resolve(directory);
+   await assertOwnedDirectory(root);
+-  const manifest = taskInputManifestSchema.parse(JSON.parse((await readOwnedFile(path.join(root, 'manifest.json'), 256 * 1024)).toString('utf8')));
++  const manifestBytes = await readOwnedFile(path.join(root, 'manifest.json'), 256 * 1024);
++  const manifestText = manifestBytes.toString('utf8');
++  if (!Buffer.from(manifestText, 'utf8').equals(manifestBytes)) throw inputFailure('manifest', 'Invalid task input manifest');
++  let manifestValue: unknown;
++  try { manifestValue = JSON.parse(manifestText); }
++  catch (error) { if (error instanceof SyntaxError) throw inputFailure('manifest', 'Invalid task input manifest'); throw error; }
++  const parsedManifest = taskInputManifestSchema.safeParse(manifestValue);
++  if (!parsedManifest.success) throw inputFailure('manifest', 'Invalid task input manifest');
++  const manifest = parsedManifest.data;
+   const { manifest_sha256: claimed, ...body } = manifest;
+-  if (manifestHash(body) !== claimed) throw new Error('Task input manifest digest mismatch');
++  if (manifestHash(body) !== claimed) throw inputFailure('manifest', 'Task input manifest digest mismatch');
+   const source = await resolveSource(manifest.source);
+   const admitted = await resolveAdmittedWorkspace(source, policy.allowedRoots);
+-  if (admitted.workspace !== source || policyDigest(policy.allowedRoots, policy.exclusions) !== manifest.policy_sha256) throw new Error('Task input authorization policy changed');
+-  if (source !== manifest.source || await resolveBaseCommit(source, 'HEAD') !== manifest.base_commit) throw new Error('Prepared task inputs are stale: source base changed');
+-  if (requiredFiles && (requiredFiles.length !== manifest.files.length || requiredFiles.some((file, index) => file !== manifest.files[index]?.path))) throw new Error('Required task input file list differs from the prepared manifest');
++  if (admitted.workspace !== source || policyDigest(policy.allowedRoots, policy.exclusions) !== manifest.policy_sha256) throw inputFailure('policy', 'Task input authorization policy changed');
++  if (source !== manifest.source || await resolveBaseCommit(source, 'HEAD') !== manifest.base_commit) throw inputFailure('base', 'Prepared task inputs are stale: source base changed');
++  if (requiredFiles && (requiredFiles.length !== manifest.files.length || requiredFiles.some((file, index) => file !== manifest.files[index]?.path))) throw inputFailure('required_files', 'Required task input file list differs from the prepared manifest');
+   const dirty = [];
+   const anchors = workspaceAnchors(policy.exclusions, source);
+   const expectedCopies = new Set(manifest.files.map((entry) => entry.path.split('/').join(path.sep)));
+@@ -184,11 +227,11 @@ export async function verifyTaskInputs(directory: string, policy: { allowedRoots
+     await assertInputPolicy(source, entry.path, anchors);
+     const sourceBytes = await readSourceFile(source, entry.path);
+     const provenance = await currentStatus(source, entry.path);
+-    if (digest(sourceBytes) !== entry.sha256 || sourceBytes.length !== entry.bytes || provenance !== entry.provenance) throw new Error(`Required source changed: ${entry.path}`);
++    if (digest(sourceBytes) !== entry.sha256 || sourceBytes.length !== entry.bytes || provenance !== entry.provenance) throw inputFailure('source_changed', `Required source changed: ${entry.path}`);
+     const copyPath = path.join(root, 'context', entry.path);
+     await assertPrivateCopyPath(root, copyPath);
+     const copied = await readOwnedFile(copyPath, MAX_TASK_INPUT_BYTES);
+-    if (digest(copied) !== entry.sha256 || copied.length !== entry.bytes) throw new Error(`Prepared context bytes changed: ${entry.path}`);
++    if (digest(copied) !== entry.sha256 || copied.length !== entry.bytes) throw inputFailure('copy_changed', `Prepared context bytes changed: ${entry.path}`);
+     totalBytes += copied.length;
+     if (provenance !== 'committed') dirty.push({ path: entry.path, sha256: entry.sha256, bytes: entry.bytes });
+   }
+@@ -199,18 +242,18 @@ export async function verifyTaskInputs(directory: string, policy: { allowedRoots
+       const child = path.join(relative, name);
+       const absolute = path.join(root, 'context', child);
+       const info = await lstat(absolute);
+-      if (info.isSymbolicLink() || (typeof process.getuid === 'function' && info.uid !== process.getuid()) || (info.mode & 0o077) !== 0) throw new Error('Unsafe prepared context inventory');
++      if (info.isSymbolicLink() || (typeof process.getuid === 'function' && info.uid !== process.getuid()) || (info.mode & 0o077) !== 0) throw artifactFailure('Unsafe prepared context inventory');
+       if (info.isDirectory() && expectedDirectories.has(child)) await walkCopies(child);
+       else if (info.isFile() && info.nlink === 1) actualCopies.push(child);
+-      else throw new Error('Unsupported prepared context inventory entry');
++      else throw inputFailure('inventory', 'Unsupported prepared context inventory entry');
+     }
+   };
+   await walkCopies('');
+-  if (actualCopies.length !== expectedCopies.size || actualCopies.some((file) => !expectedCopies.has(file))) throw new Error('Prepared context contains missing or unlisted files');
++  if (actualCopies.length !== expectedCopies.size || actualCopies.some((file) => !expectedCopies.has(file))) throw inputFailure('inventory', 'Prepared context contains missing or unlisted files');
+   const topLevel = await readdir(root);
+-  if (topLevel.length !== 2 || !topLevel.includes('context') || !topLevel.includes('manifest.json')) throw new Error('Prepared directory contains unlisted files');
++  if (topLevel.length !== 2 || !topLevel.includes('context') || !topLevel.includes('manifest.json')) throw inputFailure('inventory', 'Prepared directory contains unlisted files');
+   for (const relative of manifest.allowed_output_paths) await assertInputPolicy(source, relative, anchors);
+-  if (totalBytes !== manifest.total_bytes || digest(canonical(dirty)) !== manifest.dirty_overlay_sha256) throw new Error('Prepared context totals or dirty overlay changed');
++  if (totalBytes !== manifest.total_bytes || digest(canonical(dirty)) !== manifest.dirty_overlay_sha256) throw inputFailure('totals', 'Prepared context totals or dirty overlay changed');
+   return { status: 'verified', files: manifest.total_files, bytes: manifest.total_bytes, token_count: null, manifest_sha256: claimed };
+ }
+ 
+@@ -221,8 +264,13 @@ async function assertPrivateCopyPath(root: string, file: string): Promise<void>
+   let current = root;
+   for (const part of relative.split(path.sep)) {
+     current = path.join(current, part);
+-    const info = await lstat(current);
+-    if (info.isSymbolicLink() || (typeof process.getuid === 'function' && info.uid !== process.getuid())) throw new Error('Unsafe prepared context path');
+-    if (current !== file && (!info.isDirectory() || (info.mode & 0o077) !== 0)) throw new Error('Unsafe prepared context directory');
++    let info: Awaited<ReturnType<typeof lstat>>;
++    try { info = await lstat(current); }
++    catch (error) {
++      if (['ENOENT', 'ENOTDIR', 'ELOOP', 'EACCES', 'EPERM'].includes((error as NodeJS.ErrnoException).code ?? '')) throw artifactFailure('Prepared context path cannot be accessed safely');
++      throw error;
++    }
++    if (info.isSymbolicLink() || (typeof process.getuid === 'function' && info.uid !== process.getuid())) throw artifactFailure('Unsafe prepared context path');
++    if (current !== file && (!info.isDirectory() || (info.mode & 0o077) !== 0)) throw artifactFailure('Unsafe prepared context directory');
+   }
+ }
+diff --git a/src/reporting/export.ts b/src/reporting/export.ts
+index 049e419..9274334 100644
+--- a/src/reporting/export.ts
++++ b/src/reporting/export.ts
+@@ -11,7 +11,7 @@ import { sanitizeForPersistence } from '../persistence/atomic.js';
+ import { environmentSecrets, patchContainsCredential } from '../security/redaction.js';
+ import { contractDigest, digest, validationSchema, verificationSummary } from '../acceptance/schema.js';
+ import { verifySaved } from '../acceptance/verify.js';
+-import { assertOwnedDirectory, readOwnedFile } from './private-files.js';
++import { assertOwnedDirectory, invalidValidationInput, parseInputJson, readInputFile, readOwnedFile } from './private-files.js';
+ 
+ const uuid = z.string().uuid({ version: 'v4' });
+ const ledgerText = z.string().max(4096).nullable();
+@@ -46,7 +46,7 @@ export async function locateSavedRun(dataDir: string, runId: string): Promise<st
+   await inspect(dataDir);
+   const sessions = path.join(dataDir, 'mcp-sessions');
+   try {
+-    await assertOwnedDirectory(sessions); const entries = await readdir(sessions);
++    await lstat(sessions); await assertOwnedDirectory(sessions); const entries = await readdir(sessions);
+     if (entries.length > 128) throw new Error('Too many isolated sessions');
+     for (const name of entries.filter((entry) => /^session-[A-Za-z0-9]{6}$/.test(entry))) await inspect(path.join(sessions, name));
+   } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+@@ -139,9 +139,9 @@ export async function exportReport(options: { directory: string; output: string;
+   const exportedApprovals = approvals ? Buffer.from(JSON.stringify(publicValue(exportedLedger(approvals.ledger, record)), null, 2) + '\n') : undefined;
+   let external: unknown = null;
+   if (options.validationFile) {
+-    const manifest = validationManifest.parse(JSON.parse((await readOwnedFile(options.validationFile, 256 * 1024)).toString('utf8')));
+-    if (manifest.patch_sha256 !== patchArtifact?.sha256) throw new Error('External validation refers to another patch');
+-    if (new Set(manifest.validations.map((item) => item.id)).size !== manifest.validations.length) throw new Error('Duplicate validation IDs');
++    const manifest = parseInputJson(await readInputFile(options.validationFile, 256 * 1024, 'validation'), 'validation', validationManifest);
++    if (manifest.patch_sha256 !== patchArtifact?.sha256) throw invalidValidationInput('mismatch');
++    if (new Set(manifest.validations.map((item) => item.id)).size !== manifest.validations.length) throw invalidValidationInput('duplicate');
+     external = { source: 'coordinator-reported', ...manifest };
+   }
+   const assessments = record.assessments ?? [];
+diff --git a/src/reporting/private-files.ts b/src/reporting/private-files.ts
+index 73fe49f..d401994 100644
+--- a/src/reporting/private-files.ts
++++ b/src/reporting/private-files.ts
+@@ -1,24 +1,96 @@
+-import { constants } from 'node:fs';
++import { constants, type Stats } from 'node:fs';
+ import { lstat, open, realpath } from 'node:fs/promises';
+ import path from 'node:path';
++import type { z } from 'zod';
+ 
+-export async function readOwnedFile(file: string, maxBytes = 100 * 1024 * 1024): Promise<Buffer> {
+-  if (!path.isAbsolute(file) || await realpath(file) !== file) throw new Error('Noncanonical or linked artifact');
+-  const before = await lstat(file);
+-  const foreign = typeof process.getuid === 'function' && before.uid !== process.getuid();
+-  if (!before.isFile() || before.isSymbolicLink() || foreign || (before.mode & 0o077) !== 0 || before.nlink !== 1 || before.size > maxBytes) throw new Error('Unsafe artifact');
+-  const handle = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | constants.O_NONBLOCK);
++type FileRole = 'request' | 'contract' | 'patch' | 'validation' | 'artifact' | 'directory';
++type FileReason = 'missing' | 'permission' | 'link' | 'type' | 'owner' | 'mode' | 'size' | 'changed' | 'invalid_json' | 'invalid_schema' | 'mismatch' | 'duplicate';
++
++function fileFailure(role: FileRole, reason: FileReason): Error {
++  const code = role === 'artifact' || role === 'directory' ? 'VSUP_ARTIFACT_ERROR' : 'VSUP_INVALID_ARGUMENT';
++  const guidance = reason === 'mismatch' ? 'External validation refers to another patch; provide validation for this patch.' : reason === 'duplicate' ? 'Duplicate validation IDs; provide unique IDs.' : reason === 'invalid_json' || reason === 'invalid_schema' ? 'Provide valid JSON matching the required schema.' : role === 'directory' ? 'Use a canonical, owner-private directory.' : 'Use a canonical, owned, single-link file with safe permissions and within the size limit.';
++  return Object.assign(new Error(`Cannot read ${role}: ${reason}. ${guidance}`), { code, details: { role, reason } });
++}
++
++function failureFor(error: unknown, role: FileRole): never {
++  const code = (error as NodeJS.ErrnoException)?.code;
++  if (code === 'ENOENT' || code === 'ENOTDIR') throw fileFailure(role, 'missing');
++  if (code === 'EACCES' || code === 'EPERM') throw fileFailure(role, 'permission');
++  if (code === 'ELOOP') throw fileFailure(role, 'link');
++  throw error;
++}
++
++function check(info: Stats, role: FileRole, maxBytes: number, privateFile: boolean): void {
++  if (info.isSymbolicLink()) throw fileFailure(role, 'link');
++  if (!info.isFile()) throw fileFailure(role, 'type');
++  if (typeof process.getuid === 'function' && info.uid !== process.getuid()) throw fileFailure(role, 'owner');
++  if (info.nlink !== 1) throw fileFailure(role, 'link');
++  if ((info.mode & (privateFile ? 0o077 : 0o022)) !== 0) throw fileFailure(role, 'mode');
++  if (info.size > maxBytes) throw fileFailure(role, 'size');
++}
++
++function same(a: Stats, b: Stats): boolean {
++  return a.dev === b.dev && a.ino === b.ino && a.uid === b.uid && a.mode === b.mode && a.nlink === b.nlink && a.size === b.size && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs;
++}
++
++async function readChecked(file: string, maxBytes: number, role: FileRole, privateFile: boolean): Promise<Buffer> {
+   try {
+-    const info = await handle.stat();
+-    if (info.ino !== before.ino || info.dev !== before.dev || !info.isFile() || info.size > maxBytes) throw new Error('Artifact changed');
+-    const bytes = await handle.readFile(); const after = await handle.stat(); const current = await lstat(file);
+-    if (bytes.length > maxBytes || after.size !== info.size || after.mtimeMs !== info.mtimeMs || after.ctimeMs !== info.ctimeMs || current.ino !== info.ino || current.dev !== info.dev) throw new Error('Artifact changed while reading');
+-    return bytes;
+-  } finally { await handle.close(); }
++    if (!path.isAbsolute(file)) throw fileFailure(role, 'link');
++    const before = await lstat(file);
++    check(before, role, maxBytes, privateFile);
++    if (await realpath(file) !== file) throw fileFailure(role, 'link');
++    const handle = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | constants.O_NONBLOCK);
++    try {
++      const opened = await handle.stat();
++      check(opened, role, maxBytes, privateFile);
++      if (!same(before, opened)) throw fileFailure(role, 'changed');
++      const buffer = Buffer.alloc(Math.min(maxBytes + 1, opened.size + 1));
++      let length = 0;
++      while (length < buffer.length) {
++        const { bytesRead } = await handle.read(buffer, length, buffer.length - length, length);
++        if (!bytesRead) break;
++        length += bytesRead;
++      }
++      const after = await handle.stat();
++      let current: Stats; let resolved: string;
++      try { current = await lstat(file); resolved = await realpath(file); }
++      catch (error) { if (['ENOENT', 'ENOTDIR', 'ELOOP'].includes((error as NodeJS.ErrnoException).code ?? '')) throw fileFailure(role, 'changed'); throw error; }
++      if (length > maxBytes || !same(opened, after) || !same(opened, current) || resolved !== file || length !== opened.size) throw fileFailure(role, 'changed');
++      return buffer.subarray(0, length);
++    } finally { await handle.close(); }
++  } catch (error) { failureFor(error, role); }
++}
++
++export function invalidValidationInput(reason: 'mismatch' | 'duplicate'): Error {
++  return fileFailure('validation', reason);
++}
++
++export function parseInputJson<T>(bytes: Buffer, role: 'request' | 'contract' | 'validation', schema: z.ZodType<T>): T {
++  const text = bytes.toString('utf8');
++  if (!Buffer.from(text, 'utf8').equals(bytes)) throw fileFailure(role, 'invalid_json');
++  let value: unknown;
++  try { value = JSON.parse(text); }
++  catch (error) { if (error instanceof SyntaxError) throw fileFailure(role, 'invalid_json'); throw error; }
++  const parsed = schema.safeParse(value);
++  if (!parsed.success) throw fileFailure(role, 'invalid_schema');
++  return parsed.data;
++}
++
++export async function readInputFile(file: string, maxBytes: number, role: 'request' | 'contract' | 'patch' | 'validation'): Promise<Buffer> {
++  return readChecked(file, maxBytes, role, false);
++}
++
++export async function readOwnedFile(file: string, maxBytes = 100 * 1024 * 1024): Promise<Buffer> {
++  return readChecked(file, maxBytes, 'artifact', true);
+ }
+ 
+ export async function assertOwnedDirectory(directory: string): Promise<void> {
+-  if (!path.isAbsolute(directory) || await realpath(directory) !== directory) throw new Error('Unsafe directory');
+-  const info = await lstat(directory);
+-  if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o077) !== 0 || (typeof process.getuid === 'function' && info.uid !== process.getuid())) throw new Error('Unsafe directory');
++  try {
++    if (!path.isAbsolute(directory)) throw fileFailure('directory', 'link');
++    const info = await lstat(directory);
++    if (info.isSymbolicLink() || await realpath(directory) !== directory) throw fileFailure('directory', 'link');
++    if (!info.isDirectory()) throw fileFailure('directory', 'type');
++    if (typeof process.getuid === 'function' && info.uid !== process.getuid()) throw fileFailure('directory', 'owner');
++    if ((info.mode & 0o077) !== 0) throw fileFailure('directory', 'mode');
++  } catch (error) { failureFor(error, 'directory'); }
+ }
+diff --git a/src/validation/workspace.ts b/src/validation/workspace.ts
+index 767cc86..e9186b4 100644
+--- a/src/validation/workspace.ts
++++ b/src/validation/workspace.ts
+@@ -5,11 +5,11 @@ import path from 'node:path';
+ import { randomUUID } from 'node:crypto';
+ import { z } from 'zod';
+ import { digest, canonical } from '../acceptance/schema.js';
+-import { readOwnedFile, assertOwnedDirectory } from '../reporting/private-files.js';
++import { readInputFile, readOwnedFile, assertOwnedDirectory } from '../reporting/private-files.js';
+ import { resolveBaseCommit, resolveGitRoot } from '../git/worktree.js';
+ import { createPrivateDir } from '../security/paths.js';
+ 
+-const manifestSchema = z.object({schema_version:z.literal(1),owner:z.literal('vibe-supervisor-validation'),id:z.string().uuid(),root:z.string(),device:z.number(),inode:z.number(),base_commit:z.string().regex(/^[a-f0-9]{40,64}$/),patch_sha256:z.string().regex(/^[a-f0-9]{64}$/),node:z.string(),manager:z.object({kind:z.enum(['npm','pnpm']),version:z.string(),executable:z.string()}),lockfiles:z.array(z.object({workspace:z.enum(['baseline','candidate']),path:z.string(),sha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict()).length(2),tree_sha256:z.string().regex(/^[a-f0-9]{64}$/),dependencies:z.enum(['installed','not-requested']),created_at:z.string().datetime()}).strict();
++const manifestSchema = z.object({schema_version:z.literal(1),owner:z.literal('vibe-supervisor-validation'),id:z.string().uuid(),root:z.string(),device:z.number(),inode:z.number(),base_commit:z.string().regex(/^[a-f0-9]{40,64}$/),patch_sha256:z.string().regex(/^[a-f0-9]{64}$/),node:z.string(),manager:z.object({kind:z.enum(['npm','pnpm']),version:z.string(),executable:z.string()}).optional(),lockfiles:z.array(z.object({workspace:z.enum(['baseline','candidate']),path:z.string(),sha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict()).refine(items=>items.length===0||items.length===2),tree_sha256:z.string().regex(/^[a-f0-9]{64}$/),dependencies:z.enum(['installed','not-requested']),created_at:z.string().datetime()}).strict().refine(manifest=>manifest.dependencies!=='installed'||(manifest.manager!==undefined&&manifest.lockfiles.length===2));
+ const MAX_FILES=200_000, MAX_BYTES=2*1024*1024*1024;
+ function env(root:string):NodeJS.ProcessEnv{return {PATH:process.env.PATH,HOME:path.join(root,'home'),TMPDIR:path.join(root,'tmp'),CI:'true',GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_COUNT:'3',GIT_CONFIG_KEY_0:'core.hooksPath',GIT_CONFIG_VALUE_0:'/dev/null',GIT_CONFIG_KEY_1:'protocol.file.allow',GIT_CONFIG_VALUE_1:'always',GIT_CONFIG_KEY_2:'core.fsmonitor',GIT_CONFIG_VALUE_2:'false',GIT_TERMINAL_PROMPT:'0',npm_config_userconfig:path.join(root,'home','user.npmrc'),npm_config_globalconfig:path.join(root,'home','global.npmrc'),npm_config_update_notifier:'false',npm_config_ignore_scripts:'true',npm_config_offline:'true',COREPACK_ENABLE_NETWORK:'0',COREPACK_ENABLE_DOWNLOAD_PROMPT:'0'};}
+ async function run(command:string,args:string[],cwd:string,root:string,input?:Buffer):Promise<string>{
+@@ -64,10 +64,10 @@ async function assertProject(directory:string):Promise<{manager:string;lockfile:
+   if(lockfileNeedsUnsupportedProfile(lock))throw new Error('Lockfile requires unsupported local dependencies or build scripts');
+   return {manager:pkg.packageManager,lockfile};
+ }
+-export async function prepareValidation(options:{source:string;base:string;patchFile:string;output:string;manager:string;cache?:string;install:boolean}):Promise<unknown>{
++export async function prepareValidation(options:{source:string;base:string;patchFile:string;output:string;manager?:string;cache?:string;install:boolean}):Promise<unknown>{
+   const source=await resolveGitRoot(options.source);const base=await resolveBaseCommit(source,options.base);
+   if(base!==options.base)throw new Error('An immutable full base commit is required');
+-  const patch=await readOwnedFile(options.patchFile,16*1024*1024);
++  const patch=await readInputFile(options.patchFile,16*1024*1024,'patch');
+   const output=path.resolve(options.output);await assertOwnedDirectory(path.dirname(output));
+   if(output===source||source.startsWith(output+path.sep)||output.startsWith(source+path.sep))throw new Error('Validation must be outside the source checkout');
+   await mkdir(output,{mode:0o700});
+@@ -75,20 +75,22 @@ export async function prepareValidation(options:{source:string;base:string;patch
+   try{
+     for(const name of ['home','tmp','cache'])await createPrivateDir(path.join(output,name));
+     for (const name of ['user.npmrc','global.npmrc']) await writeFile(path.join(output,'home',name),'',{mode:0o600,flag:'wx'});
+-    if(!path.isAbsolute(options.manager))throw new Error("Absolute manager path required");
+-    const manager=await realpath(options.manager);const executable=await lstat(manager);if(!executable.isFile()||!(executable.mode&constants.S_IXUSR))throw new Error('Absolute executable manager required');
+-    const version=(await run(manager,['--version'],output,output)).trim();
+-    const profiles=[];
++    let managerInfo:{kind:'npm'|'pnpm';version:string;executable:string}|undefined;
++    const profiles:{manager:string;lockfile:string}[]=[];
+     for(const name of ['baseline','candidate']){
+       const directory=path.join(output,name);
+       await run('git',['clone','--no-local','--no-checkout','--',source,directory],output,output);
+       await run('git',['checkout','--detach',base],directory,output);
+       if(name==='candidate'&&patch.length)await run('git',['apply','--binary','--whitespace=nowarn','-'],directory,output,patch);
+-      profiles.push(await assertProject(directory));
++      if(options.install)profiles.push(await assertProject(directory));
+     }
+-    const kind=profiles[0]!.manager.split('@')[0] as 'npm'|'pnpm';
+-    if(profiles.some(profile=>profile.manager!==`${kind}@${version}`))throw new Error('Manager binary does not match exact project pin');
+     if(options.install){
++      if(!options.manager||!path.isAbsolute(options.manager))throw new Error('Absolute manager path required');
++      const manager=await realpath(options.manager);const executable=await lstat(manager);if(!executable.isFile()||!(executable.mode&constants.S_IXUSR))throw new Error('Absolute executable manager required');
++      const version=(await run(manager,['--version'],output,output)).trim();
++      const kind=profiles[0]!.manager.split('@')[0] as 'npm'|'pnpm';
++      if(profiles.some(profile=>profile.manager!==`${kind}@${version}`))throw new Error('Manager binary does not match exact project pin');
++      managerInfo={kind,version,executable:manager};
+       if(!options.cache)throw new Error('Populated offline cache required');
+       const cache=await realpath(options.cache);const sourceCache=kind==='npm'?path.join(cache,'_cacache'):cache;
+       let copiedBytes=0,copiedFiles=0;
+@@ -100,7 +102,7 @@ export async function prepareValidation(options:{source:string;base:string;patch
+       }
+     }
+     const info=await lstat(output);
+-    const manifest=manifestSchema.parse({schema_version:1,owner:'vibe-supervisor-validation',id,root:output,device:info.dev,inode:info.ino,base_commit:base,patch_sha256:digest(patch),node:process.version,manager:{kind,version,executable:manager},lockfiles:await Promise.all(profiles.map(async (profile,index)=>({workspace:index===0?"baseline":"candidate",path:profile.lockfile,sha256:digest(await readFile(path.join(output,index===0?"baseline":"candidate",profile.lockfile)))}))),tree_sha256:await fingerprint(output),dependencies:options.install?'installed':'not-requested',created_at:new Date().toISOString()});
++    const manifest=manifestSchema.parse({schema_version:1,owner:'vibe-supervisor-validation',id,root:output,device:info.dev,inode:info.ino,base_commit:base,patch_sha256:digest(patch),node:process.version,...(managerInfo?{manager:managerInfo}:{}),lockfiles:await Promise.all(profiles.map(async (profile,index)=>({workspace:index===0?"baseline":"candidate",path:profile.lockfile,sha256:digest(await readFile(path.join(output,index===0?"baseline":"candidate",profile.lockfile)))}))),tree_sha256:await fingerprint(output),dependencies:options.install?'installed':'not-requested',created_at:new Date().toISOString()});
+     await writeFile(path.join(output,'manifest.json'),JSON.stringify(manifest,null,2)+'\n',{mode:0o600,flag:'wx'});
+     return {status:'prepared',root:output,base_commit:base,patch_sha256:digest(patch),dependencies:manifest.dependencies,project_checks:'not-run'};
+   }catch(error){
+diff --git a/tests/integration/mcp-tools.test.ts b/tests/integration/mcp-tools.test.ts
+index 9a33e82..b973132 100644
+--- a/tests/integration/mcp-tools.test.ts
++++ b/tests/integration/mcp-tools.test.ts
+@@ -7,6 +7,8 @@ import { TEST_CONFIG } from '../unit/support/test-config.js';
+ import { createSupervisorMcpServer } from '../../src/mcp/server.js';
+ import { createIsolatedRunRouter } from '../../src/core/isolated-run-router.js';
+ import type { RunManagerTools } from '../../src/mcp/tools.js';
++import { parseInputJson } from '../../src/reporting/private-files.js';
++import { z } from 'zod';
+ 
+ function errorText(result: unknown): string {
+   return (result as { content: { text: string }[] }).content[0]!.text;
+@@ -112,6 +114,21 @@ describe('MCP stdio tool surface', () => {
+     expect((JSON.parse(errorText(failed)) as { error: { details: { note: string } } }).error.details.note).not.toContain('sk-abcdef');
+   });
+ 
++  it('preserves safe selected input errors across MCP', async () => {
++    const input = new PassThrough(); const output = new PassThrough();
++    const manager = {
++      reviewStart: vi.fn(async () => parseInputJson(Buffer.from('{ sensitive-marker'), 'request', z.object({}))),
++      editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})), result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
++    } satisfies RunManagerTools;
++    const server = createSupervisorMcpServer(manager, { config: { ...TEST_CONFIG, limits: { ...TEST_CONFIG.limits } } });
++    await server.connect(new StdioServerTransport(input, output));
++    const client = new Client({ name: 'mcp-test-client', version: '0.0.1' }); clients.push(client);
++    await client.connect(new StdioClientHarness(input, output));
++    const result = await client.callTool({ name: 'vibe_review_start', arguments: { ...startIds, task: 'review', cwd: '/tmp' } });
++    expect(JSON.parse(errorText(result))).toMatchObject({ error: { code: 'VSUP_INVALID_ARGUMENT', details: { role: 'request', reason: 'invalid_json' } } });
++    expect(errorText(result)).not.toContain('sensitive-marker');
++  });
++
+   it('returns VSUP_INTERNAL for an unexpected error and writes its redacted cause to the error log', async () => {
+     const input = new PassThrough(); const output = new PassThrough();
+     const manager = {
+diff --git a/tests/unit/acceptance.test.ts b/tests/unit/acceptance.test.ts
+index d78fa7c..dbb016e 100644
+--- a/tests/unit/acceptance.test.ts
++++ b/tests/unit/acceptance.test.ts
+@@ -1,4 +1,4 @@
+-import { mkdtemp, mkdir, writeFile, rm, readFile, realpath } from 'node:fs/promises';
++import { mkdtemp, mkdir, writeFile, rm, readFile, realpath, chmod, lstat } from 'node:fs/promises';
+ import os from 'node:os';
+ import path from 'node:path';
+ import { execFileSync } from 'node:child_process';
+@@ -104,6 +104,17 @@ describe('audit bundle approval ledger and pin', () => {
+     expect(result.files).not.toContain('transcript.md');
+   });
+ 
++  it('reads normal validation input and safely rejects malformed JSON', async () => {
++    const { root, directory } = await savedRun({}); const file = path.join(root, 'validation.json');
++    const bytes = JSON.stringify({ schema_version: 1, patch_sha256: HASH, validations: [] });
++    await writeFile(file, bytes, { mode: 0o644 }); await chmod(file, 0o644);
++    await expect(exportReport({ directory, output: path.join(root, 'bundle'), validationFile: file })).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', details: { role: 'validation', reason: 'mismatch' } });
++    expect(await readFile(file, 'utf8')).toBe(bytes);
++    expect((await lstat(file)).mode & 0o777).toBe(0o644);
++    await writeFile(file, '{ sensitive-marker');
++    await expect(exportReport({ directory, output: path.join(root, 'bundle'), validationFile: file })).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', details: { role: 'validation', reason: 'invalid_json' } });
++  });
++
+   it('keeps an absent ledger and an absent pin absent', async () => {
+     const { root, directory } = await savedRun({});
+     const output = path.join(root, 'bundle');
+diff --git a/tests/unit/dispatch-authorization.test.ts b/tests/unit/dispatch-authorization.test.ts
+index e1f733c..063f16c 100644
+--- a/tests/unit/dispatch-authorization.test.ts
++++ b/tests/unit/dispatch-authorization.test.ts
+@@ -1,4 +1,4 @@
+-import { mkdtemp, mkdir, realpath, rm, utimes, writeFile, readFile } from 'node:fs/promises';
++import { mkdtemp, mkdir, realpath, rm, utimes, writeFile, readFile, readdir, chmod } from 'node:fs/promises';
+ import { execFileSync } from 'node:child_process';
+ import { tmpdir } from 'node:os';
+ import path from 'node:path';
+@@ -10,10 +10,14 @@ import { RunManager } from '../../src/core/run-manager.js';
+ import type { BackendCallbacks, BackendRunHandle, StartRunInput, SupervisorBackend } from '../../src/contracts.js';
+ import { TEST_CONFIG } from './support/test-config.js';
+ import { runFromWire, runToWire } from '../../src/core/serialization.js';
++import { canonical, digest, type AcceptanceContract } from '../../src/acceptance/schema.js';
++import { prepareTaskInputs, type TaskInputManifest } from '../../src/preparation/task-inputs.js';
++import * as taskInputs from '../../src/preparation/task-inputs.js';
+ 
+ const roots: string[] = [];
+ const managers: RunManager[] = [];
+ afterEach(async () => {
++  vi.useRealTimers();
+   vi.restoreAllMocks();
+   await Promise.all(managers.splice(0).map(manager => manager.shutdown()));
+   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
+@@ -58,6 +62,63 @@ async function grant(manager: RunManager, source: string, task = 'review') {
+   return manager.authorizeDispatch('review', { task, cwd: source }, 'test-owner-message', new Date(Date.now() + 60_000).toISOString());
+ }
+ 
++async function preparedFixture() {
++  const setup = await fixture();
++  const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd: setup.source, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
++  git('init', '-q');
++  git('add', '.');
++  git('commit', '-q', '-m', 'fixture');
++  const base = git('rev-parse', 'HEAD');
++  const contract: AcceptanceContract = { schema_version: 1, allowed_changed_paths: ['note.txt'], required_changed_paths: [], checks: [{ id: 'note-exists', kind: 'file_exists', path: 'note.txt' }], required_validations: [] };
++  const contractFile = path.join(setup.root, 'contract.json');
++  await writeFile(contractFile, JSON.stringify(contract), { mode: 0o600 });
++  const directory = path.join(setup.root, 'prepared');
++  const prepared = await prepareTaskInputs({ source: setup.source, base, files: ['note.txt'], output: directory, contractFile, allowedRoots: setup.config.allowedWorkspaceRoots });
++  const request = { task: 'edit', cwd: setup.source, base_ref: base, acceptance_contract: contract, prepared_inputs: { directory, manifest_sha256: prepared.manifest_sha256 as string } };
++  return { ...setup, git, base, contractFile, directory, request };
++}
++
++type PreparedFixture = Awaited<ReturnType<typeof preparedFixture>>;
++const preparedFaults = ['source bytes', 'copied bytes', 'copy permissions', 'inventory', 'base', 'scope', 'selected digest', 'policy'] as const;
++
++async function alterPrepared(setup: PreparedFixture, fault: typeof preparedFaults[number]): Promise<() => Promise<void>> {
++  if (fault === 'copy permissions') {
++    const file = path.join(setup.directory, 'context', 'note.txt');
++    await chmod(file, 0o644);
++    return async () => { await chmod(file, 0o600); };
++  }
++  if (fault === 'source bytes' || fault === 'copied bytes') {
++    const file = fault === 'source bytes' ? path.join(setup.source, 'note.txt') : path.join(setup.directory, 'context', 'note.txt');
++    const saved = await readFile(file);
++    await writeFile(file, 'modified\n');
++    return async () => { await writeFile(file, saved); };
++  }
++  if (fault === 'inventory') {
++    const file = path.join(setup.directory, 'context', 'extra.txt');
++    await writeFile(file, 'unlisted\n', { mode: 0o600 });
++    return async () => { await rm(file); };
++  }
++  if (fault === 'policy') {
++    Object.assign(setup.config, { excludedGlobs: { [setup.source]: ['ignored/**'] } });
++    return async () => { delete (setup.config as { excludedGlobs?: unknown }).excludedGlobs; };
++  }
++  const selected = setup.request.prepared_inputs.manifest_sha256;
++  if (fault === 'selected digest') {
++    setup.request.prepared_inputs.manifest_sha256 = '0'.repeat(64);
++    return async () => { setup.request.prepared_inputs.manifest_sha256 = selected; };
++  }
++  const file = path.join(setup.directory, 'manifest.json');
++  const saved = await readFile(file);
++  const manifest = JSON.parse(saved.toString('utf8')) as TaskInputManifest;
++  if (fault === 'base') manifest.base_commit = '0'.repeat(40);
++  else manifest.allowed_output_paths = ['other.txt'];
++  const { manifest_sha256: _claimed, ...body } = manifest;
++  manifest.manifest_sha256 = digest(canonical(body));
++  setup.request.prepared_inputs.manifest_sha256 = manifest.manifest_sha256;
++  await writeFile(file, JSON.stringify(manifest));
++  return async () => { await writeFile(file, saved); setup.request.prepared_inputs.manifest_sha256 = selected; };
++}
++
+ async function state(manager: RunManager, id: string, expected: string) {
+   for (let index = 0; index < 200; index++) {
+     const status = await manager.status({ run_id: id });
+@@ -68,6 +129,142 @@ async function state(manager: RunManager, id: string, expected: string) {
+ }
+ 
+ describe('durable dispatch authorization', () => {
++  it.each(preparedFaults)('rejects invalid prepared %s before issuing or consuming a grant and releases admission', async fault => {
++    const setup = await preparedFixture();
++    const { manager, request, shared, backend } = setup;
++    const issue = vi.spyOn(DispatchGrants.prototype, 'issue');
++    const consume = vi.spyOn(DispatchGrants.prototype, 'consume');
++    const authorize = () => manager.authorizeDispatch('edit', request, 'test-owner-message', new Date(Date.now() + 60_000).toISOString());
++    const failure = { code: fault === 'copy permissions' ? 'VSUP_ARTIFACT_ERROR' : 'VSUP_INVALID_ARGUMENT' };
++    let restore = await alterPrepared(setup, fault);
++    await expect(authorize()).rejects.toMatchObject(failure);
++    expect(issue).not.toHaveBeenCalled();
++    expect(consume).not.toHaveBeenCalled();
++    await expect(readdir(path.join(shared, 'dispatch-grants'))).rejects.toMatchObject({ code: 'ENOENT' });
++    await restore();
++    const issued = await authorize();
++    restore = await alterPrepared(setup, fault);
++    const ids = { authorization_id: issued.authorization_id, attempt_id: issued.attempt_id };
++    await expect(manager.editStart({ ...request, ...ids })).rejects.toMatchObject(failure);
++    expect(consume).not.toHaveBeenCalled();
++    expect(backend.starts).toBe(0);
++    await expect(readdir(path.join(shared, 'dispatch-grants', 'consumed'))).rejects.toMatchObject({ code: 'ENOENT' });
++    await restore();
++    const started = await manager.editStart({ ...request, ...ids });
++    await state(manager, started.run_id, 'running');
++    expect(issue).toHaveBeenCalledTimes(1);
++    expect(consume).toHaveBeenCalledTimes(1);
++    expect(backend.starts).toBe(1);
++    expect(backend.lastInput?.preparedContextFiles?.map(file => ({ path: file.path, content: file.content }))).toEqual([{ path: 'note.txt', content: 'original\n' }]);
++    await manager.close({ run_id: started.run_id });
++    await expect(manager.editStart({ ...request, ...ids })).rejects.toMatchObject({ code: 'VSUP_ATTEMPT_CONSUMED' });
++    expect(backend.starts).toBe(1);
++  });
++
++  it.each(['issue', 'consume'] as const)('bounds full prepared verification by the current admission deadline before %s', async phase => {
++    const { manager, request, backend } = await preparedFixture();
++    const authorize = () => manager.authorizeDispatch('edit', request, 'test-owner-message', new Date(Date.now() + 60_000).toISOString());
++    let issued = phase === 'consume' ? await authorize() : undefined;
++    await manager.initialize();
++    const issue = vi.spyOn(DispatchGrants.prototype, 'issue');
++    const consume = vi.spyOn(DispatchGrants.prototype, 'consume');
++    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
++    const verification = vi.spyOn(taskInputs, 'verifyTaskInputs').mockImplementationOnce(() => new Promise(() => {}));
++    const pending = phase === 'issue' ? authorize() : manager.editStart({ ...request, authorization_id: issued!.authorization_id, attempt_id: issued!.attempt_id });
++    const rejected = expect(pending).rejects.toMatchObject({ code: 'VSUP_PREPARATION_TIMEOUT' });
++    await vi.waitFor(() => expect(verification).toHaveBeenCalledTimes(1));
++    await vi.advanceTimersByTimeAsync(30_001);
++    await rejected;
++    expect(issue).not.toHaveBeenCalled();
++    expect(consume).not.toHaveBeenCalled();
++    expect(backend.starts).toBe(0);
++    vi.useRealTimers();
++    verification.mockRestore();
++    issued ??= await authorize();
++    const started = await manager.editStart({ ...request, authorization_id: issued.authorization_id, attempt_id: issued.attempt_id });
++    await state(manager, started.run_id, 'running');
++    expect(backend.starts).toBe(1);
++  });
++
++  it.each(['issue', 'consume'] as const)('preserves an unexpected prepared verification fault before %s without spending authorization', async phase => {
++    const { manager, request, backend } = await preparedFixture();
++    const authorize = () => manager.authorizeDispatch('edit', request, 'test-owner-message', new Date(Date.now() + 60_000).toISOString());
++    let issued = phase === 'consume' ? await authorize() : undefined;
++    const issue = vi.spyOn(DispatchGrants.prototype, 'issue');
++    const consume = vi.spyOn(DispatchGrants.prototype, 'consume');
++    const fault = new Error('unexpected verifier fault');
++    vi.spyOn(taskInputs, 'verifyTaskInputs').mockRejectedValueOnce(fault);
++    const pending = phase === 'issue' ? authorize() : manager.editStart({ ...request, authorization_id: issued!.authorization_id, attempt_id: issued!.attempt_id });
++    await expect(pending).rejects.toBe(fault);
++    expect(issue).not.toHaveBeenCalled();
++    expect(consume).not.toHaveBeenCalled();
++    expect(backend.starts).toBe(0);
++    issued ??= await authorize();
++    const started = await manager.editStart({ ...request, authorization_id: issued.authorization_id, attempt_id: issued.attempt_id });
++    await state(manager, started.run_id, 'running');
++    expect(backend.starts).toBe(1);
++  });
++
++  it('admits current workspace policy before inspecting selected prepared state', async () => {
++    const { manager, root, request, backend } = await preparedFixture();
++    const verification = vi.spyOn(taskInputs, 'verifyTaskInputs');
++    const invalid = { ...request, cwd: root, prepared_inputs: { ...request.prepared_inputs, directory: path.join(root, 'missing') } };
++    await expect(manager.authorizeDispatch('edit', invalid, 'test-owner-message', new Date(Date.now() + 60_000).toISOString())).rejects.toMatchObject({ code: 'VSUP_WORKSPACE_INVALID' });
++    await expect(manager.editStart({ ...invalid, authorization_id: randomUUID(), attempt_id: randomUUID() })).rejects.toMatchObject({ code: 'VSUP_WORKSPACE_INVALID' });
++    expect(verification).not.toHaveBeenCalled();
++    expect(backend.starts).toBe(0);
++  });
++
++  it('binds verified prepared inputs to the admitted source and selected immutable edit base', async () => {
++    const { manager, source, root, git, base, request, backend } = await preparedFixture();
++    const issue = vi.spyOn(DispatchGrants.prototype, 'issue');
++    const other = path.join(source, 'nested-repository');
++    execFileSync('git', ['clone', '-q', source, other], { cwd: root, stdio: 'ignore' });
++    await expect(manager.authorizeDispatch('edit', { ...request, cwd: other }, 'test-owner-message', new Date(Date.now() + 60_000).toISOString())).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', message: expect.stringContaining('edit source or base') });
++    git('commit', '-q', '--allow-empty', '-m', 'new base');
++    const latest = git('rev-parse', 'HEAD');
++    git('checkout', '-q', base);
++    await expect(manager.authorizeDispatch('edit', { ...request, base_ref: latest }, 'test-owner-message', new Date(Date.now() + 60_000).toISOString())).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', message: expect.stringContaining('edit source or base') });
++    expect(issue).not.toHaveBeenCalled();
++    expect(backend.starts).toBe(0);
++  });
++
++  it.each(['after consumption', 'after launch verification'] as const)('keeps a prepared-input race %s failed without replay and releases the slot', async phase => {
++    const { manager, request, directory, shared, backend } = await preparedFixture();
++    const authorize = () => manager.authorizeDispatch('edit', request, 'test-owner-message', new Date(Date.now() + 60_000).toISOString());
++    const issued = await authorize();
++    const copy = path.join(directory, 'context', 'note.txt');
++    const saved = await readFile(copy);
++    if (phase === 'after consumption') {
++      const originalConsume = DispatchGrants.prototype.consume;
++      vi.spyOn(DispatchGrants.prototype, 'consume').mockImplementationOnce(async function (input) {
++        await originalConsume.call(this, input);
++        await writeFile(copy, 'changed after consumption\n');
++      });
++    } else {
++      const originalVerify = taskInputs.verifyTaskInputs;
++      let verifications = 0;
++      vi.spyOn(taskInputs, 'verifyTaskInputs').mockImplementation(async (...args) => {
++        const verified = await originalVerify(...args);
++        if (++verifications === 2) await writeFile(copy, 'changed after launch verification\n');
++        return verified;
++      });
++    }
++    const ids = { authorization_id: issued.authorization_id, attempt_id: issued.attempt_id };
++    const started = await manager.editStart({ ...request, ...ids });
++    await state(manager, started.run_id, 'failed');
++    expect((await manager.status({ run_id: started.run_id })).error).toMatchObject({ code: 'VSUP_INVALID_ARGUMENT' });
++    expect(backend.starts).toBe(0);
++    expect(await readdir(path.join(shared, 'dispatch-grants', 'consumed'))).toContain(`${issued.attempt_id}.json`);
++    await manager.close({ run_id: started.run_id });
++    await writeFile(copy, saved);
++    await expect(manager.editStart({ ...request, ...ids })).rejects.toMatchObject({ code: 'VSUP_ATTEMPT_CONSUMED' });
++    const fresh = await authorize();
++    const second = await manager.editStart({ ...request, authorization_id: fresh.authorization_id, attempt_id: fresh.attempt_id });
++    await state(manager, second.run_id, 'running');
++    expect(backend.starts).toBe(1);
++  });
++
+   it.each(['prepare_directory', 'write_grant'] as const)('names a denied %s operation without launching or returning a grant', async operation => {
+     const { manager, source, shared, backend } = await fixture();
+     const denied = Object.assign(new Error('private filesystem detail'), { code: 'EPERM' });
+diff --git a/tests/unit/task-inputs.test.ts b/tests/unit/task-inputs.test.ts
+index 26cd229..6f5a56c 100644
+--- a/tests/unit/task-inputs.test.ts
++++ b/tests/unit/task-inputs.test.ts
+@@ -38,12 +38,23 @@ describe('prepared task inputs', () => {
+     try { await prepareTaskInputs({ source, base, files: ['ignored.txt'], output, contractFile: contract, allowedRoots: [source] }); }
+     catch (error) { message = (error as Error).message; }
+     expect(message).toContain('outside source checkout');
+-    expect(message).toContain('mode 0600');
++    expect(message).toContain('valid acceptance-contract JSON');
+     expect(message).toContain('ignored or absent from Git discovery: ignored.txt');
+     await expect(lstat(output)).rejects.toMatchObject({ code: 'ENOENT' });
+     expect(await readFile(path.join(source, 'ignored.txt'), 'utf8')).toBe('private diagnostic input');
+   });
+ 
++  it('accepts a normal contract without modifying it and rejects malformed contracts safely', async () => {
++    const { parent, source, base } = await fixture(); const contract = path.join(parent, 'contract.json');
++    const bytes = JSON.stringify({ schema_version: 1, allowed_changed_paths: ['tracked.txt'], checks: [{ id: 'exists', kind: 'file_exists', path: 'tracked.txt' }] });
++    await writeFile(contract, bytes, { mode: 0o644 }); await chmod(contract, 0o644);
++    await prepareTaskInputs({ source, base, files: ['tracked.txt'], output: path.join(parent, 'prepared'), contractFile: contract, allowedRoots: [source] });
++    expect(await readFile(contract, 'utf8')).toBe(bytes);
++    expect((await lstat(contract)).mode & 0o777).toBe(0o644);
++    await writeFile(contract, '{ sensitive-marker');
++    await expect(prepareTaskInputs({ source, base, files: ['tracked.txt'], output: path.join(parent, 'other'), contractFile: contract, allowedRoots: [source] })).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', details: { role: 'contract', reason: 'invalid_json' } });
++  });
++
+   it('copies committed, dirty, and untracked bytes exactly and leaves source unchanged', async () => {
+     const { parent, source, base } = await fixture();
+     await writeFile(path.join(source, 'tracked.txt'), 'dirty overlay\n');
+@@ -66,7 +77,16 @@ describe('prepared task inputs', () => {
+     const { parent, source, base } = await fixture(); const output = path.join(parent, 'prepared');
+     await prep({ source, base, files: ['tracked.txt'], output });
+     await writeFile(path.join(source, 'tracked.txt'), 'change---\n');
+-    await expect(verify(output, source)).rejects.toThrow('Required source changed');
++    await expect(verify(output, source)).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', details: { role: 'prepared_inputs', reason: 'source_changed' } });
++  });
++
++  it('classifies removed source and private copies without exposing native errors', async () => {
++    const { parent, source, base } = await fixture(); const output = path.join(parent, 'prepared');
++    await prep({ source, base, files: ['tracked.txt'], output });
++    await rm(path.join(output, 'context', 'tracked.txt'));
++    await expect(verify(output, source)).rejects.toMatchObject({ code: 'VSUP_ARTIFACT_ERROR', details: { role: 'artifact' } });
++    await rm(path.join(source, 'tracked.txt'));
++    await expect(verify(output, source)).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', details: { role: 'prepared_inputs', reason: 'source_path' } });
+   });
+ 
+   it('requires the selected source to remain allowed at verification', async () => {
+@@ -114,6 +134,6 @@ describe('prepared task inputs', () => {
+     const { parent, source, base } = await fixture();
+     const output = path.join(parent, 'prepared'); await prep({ source, base, files: ['tracked.txt'], output });
+     const copy = path.join(output, 'context', 'tracked.txt'); await rm(copy); await symlink(path.join(source, 'tracked.txt'), copy);
+-    await expect(verify(output, source)).rejects.toThrow('Unsafe prepared context path');
++    await expect(verify(output, source)).rejects.toMatchObject({ code: 'VSUP_ARTIFACT_ERROR', details: { role: 'artifact' } });
+   });
+ });
+diff --git a/tests/unit/validation.test.ts b/tests/unit/validation.test.ts
+index 7f516e9..ac30a49 100644
+--- a/tests/unit/validation.test.ts
++++ b/tests/unit/validation.test.ts
+@@ -1,9 +1,10 @@
+-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
++import { chmod, mkdir, mkdtemp, lstat, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+ import { execFileSync } from 'node:child_process';
+ import { tmpdir } from 'node:os';
+ import path from 'node:path';
+ import { it, expect } from 'vitest';
+ import { prepareValidation, cleanValidation, lockfileNeedsUnsupportedProfile } from '../../src/validation/workspace.js';
++import { validationCommand } from '../../src/cli/validation.js';
+ it.each([false,true])('creates independent copies and safely cleans up (offline install=%s)',async(install)=>{
+  const root=await realpath(await mkdtemp(path.join(tmpdir(),'validation-fixture-')));
+  try{
+@@ -15,7 +16,7 @@ it.each([false,true])('creates independent copies and safely cleans up (offline
+   await writeFile(path.join(source,'package.json'),JSON.stringify({name:'fixture',version:'0.1.0',packageManager:`npm@${version}`,scripts:{postinstall:'exit 99'}}));
+   await writeFile(path.join(source,'package-lock.json'),JSON.stringify({name:'fixture',version:'0.1.0',lockfileVersion:3,packages:{'':{name:'fixture',version:'0.1.0'}}}));await writeFile(path.join(source,'page.txt'),'baseline\n');git('add','.');git('commit','-qm','fixture');
+   const base=git('rev-parse','HEAD').trim();await writeFile(path.join(source,'page.txt'),'candidate\n');
+-  const patch=path.join(root,'patch');await writeFile(patch,git('diff','--binary'),{mode:0o600});
++  const patch=path.join(root,'patch');await writeFile(patch,git('diff','--binary'),{mode:0o644});await chmod(patch,0o644);
+   const manager=path.join(root,'npm');await writeFile(manager,'#!/bin/sh\nif [ "$1" = "--version" ]; then echo 1.2.3; else exit 99; fi\n');await chmod(manager,0o700);
+   const cache=path.join(root,'offline-cache');await mkdir(path.join(cache,'_cacache'),{recursive:true});
+   const output=path.join(root,'validation');
+@@ -23,6 +24,8 @@ it.each([false,true])('creates independent copies and safely cleans up (offline
+   expect(await readFile(path.join(output,'baseline','page.txt'),'utf8')).toBe('baseline\n');
+   expect(await readFile(path.join(output,'candidate','page.txt'),'utf8')).toBe('candidate\n');
+   expect(await readFile(path.join(source,'page.txt'),'utf8')).toBe('candidate\n');
++  expect((await lstat(patch)).mode & 0o777).toBe(0o644);
++  expect(await readFile(patch,'utf8')).toBe(git('diff','--binary'));
+   await writeFile(path.join(output,'candidate','page.txt'),'changed after validation');
+   await expect(cleanValidation(output)).rejects.toThrow(/retained/);
+   await writeFile(path.join(output,'candidate','page.txt'),'candidate\n');
+@@ -45,3 +48,65 @@ it.each([
+ ])('blocks a lockfile with %s', (_name, lock) => {
+   expect(lockfileNeedsUnsupportedProfile(lock)).toBe(true);
+ });
++
++
++it.each(['package-free', 'no-lock'])('prepares %s copies without running a manager and preserves cleanup safeguards',async(fixture)=>{
++ const root=await realpath(await mkdtemp(path.join(tmpdir(),'validation-copy-')));
++ try{
++  const source=path.join(root,'source');await mkdir(source);
++  const git=(...args:string[])=>execFileSync('git',args,{cwd:source,encoding:'utf8'});
++  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
++  if(fixture==='no-lock')await writeFile(path.join(source,'package.json'),JSON.stringify({name:'fixture',packageManager:'npm@1.2.3'}));
++  await writeFile(path.join(source,'page.txt'),'baseline\n');git('add','.');git('commit','-qm','fixture');
++  const base=git('rev-parse','HEAD').trim();await writeFile(path.join(source,'page.txt'),'candidate\n');
++  const patch=path.join(root,'patch');await writeFile(patch,git('diff','--binary'),{mode:0o600});
++  const output=path.join(root,'validation');const marker=path.join(root,'manager-ran');const manager=path.join(root,'manager');
++  await writeFile(manager,`#!/bin/sh\ntouch "${marker}"\nexit 1\n`);await chmod(manager,0o700);
++  const args=['prepare','--source',source,'--base',base,'--patch',patch,'--out',output,'--no-install'];
++  if(fixture==='no-lock')args.push('--manager',manager);
++  expect(await validationCommand(args)).toMatchObject({status:'prepared',dependencies:'not-requested'});
++  await expect(readFile(marker)).rejects.toMatchObject({code:'ENOENT'});
++  expect(await readFile(path.join(output,'baseline','page.txt'),'utf8')).toBe('baseline\n');
++  expect(await readFile(path.join(output,'candidate','page.txt'),'utf8')).toBe('candidate\n');
++  await writeFile(path.join(output,'extra'),'tamper');await expect(cleanValidation(output)).rejects.toThrow(/retained/);
++  await rm(path.join(output,'extra'));expect(await cleanValidation(output)).toMatchObject({status:'removed'});
++  await expect(validationCommand(['prepare','--source',source,'--base',base,'--patch',patch,'--out',path.join(root,'missing-manager')])).rejects.toThrow(/Missing --manager/);
++  await expect(prepareValidation({source,base,patchFile:patch,output:path.join(root,'install'),manager,install:true})).rejects.toThrow(/blocked/);
++  await expect(readFile(marker)).rejects.toMatchObject({code:'ENOENT'});
++ }finally{await rm(root,{recursive:true,force:true});}
++},30_000);
++
++it('reads legacy copy-only manifests during cleanup',async()=>{
++ const root=await realpath(await mkdtemp(path.join(tmpdir(),'validation-legacy-')));
++ try{
++  const source=path.join(root,'source');await mkdir(source);
++  const git=(...args:string[])=>execFileSync('git',args,{cwd:source,encoding:'utf8'});
++  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
++  await writeFile(path.join(source,'file'),'x');git('add','.');git('commit','-qm','fixture');
++  const patch=path.join(root,'patch');await writeFile(patch,'',{mode:0o600});const output=path.join(root,'out');
++  await prepareValidation({source,base:git('rev-parse','HEAD').trim(),patchFile:patch,output,install:false});
++  const file=path.join(output,'manifest.json');const manifest=JSON.parse(await readFile(file,'utf8')) as Record<string,unknown>;
++  manifest.manager={kind:'npm',version:'1.2.3',executable:'/legacy/npm'};
++  manifest.lockfiles=[{workspace:'baseline',path:'package-lock.json',sha256:'a'.repeat(64)},{workspace:'candidate',path:'package-lock.json',sha256:'b'.repeat(64)}];
++  await writeFile(file,JSON.stringify(manifest));expect(await cleanValidation(output)).toMatchObject({status:'removed'});
++ }finally{await rm(root,{recursive:true,force:true});}
++},30_000);
++
++
++it('requires the exact manager pin, supported lockfile and offline cache for installation',async()=>{
++ const root=await realpath(await mkdtemp(path.join(tmpdir(),'validation-install-')));
++ try{
++  const source=path.join(root,'source');await mkdir(source);
++  const git=(...args:string[])=>execFileSync('git',args,{cwd:source,encoding:'utf8'});
++  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
++  await writeFile(path.join(source,'package.json'),JSON.stringify({name:'fixture',packageManager:'npm@1.2.3'}));
++  await writeFile(path.join(source,'package-lock.json'),JSON.stringify({lockfileVersion:3,packages:{}}));git('add','.');git('commit','-qm','fixture');
++  const base=git('rev-parse','HEAD').trim();const patch=path.join(root,'patch');await writeFile(patch,'',{mode:0o600});
++  const manager=path.join(root,'manager');await writeFile(manager,'#!/bin/sh\necho 1.2.3\n');await chmod(manager,0o700);
++  await expect(prepareValidation({source,base,patchFile:patch,output:path.join(root,'no-cache'),manager,install:true})).rejects.toThrow(/Populated offline cache required/);
++  await writeFile(manager,'#!/bin/sh\necho 2.0.0\n');
++  await expect(prepareValidation({source,base,patchFile:patch,output:path.join(root,'wrong-manager'),manager,install:true})).rejects.toThrow(/does not match exact project pin/);
++  await writeFile(path.join(source,'package-lock.json'),'file:../local');git('add','.');git('commit','-qm','unsupported');
++  await expect(prepareValidation({source,base:git('rev-parse','HEAD').trim(),patchFile:patch,output:path.join(root,'unsupported'),manager,install:true})).rejects.toThrow(/unsupported local dependencies/);
++ }finally{await rm(root,{recursive:true,force:true});}
++},30_000);

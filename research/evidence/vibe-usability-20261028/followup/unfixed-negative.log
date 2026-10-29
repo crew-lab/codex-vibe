@@ -1,0 +1,36 @@
+✔ returns false for 99 (0.318209ms)
+✖ returns true for 100 (1.219ms)
+✔ returns true for 101 (0.041708ms)
+✔ returns false for 99.99 (0.360958ms)
+✔ returns true for 100.01 (0.070333ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 4
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 39.182292
+
+✖ failing tests:
+
+test at delivery.test.mjs:9:1
+✖ returns true for 100 (1.219ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file://<private-validation-root>/validation/baseline/delivery.test.mjs:10:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "supervisor_version": "2.2.1",
+  "run_id": "7ec365ea-3701-4266-a89f-4eef5477d0f5",
+  "state": "completed",
+  "backend": "app-server",
+  "execution_state": "completed",
+  "stop_reason": "end_turn",
+  "summary": "Contract: `below(value, limit)` must return `true` exactly when `value < limit`. Equality must return `false`.\nImplementation: `return value <= limit;`\n\nDefect in `limit.mjs:below`: uses `<=` instead of `<`.\n\n| Input       | Expected | Actual |\n|-------------|----------|--------|\n| (699, 700)  | true     | true   |\n| (700, 700)  | false    | **true** |\n| (701, 700)  | false    | false  |\n| (-3, -2)    | true     | true   |\n| (-2, -2)    | false    | **true** |\n\nSmallest correction: change `<=` to `<`.",
+  "verification": {
+    "status": "not_requested",
+    "checks": []
+  },
+  "assessments": [],
+  "changed_files": [],
+  "usage": {
+    "prompt_tokens": 14562,
+    "completion_tokens": 239,
+    "cached_tokens": 9856,
+    "model_calls": 2,
+    "cost_source": "runtime-stats-prices",
+    "price_availability": "available",
+    "price_source": "runtime/read",
+    "cost_availability": "available",
+    "tokens_used": 14801,
+    "context_size": 209715,
+    "cost": {
+      "amount": 0.0103299,
+      "currency": "USD",
+      "authoritative": false
+    },
+    "tool_calls": {
+      "executed": 2,
+      "denied_by_handler": 0,
+      "denied_by_policy": 0
+    }
+  },
+  "warnings": [],
+  "integrity": {
+    "status": "verified",
+    "write_tool_observed": false
+  },
+  "next_action": "Check stop_reason and warnings before trusting the result; call vibe_close when done."
+}

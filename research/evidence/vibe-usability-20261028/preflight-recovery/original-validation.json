@@ -1,0 +1,9 @@
+{
+  "patch_sha256": "88459562600d6b8c60454cbfe53c43aa52550dcddada2cc1476cf36544179892",
+  "worker_tests": "FAIL: test is not defined",
+  "framework": "FAIL: missing node:test import",
+  "independent_boundaries": "PASS: 8",
+  "scope": "PASS: exactly delivery.mjs and delivery.test.mjs",
+  "original_fixture": "clean at frozen baseline",
+  "decision": "rejected"
+}

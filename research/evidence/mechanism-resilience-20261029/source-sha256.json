@@ -1,0 +1,31 @@
+{
+  "coverage": "Listed candidate source, regression and guidance files only; not a whole repository manifest",
+  "files": {
+    "src/reporting/private-files.ts": "343a7e9f9112d9b168d9f62189ebaa955cafccd74594b4290dfd25169ca62457",
+    "src/cli/task.ts": "5128fc1fcd73280097c53364739d28356334c688dc458e36b1682379625c3f55",
+    "src/preparation/task-inputs.ts": "509565122ad23980ad466a46bf33dc486b8b98959d179b9471dd1e780aebba9e",
+    "src/validation/workspace.ts": "07ca84c73dcb78459f6373ff53e47ac9531ef2bfb6cd3f792f4b2885dd4b2312",
+    "src/reporting/export.ts": "ca7f6dd406c79779e8af825fd2e07ddaf00e7d3a9e2d73902ffb128ef68355b2",
+    "src/core/run-manager.ts": "27c6ae8f137c3d3b09289dcadaf76eac994eca11ef13936466e4541c7993799c",
+    "src/preparation/evidence.ts": "58b7a4392c8a6c541a4cd34ecdecb8d148cd89b8e405436cbc0b9d99c71d03d2",
+    "src/contracts.ts": "c0801afdf81dcc7805e54ba360b597d58417a9175b81b7197f8b88d39e02015e",
+    "scripts/errors-doc.mjs": "da6a0b9c6ce71ed66b38adff9d77770408f5fb67c4e9b61434397f704d718048",
+    "tests/unit/private-files.test.ts": "2b53cd43c9bdc3430220c4294b173bda6e22c379db58ead6c8428740cfd8a56c",
+    "tests/unit/private-files-race.test.ts": "89b469fe6abbdb63c023fd89e39ae1b67a867e64dbd09e41ceaf6ce970af7a99",
+    "tests/unit/task-inputs-race.test.ts": "a1b5b046730f54cece5fe6ba7d266a08616218383420b218312c3f5eaaa6ac8d",
+    "tests/unit/task-inputs.test.ts": "cddd3e1b49ecf0668a2dace52fd75fe53d9cecd6730a27f8531d054da4d8971d",
+    "tests/unit/validation.test.ts": "30d84f32a45c959648eb1d18dade2481e3f9db4d29e212aa019bb5a9f4635b0c",
+    "tests/unit/acceptance.test.ts": "ab9ad3dd18c11e37ee26e3c7db3a10eb1688e4ede76f19a423e3bc25de417d63",
+    "tests/unit/dispatch-authorization.test.ts": "044940a1f35c7324bbc2dbae997a60fdf0e597445988eba18c171c90ea19f15d",
+    "tests/integration/mcp-tools.test.ts": "1f5396055b19755b728c19810a0bbe25f42534a22c075cba1d75ea47e39c9d66",
+    "docs/artifact-handling.md": "7f672cc1018b34bf729eeb891de612a54288c4b434b4f244dc3b23a9aac91ce8",
+    "docs/errors.md": "bdeae8c8976dc547cb55bbd1f87785b7a78716650d08d89c95b3bf4b3abf67ee",
+    "docs/functionality.md": "60a9f6be33820f92b4b66cdd6595c0118bd527f3ac064cdba78f89b42c4fcf30",
+    "docs/validation-workspace.md": "787c309c8a40f9eb5ff73e38f0540608c706846d0b4e472762b2d554fc327ec0",
+    "docs/local-operation.md": "35573a93a155ecce4c43dd0ebc26a3d8bf2b1d2a5d1e6a836f86f9e72ab00012",
+    ".agents/skills/vibe-supervisor/SKILL.md": "0a843248902e43ee659a95d245d8d0a2c09c6b0b771b9b28ccef17074819d706",
+    "planning/development-strategy.md": "216a21cee67f7249ee51a4cd98de028629e33e98ea8b4ebe5f58399da8644a94",
+    "package.json": "d18d1a05db988b381719631bbf05c2b1cf98a312a734036390436168d971d196",
+    "package-lock.json": "50d3640ba5213d5db2ad27b0167f107593447d6a0e62c25ddf911de514903b96"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "server_version": "2.2.1",
+  "candidate": {
+    "version": "2.2.1",
+    "sha256": "65dbafd0700891c72978e35df8a599a1c110ba37d13ff68bb19a3004cbe1e716"
+  },
+  "preparation": {
+    "status": "passed",
+    "candidate_sha256": "65dbafd0700891c72978e35df8a599a1c110ba37d13ff68bb19a3004cbe1e716",
+    "version": "2.2.1",
+    "reason": "Version-matched no-inference evidence; hosted acceptance remains separate"
+  },
+  "eligible": true,
+  "active_slot": {
+    "busy": false
+  },
+  "blockers": []
+}
