@@ -201,7 +201,7 @@ Source 347bf79, archive SHA-256 `84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f
 | `clean-account-install` | Not run: no spare standard macOS account. Retired as a latest-release blocker by decision D2; the target's fresh-prefix installation and the offline smoke stand in. |
 | `antigravity-backend-no-inference-check` | Observed on 2026-10-17 for the agy 1.4.0 candidate only; not rerun. |
 | `antigravity-backend-hosted-review-edit` | No hosted Antigravity run. |
-| `antigravity-hook-invoked-and-deny-honoured`, `antigravity-hook-failure-denies`, `antigravity-stream-tool-shape`, `antigravity-proxy-honoured`, `antigravity-project-config-not-loaded` | Claimed, not recorded: the target reports a pass on agy 1.4.9 with `antigravity_skip_permissions` on, and no evidence is committed. The backend is frozen (ADR 0008). |
+| `antigravity-hook-invoked-and-deny-honoured`, `antigravity-hook-failure-denies`, `antigravity-stream-tool-shape`, `antigravity-proxy-honoured`, `antigravity-project-config-not-loaded` | Not in the 2.2.0 archive; observed on the unreleased candidate with agy 1.4.9 (`research/evidence/antigravity-1.4.9-target-20261028/`). The backend is frozen (ADR 0008). |
 
 macOS Apple silicon is the supported platform. Linux and Windows code paths may exist, but no support claim is made for them, and Intel and other MCP clients have no acceptance. Codex plugin packaging is not offered.
 

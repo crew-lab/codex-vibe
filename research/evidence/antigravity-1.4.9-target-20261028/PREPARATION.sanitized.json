@@ -1,0 +1,275 @@
+{
+  "schema_version": 2,
+  "backend": "antigravity",
+  "result": "pass",
+  "checked_at": "2026-10-30T23:16:19.292Z",
+  "candidate_sha256": "14c7459770c79fadd71293ffacd23406a689c9918fbd29515d1458de00733faa",
+  "executable": {
+    "configured": "<private-path>",
+    "resolved_path": "<private-path>",
+    "sha256": "a66421b7962ffe5642e00cffdd2844dfde440e540502a29d206be5544a065c7b",
+    "version": "1.4.9",
+    "expected_version": "1.4.9"
+  },
+  "profiles": {
+    "review": {
+      "settings_valid": true,
+      "hooks_valid": true,
+      "cli_readback_passed": true,
+      "synthetic_checks_passed": true,
+      "ledger_entries": 6
+    },
+    "edit": {
+      "settings_valid": true,
+      "hooks_valid": true,
+      "cli_readback_passed": true,
+      "synthetic_checks_passed": true,
+      "ledger_entries": 6
+    }
+  },
+  "network_observation": {
+    "verdict": "none-observed-control-validated",
+    "total_tokens": 0
+  },
+  "agy_probes": {
+    "scripted_model": {
+      "endpoint_variables": [
+        "GOOGLE_GEMINI_BASE_URL",
+        "GEMINI_API_BASE_URL",
+        "CODE_ASSIST_ENDPOINT"
+      ],
+      "requests": 18,
+      "paths": [
+        "<private-path>",
+        "<private-path>"
+      ],
+      "declared_tools": [
+        "read_file",
+        "run_command",
+        "manage_task",
+        "send_message",
+        "schedule",
+        "invoke_subagent",
+        "define_subagent",
+        "manage_subagents",
+        "write_file",
+        "edit_file",
+        "search_web",
+        "ask_question"
+      ]
+    },
+    "hook_invoked_and_deny_honoured": {
+      "result": "pass",
+      "control": {
+        "outcome": "executed",
+        "reason": "probe_content_returned",
+        "exit_code": 0,
+        "timed_out": false,
+        "model_requests": 3,
+        "function_call_issued": true,
+        "probe_tool": "read_file",
+        "function_response_returned": true,
+        "nonce_returned": true,
+        "hook_invocations": 1,
+        "hook_payload_fields": []
+      },
+      "deny_all": {
+        "outcome": "denied",
+        "reason": "probe_content_withheld",
+        "exit_code": 0,
+        "timed_out": false,
+        "model_requests": 3,
+        "function_call_issued": true,
+        "probe_tool": "read_file",
+        "function_response_returned": true,
+        "nonce_returned": false,
+        "hook_invocations": 1,
+        "hook_payload_fields": [
+          "artifactDirectoryPath",
+          "conversationId",
+          "lastUserInput",
+          "modelName",
+          "stepIdx",
+          "toolCall",
+          "transcriptPath",
+          "workspacePaths"
+        ]
+      }
+    },
+    "hook_failure_denies": {
+      "result": "pass",
+      "timeout": {
+        "outcome": "denied",
+        "reason": "probe_content_withheld",
+        "exit_code": 0,
+        "timed_out": false,
+        "model_requests": 3,
+        "function_call_issued": true,
+        "probe_tool": "read_file",
+        "function_response_returned": true,
+        "nonce_returned": false,
+        "hook_invocations": 1,
+        "hook_payload_fields": [
+          "artifactDirectoryPath",
+          "conversationId",
+          "lastUserInput",
+          "modelName",
+          "stepIdx",
+          "toolCall",
+          "transcriptPath",
+          "workspacePaths"
+        ]
+      },
+      "nonzero_exit": {
+        "outcome": "denied",
+        "reason": "probe_content_withheld",
+        "exit_code": 0,
+        "timed_out": false,
+        "model_requests": 3,
+        "function_call_issued": true,
+        "probe_tool": "read_file",
+        "function_response_returned": true,
+        "nonce_returned": false,
+        "hook_invocations": 1,
+        "hook_payload_fields": [
+          "artifactDirectoryPath",
+          "conversationId",
+          "lastUserInput",
+          "modelName",
+          "stepIdx",
+          "toolCall",
+          "transcriptPath",
+          "workspacePaths"
+        ]
+      },
+      "unparseable_output": {
+        "outcome": "denied",
+        "reason": "probe_content_withheld",
+        "exit_code": 0,
+        "timed_out": false,
+        "model_requests": 3,
+        "function_call_issued": true,
+        "probe_tool": "read_file",
+        "function_response_returned": true,
+        "nonce_returned": false,
+        "hook_invocations": 1,
+        "hook_payload_fields": [
+          "artifactDirectoryPath",
+          "conversationId",
+          "lastUserInput",
+          "modelName",
+          "stepIdx",
+          "toolCall",
+          "transcriptPath",
+          "workspacePaths"
+        ]
+      }
+    },
+    "stream_tool_shape": {
+      "result": "pass",
+      "executed": {
+        "lines": 7,
+        "unparsed_lines": 0,
+        "tool_events": 2,
+        "field_paths": [
+          "event",
+          "step_update",
+          "step_update.conversation_id",
+          "step_update.duration_seconds",
+          "step_update.state",
+          "step_update.step_index",
+          "step_update.step_type",
+          "step_update.tool_info",
+          "step_update.tool_info.name",
+          "step_update.tool_info.output",
+          "step_update.tool_info.parameters",
+          "step_update.tool_info.parameters.Path",
+          "step_update.tool_name"
+        ],
+        "kinds": [
+          "event=step_update",
+          "state=ACTIVE",
+          "state=DONE",
+          "step_type=tool"
+        ],
+        "parser_executed_calls": 1,
+        "parser_probe_calls": 1,
+        "parser_denied_actions": 0
+      },
+      "denied": {
+        "lines": 7,
+        "unparsed_lines": 0,
+        "tool_events": 2,
+        "field_paths": [
+          "event",
+          "step_update",
+          "step_update.conversation_id",
+          "step_update.duration_seconds",
+          "step_update.state",
+          "step_update.step_index",
+          "step_update.step_type",
+          "step_update.tool_info",
+          "step_update.tool_info.error",
+          "step_update.tool_info.error.message",
+          "step_update.tool_info.error.type",
+          "step_update.tool_info.name",
+          "step_update.tool_info.parameters",
+          "step_update.tool_info.parameters.Path",
+          "step_update.tool_name"
+        ],
+        "kinds": [
+          "event=step_update",
+          "state=ACTIVE",
+          "state=ERROR",
+          "step_type=tool",
+          "type=TOOL_ERROR"
+        ],
+        "parser_executed_calls": 0,
+        "parser_probe_calls": 0,
+        "parser_denied_actions": 0
+      }
+    },
+    "proxy_honoured": {
+      "result": "pass",
+      "attempts": 6,
+      "hosts": [
+        "antigravity-unleash.goog",
+        "generativelanguage.googleapis.com",
+        "play.googleapis.com"
+      ],
+      "inference_hosts": [
+        "generativelanguage.googleapis.com"
+      ]
+    },
+    "project_config_not_loaded": {
+      "result": "pass",
+      "loaded": [],
+      "readbacks_ok": true,
+      "run": {
+        "outcome": "executed",
+        "reason": "probe_content_returned",
+        "exit_code": 0,
+        "timed_out": false,
+        "model_requests": 3,
+        "function_call_issued": true,
+        "probe_tool": "read_file",
+        "function_response_returned": true,
+        "nonce_returned": true,
+        "hook_invocations": 1,
+        "hook_payload_fields": []
+      }
+    }
+  },
+  "findings": [
+    {
+      "level": "info",
+      "code": "executable_verified",
+      "message": "Antigravity CLI 1.4.9 verified (sha256: a66421b7962ffe5642e00cffdd2844dfde440e540502a29d206be5544a065c7b)."
+    },
+    {
+      "level": "info",
+      "code": "background_telemetry_refused",
+      "message": "Antigravity CLI background telemetry/updater requests were intercepted and refused by proxy (antigravity-unleash.goog, play.googleapis.com, antigravity-cli-auto-updater-974169037036.us-central1.run.app). No provider inference occurred."
+    }
+  ]
+}
