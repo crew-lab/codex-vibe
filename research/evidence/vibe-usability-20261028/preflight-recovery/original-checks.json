@@ -1,0 +1,32 @@
+{
+  "contract_sha256": "ec666833873a82b5a334fa0cbe762461e7c0a8334c8337366e89cb25c4e222bd",
+  "checked_at": "2026-10-28T21:51:24.355Z",
+  "patch_sha256": "88459562600d6b8c60454cbfe53c43aa52550dcddada2cc1476cf36544179892",
+  "base_commit": "d0ce8a966690dc80e8feffb36796452f7987692f",
+  "execution_state": "completed",
+  "status": "passed",
+  "checks": [
+    {
+      "id": "$scope",
+      "status": "passed",
+      "reason": "changed-path-allowlist"
+    },
+    {
+      "id": "$required_changes",
+      "status": "passed",
+      "reason": "required-changed-paths"
+    },
+    {
+      "id": "function-file",
+      "path": "delivery.mjs",
+      "status": "passed",
+      "reason": "file_exists"
+    },
+    {
+      "id": "test-file",
+      "path": "delivery.test.mjs",
+      "status": "passed",
+      "reason": "file_exists"
+    }
+  ]
+}

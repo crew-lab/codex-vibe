@@ -1,0 +1,717 @@
+
+> vibe-supervisor@2.2.1 verify:release
+> npm run lint && npm run typecheck && npm run build && npm test && npm run acceptance && npm run secret-scan && npm run sbom
+
+
+> vibe-supervisor@2.2.1 lint
+> eslint .
+
+
+> vibe-supervisor@2.2.1 typecheck
+> tsc --noEmit
+
+
+> vibe-supervisor@2.2.1 build
+> node scripts/clean-dist.mjs && tsc
+
+
+> vibe-supervisor@2.2.1 test
+> vitest run
+
+
+ RUN  v4.0.18 <supervisor-repository>
+
+ ✓ tests/integration/progress-watchdog.test.ts (13 tests) 27431ms
+     ✓ fails a silent run with VSUP_NO_PROGRESS, names the silence, cancels the worker and frees the slot  1206ms
+     ✓ resets on every vibe event and lets a run that keeps talking complete  6483ms
+     ✓ does not count supervisor diagnostics as worker output  1180ms
+     ✓ is disabled by 0: no timer is armed, while a sibling with a tiny window trips  2862ms
+     ✓ exports and keeps the worktree of a silent edit run like a timeout does  1426ms
+     ✓ counts app-server frames that carry no assistant text as activity so a slow but busy run completes  3148ms
+     ✓ records the last activity kind and the silence in the no_progress diagnostic  2386ms
+     ✓ does not add a no_progress diagnostic to a run being cancelled  2518ms
+     ✓ does not add a no_progress diagnostic to a run whose deadline fired  2196ms
+     ✓ does not cancel a completed run whose settling outlasts the window  2014ms
+     ✓ fails an interrupted one-shot run when shutdown outlasts the watchdog window  2008ms
+ ✓ tests/unit/antigravity-headless-lifecycle.test.ts (9 tests) 31310ms
+     ✓ passes --dangerously-skip-permissions only when antigravity_skip_permissions is false and logs the enforced layer  333ms
+     ✓ passes --dangerously-skip-permissions only when antigravity_skip_permissions is true and logs the bypassed layer  323ms
+     ✓ cancels a worker waiting for authentication and removes its browser interception state  354ms
+     ✓ applies the supervisor deadline to an authentication wait and cleans the worker home  30234ms
+ ✓ tests/unit/dispatch-authorization.test.ts (29 tests) 15594ms
+     ✓ rejects invalid prepared source bytes before issuing or consuming a grant and releases admission  943ms
+     ✓ rejects invalid prepared copied bytes before issuing or consuming a grant and releases admission  850ms
+     ✓ rejects invalid prepared copy permissions before issuing or consuming a grant and releases admission  852ms
+     ✓ rejects invalid prepared inventory before issuing or consuming a grant and releases admission  910ms
+     ✓ rejects invalid prepared base before issuing or consuming a grant and releases admission  937ms
+     ✓ rejects invalid prepared scope before issuing or consuming a grant and releases admission  1006ms
+     ✓ rejects invalid prepared selected digest before issuing or consuming a grant and releases admission  924ms
+     ✓ rejects invalid prepared policy before issuing or consuming a grant and releases admission  835ms
+     ✓ bounds full prepared verification by the current admission deadline before issue  761ms
+     ✓ bounds full prepared verification by the current admission deadline before consume  771ms
+     ✓ preserves an unexpected prepared verification fault before issue without spending authorization  757ms
+     ✓ preserves an unexpected prepared verification fault before consume without spending authorization  745ms
+     ✓ binds verified prepared inputs to the admitted source and selected immutable edit base  337ms
+     ✓ keeps a prepared-input race after consumption failed without replay and releases the slot  1273ms
+     ✓ keeps a prepared-input race after launch verification failed without replay and releases the slot  1347ms
+     ✓ binds allowed_write_paths into the edit authorization and the run record  484ms
+     ✓ keeps an attempt consumed after startup failure and permits a fresh authorization  357ms
+ ✓ tests/integration/git-bounds.test.ts (4 tests) 24194ms
+     ✓ lets worktree creation take longer than the query bound but still bounds it  7787ms
+     ✓ lets patch export take longer than the query bound and reports a timeout past the heavy bound  15974ms
+ ✓ tests/unit/antigravity-prepare.test.ts (26 tests) 58210ms
+     ✓ passes --dangerously-skip-permissions to probe runs only when the switch is false, and records the enforced layer  3946ms
+     ✓ passes --dangerously-skip-permissions to probe runs only when the switch is true, and records the bypassed layer  3881ms
+     ✓ passes when agy invokes the hook, honours deny and hook failures, routes through the proxy and ignores planted project config  3847ms
+     ✓ exercises every replacement hook through the alternate registration and JSON Schema read dialect  3912ms
+     ✓ does not accept arbitrary built-in skills as a substitute for the disabled-skill policy  3875ms
+     ✓ accepts pinned built-in skills with provenance while rejecting arbitrary skills  3854ms
+     ✓ accepts agy 1.4.7 executable during preparation  3871ms
+     ✓ accepts agy 1.4.8 executable during preparation  3912ms
+     ✓ accepts agy 1.4.9 executable during preparation  3907ms
+     ✓ fails the receipt when agy lets a failed hook allow the call  4015ms
+     ✓ fails the receipt when agy runs the tool without honouring the hook  1712ms
+     ✓ fails the receipt when agy bypasses HTTPS_PROXY  3932ms
+     ✓ fails the receipt when agy loads project configuration above the workspace  3988ms
+     ✓ fails the receipt when the stream shape does not match the backend audit parser  7849ms
+     ✓ fails closed as inconclusive when agy does not reach the scripted model endpoint  1693ms
+vibe-supervisor: background failure in recovery-private-state: Error: Private Vibe state of run 263e8a33-9219-41ab-99a9-387f4901887e could not be deleted.
+ ✓ tests/integration/app-server-wiring.test.ts (28 tests) 15306ms
+     ✓ deletes the leftover private directories of an interrupted run before accepting work, and nothing else  6028ms
+     ✓ reports in the result when leftover state cannot be deleted, and still recovers  6023ms
+     ✓ runs a review to completion, reports usage and events, and closes without private state  527ms
+     ✓ surfaces a refused write as a tool_denied event and still completes the review  440ms
+     ✓ maps a server-side limit stop to turn_limit with the incomplete-result warning  398ms
+ ✓ tests/unit/antigravity-backend.test.ts (27 tests) 14395ms
+     ✓ probes executable version, binary sha256, runtimeCheck, requires preparation receipt by default, and rejects unsupported versions  1249ms
+     ✓ runs a review task with agy 1.4.0 stream-json envelopes, unified settings.json rules, secret redaction, cleanup, and distinguishes turns from modelCalls  441ms
+     ✓ runs an edit task with --mode accept-edits and write_file unified rules in isolated settings  349ms
+     ✓ fails closed when nested result.status is ERROR even if exit code is 0, and rejects unsupported ceilings (maxCostUsd, maxTokens) before dispatch  347ms
+     ✓ filters excluded files from review prompt workspace listing and populates unified settings.json permissions.deny  334ms
+     ✓ pre-tool hook invoked via .gemini/config/hooks.json approves valid reads and denies excluded, outside, reserved, unprofiled tools, and turn limits  624ms
+     ✓ integrates RunManager with mandatory preparation, exportReport, approvals.json, pin identity, reasoning_observation, and redacts out-of-workspace paths  4371ms
+     ✓ fails closed when slash commands exit nonzero (Finding 1 / exit-42 probe regression)  1208ms
+     ✓ executes runAntigravityPreparationCheck and runDoctor with zero model inference when slash commands succeed  3957ms
+     ✓ accepts GOOGLE_API_KEY when GEMINI_API_KEY is unset and explicitly writes modelProvider: gemini and neutralizer shim in PATH  379ms
+ ✓ tests/integration/active-disconnect.test.ts (8 tests) 10641ms
+       ✓ client-close ends the server, the worker process group, the lock and the run record  1183ms
+       ✓ sigterm ends the server, the worker process group, the lock and the run record  1074ms
+       ✓ client-close ends the server, the worker process group, the lock and the run record  1504ms
+       ✓ sigterm ends the server, the worker process group, the lock and the run record  1483ms
+       ✓ client-close ends the server, the worker process group, the lock and the run record  1123ms
+       ✓ sigterm ends the server, the worker process group, the lock and the run record  1098ms
+       ✓ client-close ends the server, the worker process group, the lock and the run record  1593ms
+       ✓ sigterm ends the server, the worker process group, the lock and the run record  1583ms
+ ✓ tests/disconnect-client.test.mjs (5 tests) 9843ms
+   ✓ disconnects an active edit through the official client and finds it failed and retained after reconnect  4869ms
+   ✓ starts the independent observer on the session directory before the run  4972ms
+vibe-supervisor: shutdown exceeded 5 ms; terminating owned workers and waiting for bounded start and cleanup work before releasing the storage lock
+ ✓ tests/integration/worktree-close.test.ts (20 tests) 9522ms
+     ✓ records the exact detached worktree identity created for the run  459ms
+     ✓ retains exported edits and reports the worktree path and reason  687ms
+     ✓ reaches closed and keeps the worktree when ignored files remain, saying why  705ms
+     ✓ continues to retain exported edits after ignored residue is removed  869ms
+     ✓ reports worktree_removed false without a reason when cleanup was not requested  412ms
+     ✓ retains an exported dirty worktree after restart using the saved patch artifact  664ms
+     ✓ still refuses after a restart when the saved patch was tampered with  444ms
+     ✓ refuses after a restart when the worktree changed since the export  585ms
+     ✓ close during delayed worktree creation waits and reports verified cleanup  992ms
+     ✓ keeps the owner lock through a short-deadline shutdown while Git creation is still pending  793ms
+     ✓ exports and keeps a tracked-file edit when the repository sets core.ignoreStat  697ms
+     ✓ exports and keeps an edit to a skip-worktree entry  713ms
+     ✓ refuses cleanup and retention when one run is redirected to another valid owned worktree  795ms
+     ✓ maps git failures to their own codes and keeps VSUP_GIT_REQUIRED for a missing binary or non-repository  326ms
+ ✓ tests/integration/reviewed-baseline.test.ts (25 tests) 9351ms
+     ✓ dry-runs and creates exact reviewed snapshots without source/index/ref changes  547ms
+     ✓ ignores an inherited external index during snapshot staging  369ms
+     ✓ allows only the exact hash-bound root .env.example template in dry-run and created snapshots  556ms
+     ✓ creates exact file-to-directory transitions independent of manifest order  456ms
+     ✓ creates exact directory-to-file transitions independent of manifest order  500ms
+     ✓ binds template opt-in to effective reviewed bytes and rechecks dotenv syntax  419ms
+     ✓ rejects hash mismatch, arbitrary credential values, command substitution, other env files and real .env files  1386ms
+     ✓ runs the documented CLI dry-run and create flows with a private config and manifest  739ms
+     ✓ uses the explicit artifact config for preparation despite obsolete default keys and needs no live connection  675ms
+     ✓ refuses a stale dry-run manifest when source refs change before snapshot creation  326ms
+     ✓ writes a private sanitized failure receipt after a controlled late source hash change  1028ms
+ ✓ tests/integration/run-manager-regressions.test.ts (14 tests) 8377ms
+     ✓ lists only the supervisor-written artifacts and ignores any other file planted in the run directory  492ms
+     ✓ turns a source workspace change during a review into a warning instead of failing the run  502ms
+     ✓ records a diagnostic event when a backend reports a state transition that is invalid for the run  633ms
+     ✓ closing a completed one-shot run reports closed without a failed transition  1016ms
+     ✓ shutting down with a completed but unclosed one-shot run produces no unhandled rejection  968ms
+     ✓ refuses unreadable source before registering a dispatch grant  304ms
+     ✓ fails the run when saving the record right after a successful snapshot fails  449ms
+     ✓ hashWorkspace enforces the entry limit and bounds only the hashed bytes  383ms
+     ✓ releases the worker when artifact finalization fails a completed run  781ms
+       ✓ when the backend reports failed while its process is still alive  588ms
+       ✓ when a completed run fails during artifact finalization  594ms
+       ✓ when a failure is reported after the run already completed  583ms
+       ✓ when the transcript limit fails the run  596ms
+       ✓ when the deadline expires  488ms
+vibe-supervisor: background failure in worker-termination-unverified: Error: backend close exploded
+vibe-supervisor: background failure in worker-termination-unverified: Error: backend close exploded
+ ✓ tests/unit/v2-conformance-check.test.ts (16 tests) 8809ms
+     ✓ passes both modes, sends no turn, forwards no real key and leaves nothing behind  429ms
+     ✓ fails and terminates the group when a descendant outlives the server  2424ms
+     ✓ sends only a labelled placeholder key when asked and never echoes it  369ms
+     ✓ reports every read-back mismatch, still shuts the server down and exits non-zero  377ms
+     ✓ takes the executable and manifest from the selected configuration  437ms
+     ✓ redacts paths and secrets that arrive through the server standard error  408ms
+     ✓ flags a server that reports another version  370ms
+     ✓ reports a credential requirement as an incomplete check, not a failure  360ms
+     ✓ validates the network observation with a control and finds no request when experiments are off  821ms
+     ✓ fails when the supervisor configuration still contacts the host the control contacted  769ms
+     ✓ fails any subject request even when the control contacted no matching host  687ms
+     ✓ calls the observation inconclusive when the control sees no request  654ms
+     ✓ merges repeatable --excluded-glob values into the profile denylist and reads them back  337ms
+ ✓ tests/integration/close-cleanup.test.ts (14 tests) 7517ms
+     ✓ fails an interrupted run without replay and retains its dirty worktree  663ms
+     ✓ keeps the worktree of a completed run  430ms
+     ✓ retains exported dirty worktrees for cancelled and closed runs  1199ms
+     ✓ prints a manual cleanup command that a shell passes to git literally  671ms
+     ✓ is exported and then removed by close with cleanup_worktree  554ms
+     ✓ still keeps a worktree that holds ignored files, exporting the patch first  552ms
+     ✓ serializes concurrent close requests around worker cancellation and retains dirty output  1052ms
+     ✓ retains the worker and slot when backend close throws, then closes after a safe retry  375ms
+     ✓ retains the worker and slot when backend close rejects, then closes after a safe retry  358ms
+     ✓ accepts actual disclosure despite a misleading summary and appends a correction after closure  599ms
+     ✓ preserves a completed review outcome and observed start time after close  341ms
+     ✓ preserves a failed review outcome and observed start time after close  334ms
+     ✓ preserves a cancelled review outcome and observed start time after close  307ms
+ ✓ tests/unit/policy-readiness.test.ts (30 tests) 7208ms
+     ✓ sees a root approved after connect in the same manager's readiness and start without restart  361ms
+     ✓ denies only a deleted root while readiness, start and cleanup in the other root keep working  967ms
+     ✓ keeps a missing git binary and a Git timeout distinct from an unresolved base_ref  695ms
+     ✓ rejects a receipt used for another operation, workspace or moved edit base  508ms
+     ✓ creates the edit worktree at the exact commit the receipt checked even if the ref moves  476ms
+     ✓ rejects a valid receipt when another start claimed the slot first  366ms
+     ✓ leaves the live run unaffected, applies the new policy to the next admission and still cleans the verified worktree under its frozen admission  685ms
+     ✓ still retains a dirty worktree after revocation because cleanup keeps its fresh export checks  602ms
+vibe-supervisor: background failure in storage: VSUP_STORAGE_ERROR: The supervisor could not write to its data directory because the disk is full (ENOSPC).
+ ✓ tests/unit/fake-vibe-app-server.test.ts (54 tests) 5631ms
+     ✓ serves a read-back mismatch scenario, a missing field scenario and an injected session error  302ms
+     ✓ never times out a pending approval: the turn stalls until the client answers  558ms
+     ✓ accepts an interrupt but never settles when the scenario ignores it  440ms
+     ✓ takes the configured exit path after session/stop  400ms
+     ✓ supports a delayed EOF exit and an ignored EOF  767ms
+     ✓ wedges mid-turn, ignores EOF and SIGTERM, and dies only on SIGKILL, leaving its store behind  550ms
+ ✓ tests/security/security-primitives.test.ts (16 tests) 5363ms
+     ✓ refuses cleanup after post-export changes and retains the worktree  381ms
+     ✓ retains a verified export worktree while it contains uncommitted output  430ms
+     ✓ uses non-force Git removal so a file created at the final removal boundary is preserved  815ms
+     ✓ keeps termination unverified when EPERM strands a managed descendant, then retries the owned group handle  1591ms
+     ✓ rejects termination within a bound when group and direct-child signaling fail  1535ms
+vibe-supervisor: background failure in storage: VSUP_STORAGE_ERROR: The supervisor could not write to its data directory because the disk is full (ENOSPC).
+ ✓ tests/integration/storage-faults.test.ts (11 tests) 4790ms
+     ✓ fails the run with VSUP_STORAGE_ERROR when the completion persist hits ENOSPC, and keeps the pipeline moving  686ms
+     ✓ keeps the in-memory outcome and reports a warning while the state cannot be saved  650ms
+     ✓ lets the first persist of start() propagate VSUP_STORAGE_ERROR without creating a run  454ms
+     ✓ fails the run with EACCES when the run directory becomes unwritable mid-run  719ms
+     ✓ does not reject a run when recording an event fails  576ms
+ ✓ tests/integration/token-shaping.test.ts (22 tests) 4324ms
+     ✓ an edit start keeps the worker path and returns the compact patch  467ms
+     ✓ inlines a small patch and trims artifacts and workspace  419ms
+     ✓ references a patch larger than 4000 bytes by path instead of inlining it  458ms
+     ✓ caps changed_files at 50 and reports the total  414ms
+     ✓ caps the inline transcript in compact mode and points at the file  399ms
+ ✓ tests/integration/readiness-connection.test.ts (2 tests) 4816ms
+     ✓ rereads the originally selected config, not the session snapshot, and never launches Vibe  346ms
+     ✓ locates preparation receipt in selected nondefault config directory over --isolated stdio connection and refuses stale evidence  4469ms
+ ✓ tests/integration/event-log-failures.test.ts (4 tests) 3754ms
+     ✓ degrades with VSUP_STORAGE_ERROR when events.ndjson becomes a directory, without looping or a false output limit  1689ms
+     ✓ degrades with VSUP_STORAGE_ERROR when events.ndjson becomes a symlink, without looping or a false output limit  1686ms
+vibe-supervisor: background failure in worker-termination-unverified: Error: owned worker still alive
+vibe-supervisor: background failure in worker-termination-unverified: Error: process group still alive
+vibe-supervisor: background failure in shutdown-termination-unverified: Error: owned worker still alive
+ ✓ tests/unit/runtime-install.test.ts (7 tests) 4329ms
+     ✓ performs a real offline runtime installation with discovered uv  3994ms
+ ✓ tests/integration/settle.test.ts (11 tests) 3462ms
+     ✓ does not reattach a handle when completion arrives before backend start returns  356ms
+     ✓ keeps shutdown ownership when termination is unverified and drains after a later owned-handle retry  1225ms
+ ✓ tests/integration/review-fixes.test.ts (18 tests) 3453ms
+     ✓ omits integrity for edit runs  465ms
+     ✓ compactResult gives a patch path when inlining would exceed the result cap  427ms
+     ✓ compactResult still inlines a patch that fits the cap  465ms
+ ✓ tests/unit/workspace-snapshot.test.ts (10 tests) 3147ms
+     ✓ snapshots 20,000 small ignored files by metadata without hashing them  2358ms
+ ✓ tests/unit/antigravity-review-fixes.test.ts (11 tests) 2404ms
+     ✓ denies every unreadable or unknown path argument identically in the TypeScript twin and the embedded hook  655ms
+     ✓ spawns agy with only the allowlisted environment and redacts the forwarded Google key from stdout and stderr  360ms
+ ✓ tests/unit/validation.test.ts (13 tests) 3438ms
+   ✓ creates independent copies and safely cleans up (offline install=false)  311ms
+   ✓ creates independent copies and safely cleans up (offline install=true)  1474ms
+   ✓ prepares package-free copies without running a manager and preserves cleanup safeguards  458ms
+   ✓ prepares no-lock copies without running a manager and preserves cleanup safeguards  401ms
+   ✓ requires the exact manager pin, supported lockfile and offline cache for installation  558ms
+vibe-supervisor: run 1e66d831-c02d-4902-87aa-8acda50d6b4b has a record this release cannot load; it was left in place
+ ✓ tests/unit/package-finalization.test.ts (4 tests) 2407ms
+   ✓ matches the actual npm pack artifact when SBOM is externally regenerated afterward (SBOM retained by prepare=false)  424ms
+   ✓ matches the actual npm pack artifact when SBOM is externally regenerated afterward (SBOM retained by prepare=true)  440ms
+   ✓ rejects a repacked archive with changed package content and tampered or unsafe kit checksums  1111ms
+   ✓ fails closed on an actual offline dependency-cache miss, removes the verification prefix, and prints no success notice  431ms
+ ✓ tests/integration/lazy-startup-retention.test.ts (8 tests) 1934ms
+     ✓ initializes 200 runs with 1 MiB event logs without reading events, and loads them on demand  637ms
+     ✓ keeps a live one-shot run while removing an old terminal control run  412ms
+     ✓ never removes a fresh completed run when retention is set to zero days, but still removes old terminal ones  352ms
+ ✓ tests/unit/task-inputs.test.ts (11 tests) 2147ms
+vibe-supervisor: shutdown exceeded 5 ms; terminating owned workers and waiting for bounded start and cleanup work before releasing the storage lock
+ ✓ tests/integration/client-shutdown.test.ts (3 tests) 1946ms
+     ✓ completes one task, closes it, then EOF exits the server and settles owned resources  641ms
+     ✓ client.close while a run is active exits the server and terminates the owned Vibe process  669ms
+     ✓ SIGINT exits the server and terminates the owned Vibe process  635ms
+ ✓ tests/integration/stop-reason.test.ts (9 tests) 1841ms
+ ✓ tests/unit/core-run-manager.test.ts (12 tests) 2041ms
+     ✓ exports an edit worktree patch and retains dirty output after close  736ms
+ ✓ tests/integration/worktree-index-flags.test.ts (3 tests) 1567ms
+     ✓ refuses cleanup while an assume-unchanged edit is missing from the saved export  752ms
+     ✓ writes and expires no shared index while exporting a split-index worktree  537ms
+ ✓ tests/integration/readiness-task-authorize.test.ts (2 tests) 1488ms
+     ✓ registers a grant that the same server accepts for the templated request, and refuses one bound to another task by name  1224ms
+ ✓ tests/integration/event-durability.test.ts (5 tests) 1497ms
+     ✓ flushes on its own within the window  777ms
+vibe-supervisor: background failure in storage: VSUP_STORAGE_ERROR: The supervisor could not write to its data directory because the disk is full (ENOSPC).
+vibe-supervisor: background failure in storage: VSUP_STORAGE_ERROR: The supervisor could not write to its data directory because the disk is full (ENOSPC).
+ ✓ tests/unit/reaper.test.ts (8 tests) 1564ms
+     ✓ kills the whole worker group when the recorded deadline passes  482ms
+     ✓ escalates to SIGKILL when the worker ignores SIGTERM  591ms
+ ✓ tests/unit/app-server-credentials.test.ts (20 tests) 1393ms
+     ✓ times out and kills the process group  943ms
+ ✓ tests/integration/storage-degraded.test.ts (2 tests) 1412ms
+     ✓ keeps the warning while event flushes fail, then clears after a successful flush  701ms
+     ✓ retains accepted events in memory during a failed flush and flushes them on recovery  710ms
+vibe-supervisor: background failure in app-server-start-cleanup: Error: termination could not be verified
+ ✓ tests/integration/status-result.test.ts (5 tests) 1398ms
+     ✓ embeds the result for failed and cancelled runs and carries the error  349ms
+     ✓ keeps the protected fields when a large patch and many files exceed max_mcp_result_chars  433ms
+ ✓ tests/security/export-equivalence.test.ts (4 tests) 1450ms
+     ✓ produces a patch that rebuilds the same tree as the reference patch  534ms
+     ✓ exports 50 untracked files in constant time  386ms
+ ✓ tests/integration/app-server-start-cleanup.test.ts (4 tests) 1249ms
+     ✓ keeps the reaper running and the handle usable, and lets a retry finish the cleanup  315ms
+     ✓ still terminates the worker during cleanup instead of throwing on the missing client  354ms
+ ✓ tests/unit/run-record-fields.test.ts (15 tests) 1188ms
+ ✓ tests/security/worktree-cleanup-order.test.ts (3 tests) 1183ms
+     ✓ accepts a reordered verified patch but retains its dirty worktree  476ms
+     ✓ still refuses a one-byte content change in the reordered patch comparison  461ms
+ ✓ tests/integration/phase-c-surface.test.ts (2 tests) 1182ms
+     ✓ uses the configured turn and timeout defaults when a call omits them  966ms
+ ✓ tests/integration/app-server-backend.test.ts (113 tests) 113942ms
+     ✓ completes a review through the whole protocol sequence and cleans up  304ms
+     ✓ denies an edit outside allowed_write_paths, keeps running and names the writable paths in the prompt  304ms
+     ✓ writes a private edit agent profile that asks for every profile tool and denies reserved paths  330ms
+     ✓ owns the managed-config listener for the worker lifetime and closes it with the run  314ms
+     ✓ prefixes approved context paths to the task  311ms
+     ✓ reads every server frame tolerantly: unknown fields, stale events and unknown notifications  1217ms
+     ✓ denies out-of-workspace, secret and off-profile calls and keeps running  309ms
+     ✓ answers deny when an approval decision stalls past its deadline  434ms
+     ✓ does not count repeated denials of a non-network tool toward the shell and network stop  355ms
+     ✓ maps provider error codes: auth, rate limit and refusal  823ms
+     ✓ rebuilds usage from stats and cost from the snapshot prices  319ms
+     ✓ interrupts when modelCalls pass the turn limit plus its margin and completes at the limit  320ms
+     ✓ interrupts on the token ceiling  317ms
+     ✓ fails when the server version is not the pinned one  304ms
+     ✓ classifies a server that exits during startup and keeps its stderr tail  310ms
+     ✓ accepts bundled plugin skills while retaining the exact file-tool profile  333ms
+     ✓ fails the run on settings the environment did not apply  305ms
+     ✓ fails with a classified error when the reaper cannot start  304ms
+     ✓ fails with a crash when the server dies mid-turn and redacts its stderr  311ms
+     ✓ group-kills a server that ignores stdin EOF  581ms
+     ✓ interrupts at the deadline and fails with a timeout  8032ms
+     ✓ kills a wedged server that ignores SIGTERM and fails with a timeout  9648ms
+     ✓ lets the reaper kill a wedged group at its recorded deadline  6248ms
+     ✓ cancels a server that ignores the interrupt by group-killing it after the grace period  605ms
+     ✓ close on a live run cancels it and verifies termination  301ms
+     ✓ keeps a completed turn completed when the deadline passes during finalization  9415ms
+     ✓ a cancel after the turn completed shuts the server down gracefully instead of aborting startup  509ms
+     ✓ keeps enforcing the token ceiling on the totals after the counters reset  339ms
+     ✓ follows a context clear whose counters kept growing, without counting the old session twice  372ms
+     ✓ fails closed when the handoff arrives while a callback is open  684ms
+     ✓ fails closed when the handoff arrives with an effect that has not finished  682ms
+     ✓ still counts tokens of an unpriced model when no cost ceiling is set, and enforces a priced ceiling  1083ms
+     ✓ fails when a second effect names the callback that was approved for the first  480ms
+     ✓ accepts the unchanged edit the callback showed  351ms
+     ✓ puts a bounded listing of the allowed files before the context paths and the task in a review  421ms
+     ✓ includes the same listing in an edit run  420ms
+     ✓ says plainly when the listing was truncated by the file count  327ms
+     ✓ says plainly when the listing was truncated by its byte budget  424ms
+     ✓ leaves the prompt as it was outside a Git repository, without a diagnostic  329ms
+     ✓ leaves the listing out and reports it when Git output exceeds its cap  350ms
+     ✓ audits the history after a budget interrupt the server ignored and catches an unapproved write  532ms
+     ✓ does not report a clean completed budget stop when the audit could not run  589ms
+     ✓ still completes a budget stop with the incomplete-result warning when the audit passes  590ms
+     ✓ audits the history at the deadline and reports the unapproved write instead of a plain timeout  8335ms
+     ✓ denies a callback that arrives after a cancel without consulting the policy  1787ms
+     ✓ denies a callback that arrives after the budget interrupt  1741ms
+     ✓ denies a callback that arrives after the deadline interrupt  16032ms
+     ✓ keeps the watermark gap error and mentions the cancel that came after it  3347ms
+     ✓ keeps the watermark gap error when the deadline arrives after it  8245ms
+     ✓ still reports a plain timeout when no protocol failure came first  8339ms
+     ✓ treats a missing hooksCount in config/read as a read-back mismatch  306ms
+     ✓ treats a missing skillsCount in config/read as a read-back mismatch  357ms
+     ✓ anchors the globs at the allowed root above the workspace in the handler, the listing and the denylist  306ms
+     ✓ saves the real pin identity in meta.json, writes approvals.json and includes it in runs export  484ms
+vibe-supervisor: background failure in storage: VSUP_STORAGE_ERROR: The supervisor could not write to its data directory because the disk is full (ENOSPC).
+ ✓ tests/unit/package-files.test.ts (1 test) 868ms
+   ✓ ships documentation and the runtime installer without mutating the shared build  868ms
+ ✓ tests/integration/usage-record.test.ts (2 tests) 952ms
+     ✓ saves tool-call counts and token totals equal to the statistics delta in meta.json and result.json  459ms
+     ✓ saves the configured token ceiling and the model-call backstop in the limits  492ms
+vibe-supervisor: background failure in storage: VSUP_STORAGE_ERROR: The supervisor could not write to its data directory because the disk is full (ENOSPC).
+ ✓ tests/integration/event-flush-faults.test.ts (2 tests) 1012ms
+     ✓ degrades the run, keeps the events in memory, and heals after a later meta write and flush  711ms
+     ✓ degrades from a timer flush with no state change  301ms
+vibe-supervisor: run 5071d099-b9da-4d55-86b9-251aac78fd94 has a record this release cannot load; it was left in place
+vibe-supervisor: run 61cd071f-edb5-4ca0-b2d0-277872c82397 has a record this release cannot load; it was left in place
+vibe-supervisor: run fd7c33a9-bae1-41ad-9eb6-e90559f6e195 has a record this release cannot load; it was left in place
+ ✓ tests/integration/config-without-pin-manifest.test.ts (7 tests) 1022ms
+ ✓ tests/security/export-false-positive.test.ts (5 tests) 1004ms
+vibe-supervisor: shutdown exceeded 300 ms; terminating owned workers and waiting for bounded start and cleanup work before releasing the storage lock
+ ✓ tests/integration/stability-fixes.test.ts (3 tests) 761ms
+     ✓ keeps the owner lock while a stuck run chain may still write, then releases it after the chain settles  666ms
+ ✓ tests/integration/recovery.test.ts (6 tests) 997ms
+     ✓ keeps the private directories until the reaper window of a worker that may still be alive has passed  728ms
+ ✓ tests/unit/app-server-protocol.test.ts (64 tests) 682ms
+ ✓ tests/unit/acceptance.test.ts (9 tests) 761ms
+     ✓ checks exact exported contents independently of summaries and detects later tampering  721ms
+ ✓ tests/integration/requested-outcome.test.ts (3 tests) 615ms
+ ✓ tests/unit/app-server-readback.test.ts (57 tests) 723ms
+ ✓ tests/unit/setup.test.ts (35 tests) 644ms
+ ✓ tests/integration/failure-reporting.test.ts (3 tests) 600ms
+ ✓ tests/unit/readiness-task-authorize.test.ts (5 tests) 581ms
+ ✓ tests/unit/workspace-guard.test.ts (15 tests) 595ms
+ ✓ tests/unit/review-fixes-core.test.ts (8 tests) 518ms
+ ✓ tests/unit/isolated-home.test.ts (18 tests) 508ms
+ ✓ tests/integration/backend-labels.test.ts (3 tests) 607ms
+ ✓ tests/integration/cli-entrypoint.test.ts (4 tests) 544ms
+ ✓ tests/unit/app-server-approvals.test.ts (58 tests) 896ms
+ ✓ tests/unit/app-server-outcome.test.ts (18 tests) 413ms
+ ✓ tests/unit/dispatch-grants.test.ts (14 tests) 482ms
+ ✓ tests/security/split-index.test.ts (2 tests) 643ms
+     ✓ leaves the common git dir untouched for a linked worktree of a split-index repository  360ms
+ ✓ tests/integration/status-paging.test.ts (4 tests) 459ms
+ ✓ tests/unit/app-server-pin.test.ts (32 tests) 532ms
+ ✓ tests/unit/child-environment.test.ts (4 tests) 419ms
+ ✓ tests/unit/app-server-events.test.ts (71 tests) 421ms
+ ✓ tests/unit/event-log.test.ts (12 tests) 376ms
+     ✓ flushes on its own after the window  302ms
+ ✓ tests/unit/app-server-workspace-listing.test.ts (17 tests) 329ms
+ ✓ tests/fixture-verify.test.mjs (7 tests) 343ms
+ ✓ tests/integration/unreadable-event-log.test.ts (12 tests) 315ms
+ ✓ tests/integration/preparation-help.test.ts (1 test) 271ms
+ ✓ tests/sbom.test.mjs (5 tests) 347ms
+ ✓ tests/unit/app-server-jsonrpc.test.ts (52 tests) 204ms
+ ✓ tests/unit/managed-collector.test.ts (7 tests) 135ms
+ ✓ tests/integration/doctor-executable-lookup.test.ts (4 tests) 136ms
+ ✓ tests/unit/app-server-usage.test.ts (34 tests) 170ms
+ ✓ tests/unit/no-legacy-references.test.ts (27 tests) 86ms
+ ✓ tests/unit/budget-aggregation.test.ts (8 tests) 92ms
+ ✓ tests/unit/task-inputs-race.test.ts (1 test) 137ms
+ ✓ tests/unit/cli.test.ts (10 tests) 143ms
+ ✓ tests/unit/runs-usefulness.test.ts (7 tests) 48ms
+ ✓ tests/unit/process-guards.test.ts (5 tests) 56ms
+ ✓ tests/unit/config.test.ts (39 tests) 47ms
+ ✓ tests/unit/docs-links.test.ts (1 test) 32ms
+ ✓ tests/unit/app-server-session-config.test.ts (25 tests) 45ms
+ ✓ tests/unit/owner-lock.test.ts (43 tests) 33ms
+ ✓ tests/unit/vibe-wire.test.ts (10 tests) 27ms
+ ✓ tests/integration/mcp-tools.test.ts (10 tests) 40ms
+ ✓ tests/unit/sarif.test.ts (7 tests) 17ms
+ ✓ tests/unit/pin-manifest-read.test.ts (1 test) 52ms
+ ✓ tests/unit/app-server-failure.test.ts (18 tests) 15ms
+ ✓ tests/unit/preparation.test.ts (2 tests) 15ms
+ ✓ tests/unit/app-server-managed-config.test.ts (2 tests) 15ms
+ ✓ tests/unit/version.test.ts (4 tests) 19ms
+ ✓ tests/unit/grant-storage-faults.test.ts (2 tests) 17ms
+ ✓ tests/unit/private-files.test.ts (8 tests) 15ms
+ ✓ tests/disconnect-observer.test.mjs (6 tests) 7ms
+ ✓ tests/unit/findings.test.ts (10 tests) 14ms
+ ✓ tests/unit/tool-schemas.test.ts (7 tests) 7ms
+ ✓ tests/unit/redaction.test.ts (29 tests) 8ms
+ ✓ tests/unit/acceptance-ledger.test.ts (7 tests) 6ms
+ ✓ tests/unit/reporting-telemetry.test.ts (5 tests) 6ms
+ ✓ tests/unit/private-files-race.test.ts (1 test) 4ms
+ ✓ tests/unit/private-directory.test.ts (3 tests) 5ms
+ ✓ tests/unit/storage-error.test.ts (21 tests) 3ms
+ ✓ tests/unit/patch-credentials.test.ts (32 tests) 3ms
+ ✓ tests/unit/errors-doc.test.ts (2 tests) 2ms
+ ✓ tests/integration/authorization-runtime.test.ts (4 tests | 1 skipped) 3ms
+ ✓ tests/unit/run-provenance.test.ts (12 tests) 3ms
+ ✓ tests/unit/node-version.test.ts (3 tests) 2ms
+ ✓ tests/unit/export-ledger.test.ts (2 tests) 2ms
+
+ Test Files  118 passed (118)
+      Tests  1657 passed | 1 skipped (1658)
+   Start at  10:13:57
+   Duration  123.03s (transform 1.54s, setup 0ms, import 7.07s, tests 471.36s, environment 7ms)
+
+
+> vibe-supervisor@2.2.1 acceptance
+> node scripts/acceptance.mjs
+
+{
+  "schema_version": 2,
+  "generated_at": "2026-10-28T15:51:50.000Z",
+  "deterministic_checks": [
+    {
+      "name": "private-package",
+      "status": "PASS",
+      "detail": "Package remains unpublished/private while the source is MIT licensed."
+    },
+    {
+      "name": "node-engine",
+      "status": "PASS",
+      "detail": "Node 24.22.1; package engine >=20.19"
+    },
+    {
+      "name": "cli-build",
+      "status": "PASS",
+      "detail": "Compiled CLI entrypoint exists."
+    },
+    {
+      "name": "cli-version",
+      "status": "PASS",
+      "detail": "2.2.1"
+    },
+    {
+      "name": "mcp-five-tool-catalog",
+      "status": "PASS",
+      "detail": "vibe_close, vibe_edit_start, vibe_result, vibe_review_start, vibe_status"
+    },
+    {
+      "name": "mcp-server-version",
+      "status": "PASS",
+      "detail": "2.2.1"
+    }
+  ],
+  "supported_release": "2.2.0",
+  "open_gates": [
+    {
+      "name": "package-kit-identity-binding",
+      "reason": "The preparation PASS shows the kit matched the installed candidate; the packaging-time identity report (offline installation, conformance-script hash, delivery checksums) is not in the committed evidence."
+    },
+    {
+      "name": "installed-sdk-readiness",
+      "reason": "Native readiness was recorded instead; the SDK-over-stdio pass and the wrong expected_candidate rejection were not."
+    },
+    {
+      "name": "hosted-close-acceptance-recorded",
+      "reason": "The hash-bound accepted assessment is in trial-a/report.json; the runs usefulness row for it was not recorded."
+    },
+    {
+      "name": "hosted-excluded-glob-readback-and-denial",
+      "reason": "Zero tool denials in both trials; no exclusion was exercised."
+    },
+    {
+      "name": "permission-ask-visible-in-effective-config",
+      "reason": "The handler half is observed (approvals.json: in-workspace reads reached the handler); the per-tool config fields are in the target's private conformance report, not committed."
+    },
+    {
+      "name": "mcp-client-disconnect-hosted",
+      "reason": "Not exercised on this build; observed once on the 2a49abd repair build."
+    },
+    {
+      "name": "thinking-off-effect",
+      "reason": "Thinking read back off and reasoning counts were zero; zero counts cannot show the generation effect."
+    },
+    {
+      "name": "experiments-fetch-off",
+      "reason": "Host-only observation cannot attribute a request to experiments."
+    },
+    {
+      "name": "nested-run-typescript-shape-and-gating",
+      "reason": "The trials did not carry the probe; it rides the next hosted review (Direction, step 5)."
+    },
+    {
+      "name": "validation-populated-pnpm-dependencies",
+      "reason": "Passed locally on 2026-10-15 on a public fixture (pnpm 9.15.4) before any archive; not rerun on this build."
+    },
+    {
+      "name": "clean-account-install",
+      "reason": "Not run: no spare standard macOS account (2026-10-17). Retired as a latest-release blocker by D2; the target's fresh-prefix installation and the offline smoke stand in."
+    },
+    {
+      "name": "antigravity-backend-no-inference-check",
+      "reason": "Observed on 2026-10-17 for candidate cfa7fbec with agy 1.4.0 only; not rerun on this build."
+    },
+    {
+      "name": "antigravity-backend-hosted-review-edit",
+      "reason": "No hosted Antigravity run."
+    },
+    {
+      "name": "antigravity-hook-invoked-and-deny-honoured",
+      "reason": "Claimed, not recorded: the target reports a pass on agy 1.4.9 with antigravity_skip_permissions on; no evidence is committed."
+    },
+    {
+      "name": "antigravity-hook-failure-denies",
+      "reason": "Claimed, not recorded: the target reports a pass on agy 1.4.9 with antigravity_skip_permissions on; no evidence is committed."
+    },
+    {
+      "name": "antigravity-stream-tool-shape",
+      "reason": "Claimed, not recorded: the target reports a pass on agy 1.4.9 with antigravity_skip_permissions on; no evidence is committed."
+    },
+    {
+      "name": "antigravity-proxy-honoured",
+      "reason": "Claimed, not recorded: the target reports a pass on agy 1.4.9 with antigravity_skip_permissions on; no evidence is committed."
+    },
+    {
+      "name": "antigravity-project-config-not-loaded",
+      "reason": "Claimed, not recorded: the target reports a pass on agy 1.4.9 with antigravity_skip_permissions on; no evidence is committed."
+    }
+  ],
+  "builds": [
+    {
+      "label": "2.2.0",
+      "archive_sha256": "6b0a120d1ae16bb102af4bc07bfa11522684f536a3a17fce3f9f93dc70d44984",
+      "candidate_sha256": "81df8140eb49afbebfb5202bc3186c97f9ea8b57a7243d108ce376cbdcc73b90",
+      "recorded_on": "2026-10-27",
+      "observed": [
+        "node-floor-20.19.0",
+        "target-no-inference-conformance-check",
+        "native-readiness",
+        "hosted-review-edit-confirmation",
+        "execution-provenance-on-hosted-run",
+        "hosted-usage-recorded",
+        "hosted-run-exported"
+      ],
+      "open": [
+        "package-kit-identity-binding",
+        "installed-sdk-readiness",
+        "hosted-close-acceptance-recorded",
+        "hosted-excluded-glob-readback-and-denial",
+        "permission-ask-visible-in-effective-config",
+        "mcp-client-disconnect-hosted",
+        "thinking-off-effect",
+        "experiments-fetch-off",
+        "nested-run-typescript-shape-and-gating",
+        "validation-populated-pnpm-dependencies",
+        "clean-account-install",
+        "antigravity-backend-no-inference-check",
+        "antigravity-backend-hosted-review-edit",
+        "antigravity-hook-invoked-and-deny-honoured",
+        "antigravity-hook-failure-denies",
+        "antigravity-stream-tool-shape",
+        "antigravity-proxy-honoured",
+        "antigravity-project-config-not-loaded"
+      ]
+    },
+    {
+      "label": "2.2.1 qualification candidate",
+      "archive_sha256": "18744750fb5e1bf1695e1aa25b1ef2b6caddb746fadb08c6222cc4b53f0d2afc",
+      "candidate_sha256": "65dbafd0700891c72978e35df8a599a1c110ba37d13ff68bb19a3004cbe1e716",
+      "recorded_on": "2026-10-28",
+      "observed": [
+        "target-no-inference-conformance-check",
+        "execution-provenance-on-hosted-run",
+        "hosted-usage-recorded"
+      ],
+      "open": [
+        "package-kit-identity-binding",
+        "node-floor-20.19.0",
+        "installed-sdk-readiness",
+        "native-readiness",
+        "hosted-review-edit-confirmation",
+        "hosted-run-exported",
+        "hosted-excluded-glob-readback-and-denial",
+        "permission-ask-visible-in-effective-config",
+        "mcp-client-disconnect-hosted",
+        "thinking-off-effect",
+        "experiments-fetch-off",
+        "nested-run-typescript-shape-and-gating",
+        "validation-populated-pnpm-dependencies",
+        "clean-account-install",
+        "antigravity-backend-no-inference-check",
+        "antigravity-backend-hosted-review-edit",
+        "antigravity-hook-invoked-and-deny-honoured",
+        "antigravity-hook-failure-denies",
+        "antigravity-stream-tool-shape",
+        "antigravity-proxy-honoured",
+        "antigravity-project-config-not-loaded",
+        "hosted-close-acceptance-recorded"
+      ]
+    },
+    {
+      "label": "2.1.0",
+      "archive_sha256": "9f949d4337b4dc037c1e82c0a692c8da27878f670992c46f77f79c9f5f1de2a5",
+      "candidate_sha256": "7641d294df5f432b1b99633c052b5e2311e16131e9ad9e8dc828ccf8511f9154",
+      "recorded_on": "2026-10-26",
+      "observed": [
+        "target-no-inference-conformance-check",
+        "native-readiness",
+        "hosted-review-edit-confirmation"
+      ],
+      "open": []
+    },
+    {
+      "label": "2.0.2",
+      "archive_sha256": "84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09",
+      "candidate_sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1",
+      "recorded_on": "2026-10-16 to 2026-10-17",
+      "observed": [
+        "package-kit-identity-binding",
+        "node-floor-20.19.0",
+        "target-no-inference-conformance-check",
+        "installed-sdk-readiness",
+        "native-readiness"
+      ],
+      "open": []
+    },
+    {
+      "label": "reporting repair 2a49abd",
+      "archive_sha256": "133e77bdf20fc1cc839d3f0e5bfcdc644aa5ec09e4eb02558fb43cd1b8d191a8",
+      "candidate_sha256": "1c3c135862e2fe888428a2bf67fc6cd02fe9852259a494e7d624e2a3e96a45c0",
+      "recorded_on": "2026-10-16",
+      "observed": [
+        "mcp-client-disconnect-hosted"
+      ],
+      "open": []
+    },
+    {
+      "label": "2.0.1 corrected archive",
+      "archive_sha256": "7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e",
+      "candidate_sha256": "8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4",
+      "recorded_on": "2026-10-15 to 2026-10-16",
+      "observed": [
+        "package-kit-identity-binding",
+        "node-floor-20.19.0",
+        "target-no-inference-conformance-check",
+        "installed-sdk-readiness",
+        "native-readiness",
+        "hosted-review-edit-confirmation",
+        "nested-run-typescript-shape-and-gating"
+      ],
+      "open": []
+    },
+    {
+      "label": "antigravity 1.4.0 candidate",
+      "archive_sha256": null,
+      "candidate_sha256": "cfa7fbecc59ccce422d88874798d5e9cae27772f0906f4c4a9ac2f2020e5738c",
+      "recorded_on": "2026-10-17",
+      "observed": [
+        "antigravity-backend-no-inference-check"
+      ],
+      "open": []
+    },
+    {
+      "label": "workflow candidate",
+      "archive_sha256": "d1fd22ec04e50048c052cdf013b4d235b525dffc2efb11596dd29f8253003f6a",
+      "candidate_sha256": "a3600f7632ea42a221d342734dd1b6cb17deaaf072211693a728e31c0437b053",
+      "recorded_on": "2026-10-15",
+      "observed": [
+        "target-no-inference-conformance-check",
+        "installed-sdk-readiness",
+        "validation-populated-pnpm-dependencies"
+      ],
+      "open": []
+    }
+  ]
+}
+
+> vibe-supervisor@2.2.1 secret-scan
+> node scripts/secret-scan.mjs
+
+Secret scan passed: no recognized credential formats found.
+
+> vibe-supervisor@2.2.1 sbom
+> node scripts/sbom.mjs
+
+Wrote SPDX SBOM with 193 locked package entries to dist/sbom.spdx.json.

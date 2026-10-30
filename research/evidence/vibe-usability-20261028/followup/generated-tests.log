@@ -1,0 +1,13 @@
+✔ returns false for 99 (0.326708ms)
+✔ returns true for 100 (0.04825ms)
+✔ returns true for 101 (0.040375ms)
+✔ returns false for 99.99 (0.038959ms)
+✔ returns true for 100.01 (0.084708ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 38.043667

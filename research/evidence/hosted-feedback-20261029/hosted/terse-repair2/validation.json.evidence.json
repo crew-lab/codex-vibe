@@ -1,0 +1,15 @@
+{
+  "profile": {
+    "kind": "node-test",
+    "tests": [
+      "discount.test.mjs"
+    ],
+    "timeout_seconds": 30,
+    "node": "v24.21.0"
+  },
+  "profile_sha256": "c6c2fa0b94138a16b856c5d7c9bf0d926e2e2b29e0c59fb24ea0e3b735e04b0f",
+  "patch_sha256": "5df70fe80ff1b8823147ce08ef0ee31cf715cd96c5700ce8a37f5003158f4642",
+  "status": "passed",
+  "reason": "exit-0",
+  "diagnostic": "✔ exactly 100 qualifies (0.343416ms)\n✔ above 100 qualifies (0.052834ms)\n✔ just below 100 does not qualify (0.050667ms)\n✔ far below 100 does not qualify (0.0425ms)\n✔ far above 100 qualifies (0.353375ms)\n✔ zero does not qualify (0.041542ms)\n✔ negative number does not qualify (0.040542ms)\nℹ tests 7\nℹ suites 0\nℹ pass 7\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 39.093208\n"
+}

@@ -1,0 +1,50 @@
+{
+  "contract_sha256": "b2c9ec057085320d5e68ae8fc082e85f074ced0ba44b505e51a6b7825eecabb4",
+  "checked_at": "2026-10-28T21:30:31.269Z",
+  "patch_sha256": "5723b5e04558a63b4b7f601afbfabfade16547257198bebcd3276bd731fe3e7b",
+  "base_commit": "3f834a01b8dc61adbc393be298400311bde02825",
+  "execution_state": "completed",
+  "status": "failed",
+  "checks": [
+    {
+      "id": "$scope",
+      "status": "passed",
+      "reason": "changed-path-allowlist"
+    },
+    {
+      "id": "$required_changes",
+      "status": "passed",
+      "reason": "required-changed-paths"
+    },
+    {
+      "id": "test-file",
+      "path": "delivery.test.mjs",
+      "status": "passed",
+      "reason": "file_exists"
+    },
+    {
+      "id": "inclusive-threshold",
+      "path": "delivery.mjs",
+      "status": "passed",
+      "reason": "text_contains"
+    },
+    {
+      "id": "node-test-import",
+      "path": "delivery.test.mjs",
+      "status": "passed",
+      "reason": "text_contains"
+    },
+    {
+      "id": "named-test-call",
+      "path": "delivery.test.mjs",
+      "status": "passed",
+      "reason": "text_contains"
+    },
+    {
+      "id": "strict-assert",
+      "path": "delivery.test.mjs",
+      "status": "failed",
+      "reason": "text_contains"
+    }
+  ]
+}

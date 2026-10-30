@@ -1,0 +1,20 @@
+
+ RUN  v4.0.18 <supervisor-repository>
+
+ ✓ tests/integration/readiness-connection.test.ts (2 tests) 4714ms
+     ✓ rereads the originally selected config, not the session snapshot, and never launches Vibe  342ms
+     ✓ locates preparation receipt in selected nondefault config directory over --isolated stdio connection and refuses stale evidence  4371ms
+ ✓ tests/unit/antigravity-backend.test.ts (27 tests) 14048ms
+     ✓ probes executable version, binary sha256, runtimeCheck, requires preparation receipt by default, and rejects unsupported versions  2125ms
+     ✓ runs a review task with agy 1.4.0 stream-json envelopes, unified settings.json rules, secret redaction, cleanup, and distinguishes turns from modelCalls  304ms
+     ✓ filters excluded files from review prompt workspace listing and populates unified settings.json permissions.deny  395ms
+     ✓ pre-tool hook invoked via .gemini/config/hooks.json approves valid reads and denies excluded, outside, reserved, unprofiled tools, and turn limits  587ms
+     ✓ integrates RunManager with mandatory preparation, exportReport, approvals.json, pin identity, reasoning_observation, and redacts out-of-workspace paths  4291ms
+     ✓ fails closed when slash commands exit nonzero (Finding 1 / exit-42 probe regression)  1141ms
+     ✓ executes runAntigravityPreparationCheck and runDoctor with zero model inference when slash commands succeed  3736ms
+
+ Test Files  2 passed (2)
+      Tests  29 passed (29)
+   Start at  10:12:52
+   Duration  16.02s (transform 343ms, setup 0ms, import 449ms, tests 18.76s, environment 0ms)
+

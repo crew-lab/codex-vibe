@@ -1,0 +1,15 @@
+{
+  "profile": {
+    "kind": "node-test",
+    "tests": [
+      "discount.test.mjs"
+    ],
+    "timeout_seconds": 30,
+    "node": "v24.21.0"
+  },
+  "profile_sha256": "c6c2fa0b94138a16b856c5d7c9bf0d926e2e2b29e0c59fb24ea0e3b735e04b0f",
+  "patch_sha256": "de690c145c346abf04096dd65deb01d69521cb864e1c371a4cc02e62f108173a",
+  "status": "passed",
+  "reason": "exit-0",
+  "diagnostic": "All tests passed!\n✔ discount.test.mjs (26.73325ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 30.013583\n"
+}

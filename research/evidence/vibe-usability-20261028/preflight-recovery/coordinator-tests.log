@@ -1,0 +1,13 @@
+✔ 99 does not qualify (0.337334ms)
+✔ 99.99 does not qualify (0.05125ms)
+✔ 100 qualifies (0.042667ms)
+✔ 100.01 qualifies (0.041208ms)
+✔ 101 qualifies (0.046ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 39.955708

@@ -7,6 +7,8 @@ import { TEST_CONFIG } from '../unit/support/test-config.js';
 import { createSupervisorMcpServer } from '../../src/mcp/server.js';
 import { createIsolatedRunRouter } from '../../src/core/isolated-run-router.js';
 import type { RunManagerTools } from '../../src/mcp/tools.js';
+import { parseInputJson } from '../../src/reporting/private-files.js';
+import { z } from 'zod';
 
 function errorText(result: unknown): string {
   return (result as { content: { text: string }[] }).content[0]!.text;
@@ -110,6 +112,21 @@ describe('MCP stdio tool surface', () => {
       details: { unavailable_root: '/gone', note: expect.stringContaining('api_key=') },
     } });
     expect((JSON.parse(errorText(failed)) as { error: { details: { note: string } } }).error.details.note).not.toContain('sk-abcdef');
+  });
+
+  it('preserves safe selected input errors across MCP', async () => {
+    const input = new PassThrough(); const output = new PassThrough();
+    const manager = {
+      reviewStart: vi.fn(async () => parseInputJson(Buffer.from('{ sensitive-marker'), 'request', z.object({}))),
+      editStart: vi.fn(async () => ({})), status: vi.fn(async () => ({})), result: vi.fn(async () => ({})), close: vi.fn(async () => ({})),
+    } satisfies RunManagerTools;
+    const server = createSupervisorMcpServer(manager, { config: { ...TEST_CONFIG, limits: { ...TEST_CONFIG.limits } } });
+    await server.connect(new StdioServerTransport(input, output));
+    const client = new Client({ name: 'mcp-test-client', version: '0.0.1' }); clients.push(client);
+    await client.connect(new StdioClientHarness(input, output));
+    const result = await client.callTool({ name: 'vibe_review_start', arguments: { ...startIds, task: 'review', cwd: '/tmp' } });
+    expect(JSON.parse(errorText(result))).toMatchObject({ error: { code: 'VSUP_INVALID_ARGUMENT', details: { role: 'request', reason: 'invalid_json' } } });
+    expect(errorText(result)).not.toContain('sensitive-marker');
   });
 
   it('returns VSUP_INTERNAL for an unexpected error and writes its redacted cause to the error log', async () => {

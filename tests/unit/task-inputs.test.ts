@@ -38,10 +38,21 @@ describe('prepared task inputs', () => {
     try { await prepareTaskInputs({ source, base, files: ['ignored.txt'], output, contractFile: contract, allowedRoots: [source] }); }
     catch (error) { message = (error as Error).message; }
     expect(message).toContain('outside source checkout');
-    expect(message).toContain('mode 0600');
+    expect(message).toContain('valid acceptance-contract JSON');
     expect(message).toContain('ignored or absent from Git discovery: ignored.txt');
     await expect(lstat(output)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readFile(path.join(source, 'ignored.txt'), 'utf8')).toBe('private diagnostic input');
+  });
+
+  it('accepts a normal contract without modifying it and rejects malformed contracts safely', async () => {
+    const { parent, source, base } = await fixture(); const contract = path.join(parent, 'contract.json');
+    const bytes = JSON.stringify({ schema_version: 1, allowed_changed_paths: ['tracked.txt'], checks: [{ id: 'exists', kind: 'file_exists', path: 'tracked.txt' }] });
+    await writeFile(contract, bytes, { mode: 0o644 }); await chmod(contract, 0o644);
+    await prepareTaskInputs({ source, base, files: ['tracked.txt'], output: path.join(parent, 'prepared'), contractFile: contract, allowedRoots: [source] });
+    expect(await readFile(contract, 'utf8')).toBe(bytes);
+    expect((await lstat(contract)).mode & 0o777).toBe(0o644);
+    await writeFile(contract, '{ sensitive-marker');
+    await expect(prepareTaskInputs({ source, base, files: ['tracked.txt'], output: path.join(parent, 'other'), contractFile: contract, allowedRoots: [source] })).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', details: { role: 'contract', reason: 'invalid_json' } });
   });
 
   it('copies committed, dirty, and untracked bytes exactly and leaves source unchanged', async () => {
@@ -66,7 +77,16 @@ describe('prepared task inputs', () => {
     const { parent, source, base } = await fixture(); const output = path.join(parent, 'prepared');
     await prep({ source, base, files: ['tracked.txt'], output });
     await writeFile(path.join(source, 'tracked.txt'), 'change---\n');
-    await expect(verify(output, source)).rejects.toThrow('Required source changed');
+    await expect(verify(output, source)).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', details: { role: 'prepared_inputs', reason: 'source_changed' } });
+  });
+
+  it('classifies removed source and private copies without exposing native errors', async () => {
+    const { parent, source, base } = await fixture(); const output = path.join(parent, 'prepared');
+    await prep({ source, base, files: ['tracked.txt'], output });
+    await rm(path.join(output, 'context', 'tracked.txt'));
+    await expect(verify(output, source)).rejects.toMatchObject({ code: 'VSUP_ARTIFACT_ERROR', details: { role: 'artifact' } });
+    await rm(path.join(source, 'tracked.txt'));
+    await expect(verify(output, source)).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', details: { role: 'prepared_inputs', reason: 'source_path' } });
   });
 
   it('requires the selected source to remain allowed at verification', async () => {
@@ -114,6 +134,6 @@ describe('prepared task inputs', () => {
     const { parent, source, base } = await fixture();
     const output = path.join(parent, 'prepared'); await prep({ source, base, files: ['tracked.txt'], output });
     const copy = path.join(output, 'context', 'tracked.txt'); await rm(copy); await symlink(path.join(source, 'tracked.txt'), copy);
-    await expect(verify(output, source)).rejects.toThrow('Unsafe prepared context path');
+    await expect(verify(output, source)).rejects.toMatchObject({ code: 'VSUP_ARTIFACT_ERROR', details: { role: 'artifact' } });
   });
 });

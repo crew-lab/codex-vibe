@@ -124,3 +124,10 @@ Pinned Vibe 3.0.2 bundled plugin skills are permitted by owner decision ([ADR 00
 The server always registers exactly five tools. Edit start may freeze an [acceptance contract](workflow-acceptance.md); automated checks evaluate exact exported bytes separately from execution and coordinator assessment. Close accepts append-only assessment corrections. Read-only `runs verify` and `runs export` produce sanitized reports and optional patch/projected-event artifacts, and an export adds the run's approval ledger and pin identity when it has them. `runs usefulness` counts accepted and rejected edit runs from those assessments ([workflow acceptance](workflow-acceptance.md#measuring-usefulness)); reviews are not assessable.
 
 [Version-matched preparation](preparation.md) is now a dispatch gate: workspace eligibility alone is insufficient. Native readiness reports candidate identity, preparation state and optional expected-candidate mismatch. Runtime pin verification remains independent at launch. Model observations and detailed usage are reported where exposed; unknown identities, costs and phase boundaries stay unknown. [Validation preparation](validation-workspace.md) creates independent owned copies and pinned offline dependencies without running project checks or integrating output.
+
+## Caller inputs and internal artifacts
+
+[Artifact intake](artifact-handling.md) separates ordinary caller-selected files from strict saved state. Normal owned 0644 request/contract/patch/validation inputs are read without a chmod prerequisite; unsafe or changed inputs yield actionable typed errors. Internal state keeps its private-file requirements. Full prepared-input verification precedes grant issuance and consumption and is repeated at launch; no attempt is automatically replayed.
+
+
+Contract delivery, structured Node test checks, complete authorization payloads and bounded fresh repair preparation are described in [contract workflow](workflow-acceptance.md). Explicit coordinator test execution uses the [validation profile](validation-workspace.md). These mechanisms preserve separate grants, one-shot runs and coordinator acceptance.

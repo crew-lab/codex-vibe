@@ -11,7 +11,8 @@ export const checkSchema = z.discriminatedUnion('kind', [
   z.object({ ...basic, kind: z.literal('file_absent') }).strict(),
   z.object({ ...basic, kind: z.literal('text_contains'), value: z.string().min(1).max(100_000) }).strict(),
   z.object({ ...basic, kind: z.literal('text_not_contains'), value: z.string().min(1).max(100_000) }).strict(),
-  z.object({ ...basic, kind: z.literal('file_sha256'), value: sha256 }).strict()
+  z.object({ ...basic, kind: z.literal('file_sha256'), value: sha256 }).strict(),
+  z.object({ ...basic, kind: z.literal('node_test'), min_cases: z.number().int().min(1).max(100) }).strict()
 ]);
 export const acceptanceContractSchema = z.object({
   schema_version: z.literal(1), allowed_changed_paths: z.array(safeRelativePath).min(1).max(1000),

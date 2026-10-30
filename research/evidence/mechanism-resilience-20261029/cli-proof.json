@@ -1,0 +1,16 @@
+{
+  "runtime": "v24.22.1",
+  "before_exit": 1,
+  "before_result": "VSUP_INTERNAL: Unsafe artifact",
+  "after_exit": 0,
+  "after_result": "prepared",
+  "input_mode_before": "0644",
+  "input_mode_after": "0644",
+  "input_sha256_before": "4c125179c3b31f91479a2a995d4c9a9fd16036ee6f99b597e5527177f3dab72b",
+  "input_sha256_after": "4c125179c3b31f91479a2a995d4c9a9fd16036ee6f99b597e5527177f3dab72b",
+  "source_and_candidate_bytes": "PASS",
+  "unsafe_writable_input": "VSUP_INVALID_ARGUMENT: mode; no chmod and no output",
+  "malformed_request": "VSUP_INVALID_ARGUMENT: invalid_json; no contents in error",
+  "output_cleanup": "removed after fingerprint verification",
+  "hosted_starts": 0
+}

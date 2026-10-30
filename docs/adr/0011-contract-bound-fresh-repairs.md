@@ -1,0 +1,16 @@
+# ADR 0011: contract delivery and bounded fresh repair preparation
+
+Status: implementation candidate; hosted qualification pending.
+
+A frozen edit contract is delivered by both backend prompt builders, independently of task wording. Structured node_test checks use the pinned TypeScript parser without evaluating project code. This checks a documented syntax subset, not arbitrary test correctness. TypeScript 5.9.3 moves from development-only to runtime dependencies without a version change.
+
+Corrections remain fresh one-shot runs through the existing five tools. Administrative task repair prepares a new complete edit request from a closed rejected predecessor, unchanged original base/scope/contract, exact saved patch and hash-bound failed validations. It includes the previous patch and failures as bounded untrusted data; it never applies that patch. The worker regenerates a complete delta from the original base. Private exclusive reservations enforce at most two corrections across a lineage, including concurrent calls and restart. Preparation consumes budget conservatively even if output writing later fails. Administrative authorization durably reserves each generated correction once, after validating grant arguments and before issuing its single-use grant. A second grant for that correction or replay of the original within its repair lineage is refused, including after restart. Changing scope or limits on the generated task cannot bypass its recorded identity. It never grants or starts an attempt; every correction needs a fresh task authorize and readiness receipt. No replay, continuation, policy widening or automatic integration is introduced. Authorized local administrators can choose a new independent task; this is not a global provider allowance tracker.
+
+Authorization returns a complete start_request preserving every selected request field with new grant identifiers. The caller adds only a fresh readiness receipt on the intended connection. A prepared payload does not establish readiness or validate a later changed request.
+
+A separately invoked coordinator node-test validation profile executes fixed Node argv against explicitly selected safe test paths in an owned validation copy. It uses a filtered environment, bounded deadline/output and process-group cleanup, and reports exact patch/profile hashes and sanitized diagnostics. Project tests execute code with the coordinator's OS privileges; application policy is not an OS sandbox. No command string, shell runner or worker tool is added. External validation IDs remain reported evidence unless the coordinator explicitly executes a supported profile.
+
+Failures retain original artifacts and assessments. Acceptance requires both automated contract PASS and required independent validation evidence; successful execution alone cannot mark an edit accepted. No mechanism can infer unspecified requirements or guarantee arbitrary model output correctness.
+
+
+Hosted feedback refinement: opaque check IDs/JSON alone did not consistently elicit named callbacks under a terse task. Both initial delivery and prepared repair now end with tool-rendered, per-file contract requirements and supported syntax. This changes instruction delivery only; automated checks, frozen contracts, budgets and separate grants remain unchanged. Preserved rejected outputs remain rejected.

@@ -1,0 +1,17 @@
+✔ below (0.365625ms)
+✔ equality (0.048917ms)
+✔ above (0.041292ms)
+✔ negative-below (0.320375ms)
+✔ negative-equality (0.041958ms)
+✔ negative-above (0.037083ms)
+✔ NaN (0.037333ms)
+✔ positive infinity (0.035792ms)
+✔ negative infinity (0.051125ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 40.231375

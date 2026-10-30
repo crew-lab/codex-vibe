@@ -5,3 +5,6 @@ docs/reviews/practical-tool-fix-2026-10-13/*.log -text -whitespace
 docs/reviews/rc1-hosted-2026-10-14/**/*.patch -text -whitespace
 docs/reviews/rc1-hosted-2026-10-14/**/*.log -text -whitespace
 docs/reviews/rc1-integration-2026-10-14/*.patch -text -whitespace
+research/evidence/**/*.diff whitespace=-blank-at-eol
+research/evidence/**/*.patch whitespace=-blank-at-eol
+research/evidence/**/*.log -text -whitespace

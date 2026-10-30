@@ -1,0 +1,18 @@
+{
+  "run_id": "055ed180-40d2-4792-9b27-b035abaa25aa",
+  "candidate": "cfb9cc2164fa569ec7d237c37b6fda3b69a981fe2f29e1297913400fe04a22c8",
+  "execution": "completed",
+  "stop_reason": "end_turn",
+  "warnings": [],
+  "integrity": {
+    "status": "verified",
+    "write_tool_observed": false
+  },
+  "tool_calls": {
+    "executed": 2,
+    "denied_by_handler": 0,
+    "denied_by_policy": 0
+  },
+  "context_file_count": 2,
+  "decision": "accepted"
+}

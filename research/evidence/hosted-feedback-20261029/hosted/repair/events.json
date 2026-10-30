@@ -1,0 +1,122 @@
+[
+  {
+    "seq": 1,
+    "timestamp": "2026-10-29T14:58:39.712Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 2,
+    "timestamp": "2026-10-29T14:58:39.715Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 3,
+    "timestamp": "2026-10-29T14:58:39.717Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 4,
+    "timestamp": "2026-10-29T14:58:42.147Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "write_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 5,
+    "timestamp": "2026-10-29T14:58:42.150Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "write_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 6,
+    "timestamp": "2026-10-29T14:58:46.575Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "write_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 7,
+    "timestamp": "2026-10-29T14:58:47.320Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 8,
+    "timestamp": "2026-10-29T14:58:47.323Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 9,
+    "timestamp": "2026-10-29T14:58:48.610Z",
+    "type": "tool_denied",
+    "severity": "warning",
+    "name": "unknown",
+    "outcome": "permission_denied_by_policy",
+    "reason": "permission_denied_by_policy"
+  },
+  {
+    "seq": 10,
+    "timestamp": "2026-10-29T14:58:51.344Z",
+    "type": "tool_denied",
+    "severity": "warning",
+    "name": "unknown",
+    "outcome": "permission_denied_by_policy",
+    "reason": "permission_denied_by_policy"
+  },
+  {
+    "seq": 11,
+    "timestamp": "2026-10-29T14:58:55.186Z",
+    "type": "message",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown"
+  },
+  {
+    "seq": 12,
+    "timestamp": "2026-10-29T14:58:55.186Z",
+    "type": "diagnostic",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown",
+    "reason": "reasoning_observation",
+    "streamed_entries": 0,
+    "history_entries": 0,
+    "history_audited": true
+  },
+  {
+    "seq": 13,
+    "timestamp": "2026-10-29T14:58:55.186Z",
+    "type": "diagnostic",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown",
+    "reason": "ignored_notifications"
+  },
+  {
+    "seq": 14,
+    "timestamp": "2026-10-29T14:58:56.813Z",
+    "type": "diagnostic",
+    "severity": "warning",
+    "name": "unknown",
+    "outcome": "unknown",
+    "reason": "worktree_retained"
+  }
+]
