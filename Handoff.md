@@ -46,7 +46,7 @@ Behaviour on a running Vibe is proven only by the [target acceptance procedure](
 
 ## Open questions
 
-**Only the target can answer.** The protocol questions that fail closed are listed in the [strategy's verification model](planning/development-strategy.md#verification-model), and the [procedure](docs/target-acceptance.md) records which way each goes. The 2.2.0 trials completed without a refusal on that build; two observations are still owed: `nested-run-typescript-shape-and-gating` (Direction step 5, on the next hosted review) and the five `antigravity-*` probe gates (step 8, evidence reported by the target and not yet committed). A new build reopens every observation.
+**Only the target can answer.** The protocol questions that fail closed are listed in the [strategy's verification model](planning/development-strategy.md#verification-model), and the [procedure](docs/target-acceptance.md) records which way each goes. The 2.2.0 trials completed without a refusal on that build; one hosted observation is still owed: `nested-run-typescript-shape-and-gating` (Direction step 5, on the next hosted review). The five `antigravity-*` probe gates are observed and committed under `research/evidence/antigravity-1.4.9-target-20261028/` for candidate `14c74597…` with agy 1.4.9. A new build reopens every observation.
 
 **For the owner.** The private project name is in `main`'s history (commit `2e920d3`); the current tree uses `<site-project>`. The recommendation stands: leave history as it is unless the name is sensitive, because a rewrite of public `main` breaks every clone.
 
@@ -67,6 +67,11 @@ Sanitized evidence folders under `research/evidence/`:
 | `antigravity-backend-2026-10-17` | The Antigravity no-inference check |
 | `vibe-302-stability-20261026` | The 2.1.0 qualification: preparation, native readiness and one accepted fixture edit |
 | `v2.2.0-local-workflow-20261027` | The 2.2.0 trials: one accepted native edit and one accepted native review |
+| `qualification-221-20261028` | The 2.2.1 candidate trials: preparation, native readiness, accepted review, rejected edit |
+| `real-use-design-20261028` | Two separately authorized real-use design trials on 2.2.0, both rejected |
+| `antigravity-1.4.9-target-20261028` | The Antigravity 1.4.9 target probes: 5 probe gates observed and preparation receipt |
+| `mechanism-resilience-20261029` | The mechanism resilience and external-input reader candidate evidence |
+| `contract-repair-20261029` | The contract-bound fresh repairs and weather fixture acceptance |
 
 The workflow candidate's 2026-10-15 packet is at commit `2e920d3`.
 
