@@ -1,0 +1,107 @@
+# ADR 0007: a supervisor-owned search tool for reviews
+
+Status: **Proposed** on 2026-10-28, for the owner's approval. No product code depends on it yet.
+
+Reviews read one file at a time and cannot search, which is the main reason review answers miss code that a search would have found. This ADR adds two read-only tools, `list_files` and `grep`, to reviews. A supervisor-owned stdio MCP server, `supervisor_search`, serves them, and the model reaches them through `run_typescript`. Edits are unchanged.
+
+Every Vibe fact below was read from the v3.0.2 tag source. The paths and SHA-256 values are in [Search tool facts](../compatibility-v3.md#search-tool-facts). None of these facts has been observed on a hosted run.
+
+## Decision
+
+1. **Server.** A review session declares exactly one MCP source on the session wire. Vibe 3.0.2 accepts the session option `agentConfig.mcpServers`, a list of `SessionMCPStdioServer` (`transport`, `name`, `command`, `args`, `env`, `cwd`):
+
+   ```json
+   { "transport": "stdio", "name": "supervisor_search", "command": "<node executable>",
+     "args": ["<dist>/backends/app-server/search-server.js", "--workspace", "<workspace>", "--excluded", "<json list>", "--lifetime", "<run lifetime directory>"],
+     "env": {} }
+   ```
+
+   `env` stays empty. Vibe's stdio client then gives the server only `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM` and `USER`, taken from the worker's already-filtered environment. `MISTRAL_API_KEY` never reaches the server. `cwd` is omitted.
+
+2. **Tools.** `list_files { path = ".", cursor?, limit 1–1000 = 200 }` and `grep { pattern 1–1024 chars, path = ".", case_sensitive = true, max_matches 1–500 = 100 }`. Vibe registers every MCP tool for use inside `run_typescript` only and never as a direct tool. The model therefore calls `tools.mcp_supervisor_search.grep(...)` and `tools.mcp_supervisor_search.list_files(...)`. The namespace is `mcp_` plus the server name, and the member is the remote tool name.
+
+3. **Review profile.** `enabledTools` becomes `["read_file", "run_typescript", "supervisor_search_grep", "supervisor_search_list_files"]`. Vibe filters MCP tools by their `{server}_{tool}` display names against the same `enabled_tools` globs, so a profile without those two names publishes neither tool. The edit profile does not change.
+
+4. **Approval.** Each sidecar call reaches the supervisor as a `callback/call` approval. Vibe's resolver treats any name that is not a builtin as a provided-tool route, and with no configured permission it answers `ask`. The handler approves only when all of the following hold:
+   - the effect is `kind: "tool"`;
+   - `toolName` is `mcp_supervisor_search.grep` or `mcp_supervisor_search.list_files`;
+   - the input parses against that tool's schema;
+   - the `path` argument passes the judgement below.
+
+   `inputFingerprint` covers `{ tool, input }` as it already does for unknown tools. A session or permanent approval is still never offered, and the 5-second deny is unchanged.
+
+5. **Per-file judgement.** Each judgement goes through `judgeWorkspacePath` in `src/backends/app-server/approvals.ts` with the run's `excluded_globs`. There is no second policy: the parallel branch's `path-policy.ts` merges into it. There are two layers:
+   - The handler judges the call's directory argument. The workspace root itself (`.`) is allowed as a search scope. `judgeWorkspacePath` rejects the root (`relative === ''`), so the root needs an explicit scope case. Every other directory goes through `judgeWorkspacePath` unchanged.
+   - The sidecar runs `judgeWorkspacePath` on every file it lists or opens, with the same workspace and `excluded_globs` passed in `args`. Reserved, secret, excluded, symlinked and out-of-root files are skipped silently. They are left out of `list_files` results and never read by `grep`. A skipped directory is not descended into.
+
+   This per-file layer is what built-in `grep` lacks.
+
+6. **Bounds.** Each call returns at most 64 KiB of result and at most 500 matches. `grep` reads at most 64 MiB of file content per call and has a 10-second call deadline, below Vibe's default 60-second MCP tool timeout. Each file's regular expression runs in a worker thread that is terminated after 2 seconds; that call then returns an error instead of hanging. The server serves one request at a time and refuses a concurrent one. `list_files` cursors are HMAC-signed with a per-process key, and `list_files` stops at 1000 entries per page. The bounds are the parallel branch's `search.ts` values (`c3678cc`).
+
+7. **Lifetime.** The sidecar does not share the worker's process group. Vibe starts it through the `mcp` Python SDK's `stdio_client`, which spawns with `start_new_session=True` on Unix. The supervisor's process-group kill therefore does not reach it, and AGENTS.md forbids signalling a PID read from saved data. The sidecar ends itself in three ways:
+   - when stdin closes;
+   - when its parent PID changes;
+   - when the run's deadline passes (passed in `args`).
+
+   At start it writes a private lifetime record of its pid and start time. Close waits up to 5 seconds and checks, with a read-only `ps` start-time comparison, that every recorded sidecar is gone. If one is still alive, close fails as termination unverified. Restart recovery treats a leftover record as evidence only and never signals it. This is the parallel branch's `search-lifetime.ts`.
+
+8. **Fallback.** If the sidecar fails to start, the read-back fails closed and the run fails. There is no silent fallback to a review without search. The file listing in the prompt stays as it is.
+
+## Rejected alternatives
+
+- **Client-provided tools.** `vibe/app_server/_client_provided_tools.py` declares them internal: nothing on the app-server wire declares them. The supervisor cannot register a tool that way.
+- **Vibe's built-in `grep`.** `GrepTool.resolve_permission` (`vibe/core/tools/builtins/grep.py`) judges only `args.path`, the directory searched. It has no per-file check against the supervisor's reserved, secret or `excluded_globs` patterns. Its ignore handling is `.gitignore`/`.vibeignore` plus a model-settable `use_default_ignore`. Its matches would expose `.env` lines or excluded files to the model.
+- **Shell search (`rg`/`grep` through `bash`).** Shell tools stay disabled, and `allow_shell: true` stays rejected. A command line cannot be judged per file either.
+- **Prompt-only listing (status quo).** It does not scale past the listing budget and gives no content search.
+
+## Boundary changes in AGENTS.md
+
+Three lines change, all under "Boundaries that must remain intact":
+
+- "Review profiles enable `read_file` only (there is no `grep`); edits add `write_file` and `edit`." becomes: "Review profiles enable `read_file`, `run_typescript` and the two `supervisor_search` tools (ADR 0007); edits add `write_file` and `edit` and do not get search."
+- "Do not inherit user/project tools, hooks, agents, skills, MCP servers, or trust records." stays. A new sentence follows it: "The one MCP exception is ADR 0007's supervisor-owned `supervisor_search` stdio server on reviews; the read-back expects exactly that source and no other."
+- The app-server enforcement list gains "the supervisor-owned search sidecar with per-file `judgeWorkspacePath` and its bounds". The approval-handler clause becomes "an approval handler that denies unless the call is the profile's tool on an in-workspace path, or a `supervisor_search` route whose path argument and every file it reads pass the same judgement".
+
+These stay: no shell and no network; `allow_shell: true` rejected; the managed-configuration endpoint; `permission = "ask"` with its denylist; the 5-second deny with no session or permanent approvals; the fail-closed event validator; the private per-run HOME; credential isolation; no automatic patch integration; the edit profile. `run_typescript` stays refused for edits.
+
+## Read-back
+
+The read-back expects exactly this one source, in each of these places:
+
+- **`runtime/read`**: `runtime.mcp.sources` is a single entry: `name: "supervisor_search"`, `kind: "server"`, `transport: "stdio"`, `status: "connected"`, `error: null`, `pluginName: null`, with `tools` named `grep` and `list_files`, both `enabled: true`. Tool descriptions are not compared. `runtime.mcp.discoveryErrors` stays `{}`, and `runtime.connectors` stays zero.
+- **`config/effective/read`**: `config.mcp_servers` is a single entry with `name: "supervisor_search"`, `transport: "stdio"`, `command: ["<node executable>"]`, `args` as the expected count of `"<redacted>"` strings (Vibe redacts every argument), `env: {}`, `disabled: false` and `disabled_tools: []`. `sampling_enabled` reads `true`, Vibe's default, which the session wire cannot change. The sidecar sends no server-to-client request, and a fixture test asserts this. `config.enabled_tools` equals the review profile above. `config.tools` has no `supervisor_search_*` entry, so its permission stays Vibe's default `ask`.
+- **`config/read`**: `mcpServersTotal` and `mcpServersEnabled` are both `1`. `skillsCount` stays `0`.
+
+A second source, a missing source, a source that is not connected, or any discovery error fails the run before the first turn. The edit read-back is unchanged and still expects no sources.
+
+## Prerequisites
+
+- Gate `nested-run-typescript-shape-and-gating` in [docs/acceptance.json](../acceptance.json) must be VERIFIED first. Vibe's Rust acceptance tests show that a call made inside `run_typescript` goes through the same approval as a direct call: they expect `tool_id` `file_system.read_file` or the provided route `github.create_issue`, and a rejection reaches the program. The source does not show which of `tool_id` or `display_name` (`tools.file_system.write_file`) the app-server effect's `toolName` carries for a nested call. If a nested `write_file` does not arrive as a `file_system.*` effect that is denied, enabling `run_typescript` is unsafe and this ADR stops.
+- Enabling `run_typescript` makes the program's other members reachable, for example `tools.self.sleep` and nested `tools.file_system.*`. Each one still has to pass the handler. One that runs without an approval is an unapproved allowed effect, which the event validator already fails closed on. The hosted gate must show this.
+- Item 3 (`excluded_globs` per root) is merged before this, so the sidecar receives the same exclusions as `read_file`.
+
+## Gates
+
+Fixture gate `search-sidecar-routes-approved-and-bounded` (focused tests):
+
+- Session start carries exactly one `supervisor_search` source and the four-tool review profile. Edit sessions carry none.
+- Read-back: one connected source passes. Zero sources, two sources, a disconnected source or a discovery error fails.
+- Approval: the two `mcp_supervisor_search.*` routes with in-workspace paths are approved. Out-of-workspace, reserved, secret, excluded or symlinked paths are denied, as are an unknown `mcp_*` route and a `kind` other than `tool`.
+- Sidecar: `grep` never returns a line from `.env`, a reserved directory or an `excluded_globs` match, even under an allowed directory. `list_files` never lists them.
+- Bounds: results stop at 64 KiB and 500 matches. A catastrophic regular expression returns an error within its limit. A concurrent call is refused.
+- Lifetime: the sidecar exits on stdin EOF and when its parent dies. Close fails while a recorded sidecar is still alive.
+- A nested `write_file` from `run_typescript` in a review is denied. This is the fixture half of the prerequisite gate.
+
+Hosted gate `hosted-review-search-sidecar`, one hosted review on the candidate archive:
+
+- the read-back shows exactly the `supervisor_search` source;
+- the history shows a sidecar call that the handler approved, with its actual `toolName` and `kind` recorded;
+- the probe's nested write is denied;
+- results stay within their bounds;
+- no sidecar process remains after close.
+
+## Open items
+
+- The exact `toolName` string on the live approval effect for an MCP call. Source reading gives the route `mcp_supervisor_search.grep`; the handler should accept only what the hosted gate records.
+- Whether `runtime.tools` lists the MCP tools, `run_typescript` or neither. The fixture's read-back expectation is set from the hosted gate's recorded `runtime/read`.
+- Whether the source has reached `status: "connected"` when the startup read-back runs, or whether the read-back must wait for discovery.

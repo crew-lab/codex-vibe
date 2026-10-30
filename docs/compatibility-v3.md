@@ -52,7 +52,7 @@ A re-pin is owner-triggered and runs in this order:
 
 ## Search tool facts
 
-Read on 2026-10-28 from the same `v3.0.2` tag commit for the [review search tool design](../planning/2.1-designs.md#5-search-tool-for-reviews). Source reading only: no Vibe was installed or run, and no fact here is hosted evidence.
+Read on 2026-10-28 from the same `v3.0.2` tag commit for [ADR 0007](adr/0007-review-search-tool.md). Source reading only: no Vibe was installed or run, and no fact here is hosted evidence.
 
 | Source path | SHA-256 | Fact relied on |
 | --- | --- | --- |
@@ -86,4 +86,4 @@ The `mcp` Python SDK at tag `v1.28.1` (commit `777b8d06710c140e3606b0d4598e2aa48
 | `src/mcp/client/stdio/__init__.py` | `a23227cfe1e3456f16ab41311486a399cf547fcc6b645399bf9bf3a6dc6cf654` | the server inherits only `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM` and `USER`, and on Unix starts with `start_new_session=True` |
 | `src/mcp/os/posix/utilities.py` | `99311857be0cf73f6cd9d79759cb695064d2d4c36d90eafb2180975379b194d2` | Vibe's own close kills the server's group with `killpg` |
 
-The source does not settle three things: the exact `toolName` on a live MCP approval effect, whether `runtime.tools` lists MCP tools, and whether a nested `write_file` arrives as a `file_system.*` effect. The first two are for the search design's hosted gate. The third is gate `nested-run-typescript-shape-and-gating`.
+The source does not settle three things: the exact `toolName` on a live MCP approval effect, whether `runtime.tools` lists MCP tools, and whether a nested `write_file` arrives as a `file_system.*` effect. The first two are for the hosted gate in ADR 0007. The third is gate `nested-run-typescript-shape-and-gating`.
