@@ -216,23 +216,23 @@
         },
         {
           "gate": "antigravity-hook-invoked-and-deny-honoured",
-          "why": "Claimed, not recorded: the target reports a pass on agy 1.4.9 with antigravity_skip_permissions on; no evidence is committed."
+          "why": "Not in this archive; observed on the unreleased candidate with agy 1.4.9 (research/evidence/antigravity-1.4.9-target-20261028/)."
         },
         {
           "gate": "antigravity-hook-failure-denies",
-          "why": "Claimed, not recorded: the target reports a pass on agy 1.4.9 with antigravity_skip_permissions on; no evidence is committed."
+          "why": "Not in this archive; observed on the unreleased candidate with agy 1.4.9 (research/evidence/antigravity-1.4.9-target-20261028/)."
         },
         {
           "gate": "antigravity-stream-tool-shape",
-          "why": "Claimed, not recorded: the target reports a pass on agy 1.4.9 with antigravity_skip_permissions on; no evidence is committed."
+          "why": "Not in this archive; observed on the unreleased candidate with agy 1.4.9 (research/evidence/antigravity-1.4.9-target-20261028/)."
         },
         {
           "gate": "antigravity-proxy-honoured",
-          "why": "Claimed, not recorded: the target reports a pass on agy 1.4.9 with antigravity_skip_permissions on; no evidence is committed."
+          "why": "Not in this archive; observed on the unreleased candidate with agy 1.4.9 (research/evidence/antigravity-1.4.9-target-20261028/)."
         },
         {
           "gate": "antigravity-project-config-not-loaded",
-          "why": "Claimed, not recorded: the target reports a pass on agy 1.4.9 with antigravity_skip_permissions on; no evidence is committed."
+          "why": "Not in this archive; observed on the unreleased candidate with agy 1.4.9 (research/evidence/antigravity-1.4.9-target-20261028/)."
         }
       ],
       "real_use_evidence": "research/evidence/real-use-design-20261028/README.md"
@@ -503,6 +503,59 @@
         }
       ],
       "open": []
+    },
+    {
+      "label": "antigravity 1.4.9 candidate",
+      "release": "unreleased; source on main with agy 1.4.9 support and probe resolution",
+      "source_commit": "a95a659f4b8e4cfc5f14141f62e455e693245186",
+      "candidate_sha256": "14c7459770c79fadd71293ffacd23406a689c9918fbd29515d1458de00733faa",
+      "runtime": "macOS arm64, Node 24.22.1, agy 1.4.9 (binary sha256 a66421b7962ffe5642e00cffdd2844dfde440e540502a29d206be5544a065c7b)",
+      "recorded_on": "2026-10-30",
+      "evidence": "research/evidence/antigravity-1.4.9-target-20261028/",
+      "observed": [
+        {
+          "gate": "antigravity-backend-no-inference-check",
+          "result": "pass",
+          "evidence": "research/evidence/antigravity-1.4.9-target-20261028/REPORT.md",
+          "note": "Zero-inference slash-command read-backs (/config, /hooks, /permissions, /skills, /agents) passed with 0 tokens, refusing proxy saw only updater and telemetry, 6/6 synthetic hook cases ledgered in both review and edit profiles."
+        },
+        {
+          "gate": "antigravity-hook-invoked-and-deny-honoured",
+          "result": "pass",
+          "evidence": "research/evidence/antigravity-1.4.9-target-20261028/REPORT.md",
+          "note": "Control run executed with nonce returned to scripted model; deny-all hook withheld nonce and verified hook invocation."
+        },
+        {
+          "gate": "antigravity-hook-failure-denies",
+          "result": "pass",
+          "evidence": "research/evidence/antigravity-1.4.9-target-20261028/REPORT.md",
+          "note": "Hook timeout, nonzero exit, and unparseable output all denied with nonce withheld from scripted model."
+        },
+        {
+          "gate": "antigravity-stream-tool-shape",
+          "result": "pass",
+          "evidence": "research/evidence/antigravity-1.4.9-target-20261028/REPORT.md",
+          "note": "Recorded stream-json tool event shape matched audit parser, counting 1 executed call in control stream and 0 in denied stream."
+        },
+        {
+          "gate": "antigravity-proxy-honoured",
+          "result": "pass",
+          "evidence": "research/evidence/antigravity-1.4.9-target-20261028/REPORT.md",
+          "note": "Proxy intercepted 6 requests including generativelanguage.googleapis.com inference host and refused with 403; zero inference leaked."
+        },
+        {
+          "gate": "antigravity-project-config-not-loaded",
+          "result": "pass",
+          "evidence": "research/evidence/antigravity-1.4.9-target-20261028/REPORT.md",
+          "note": "Planted ancestor configuration above workspace was refused by supervisor admission and ignored by agy, loaded list empty."
+        }
+      ],
+      "open": [
+        {
+          "gate": "antigravity-backend-hosted-review-edit",
+          "why": "No hosted Antigravity run; requires owner hosted start allowance."
+        }
+      ]
     },
     {
       "label": "antigravity 1.4.0 candidate",
