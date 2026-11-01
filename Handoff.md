@@ -167,3 +167,12 @@ Following the owner decision to support stable Vibe versions $\ge 3.0.2$ and bot
 - Acceptance record: `release/acceptance.json` (SHA-256: `7a7122ea81e10311a6b9ca836048dcfe7fb8956434338e7468c91c274023f215`)
 
 All 1,752 vitest tests, offline fresh-prefix install smoke test, and deterministic acceptance checks passed. Target machine installation, candidate preparation, and hosted trials on this build are pending.
+
+### Target observation on candidate `62aaf0b7…` with Vibe 3.0.4 — 2026-11-01
+
+The target machine tested candidate `62aaf0b7…` (`b6ac0fd`) against an installed Vibe 3.0.4 runtime:
+- `vibe-supervisor pin-manifest --config "$CONFIG" --force`: PASS
+- `vibe-supervisor doctor --config "$CONFIG" --json`: PASS
+- `vibe-supervisor prepare check --kit release/preparation-kit-2.2.1 --config "$CONFIG"`: FAIL (`network-request-observed`)
+
+The refusing network observer intercepted and recorded `CONNECT api.mistral.ai:443` from both review and edit subject runs during session startup (proxy refused both with 403; no model turn was sent; preparation report `23cc8c8c8ef76c131021c4c19f303f6150c42724b831d344ce9f16a3f6cd9712.json`). Because CONNECT authority reveals only the host and port rather than the encrypted HTTP path, the exact startup caller in 3.0.4 (e.g. connector catalog warming, provider model grouping, or telemetry) remains unisolated. In accordance with deterministic-failure stop rules, no retry, unverified setting modification, or configuration loosening was attempted. Dispatch on Vibe 3.0.4 remains blocked by the preparation gate; Vibe 3.0.2 remains the qualified runtime.
