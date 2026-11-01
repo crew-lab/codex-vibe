@@ -48,7 +48,7 @@ import {
 } from './app-server/failure.js';
 import { configureManagedConfigEndpoint, startManagedConfigEndpoint, type ManagedConfigEndpoint } from './app-server/managed-config.js';
 import { SUPPORTED_VIBE } from './app-server/supported-vibe.js';
-import { PINNED_WIRE } from './app-server/vibe-wire.js';
+import { PINNED_WIRE, approvalNames } from './app-server/vibe-wire.js';
 
 const BACKEND_KIND: BackendKind = 'app-server';
 const APP_SERVER_BINARY = 'vibe-app-server';
@@ -61,7 +61,7 @@ const EXIT_WAIT_MS = 1500;
 const BACKGROUND_WAIT_MS = 2000;
 const MAX_STDERR_DETAIL_CHARS = 400;
 
-const TOOL_NAMES: Readonly<Record<string, string>> = Object.fromEntries(PINNED_WIRE.tools.map((tool) => [tool.approvalName, tool.configName]));
+const TOOL_NAMES: Readonly<Record<string, string>> = Object.fromEntries(PINNED_WIRE.tools.flatMap((tool) => approvalNames(tool).map((name) => [name, tool.configName])));
 const TOOL_KINDS: Readonly<Record<string, string>> = Object.fromEntries(PINNED_WIRE.tools.map((tool) => [tool.configName, tool.access]));
 const SHELL_OR_NETWORK_TOOL_WORDS: ReadonlySet<string> = new Set(['bash', 'shell', 'terminal', 'command', 'exec', 'network', 'http', 'https', 'web', 'fetch', 'url', 'download', 'curl', 'browser']);
 const STOP_REQUEST_KINDS: ReadonlySet<SupervisorCondition['kind']> = new Set(['budget', 'cancelled', 'deadline']);
@@ -1063,8 +1063,8 @@ export class AppServerBackend implements SupervisorBackend {
     let executable: string | undefined;
     try {
       executable = await this.appServerExecutable();
-      await this.verifyPin(executable);
-      return { available: true, backend: this.kind, executable, version: this.expectedVersion(), details: { reason: 'The installed Vibe matches the pinned manifest.' } };
+      const verified = await this.verifyPin(executable);
+      return { available: true, backend: this.kind, executable, version: verified.pin?.vibeVersion ?? this.expectedVersion(), details: { reason: 'The installed Vibe matches the pinned manifest.' } };
     } catch (error) {
       const failure = toSupervisorError(error, []);
       return { available: false, backend: this.kind, ...(executable ? { executable } : {}), details: { reason: failure.message, code: failure.code } };
@@ -1076,7 +1076,7 @@ export class AppServerBackend implements SupervisorBackend {
   async runtimeCheck(): Promise<RuntimeCheck> {
     const command = this.options.executable ?? this.config.paths?.vibe ?? 'vibe';
     const expectedVersion = this.expectedVersion();
-    const note = `Vibe was not launched. The app-server executable is resolved only; the exact version ${expectedVersion} and the installed files are verified when a run starts and drift fails that run closed.`;
+    const note = `Vibe was not launched. The app-server executable is resolved only; the minimum version ${expectedVersion}, actual installed version and installed files are verified when a run starts and drift fails that run closed.`;
     try {
       const resolved = await this.appServerExecutable();
       await access(resolved, fsConstants.X_OK);
@@ -1108,7 +1108,7 @@ export class AppServerBackend implements SupervisorBackend {
     const listing = await buildWorkspaceListing(input.workerWorkspace, this.options.listing, anchors);
     const run = new AppServerRun({
       input, callbacks, preparation, options: this.runOptions, timing: this.timing, executable: verified.executable, pin: verified.pin, plan, listing,
-      credential: resolution.credential, expectedVersion: this.expectedVersion()
+      credential: resolution.credential, expectedVersion: verified.pin?.vibeVersion ?? this.expectedVersion()
     });
     return run.start();
   }

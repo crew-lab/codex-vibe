@@ -216,12 +216,18 @@ describe("app-server keys", () => {
     for (const value of [0, -0.01, "1", 1_000_001]) expect(() => validateConfig({ ...appServer, limits: { max_cost_usd: value } }), String(value)).toThrow(/max_cost_usd/);
   });
 
-  it("uses Vibe 3.0.2 and rejects older pins and obsolete selectors", () => {
+  it("accepts stable minimum versions without a release allowlist and rejects old or malformed selectors", () => {
     expect(selectedVibeVersion(undefined)).toBe("3.0.2");
     expect(selectedVibeVersion("3.0.2")).toBe("3.0.2");
-    expect(() => selectedVibeVersion("2.26.1")).toThrow(/only 3\.0\.2/);
+    expect(() => selectedVibeVersion("2.26.1")).toThrow();
     expect(validateConfig(appServer)).not.toHaveProperty("vibeVersion");
     expect(validateConfig({ ...appServer, vibe_version: "3.0.2" })).toMatchObject({ vibeVersion: "3.0.2" });
+    for (const version of ["3.0.3", "3.0.4", "3.10.0", "4.0.0"]) {
+      expect(validateConfig({ ...appServer, vibe_version: version })).toMatchObject({ vibeVersion: version });
+    }
+    for (const version of ["3.0.1", "3.0.4rc1", "latest", "3.0.4;echo bad"]) {
+      expect(() => validateConfig({ ...appServer, vibe_version: version })).toThrow();
+    }
     expect(() => validateConfig({ ...appServer, vibe_version: "2.26.1" })).toThrow(/vibe_version/);
     expect(() => validateConfig({ ...appServer, experimental: { vibe3: true } })).toThrow(/vibe3/);
     expect(() => validateConfig({ ...appServer, experimental: { correctable: true } })).toThrow(/correctable/);

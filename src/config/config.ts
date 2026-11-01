@@ -159,7 +159,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Super
   } catch (error) {
     if (error instanceof Error) {
       throw Object.assign(new Error(`Invalid supervisor configuration: ${error.message}`, { cause: error }), {
-        supervisor: supervisorError("VSUP_CONFIG_INVALID", `Invalid configuration file ${selection.configPath}: ${error.message} Supported fields are version, backend, vibe_version (${SUPPORTED_VIBE} only), allowed_workspace_roots, excluded_globs, budgets, retention, limits (including max_tokens and max_cost_usd), paths (vibe, app_server, vibe_pin_manifest, antigravity) and experimental (antigravity, antigravity_skip_permissions); remove unsupported fields.`, { configPath: selection.configPath })
+        supervisor: supervisorError("VSUP_CONFIG_INVALID", `Invalid configuration file ${selection.configPath}: ${error.message} Supported fields are version, backend, vibe_version (minimum ${SUPPORTED_VIBE} or newer), allowed_workspace_roots, excluded_globs, budgets, retention, limits (including max_tokens and max_cost_usd), paths (vibe, app_server, vibe_pin_manifest, antigravity) and experimental (antigravity, antigravity_skip_permissions); remove unsupported fields.`, { configPath: selection.configPath })
       });
     }
     throw error;

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { assertWorkspaceRootScope } from "../security/paths.js";
 import { BACKEND_KINDS, type SupervisorConfig } from "../contracts.js";
 import { MAX_TURNS_LIMIT } from "../mcp/schemas.js";
-import { SELECTABLE_VIBE_VERSIONS } from "../backends/app-server/supported-vibe.js";
+import { isSupportedVibeVersion } from "../backends/app-server/supported-vibe.js";
 
 const pathString = z.string().min(1).max(4096);
 const rootString = pathString.refine((value) => path.isAbsolute(value) || value === "~" || value.startsWith("~/"), "must be an absolute path or start with ~/");
@@ -38,7 +38,7 @@ const excludedGlobString = z.string().superRefine((value, context) => {
 const baseSchema = z.object({
   version: z.literal(1),
   backend: z.enum(BACKEND_KINDS).optional(),
-  vibe_version: z.enum(SELECTABLE_VIBE_VERSIONS).optional(),
+  vibe_version: z.string().max(64).refine((value) => isSupportedVibeVersion(value), "must be a stable Vibe version at or above the supported minimum").optional(),
   allowed_workspace_roots: z.array(rootString).max(100).default([]),
   excluded_globs: z.record(pathString, z.array(excludedGlobString).max(MAX_EXCLUDED_GLOBS_PER_ROOT)).optional(),
   retention: z.object({

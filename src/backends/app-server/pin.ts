@@ -4,7 +4,7 @@ import { lstat, open, readdir, realpath, stat, type FileHandle } from 'node:fs/p
 import path from 'node:path';
 import { z } from 'zod';
 import { isPathWithinRoot } from '../../security/paths.js';
-import { SUPPORTED_VIBE } from './supported-vibe.js';
+import { SUPPORTED_VIBE, isSupportedVibeVersion } from './supported-vibe.js';
 
 export type PinFailureReason =
   | 'executable-invalid' | 'executable-missing' | 'shebang-unreadable' | 'shebang-unsupported'
@@ -244,8 +244,8 @@ export async function locateEnvironment(executable: string, expectedVersion: str
   const headers = metadataText.split(/\r?\n\r?\n/, 1)[0] ?? '';
   const versions = headers.split(/\r?\n/).filter((line) => line.startsWith('Version:')).map((line) => line.slice('Version:'.length).trim());
   if (versions.length !== 1 || !versions[0]) throw new PinCheckError('version-unreadable', 'METADATA does not carry exactly one Version header.');
-  if (nameVersion !== expectedVersion || versions[0] !== expectedVersion) {
-    throw new PinCheckError('version-mismatch', `Installed mistral_vibe is not the pinned version ${expectedVersion}.`, { directory: nameVersion, metadata: versions[0], expected: expectedVersion });
+  if (nameVersion !== versions[0] || !isSupportedVibeVersion(expectedVersion) || !isSupportedVibeVersion(versions[0], expectedVersion)) {
+    throw new PinCheckError('version-mismatch', `Installed mistral_vibe must have matching metadata and a stable version at least ${expectedVersion}.`, { directory: nameVersion, metadata: versions[0], expected: expectedVersion });
   }
   return { environmentRoot, executable: script, sitePackages: entry.sitePackages, distInfo: entry.distInfo, version: versions[0] };
 }
@@ -425,8 +425,8 @@ export async function verifyPinnedInstall(options: PinCheckOptions): Promise<Pin
   const located = await locateEnvironment(options.executable, expectedVersion, limits);
   const manifest = options.manifest ?? (options.manifestPath === undefined ? undefined : await loadPinManifest(options.manifestPath, limits));
   if (!manifest) throw new TypeError('A pin manifest or manifest path is required');
-  if (manifest.version !== expectedVersion) {
-    throw new PinCheckError('manifest-version-mismatch', `The pin manifest is for ${manifest.version}, not ${expectedVersion}.`, { manifest: manifest.version, expected: expectedVersion });
+  if (manifest.version !== located.version) {
+    throw new PinCheckError('manifest-version-mismatch', `The pin manifest is for ${manifest.version}, not the installed ${located.version}.`, { manifest: manifest.version, expected: located.version });
   }
   const manifestFiles = new Map(Object.entries(manifest.files));
   if (manifestFiles.size > limits.maxFiles) throw new PinCheckError('limit-exceeded', 'The pin manifest lists more files than the limit.');

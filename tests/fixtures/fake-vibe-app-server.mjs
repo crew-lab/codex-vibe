@@ -38,6 +38,7 @@ const WIRE_TOOLS = {
   'file_system.read_file': 'file_read',
   'file_system.write_file': 'file_write',
   'file_system.search_replace': 'file_edit',
+  'file_system.edit': 'file_edit',
   'file_system.bash': 'shell'
 };
 const SHORT_TOOL_NAMES = ['read_file', 'write_file', 'edit', 'search_replace', 'bash'];

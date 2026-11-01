@@ -166,6 +166,17 @@ describe('v2 conformance check against the scripted fake app-server', () => {
     expect(alive(workerPid(fake.workerRecord))).toBe(false);
   }, 90_000);
 
+  it('prepares a newer installed release against its actual manifest identity without inference', async () => {
+    const version = '3.0.4';
+    const fake = await makeLaunchableFakeVibe(path.join(scratch, 'newer'), { version, scenario: { name: 'newer-version', serverVersion: version, harnessSelectionSource: null } });
+    const result = await runCheck(['--manifest', fake.manifest, '--executable', fake.appServer, '--mode', 'review', '--settle-ms', '0', '--pin-runs', '1']);
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.report.pinned_vibe).toBe(version);
+    expect(at(result.report, 'pin.environment.version')).toBe(version);
+    expect(at(result.report, 'inference.turn_start_sent')).toBe(false);
+    expect(findingIds(result.report, 'fail')).toEqual([]);
+  }, 90_000);
+
   it('fails and terminates the group when a descendant outlives the server', async () => {
     const fake = await makeLaunchableFakeVibe(path.join(scratch, 'fake'), { scenario: { name: 'survivor' }, spawnGrandchild: true });
     const result = await runCheck(['--manifest', fake.manifest, '--executable', fake.appServer, '--mode', 'review']);

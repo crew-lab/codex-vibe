@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SUPPORTED_VIBE } from '../../src/backends/app-server/supported-vibe.js';
+import { SUPPORTED_VIBE, isSupportedVibeVersion } from '../../src/backends/app-server/supported-vibe.js';
 
 const repo = path.resolve(import.meta.dirname, '..', '..');
 const SELF = 'tests/unit/no-legacy-references.test.ts';
@@ -13,7 +13,7 @@ const CHANGELOG_START = /^## \d+\.\d+\.\d+\b/;
 const VIBE_VERSION = /\bvibe\b[ \t:=@-]*(?:(?:version|release|tag|v)[ \t:=@-]*)?v?(\d+(?:\.\d+)+)/gi;
 
 function foreignVibeVersions(text: string): string[] {
-  return [...text.matchAll(VIBE_VERSION)].map((match) => match[1]!).filter((version) => version !== SUPPORTED_VIBE);
+  return [...text.matchAll(VIBE_VERSION)].map((match) => match[1]!).filter((version) => !isSupportedVibeVersion(version));
 }
 
 interface Forbidden { name: string; test: (file: string, line: string) => boolean }
@@ -34,7 +34,7 @@ const FORBIDDEN: Forbidden[] = [
   literal('docs/reviews'),
   pattern('v1-', /\bv1-/),
   literal('programmatic'),
-  { name: `a Vibe version other than ${SUPPORTED_VIBE}`, test: (_file, line) => foreignVibeVersions(line).length > 0 }
+  { name: `a Vibe version below ${SUPPORTED_VIBE}`, test: (_file, line) => foreignVibeVersions(line).length > 0 }
 ];
 
 interface Exception { file: string; name: string; line: string; reason: string }
@@ -108,7 +108,7 @@ function linesToCheck(file: string, text: string): { number: number; text: strin
 }
 
 function isAllowed(file: string, name: string, line: string): boolean {
-  if (name === `a Vibe version other than ${SUPPORTED_VIBE}` && foreignVibeVersions(line).every(version => version === '2.26.1')) {
+  if (name === `a Vibe version below ${SUPPORTED_VIBE}` && foreignVibeVersions(line).every(version => version === '2.26.1')) {
     const historical = ['docs/compatibility.md', 'docs/compatibility-v3.md', 'docs/adr/0009-vibe-3-supervised-corrections.md', 'docs/adr/0006-bundled-vibe-skills.md', 'docs/hosted-continuation.md', 'docs/acceptance.json', 'CHANGELOG.md'];
     if (historical.includes(file)) return true;
     if (file === 'Handoff.md' && (/Historical|historical|recorded build|Default engine|no-inference conformance|still the only supported/.test(line))) return true;
@@ -119,7 +119,7 @@ function isAllowed(file: string, name: string, line: string): boolean {
   return EXCEPTIONS.some((exception) => exception.file === file && exception.name === name && line.trim() === exception.line);
 }
 
-describe('no references to other versions or to development history', () => {
+describe('no unsupported version references or development history', () => {
   it('finds no forbidden text in source, tests, scripts, skills, examples, schemas, docs or the root documents', async () => {
     const hits: string[] = [];
     for (const file of await scannedFiles()) {
@@ -164,6 +164,9 @@ describe('foreign Vibe version detection', () => {
 
   it.each([
     'Vibe 3.0.2',
+    'Vibe 3.0.3',
+    'Vibe 3.0.4',
+    'Vibe 4.0.0',
     'vibe 3.0.2.',
     'Vibe version 3.0.2',
     'Node 20.19.0 and Vibe 3.0.2',

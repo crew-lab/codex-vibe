@@ -5,8 +5,8 @@ import { EDIT_TOOLS, REVIEW_TOOLS, WRITE_TOOLS, inputFingerprint, isProfileTool,
 import { BUNDLED_SKILL_NAMES, BUNDLED_SKILL_PROVENANCE } from '../../src/backends/app-server/bundled-skills.js';
 import { ProtocolParseError, parseConfigReadResult, parseHistoryEntry, parseNotification } from '../../src/backends/app-server/protocol.js';
 import { DISABLED_TOOLS, PROFILE_TOOLS, TOOL_PERMISSION, buildSessionConfig, settingEnvironmentName } from '../../src/backends/app-server/session-config.js';
-import { SELECTABLE_VIBE_VERSIONS, SUPPORTED_VIBE } from '../../src/backends/app-server/supported-vibe.js';
-import { PINNED_WIRE, VIBE_WIRE, profileApprovalNames, wireFacts, wireFactsFor } from '../../src/backends/app-server/vibe-wire.js';
+import { SUPPORTED_VIBE } from '../../src/backends/app-server/supported-vibe.js';
+import { PINNED_WIRE, VIBE_WIRE, approvalNames, profileApprovalNames, wireFacts, wireFactsFor } from '../../src/backends/app-server/vibe-wire.js';
 
 const repo = path.resolve(import.meta.dirname, '..', '..');
 const TABLE = 'src/backends/app-server/vibe-wire.ts';
@@ -33,21 +33,20 @@ async function sourceFiles(directory: string): Promise<string[]> {
   return files.flat();
 }
 
-describe('the per-version wire-fact table', () => {
-  it('has exactly the selectable versions, all accepted', () => {
-    expect(Object.keys(VIBE_WIRE).sort()).toEqual([...SELECTABLE_VIBE_VERSIONS].sort());
-    expect(Object.keys(VIBE_WIRE)).toEqual([SUPPORTED_VIBE]);
-    expect(wireFacts()).toBe(VIBE_WIRE[SUPPORTED_VIBE]);
-    expect(PINNED_WIRE).toBe(VIBE_WIRE[SUPPORTED_VIBE]);
-    expect(wireFactsFor(UNPINNED_VERSION)).toBeUndefined();
-    expect(() => wireFacts(UNPINNED_VERSION)).toThrow(/accepts only/);
+describe('the shared wire contract', () => {
+  it('uses one protocol contract for stable versions at and above the minimum', () => {
+    expect(wireFacts()).toBe(VIBE_WIRE);
+    expect(PINNED_WIRE).toBe(VIBE_WIRE);
+    for (const version of ['3.0.3', '3.0.4', '3.1.0', '4.0.0', '100.12.3']) expect(wireFactsFor(version)).toBe(VIBE_WIRE);
+    for (const version of [UNPINNED_VERSION, '3.0.1', '3.0.4rc1', 'latest', '3.0.4-rc']) expect(wireFactsFor(version)).toBeUndefined();
+    expect(() => wireFacts(UNPINNED_VERSION)).toThrow(/stable Vibe/);
   });
 
   it('names every profile tool once with distinct config and approval names', () => {
     const configNames = PINNED_WIRE.tools.map((tool) => tool.configName);
-    const approvalNames = PINNED_WIRE.tools.map((tool) => tool.approvalName);
+    const names = PINNED_WIRE.tools.flatMap(approvalNames);
     expect(new Set(configNames).size).toBe(configNames.length);
-    expect(new Set(approvalNames).size).toBe(approvalNames.length);
+    expect(new Set(names).size).toBe(names.length);
     for (const mode of ['review', 'edit'] as const) {
       for (const name of PINNED_WIRE.profiles[mode]) expect(configNames).toContain(name);
     }
@@ -74,8 +73,8 @@ describe('modules read the pinned facts from the table', () => {
   it('derives the approval tool sets from the table', () => {
     expect(REVIEW_TOOLS).toEqual(profileApprovalNames('review'));
     expect(EDIT_TOOLS).toEqual(profileApprovalNames('edit'));
-    expect(WRITE_TOOLS).toEqual(PINNED_WIRE.tools.filter((tool) => tool.access === 'edit').map((tool) => tool.approvalName));
-    for (const tool of PINNED_WIRE.tools) {
+    expect(WRITE_TOOLS).toEqual(PINNED_WIRE.tools.filter((tool) => tool.access === 'edit').flatMap(approvalNames));
+    for (const tool of PINNED_WIRE.tools.flatMap((tool) => approvalNames(tool).map((approvalName) => ({ ...tool, approvalName })))) {
       expect(isProfileTool('edit', tool.approvalName)).toBe(PINNED_WIRE.profiles.edit.includes(tool.configName));
       expect(isProfileTool('review', tool.approvalName)).toBe(PINNED_WIRE.profiles.review.includes(tool.configName));
       expect(isWriteTool(tool.approvalName)).toBe(tool.access === 'edit');
@@ -112,6 +111,7 @@ describe('modules read the pinned facts from the table', () => {
   it('treats the config/read harness field as the table says for the pin and requires it otherwise', () => {
     expect(parseConfigReadResult({ hooksCount: 0, skillsCount: 0 }).harnessSelectionSource).toBeNull();
     expect(parseConfigReadResult({ hooksCount: 0, skillsCount: 0 }, { vibeVersion: SUPPORTED_VIBE }).harnessSelectionSource).toBeNull();
+    expect(parseConfigReadResult({ hooksCount: 0, skillsCount: 0 }, { vibeVersion: '3.0.4' }).harnessSelectionSource).toBeNull();
     expect(() => parseConfigReadResult({ hooksCount: 0, skillsCount: 0 }, { vibeVersion: UNPINNED_VERSION })).toThrow(ProtocolParseError);
   });
 

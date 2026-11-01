@@ -252,7 +252,8 @@ async function main(argv) {
     const loaded = await import(pathToFileURL(path.join(options.dist, 'config/config.js')).href).then((module) => module.loadResolvedConfig({ configPath: options.config }));
     config = loaded.config;
   }
-  const pinned = supported.selectedVibeVersion(config.vibeVersion);
+  const minimum = supported.selectedVibeVersion(config.vibeVersion);
+  let pinned = minimum;
   const manifestPath = options.manifest ?? config.paths?.vibePinManifest;
   if (!manifestPath) throw new UsageError('No manifest: pass --manifest <path> or set paths.vibe_pin_manifest in --config.');
   let executable;
@@ -311,10 +312,12 @@ async function main(argv) {
     try {
       manifest = await pin.loadPinManifest(manifestPath);
       result.manifest = { format: manifest.format, version: manifest.version, files: Object.keys(manifest.files).length, record_sha256: manifest.record_sha256 };
-      if (manifest.version !== pinned) addFinding('manifest-version-mismatch', 'fail', `The manifest records Vibe ${manifest.version}; this candidate pins ${pinned}.`);
+      if (!supported.isSupportedVibeVersion(manifest.version, minimum)) throw new pin.PinCheckError('manifest-version-mismatch', `The manifest version is below the configured minimum or is not a stable release.`);
+      pinned = manifest.version;
+      report.pinned_vibe = pinned;
       for (let index = 0; index < options.pinRuns; index++) {
         const started = performance.now();
-        const verified = await pin.verifyPinnedInstall({ executable, manifestPath, expectedVersion: pinned });
+        const verified = await pin.verifyPinnedInstall({ executable, manifestPath, expectedVersion: minimum });
         result.verify_runs_ms.push(Math.round(performance.now() - started));
         if (index === 0) {
           pairs.push([verified.environmentRoot, '<vibe-tool-env>']);
@@ -333,7 +336,7 @@ async function main(argv) {
     if (first !== undefined) {
       const tampered = { ...manifest, files: { ...manifest.files, [first]: '0'.repeat(64) } };
       try {
-        await pin.verifyPinnedInstall({ executable, manifest: tampered, expectedVersion: pinned });
+        await pin.verifyPinnedInstall({ executable, manifest: tampered, expectedVersion: minimum });
         result.tamper_control = { rejected: false };
         addFinding('tamper-control-accepted', 'fail', 'A manifest with one altered file hash was accepted against the installed files.');
       } catch (error) {

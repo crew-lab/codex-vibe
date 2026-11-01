@@ -10,7 +10,7 @@ export const MEANINGS = {
   VSUP_ATTEMPT_CONSUMED: 'This authorization-bound dispatch attempt was reserved previously and cannot be reused, including after a failure or restart.',
   VSUP_CONFIG_INVALID: 'The selected configuration file is missing, unsafe (symlinked, foreign-owned, group/world-writable or over 1 MiB), cannot be parsed, or has a missing or invalid field.',
   VSUP_VIBE_NOT_FOUND: 'The Vibe executable, the vibe-app-server executable or the interpreter named on the first line of its script is missing.',
-  VSUP_VIBE_VERSION_UNSUPPORTED: 'The installed Vibe is not the pinned version, or its installed files do not match the pin manifest (details.reason names the failed check).',
+  VSUP_VIBE_VERSION_UNSUPPORTED: 'The installed Vibe is below the configured minimum or is not a stable release, or its version/files do not match the installation manifest (details.reason names the failed check).',
   VSUP_ANTIGRAVITY_NOT_FOUND: 'The Antigravity CLI executable (agy) is missing or could not be found on PATH or at paths.antigravity.',
   VSUP_ANTIGRAVITY_EXEC_FAILED: 'The Antigravity session failed during execution.',
   VSUP_AUTH_REQUIRED: 'Vibe reported a missing or rejected credential (401, unauthorized, missing API key).',

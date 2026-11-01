@@ -5,16 +5,17 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const runtimeVersions = new Map([
-  ['3.0.2', 'unqualified']
-]);
+const minimumRuntimeVersion = [3n, 0n, 2n];
 
 const allowedPythonSymlinkPattern = process.platform === 'win32'
   ? /^Scripts[/\\]python(\d+(\.\d+)?)?\.exe$/i
   : /^bin\/python(\d+(\.\d+)?)?$/;
 
 function validVersion(version) {
-  if (!/^\d+\.\d+\.\d+$/.test(version) || !runtimeVersions.has(version)) throw new Error('Only explicitly catalogued Vibe versions can be planned.');
+  if (typeof version !== 'string' || version.length > 64 || version.trim() !== version || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) throw new Error('A stable Vibe version at least 3.0.2 is required.');
+  const parts = version.split('.').map((part) => BigInt(part));
+  const difference = parts.findIndex((part, index) => part !== minimumRuntimeVersion[index]);
+  if (difference >= 0 && parts[difference] < minimumRuntimeVersion[difference]) throw new Error('A stable Vibe version at least 3.0.2 is required.');
   return version;
 }
 
@@ -51,7 +52,7 @@ export function planRuntimeInstall({ version, runtimeRoot, uvExecutable, pythonE
     { executable: uvExecutable, args: ['venv', '--link-mode', 'copy', '--python', pythonExecutable, root] },
     { executable: uvExecutable, args: ['pip', 'install', '--offline', '--python', python, `mistral-vibe==${version}`] }
   ];
-  return Object.freeze({ version, qualification: runtimeVersions.get(version), runtimeRoot: isolatedRoot, root, executable, python, uvExecutable, pythonExecutable, commands });
+  return Object.freeze({ version, qualification: 'unqualified', runtimeRoot: isolatedRoot, root, executable, python, uvExecutable, pythonExecutable, commands });
 }
 
 async function hashTree(root, { realPython, pythonSha256 } = {}) {
@@ -203,7 +204,7 @@ export async function applyRuntimeInstall(plan, { runCommand = run, inspectVersi
   validVersion(plan.version);
   const expected = planRuntimeInstall({ version: plan.version, runtimeRoot: plan.runtimeRoot, uvExecutable: plan.uvExecutable, pythonExecutable: plan.pythonExecutable });
   if (JSON.stringify(plan) !== JSON.stringify(expected)) throw new Error('Runtime plan does not match its versioned installation paths and commands.');
-  if (plan.qualification !== runtimeVersions.get(plan.version)) throw new Error('Runtime qualification cannot be changed by an installation plan.');
+  if (plan.qualification !== 'unqualified') throw new Error('Runtime qualification cannot be changed by an installation plan.');
   const runtimeRoot = await ensureNoSymlinkPath(plan.runtimeRoot);
   const parentInfo = await lstat(path.dirname(runtimeRoot));
   const parentIsTrusted = parentInfo.isDirectory() && !parentInfo.isSymbolicLink() &&
@@ -249,7 +250,7 @@ export async function applyRuntimeInstall(plan, { runCommand = run, inspectVersi
     if (reportedVersion !== plan.version) throw new Error('Installed Vibe version did not match the requested version.');
     const entries = await hashTree(root, { realPython, pythonSha256 });
     await assertOwnedRoot(root, ownedIdentity);
-    const manifest = { format: 1, version: plan.version, qualification: runtimeVersions.get(plan.version), executable: path.relative(root, plan.executable).split(path.sep).join('/'), interpreterBinding, entries };
+    const manifest = { format: 1, version: plan.version, qualification: 'unqualified', executable: path.relative(root, plan.executable).split(path.sep).join('/'), interpreterBinding, entries };
     manifest.sha256 = createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
     await writeFile(path.join(root, 'runtime-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
     await assertOwnedRoot(root, ownedIdentity);

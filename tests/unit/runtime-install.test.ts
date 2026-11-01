@@ -52,7 +52,7 @@ afterEach(async () => {
 });
 
 describe('isolated Vibe runtime install planning', () => {
-  it('plans only the exact 3.0.2 environment and keeps it unqualified', () => {
+  it('plans supported stable environments and keeps them unqualified', () => {
     const plan = planRuntimeInstall({ version: '3.0.2', runtimeRoot: '/private/runtime', uvExecutable: '/bin/uv', pythonExecutable: '/bin/python3' });
     expect(plan).toMatchObject({ qualification: 'unqualified', executable: '/private/runtime/vibe-3.0.2/bin/vibe' });
     expect(plan.commands.map((command) => command.executable)).toEqual(['/bin/uv', '/bin/uv']);
@@ -62,7 +62,12 @@ describe('isolated Vibe runtime install planning', () => {
     expect(plan.commands[1].args).toContain('--offline');
     expect(plan.commands[1].args).toContain('mistral-vibe==3.0.2');
     expect(() => planRuntimeInstall({ version: '2.26.1', runtimeRoot: '/private/runtime', uvExecutable: '/bin/uv', pythonExecutable: '/bin/python3' })).toThrow();
-    expect(() => planRuntimeInstall({ version: '3.0.3', runtimeRoot: '/private/runtime', uvExecutable: '/bin/uv', pythonExecutable: '/bin/python3' })).toThrow();
+    for (const version of ['3.0.3', '3.0.4', '3.10.0', '4.0.0']) {
+      const newer = planRuntimeInstall({ version, runtimeRoot: '/private/runtime', uvExecutable: '/bin/uv', pythonExecutable: '/bin/python3' });
+      expect(newer.qualification).toBe('unqualified');
+      expect(newer.commands[1].args).toContain(`mistral-vibe==${version}`);
+    }
+    for (const version of ['3.0.1', '3.0.4rc1', '03.0.4', '3.0.4;false']) expect(() => planRuntimeInstall({ version, runtimeRoot: '/private/runtime', uvExecutable: '/bin/uv', pythonExecutable: '/bin/python3' })).toThrow();
   });
 
   it('applies only into a new private version directory and records immutable identity', async () => {

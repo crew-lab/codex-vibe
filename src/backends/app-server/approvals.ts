@@ -6,13 +6,13 @@ import { compileSegment, createExcludedMatcher, relativeSegments, type Exclusion
 import { isPathWithinRoot } from '../../security/paths.js';
 import type { JsonObject } from './jsonrpc.js';
 import { EFFECT_PATH_FIELD, callbackAcknowledgement, effectFilePath, parseCallbackCall, type ApprovalDecisionType, type ApprovalRequest } from './protocol.js';
-import { PINNED_WIRE, profileApprovalNames, wireToolByApprovalName } from './vibe-wire.js';
+import { PINNED_WIRE, approvalNames, profileApprovalNames, wireToolByApprovalName } from './vibe-wire.js';
 
 export { anchorsOf, createExcludedMatcher, excludedRelativePath, type ExcludedMatcher, type ExclusionAnchor, type ExclusionSpec } from '../../security/globs.js';
 
 export const REVIEW_TOOLS: readonly string[] = profileApprovalNames('review');
 export const EDIT_TOOLS: readonly string[] = profileApprovalNames('edit');
-export const WRITE_TOOLS: readonly string[] = PINNED_WIRE.tools.filter((tool) => tool.access === 'edit').map((tool) => tool.approvalName);
+export const WRITE_TOOLS: readonly string[] = PINNED_WIRE.tools.filter((tool) => tool.access === 'edit').flatMap(approvalNames);
 
 export const RESERVED_DIRECTORIES: readonly string[] = ['.git', '.vibe', '.agents'];
 export const RESERVED_FILES: readonly string[] = ['.vibeignore'];
@@ -23,7 +23,7 @@ export const DEFAULT_MAX_LEDGER_RECORDS = 4096;
 const MAX_PATH_CHARS = 4096;
 const MAX_RECORDED_PATH_CHARS = 512;
 
-const EFFECT_KIND_BY_TOOL: Readonly<Record<string, string>> = Object.fromEntries(PINNED_WIRE.tools.map((tool) => [tool.approvalName, tool.effectKind]));
+const EFFECT_KIND_BY_TOOL: Readonly<Record<string, string>> = Object.fromEntries(PINNED_WIRE.tools.flatMap((tool) => approvalNames(tool).map((name) => [name, tool.effectKind])));
 
 export type DenyReason =
   | 'unsupported_callback'

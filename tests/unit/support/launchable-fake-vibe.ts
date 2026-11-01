@@ -14,6 +14,7 @@ export interface LaunchableFakeVibe {
 }
 
 export interface LaunchableOptions {
+  version?: string;
   scenario: Record<string, unknown>;
   spawnGrandchild?: boolean;
 }
@@ -42,7 +43,7 @@ export async function makeLaunchableFakeVibe(directory: string, options: Launcha
     '})();',
     ''
   ].join('\n');
-  const fake = await makeFakeVibeEnvironment(directory, undefined, { scriptBody, interpreterTarget: process.execPath });
+  const fake = await makeFakeVibeEnvironment(directory, options.version, { scriptBody, interpreterTarget: process.execPath });
   const manifest = path.join(directory, 'vibe-pin-manifest.json');
   await writeFile(manifest, serializePinManifest(await generatePinManifest({ executable: fake.shim })), { mode: 0o600 });
   return { vibe: fake.vibeShim, appServer: fake.shim, manifest, workerRecord };

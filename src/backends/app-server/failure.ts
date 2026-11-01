@@ -4,7 +4,7 @@ import { describeMissing, interpreterMissingMessage } from './executable.js';
 import { SUPPORTED_VIBE } from './supported-vibe.js';
 
 export function versionUnsupported(detected: string, expected = SUPPORTED_VIBE): SupervisorError {
-  return supervisorError('VSUP_VIBE_VERSION_UNSUPPORTED', `Found Vibe ${detected}; this configuration supports exactly Vibe ${expected}.`, { detected_version: detected, expected_version: expected });
+  return supervisorError('VSUP_VIBE_VERSION_UNSUPPORTED', `Found Vibe ${detected}; the required Vibe identity or minimum is ${expected}.`, { detected_version: detected, expected_version: expected });
 }
 
 export function versionMismatchOnStderr(stderr: string, expected = SUPPORTED_VIBE): SupervisorError | undefined {

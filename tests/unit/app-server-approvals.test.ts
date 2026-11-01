@@ -59,7 +59,7 @@ afterEach(async () => { await rm(scratch, { recursive: true, force: true }); });
 describe('profile tool sets', () => {
   it('keeps reviews to reading and edits to the three file tools', () => {
     expect(REVIEW_TOOLS).toEqual(['file_system.read_file']);
-    expect(EDIT_TOOLS).toEqual(['file_system.read_file', 'file_system.write_file', 'file_system.search_replace']);
+    expect(EDIT_TOOLS).toEqual(['file_system.read_file', 'file_system.write_file', 'file_system.search_replace', 'file_system.edit']);
     expect(profileTools('review')).toBe(REVIEW_TOOLS);
     expect(profileTools('edit')).toBe(EDIT_TOOLS);
     expect(isProfileTool('review', 'file_system.write_file')).toBe(false);
@@ -142,7 +142,7 @@ function request(tool: string, input: Record<string, unknown>, overrides: Partia
     entryId: 'approval-call-1',
     relatedEntryId: 'effect-action-1',
     detailKind: 'approval',
-    effect: { kind: kind ?? ({ 'file_system.read_file': 'file_read', 'file_system.write_file': 'file_write', 'file_system.search_replace': 'file_edit' }[tool] ?? 'tool'), toolName: tool, input },
+    effect: { kind: kind ?? ({ 'file_system.read_file': 'file_read', 'file_system.write_file': 'file_write', 'file_system.search_replace': 'file_edit', 'file_system.edit': 'file_edit' }[tool] ?? 'tool'), toolName: tool, input },
     ...rest
   };
 }
@@ -165,6 +165,18 @@ describe('evaluateApproval', () => {
   it('approves writes and batch edits inside the worktree of an edit run, including a new file', async () => {
     expect(await evaluateApproval(edit(), request('file_system.write_file', { filePath: 'src/new.ts', content: 'x' }))).toEqual({ decision: 'approve', reason: null });
     expect(await evaluateApproval(edit(), request('file_system.search_replace', { filePath: path.join(workspace, 'src', 'index.ts'), changes: [{ oldString: 'a', newString: 'b', replaceAll: false }] }))).toEqual({ decision: 'approve', reason: null });
+  });
+
+  it('checks the renamed edit approval with the same profile, effect and path restrictions', async () => {
+    const input = { filePath: 'src/index.ts', changes: [{ oldString: 'a', newString: 'b' }] };
+    expect(await evaluateApproval(edit(), request('file_system.edit', input))).toEqual({ decision: 'approve', reason: null });
+    expect(await evaluateApproval(review(), request('file_system.edit', input))).toEqual({ decision: 'deny', reason: 'tool_not_in_profile' });
+    expect(await evaluateApproval(edit(), request('file_system.edit', input, { kind: 'file_write' }))).toEqual({ decision: 'deny', reason: 'effect_kind_mismatch' });
+    expect(await evaluateApproval(edit(), request('file_system.edit', { ...input, filePath: '/etc/hosts' }))).toEqual({ decision: 'deny', reason: 'path_outside_workspace' });
+    expect(await evaluateApproval(edit(), request('file_system.edit', { ...input, filePath: '.env' }))).toEqual({ decision: 'deny', reason: 'path_secret' });
+    expect(await evaluateApproval({ ...edit(), allowedWritePaths: ['other.ts'] }, request('file_system.edit', input))).toEqual({ decision: 'deny', reason: 'outside_allowed_write_paths' });
+    expect(inputFingerprint('file_system.edit', input)).not.toBe(inputFingerprint('file_system.search_replace', input));
+    expect(inputFingerprint('file_system.edit', input)).not.toBe(inputFingerprint('file_system.edit', { ...input, changes: [{ oldString: 'a', newString: 'c' }] }));
   });
 
   it('denies reserved, secret and out-of-workspace targets even for profile tools in an edit run', async () => {

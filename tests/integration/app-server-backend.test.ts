@@ -1509,6 +1509,30 @@ describe('app-server backend: pin identity and approval ledger', () => {
     expect(terminal.state).toBe('completed');
   });
 
+  it.each(['3.0.3', '3.0.4', '3.10.0', '4.0.0'])('runs compatible %s using its actual identity and current edit wire name', async (version) => {
+    const harness = new Harness({
+      name: 'compatible-installed-version', serverVersion: version, harnessSelectionSource: null,
+      steps: [
+        { op: 'call', tool: 'file_system.edit', mode: 'approval', input: { filePath: '${cwd}/src/index.ts', changes: [{ oldString: 'const a = 1;', newString: 'const a = 2;', replaceAll: false }] } },
+        { op: 'say', text: 'Updated.' }
+      ]
+    }, { mode: 'edit', options: { pin: { verify: async () => ({ ...identity, vibeVersion: version }) } } });
+    expect(await harness.backend.probe()).toMatchObject({ available: true, version });
+    const terminal = await harness.run();
+    expect(terminal.state).toBe('completed');
+    expect(harness.states[0]?.update?.pin?.vibeVersion).toBe(version);
+    expect(harness.eventsOfType('tool_call')[0]?.data).toMatchObject({ name: 'edit', tool: 'file_system.edit', kind: 'edit', outcome: 'executed' });
+    expect(harness.fixtureEvents('approvalAnswer')[0]).toMatchObject({ decision: 'approve' });
+    harness.expectCleanedUp();
+  });
+
+  it('rejects startup identity drift even when both versions exceed the minimum', async () => {
+    const harness = new Harness({ name: 'version-drift', serverVersion: '3.0.4', steps: [] }, { options: { pin: { verify: async () => ({ ...identity, vibeVersion: '3.0.3' }) } } });
+    expect(await rejection(harness.start())).toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED' });
+    expect(harness.frames('turn/start')).toHaveLength(0);
+    harness.expectCleanedUp();
+  });
+
   it('reports no pin when the injected check names none', async () => {
     const harness = new Harness('allowed-call');
     await harness.run();

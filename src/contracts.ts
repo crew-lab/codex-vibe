@@ -366,7 +366,7 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_ATTEMPT_CONSUMED: "This attempt cannot be retried. Preserve its evidence; another start requires a fresh direct owner authorization and a newly registered attempt.",
   VSUP_CONFIG_INVALID: "Correct the reported config.toml field and try again.",
   VSUP_VIBE_NOT_FOUND: "Install Vibe or set paths.vibe to its executable; the vibe-app-server executable must sit next to it or be set as paths.app_server.",
-  VSUP_VIBE_VERSION_UNSUPPORTED: `Install exactly the supported Vibe version (for example \`uv tool install mistral-vibe==${SUPPORTED_VIBE}\`) or set paths.vibe to its executable; for a pin-manifest failure (details.reason) check paths.vibe_pin_manifest and write the manifest on this machine with \`vibe-supervisor pin-manifest\`.`,
+  VSUP_VIBE_VERSION_UNSUPPORTED: `Install a stable Vibe version at or above ${SUPPORTED_VIBE}, or set paths.vibe to its executable; for a pin-manifest failure (details.reason) check paths.vibe_pin_manifest and write the manifest on this machine with \`vibe-supervisor pin-manifest\`.`,
   VSUP_ANTIGRAVITY_NOT_FOUND: "Install Antigravity CLI (agy) or set paths.antigravity to its executable.",
   VSUP_ANTIGRAVITY_EXEC_FAILED: "Inspect Antigravity diagnostics and start a new run.",
   VSUP_AUTH_REQUIRED: "Sign in to Vibe or configure its supported authentication.",
