@@ -411,6 +411,9 @@ async function main(argv) {
           managedConfigEndpoint = await dist.managedConfig.startManagedConfigEndpoint();
           dist.managedConfig.configureManagedConfigEndpoint(plan, managedConfigEndpoint.url);
           childEnvironment.VIBE_VIBE_BASE_URL = managedConfigEndpoint.url;
+          if (options.placeholderKey) {
+            childEnvironment.VIBE_PROVIDERS = JSON.stringify([{ name: 'mistral', api_base: `${managedConfigEndpoint.url}/v1`, backend: 'mistral' }]);
+          }
           record.child_environment_names = Object.keys(childEnvironment).sort();
         }
         child = managed.spawnManaged(executable, [], {
