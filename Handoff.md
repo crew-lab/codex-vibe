@@ -180,4 +180,14 @@ All 1,752 vitest tests, offline fresh-prefix install smoke test, and determinist
 
 The `missing_gemini_api_key` failure is the expected pre-spawn fail-closed behavior; preparation used the loopback fake key and did not test provider auth.
 
-`GEMINI_API_KEY` (or `GOOGLE_API_KEY`) has now been added to the supervisor process launch environment on the target machine. Reconnect / restart the supervisor process so it inherits the environment variable, verify readiness on the connection, and then proceed with the authorized test run.
+1. **API Key Specifics and Forwarding Invariant**:
+   - Provider credential forwarding is configured in `~/.codex/config.toml` (`mcp_servers.vibe-supervisor` sets `env_vars = ["GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTIGRAVITY_API_KEY"]`).
+   - Forwarding passes environment variables from Codex's process environment into the supervisor, but cannot supply a missing key when the parent process was started without it.
+   - Credentials were made available in the supervisor launch environment via `launchctl setenv GEMINI_API_KEY` / `GOOGLE_API_KEY` for the macOS user domain and persisted in `~/.zshenv` (`0600`). Provider authentication was validated directly against Google Generative Language API without persisting or logging secrets.
+   - Architectural invariant: credentials must never be placed in individual project repositories or workspaces. This prevents secret sprawl and leakage across Git history, diffs, patches, and worktrees, and respects the supervisor's child environment isolation model (where the supervisor injects the credentials from its own launch environment into ephemeral worker worktrees).
+
+2. **Validation and Linking-Helper Task Findings**:
+   - Evaluated the `_template` linking-helper task (`link-shared-skills.py`), preserving `_template`'s existing `.agents` configuration intact without modification.
+   - Copy-only `validation prepare` on `_template` baseline (`d8b480b`) blocked at the fingerprinting stage: `.agents/skills/vault-query -> ../../../.agents/skills/vault-query` is an external/broken symlink outside the OKF directory structure. Fixed `validation prepare` to diagnose broken symlinks explicitly (`Broken symbolic link at ...`) instead of failing with raw `ENOENT`.
+   - Supervisor readiness (`vibe_status`) on `<target-home>/src/OKF/_template` confirmed `VSUP_WORKSPACE_INVALID`: `_template` and ancestor `OKF` carry `.agents` and `AGENTS.md`, which violates the Antigravity backend extension isolation guard (`assertNoProjectAntigravityExtensions`).
+   - In accordance with AGENTS.md policy stop rules, hosted dispatch stopped at the admission/policy failure without replaying unvalidated grants or weakening isolation checks.

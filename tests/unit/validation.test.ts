@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, lstat, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, lstat, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -108,5 +108,21 @@ it('requires the exact manager pin, supported lockfile and offline cache for ins
   await expect(prepareValidation({source,base,patchFile:patch,output:path.join(root,'wrong-manager'),manager,install:true})).rejects.toThrow(/does not match exact project pin/);
   await writeFile(path.join(source,'package-lock.json'),'file:../local');git('add','.');git('commit','-qm','unsupported');
   await expect(prepareValidation({source,base:git('rev-parse','HEAD').trim(),patchFile:patch,output:path.join(root,'unsupported'),manager,install:true})).rejects.toThrow(/unsupported local dependencies/);
+ }finally{await rm(root,{recursive:true,force:true});}
+},30_000);
+
+it('blocks broken symbolic links with an explicit diagnostic',async()=>{
+ const root=await realpath(await mkdtemp(path.join(tmpdir(),'validation-broken-link-')));
+ try{
+  const source=path.join(root,'source');await mkdir(source);
+  const git=(...args:string[])=>execFileSync('git',args,{cwd:source,encoding:'utf8'});
+  git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
+  await writeFile(path.join(source,'page.txt'),'content\n');
+  await symlink('non-existent-target',path.join(source,'broken-link'));
+  git('add','.');git('commit','-qm','broken link');
+  const patch=path.join(root,'patch');await writeFile(patch,'',{mode:0o600});
+  const output=path.join(root,'out');
+  await expect(prepareValidation({source,base:git('rev-parse','HEAD').trim(),patchFile:patch,output,install:false}))
+    .rejects.toThrow(/Broken symbolic link at .*broken-link/);
  }finally{await rm(root,{recursive:true,force:true});}
 },30_000);

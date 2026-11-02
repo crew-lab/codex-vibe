@@ -37,7 +37,16 @@ async function fingerprint(root:string):Promise<string>{
       const file=path.join(root,relative);const info=await lstat(file);
       if(typeof process.getuid==='function'&&info.uid!==process.getuid())throw new Error('Foreign validation file');
       if(info.isSymbolicLink()){
-        const resolved=await realpath(file);if(!resolved.startsWith(path.join(root,relative.split(path.sep)[0]!)+path.sep))throw new Error('External dependency or source symlink');
+        let resolved: string;
+        try {
+          resolved = await realpath(file);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+            throw new Error(`Broken symbolic link at ${relative}`);
+          }
+          throw error;
+        }
+        if(!resolved.startsWith(path.join(root,relative.split(path.sep)[0]!)+path.sep))throw new Error('External dependency or source symlink');
         entries.push([relative,`link:${path.relative(root,resolved)}`]);
       }else if(info.isDirectory()) {entries.push([relative,'directory']);await walk(relative);}
       else if(info.isFile()){const key=`${info.dev}:${info.ino}`;const link=links.get(key)??{expected:info.nlink,seen:0};link.seen++;links.set(key,link);total+=info.size;if(total>MAX_BYTES||info.size>128*1024*1024)throw new Error('Validation byte limit exceeded');entries.push([relative,`${info.mode & 0o777}:${digest(await readFile(file))}`]);}
