@@ -1,0 +1,42 @@
+
+ RUN  v4.0.18 <supervisor-repository>
+
+ ✓ tests/unit/dispatch-grants.test.ts (14 tests) 403ms
+ ✓ tests/integration/task-start-payload.test.ts (2 tests) 3133ms
+     ✓ forwards the complete frozen edit request and rejects changed contract or write scope before consuming its grant  1948ms
+     ✓ refuses stale readiness transport data and invalid wait values before returning a start payload  1185ms
+ ✓ tests/unit/task-repair.test.ts (17 tests) 6516ms
+     ✓ generates a private complete request with bound failure data and never starts or grants  386ms
+     ✓ prevents concurrent forks and budget changes, carries descendants and exhausts the fixed budget  727ms
+     ✓ rejects changed scope before preparing output  309ms
+     ✓ keeps independent projects with identical terse task text in separate lineages  637ms
+     ✓ does not reset budget by submitting another run with the original task digest  495ms
+     ✓ refuses repair based only on an unrelated advisory validation failure  302ms
+     ✓ retains a spent reservation after an output-write failure  322ms
+     ✓ durably permits only one grant reservation per generated correction and refuses original replay  356ms
+     ✓ enforces the correction reservation at real administrative grant issuance  657ms
+ ✓ tests/unit/dispatch-authorization.test.ts (29 tests) 20574ms
+     ✓ rejects invalid prepared source bytes before issuing or consuming a grant and releases admission  1300ms
+     ✓ rejects invalid prepared copied bytes before issuing or consuming a grant and releases admission  1234ms
+     ✓ rejects invalid prepared copy permissions before issuing or consuming a grant and releases admission  1224ms
+     ✓ rejects invalid prepared inventory before issuing or consuming a grant and releases admission  1212ms
+     ✓ rejects invalid prepared base before issuing or consuming a grant and releases admission  1189ms
+     ✓ rejects invalid prepared scope before issuing or consuming a grant and releases admission  1289ms
+     ✓ rejects invalid prepared selected digest before issuing or consuming a grant and releases admission  1238ms
+     ✓ rejects invalid prepared policy before issuing or consuming a grant and releases admission  1137ms
+     ✓ bounds full prepared verification by the current admission deadline before issue  1033ms
+     ✓ bounds full prepared verification by the current admission deadline before consume  1008ms
+     ✓ preserves an unexpected prepared verification fault before issue without spending authorization  957ms
+     ✓ preserves an unexpected prepared verification fault before consume without spending authorization  943ms
+     ✓ binds verified prepared inputs to the admitted source and selected immutable edit base  446ms
+     ✓ keeps a prepared-input race after consumption failed without replay and releases the slot  1795ms
+     ✓ keeps a prepared-input race after launch verification failed without replay and releases the slot  1800ms
+     ✓ binds review content, not timestamps or Git-ignored output  309ms
+     ✓ binds allowed_write_paths into the edit authorization and the run record  584ms
+     ✓ keeps an attempt consumed after startup failure and permits a fresh authorization  405ms
+
+ Test Files  4 passed (4)
+      Tests  62 passed (62)
+   Start at  15:49:05
+   Duration  22.73s (transform 681ms, setup 0ms, import 1.17s, tests 30.63s, environment 0ms)
+

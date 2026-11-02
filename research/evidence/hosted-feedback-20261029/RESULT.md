@@ -1,0 +1,19 @@
+# Installed hosted recovery result — 2026-10-29
+
+Final candidate cfb9cc2164fa569ec7d237c37b6fda3b69a981fe2f29e1297913400fe04a22c8; archive SHA256883025a63d3ff7ceba743a71c754470ee5e6bb645b6a8bdb4d4ab05b8db9eae9. Supervisor2.2.1, installed Node24.21.0, Vibe exact3.0.2 pin enforced at hosted launch. Source/runtime facts are separate from public releases. Matched preparation PASS report SHA2563cc1aeaaf9d351b8b123e1180e9bd71f4d4fa9d8460f12fc62863510e9c81416. Full source/package gate123files/1715passed/1skipped, offline installed MCP smoke PASS, fresh requestedSol/high independent local VERIFIED.
+
+## Observed history, no relabeling
+
+Candidate46b2a13b reviewed correctly (c2d3f461), then corrected the historical rejected edit (8a79dddc):6 genuine named cases and all independent checks passed. Its separate task prose Fix it with a structured5case contract was rejected (753a7d3e):0 named callbacks, despite behavioralPASS. First generated correction14fe15fa was also rejected for0callbacks. Both exact original outputs remain rejected; passing assertions never overrode failed framework checks.
+
+Tool-owned human requirements were then changed and repackaged/reaccepted as finalcandidatecfb9cc21. Existing durable ledger and only the closed predecessor's metadata/patch/verification inputs were copied into the new private installation. No grants or active sessions were restored. The same root753a7d3e retained its spent first correction authorization and max2; no quota/root/task reset.
+
+Final correction03c92e5f-7083-4d56-8c7a-8299ab0e42b5 consumed correction2of2 and was ACCEPTED. Exactly discount.mjs and discount.test.mjs changed. Frozen contract ee0c49e71a442220aa8743a28a6e47c53a1bf44d86e5528db9f203cb494260ab, exact patch5df70fe80ff1b8823147ce08ef0ee31cf715cd96c5700ce8a37f5003158f4642. Automatic contractPASS,7 parsed named strict Node cases, generated executionPASS,6 independent boundariesPASS, unchanged generated tests FAIL against original baseline (negative controlPASS). No manual patch edit or prompt rewrite by the coordinator: task repair generated the complete request and task authorize returned the complete payload.
+
+Final review055ed180-40d2-4792-9b27-b035abaa25aa also ACCEPTED:2 supplied files,2 executed reads, correct exactly100 defect, verified read-only integrity, normal end_turn/no warnings. Duplicate correction registration and omitted-contract/expanded-scope registration both refused on the installed finalcandidate, without new grants or hosted starts. Exactly two durable correction authorizations exist across the candidate switch.
+
+All six hosted runs closed. Each final readiness observed a free slot; dirty worker trees retained by policy. Independent validation copies removed after fingerprint verification. Temporary fixture allowlist entries removed from both side-by-side candidate configs after byte-exact no-foreign-change checks. Original fixture checkout remained clean. No generated patch integrated, committed or published. Runtime credentials were resolved internally by the supervisor; no credential/history export was taken. Supported reports/patches/events preserve exact exported bytes and hashes; extra coordinator summaries and negative-control logs are separate.
+
+Final installation registered for Codex with rollback backup; current desktop connection still needs a restart to load the new registration. Fresh official SDK MCP connections exercised the exact installed build already. Active skill source link remains the retained task-worktree skill; no unrelated settings/roots were changed. Broad target qualification gates, Node20floor, clean-account installation and Antigravity remain unqualified by this narrow test.
+
+This demonstrates bounded rejection and recovery of this real weak-prompt failure, not first-attempt or universal model correctness. Contracts, separate fresh grants and explicit coordinator validation remain required.

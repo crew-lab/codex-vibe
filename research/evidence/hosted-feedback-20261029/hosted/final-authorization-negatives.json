@@ -1,0 +1,14 @@
+[
+  {
+    "id": "duplicate",
+    "passed": true,
+    "new_grants": 0,
+    "hosted_starts": 0
+  },
+  {
+    "id": "omitted-contract",
+    "passed": true,
+    "new_grants": 0,
+    "hosted_starts": 0
+  }
+]

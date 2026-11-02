@@ -1,0 +1,48 @@
+diff --git a/discount.mjs b/discount.mjs
+index 98d8a04..26a638d 100644
+--- a/discount.mjs
++++ b/discount.mjs
+@@ -1 +1 @@
+-export function qualifies(total) { return total > 100; }
++export function qualifies(total) { return total >= 100; }
+diff --git a/discount.test.mjs b/discount.test.mjs
+new file mode 100644
+index 0000000..20dfc22
+--- /dev/null
++++ b/discount.test.mjs
+@@ -0,0 +1,35 @@
++import { qualifies } from './discount.mjs';
++import assert from 'assert';
++
++// Test cases for qualifies function
++// Behavior: returns true for totals >= 100, false otherwise
++
++// Test case 1: Exactly 100 (boundary - should qualify)
++assert.strictEqual(qualifies(100), true, '100 should qualify');
++
++// Test case 2: Above 100 (should qualify)
++assert.strictEqual(qualifies(150), true, '150 should qualify');
++
++// Test case 3: Just below 100 (should not qualify)
++assert.strictEqual(qualifies(99), false, '99 should not qualify');
++
++// Test case 4: Far below 100 (should not qualify)
++assert.strictEqual(qualifies(50), false, '50 should not qualify');
++
++// Test case 5: Far above 100 (should qualify)
++assert.strictEqual(qualifies(1000), true, '1000 should qualify');
++
++// Negative control: edge cases
++// Test case 6: Zero (should not qualify)
++assert.strictEqual(qualifies(0), false, '0 should not qualify');
++
++// Test case 7: Negative number (should not qualify)
++assert.strictEqual(qualifies(-10), false, '-10 should not qualify');
++
++// Test case 8: 100.0001 (float just above 100, should qualify)
++assert.strictEqual(qualifies(100.0001), true, '100.0001 should qualify');
++
++// Test case 9: 99.9999 (float just below 100, should not qualify)
++assert.strictEqual(qualifies(99.9999), false, '99.9999 should not qualify');
++
++console.log('All tests passed!');

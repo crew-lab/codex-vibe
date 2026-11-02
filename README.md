@@ -74,4 +74,5 @@ The package ships one coordinator skill at `.agents/skills/vibe-supervisor`, whe
 - [Vibe compatibility and unverified gates](docs/compatibility.md)
 - [Acceptance record](docs/acceptance.json) and the [target acceptance procedure](docs/target-acceptance.md)
 
-Contract delivery, structured Node test checks and complete authorization payloads are described in [contract workflow](docs/workflow-acceptance.md).
+
+Contract delivery, structured Node test checks, complete authorization payloads and bounded fresh repair preparation are described in [contract workflow](docs/workflow-acceptance.md). Explicit coordinator test execution uses the [validation profile](docs/validation-workspace.md). These mechanisms preserve separate grants, one-shot runs and coordinator acceptance.

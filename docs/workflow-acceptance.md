@@ -59,12 +59,22 @@ Closing a run is a resource lifecycle action. The run record keeps the terminal 
 
 The `reasoning_observation` diagnostic, recorded once when the turn concludes, contains only structured-entry counts: `streamed_entries`, `history_entries` (or null) and `history_audited`. Export with `--include events` to retain those fields. Content is discarded, and existing reasoning/secret filtering remains unchanged. Stream/history counts overlap and must not be summed. A count of zero means none observed, not proof that no provider reasoning was generated. Private-file word searches are not a measurement of reasoning generation.
 
-## Contract delivery
+
+## Contract delivery and fresh repairs
 
 Both engines receive the frozen contract automatically, including exact paths, checks and validation IDs. A terse task does not remove those requirements. Validation IDs remain coordinator evidence, never commands.
 
 A structured check such as `{"id":"named-tests","kind":"node_test","path":"discount.test.mjs","min_cases":5}` checks JavaScript syntax with the pinned TypeScript parser without executing it. Supported cases are explicit top-level imported `test`/`it` calls (including aliases or namespace bindings), with literal nonempty names and function callbacks containing recognized strict assertion calls. Awaited calls work. Equivalent strict imports and strictEqual methods work. Comments, strings, top-level assertions, shadowed bindings, skipped/options cases and nested helper functions do not satisfy it. Dynamic names, nested registration, CommonJS imports and unsupported shapes cannot establish this contract. This proves structure, not execution, path coverage or truthful assertions; retain independent behavior checks.
 
-Frozen checks are rendered as per-file human requirements after the task and untrusted diagnostic data, alongside the exact JSON. Node test requirements include valid syntax and explicit exclusions for comment labels/top-level assertions. Callers do not rewrite task prose or weaken the contract to get a pass.
+After closing a completed rejected edit, prepare one bounded correction:
 
-`task authorize` returns a complete normalized `start_request` with the new grant identifiers; forward it unchanged and add only the fresh connection receipt.
+```sh
+vibe-supervisor task repair --run RUN_UUID --request ORIGINAL_REQUEST.json --out NEW_REQUEST.json --max-corrections 2 --config CONFIG
+```
+
+The helper verifies the exact saved patch, immutable original base, contract, task, scope and latest hash-bound rejection. It accepts only actual failed automated checks or failed required coordinator validations. It embeds bounded failure data and the previous patch as untrusted context, and requires a complete new delta from the original base. It never applies a patch or starts a model. Patches larger than 32 KiB, non-UTF8 or credential-bearing feedback stop safely. Original output stays unchanged.
+
+A private durable ledger allows one or two corrections, fixed on first preparation. Concurrent forks, resets and spent slots fail closed; an output path that already exists is refused before anything is reserved, but a write failure after reservation does not refund the slot. Each descendant uses its own complete request file and rejected run ID. Each correction still needs a fresh administrative grant and fresh readiness receipt. Grant registration durably reserves that correction once; repeating registration or changing its scope/limits is refused. Invalid grant arguments are rejected before this reservation. A storage failure after reservation does not refund it. Restart never resumes/replays it. The CLI returns a complete normalized `start_request` from `task authorize`; forward it unchanged and add only the fresh connection receipt. Input receipts and invalid transport values are rejected before issuance. The design and its open owner decisions are in the [development strategy](../planning/development-strategy.md#ideas-under-consideration--2026-10-28).
+
+
+Frozen checks are rendered as per-file human requirements after the task and untrusted diagnostic data, alongside the exact JSON. Node test requirements include valid syntax and explicit exclusions for comment labels/top-level assertions. Repair preparation appends the same deterministic requirements after previous-patch evidence; callers do not rewrite task prose or weaken the contract to get a pass.

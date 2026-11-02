@@ -1,0 +1,3 @@
+# Independent local verdict — round2
+
+INCOMPLETE, requested gpt-6.1-sol/high under owner-approved instruction-only read-only amendment. All24 listed hashes matched. Review found a P1 bypass: reserveRepairAuthorization returned before generated-task lookup when acceptance_contract was omitted. Removing the contract from a generated request therefore skipped durable one-grant correction enforcement. R4/R5 failed despite deterministic gate passing. Other inspected contract delivery/static checks and original one-shot boundaries remained present. Installed/hosted gates were explicitly outside this verdict. No commands or writes by reviewer.

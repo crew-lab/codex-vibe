@@ -223,4 +223,5 @@ Workspace readiness includes `supervisor_runtime` with the connected server's `n
 
 Without the option, authorization uses the CLI's current Node. The digest still binds the exact Node version and executable. A grant made under a different runtime is refused with VSUP_AUTHORIZATION_INVALID; support for both versions is not permission to ignore a runtime mismatch. Expiry accepts seconds with optional fractional digits and an explicit timezone; see task authorize above. Administrative registration must be permitted to write the selected Supervisor-private state. In a restricted project command environment, use the host-supported scoped command-permission mechanism for the exact installed CLI, runtime and configuration. A server readiness PASS does not establish that the separate administrative command has these permissions.
 
-Contract delivery, structured Node test checks and complete authorization payloads are described in [contract workflow](workflow-acceptance.md).
+
+Contract delivery, structured Node test checks, complete authorization payloads and bounded fresh repair preparation are described in [contract workflow](workflow-acceptance.md). Explicit coordinator test execution uses the [validation profile](validation-workspace.md). These mechanisms preserve separate grants, one-shot runs and coordinator acceptance.

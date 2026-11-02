@@ -1,0 +1,32 @@
+{
+  "original_private_script_sha256": "c796ec7a83aa2a26bdaefbe12fec5d2e800b64ac0d2b85e4124d2d9896564d78",
+  "public_copy": "coordinator-harness.mjs.txt",
+  "replacement": "absolute supervisor repository prefix replaced for public evidence",
+  "independent_boundaries": [
+    [
+      -1,
+      false
+    ],
+    [
+      0,
+      false
+    ],
+    [
+      99.999,
+      false
+    ],
+    [
+      100,
+      true
+    ],
+    [
+      100.001,
+      true
+    ],
+    [
+      101,
+      true
+    ]
+  ],
+  "test_execution": "fixed Node argv in owned validation copies; profile evidence and original-bug negative logs retained"
+}

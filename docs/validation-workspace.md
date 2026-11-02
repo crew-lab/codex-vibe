@@ -17,3 +17,14 @@ vibe-supervisor validation prepare --source /canonical/repository --base FULL_CO
 The helper is not a project command runner: lint, build, measurement and browser checks remain deliberate coordinator actions with their own evidence. Dependencies must resolve within the validation root; external links and unsupported filesystem entries block preparation. Copying and inspection have file/byte/time/output limits.
 
 `vibe-supervisor validation clean /canonical/validation` removes only an owned workspace whose root identity and complete content fingerprint still match its manifest. Additional files, project validation output, changed files, links outside the root or uncertain ownership cause retention for inspection. Failed preparations are retained and must be inspected manually. This conservative cleanup may retain disposable build output; it never removes a source checkout or Vibe worktree.
+
+
+## Explicit coordinator test profile
+
+```sh
+vibe-supervisor validation check --dir VALIDATION_ROOT --tests discount.test.mjs --id behavior --out PRIVATE_REPORT.json --timeout-seconds 30
+```
+
+The fixed `node-test` profile first verifies the owned copy manifest/fingerprint, then executes the selected candidate JavaScript test paths using the current Node executable and `--test`. No arbitrary command or shell field exists. It filters the child environment, bounds time(1–120seconds) and combined output(256KiB), and terminates the process group on timeout/overflow. Both output files are exclusively reserved before test execution. A hard termination grace bounds completion when inherited output pipes remain open; cleanup uncertainty is explicitly reported. Detached descendants can escape process-group cleanup, so no OS-level isolation is claimed. The output is an export-compatible hash-bound validation manifest; the sibling `.evidence.json` contains sanitized diagnostics and exact profile identity. A failing test yields a failed validation with retained diagnostics. Output paths must be new and outside the copies under a private parent.
+
+This is explicit coordinator code execution with coordinator OS privileges, not an OS sandbox or a worker permission. Execute only tests within the owner's authorized scope. The profile never proves all contract semantics or automatically accepts a patch; use independently chosen cases and an original-bug negative control. Tests may change their copies; fingerprint-based cleanup then retains them for inspection. Reprepare fresh copies before another profile execution. No automatic install/network fallback occurs.

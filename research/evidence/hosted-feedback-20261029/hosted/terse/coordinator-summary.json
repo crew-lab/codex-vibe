@@ -1,0 +1,36 @@
+{
+  "run_id": "753a7d3e-0a0f-4666-bc4d-f56a41a3e519",
+  "candidate": "46b2a13bd4982f247784f6c645ee0c92cd3197449fed268b8cd7a8d2e07c6220",
+  "execution": "completed",
+  "stop_reason": "end_turn",
+  "warnings": [],
+  "changed_files": [
+    "discount.mjs",
+    "discount.test.mjs"
+  ],
+  "patch_sha256": "de690c145c346abf04096dd65deb01d69521cb864e1c371a4cc02e62f108173a",
+  "contract_sha256": "ee0c49e71a442220aa8743a28a6e47c53a1bf44d86e5528db9f203cb494260ab",
+  "automated": "failed",
+  "structure": {
+    "passed": false,
+    "reason": "node-test-insufficient-cases",
+    "cases": 0
+  },
+  "validations": [
+    {
+      "id": "behavior",
+      "status": "passed"
+    },
+    {
+      "id": "test-framework",
+      "status": "failed"
+    },
+    {
+      "id": "negative-control",
+      "status": "passed"
+    }
+  ],
+  "decision": "rejected",
+  "slot_busy": false,
+  "worktree_retained_reason": "Uncommitted or untracked files remain after export; worktree retained"
+}

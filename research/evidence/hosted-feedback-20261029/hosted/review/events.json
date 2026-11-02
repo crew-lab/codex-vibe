@@ -1,0 +1,47 @@
+[
+  {
+    "seq": 1,
+    "timestamp": "2026-10-29T14:58:08.818Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 2,
+    "timestamp": "2026-10-29T14:58:08.820Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 3,
+    "timestamp": "2026-10-29T14:58:10.001Z",
+    "type": "message",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown"
+  },
+  {
+    "seq": 4,
+    "timestamp": "2026-10-29T14:58:10.002Z",
+    "type": "diagnostic",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown",
+    "reason": "reasoning_observation",
+    "streamed_entries": 0,
+    "history_entries": 0,
+    "history_audited": true
+  },
+  {
+    "seq": 5,
+    "timestamp": "2026-10-29T14:58:10.002Z",
+    "type": "diagnostic",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown",
+    "reason": "ignored_notifications"
+  }
+]

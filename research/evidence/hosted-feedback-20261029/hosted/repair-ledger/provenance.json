@@ -1,0 +1,21 @@
+{
+  "source": "final installed private repair accounting; these are correction-slot records, not dispatch grants or readiness receipts",
+  "root_run_id": "753a7d3e-0a0f-4666-bc4d-f56a41a3e519",
+  "max_corrections": 2,
+  "spent_corrections": [
+    1,
+    2
+  ],
+  "unchanged_across_candidate_switch": [
+    "root.json",
+    "correction-1.json",
+    "authorization-1.json"
+  ],
+  "sha256": {
+    "root.json": "288774ce25221a8641f9cd208e4f15190ffc7cc9183a1bff68bc38aa573b308f",
+    "correction-1.json": "6ed1435f425afce57ecb80256268847b57cd6e5191ebb2c0a28d98b25879ae89",
+    "correction-2.json": "e08e715eb195ea80143b966f7b5467c24d213d700b2da457316893d5c9011a3a",
+    "authorization-1.json": "b7747b2dfe732329c724e190b8fafdd5621217906e90f7bbee6708144db9f4ca",
+    "authorization-2.json": "80d20daa28b5463d8802de513cefdd957ffb3967a1cf4dc9ab5ad76c3454243c"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "complete": true,
+  "sequence_gaps": 0,
+  "counts": {
+    "tool_call:read_file:executed": 5,
+    "tool_call:edit:executed": 1,
+    "tool_call:write_file:executed": 1,
+    "tool_denied:unknown:permission_denied_by_policy": 1,
+    "message:unknown:unknown": 1,
+    "diagnostic:unknown:unknown": 3
+  }
+}

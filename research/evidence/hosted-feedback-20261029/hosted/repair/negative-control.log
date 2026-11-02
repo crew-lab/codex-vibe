@@ -1,0 +1,37 @@
+✔ below 100 should not qualify (0.314916ms)
+✖ equal to 100 should qualify (1.194958ms)
+✔ above 100 should qualify (0.046667ms)
+✔ zero should not qualify (0.042417ms)
+✔ fractional below 100 should not qualify (0.304791ms)
+✔ fractional at or above 100 should qualify (0.041042ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 5
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 39.831375
+
+✖ failing tests:
+
+test at discount.test.mjs:9:1
+✖ equal to 100 should qualify (1.194958ms)
+  AssertionError [ERR_ASSERTION]: 100 should qualify
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file://<integration-workspace>/repair/validation/baseline/discount.test.mjs:10:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -1,0 +1,19 @@
+
+ RUN  v4.0.18 <supervisor-repository>
+
+ ✓ tests/unit/task-prompt.test.ts (5 tests) 21ms
+ ✓ tests/unit/node-test-contract.test.ts (25 tests) 505ms
+     ✓ rejects original top-level assertions and preserves verification independently of worker mutations  475ms
+ ✓ tests/unit/task-repair.test.ts (18 tests) 5989ms
+     ✓ generates a private complete request with bound failure data and never starts or grants  306ms
+     ✓ prevents concurrent forks and budget changes, carries descendants and exhausts the fixed budget  612ms
+     ✓ keeps independent projects with identical terse task text in separate lineages  554ms
+     ✓ does not reset budget by submitting another run with the original task digest  431ms
+     ✓ enforces the correction reservation at real administrative grant issuance  587ms
+     ✓ renders actionable frozen framework requirements after untrusted failed-patch feedback  445ms
+
+ Test Files  3 passed (3)
+      Tests  48 passed (48)
+   Start at  16:05:20
+   Duration  8.00s (transform 339ms, setup 0ms, import 895ms, tests 6.52s, environment 0ms)
+

@@ -1,0 +1,10 @@
+{
+  "request_sha256": "a4be5ac5ab34b758ef5440538d09164b9726386f5d01f6e3d51d509ec031f0dd",
+  "task_sha256": "e2d59ff52204ff740ae6ac63081bdc6cd565c29abe4d3bd0dbca2502947315b0",
+  "root_run_id": "753a7d3e-0a0f-4666-bc4d-f56a41a3e519",
+  "correction": 2,
+  "max_corrections": 2,
+  "predecessor_run_id": "14fe15fa-9a23-4f3e-b956-2013a86ab34d",
+  "predecessor_patch_sha256": "2a90ab6190c49573244ad22b15313a322662fb38aadde2cd6681551502b79712",
+  "contract_sha256": "ee0c49e71a442220aa8743a28a6e47c53a1bf44d86e5528db9f203cb494260ab"
+}

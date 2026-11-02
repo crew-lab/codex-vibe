@@ -1,0 +1,15 @@
+{
+  "profile": {
+    "kind": "node-test",
+    "tests": [
+      "discount.test.mjs"
+    ],
+    "timeout_seconds": 30,
+    "node": "v24.21.0"
+  },
+  "profile_sha256": "c6c2fa0b94138a16b856c5d7c9bf0d926e2e2b29e0c59fb24ea0e3b735e04b0f",
+  "patch_sha256": "26f04bedbc066d2d4785c117af1adc0e2fcd7fef69e1b9ef91469d7ffe26d18c",
+  "status": "passed",
+  "reason": "exit-0",
+  "diagnostic": "✔ below 100 should not qualify (0.503083ms)\n✔ equal to 100 should qualify (0.050959ms)\n✔ above 100 should qualify (0.044ms)\n✔ zero should not qualify (0.047083ms)\n✔ fractional below 100 should not qualify (0.310542ms)\n✔ fractional at or above 100 should qualify (0.041ms)\nℹ tests 6\nℹ suites 0\nℹ pass 6\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 38.628459\n"
+}

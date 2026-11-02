@@ -1,0 +1,104 @@
+[
+  {
+    "seq": 1,
+    "timestamp": "2026-10-29T15:15:35.234Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 2,
+    "timestamp": "2026-10-29T15:15:35.238Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 3,
+    "timestamp": "2026-10-29T15:15:35.240Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 4,
+    "timestamp": "2026-10-29T15:15:38.442Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "edit",
+    "outcome": "executed"
+  },
+  {
+    "seq": 5,
+    "timestamp": "2026-10-29T15:15:38.445Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "write_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 6,
+    "timestamp": "2026-10-29T15:15:43.813Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "write_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 7,
+    "timestamp": "2026-10-29T15:15:45.130Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 8,
+    "timestamp": "2026-10-29T15:15:45.133Z",
+    "type": "tool_call",
+    "severity": "info",
+    "name": "read_file",
+    "outcome": "executed"
+  },
+  {
+    "seq": 9,
+    "timestamp": "2026-10-29T15:15:47.102Z",
+    "type": "message",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown"
+  },
+  {
+    "seq": 10,
+    "timestamp": "2026-10-29T15:15:47.102Z",
+    "type": "diagnostic",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown",
+    "reason": "reasoning_observation",
+    "streamed_entries": 0,
+    "history_entries": 0,
+    "history_audited": true
+  },
+  {
+    "seq": 11,
+    "timestamp": "2026-10-29T15:15:47.103Z",
+    "type": "diagnostic",
+    "severity": "info",
+    "name": "unknown",
+    "outcome": "unknown",
+    "reason": "ignored_notifications"
+  },
+  {
+    "seq": 12,
+    "timestamp": "2026-10-29T15:15:48.771Z",
+    "type": "diagnostic",
+    "severity": "warning",
+    "name": "unknown",
+    "outcome": "unknown",
+    "reason": "worktree_retained"
+  }
+]
