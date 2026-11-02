@@ -1,0 +1,14 @@
+{
+  "conflict_atomicity": {
+    "passed": false,
+    "partial_first_link_created": true
+  },
+  "parent_symlink_escape": {
+    "passed": false,
+    "outside_link_created": true
+  },
+  "project_root": {
+    "passed": false,
+    "wrong_ops_link_created": true
+  }
+}

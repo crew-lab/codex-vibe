@@ -1,0 +1,50 @@
+{
+  "run_id": "da015524-9dda-45ff-8240-15b3ede6ff9e",
+  "state": "failed",
+  "backend": "app-server",
+  "execution_state": "failed",
+  "verification": {
+    "contract_sha256": "6cfc0da4b2f64490e3dbd2d7d9ad0da18b6ff87a25f4721bc17719e8ce50ae43",
+    "checked_at": "2026-11-02T13:00:32.827Z",
+    "patch_sha256": "b5ac3b1105796bdc5f9a59c81139d25e85731a31bc6c204a31618c43e35b64a7",
+    "base_commit": "c6c1e636aab1b4c4b609db671b8d0b2f4d4ead9e",
+    "execution_state": "failed",
+    "status": "incomplete",
+    "checks": [
+      {
+        "id": "$scope",
+        "status": "passed",
+        "reason": "changed-path-allowlist"
+      },
+      {
+        "id": "$required_changes",
+        "status": "passed",
+        "reason": "required-changed-paths"
+      },
+      {
+        "id": "helper",
+        "path": "ops/scripts/link-shared-skills.py",
+        "status": "passed",
+        "reason": "file_exists"
+      },
+      {
+        "id": "tests",
+        "path": "ops/scripts/test_link_shared_skills.py",
+        "status": "passed",
+        "reason": "file_exists"
+      }
+    ]
+  },
+  "changed_files": [
+    "README.md",
+    "ops/scripts/link-shared-skills.py",
+    "ops/scripts/test_link_shared_skills.py"
+  ],
+  "warnings": [],
+  "error": {
+    "code": "VSUP_BACKEND_ERROR",
+    "reason": "unapproved_effect",
+    "tool": "file_system.bash"
+  },
+  "patch_sha256": "b5ac3b1105796bdc5f9a59c81139d25e85731a31bc6c204a31618c43e35b64a7"
+}
