@@ -1,4 +1,4 @@
-# Current state — 2026-11-01
+# Current state — 2026-11-02
 
 **Compatibility source change verified — 2026-11-01.** The owner authorized stable Vibe releases at or above 3.0.2 without a per-release allowlist, superseding step 9/D6 below. `vibe_version` is an optional minimum; the actual installed version is discovered and must match its manifest and startup handshake exactly. Refresh the reviewed manifest and rerun candidate preparation after a CLI update. The shared wire contract supports the legacy and current edit approval names without adding tool or path access. Source implementation and independent read-only code review are complete. `npm run verify:release` passed on Node 24.22.1: 124 test files, 1,752 tests passed and one skipped, plus lint, typecheck, build, acceptance reporting, secret scan and SBOM generation. Focused backend/preparation fixture checks passed 136 tests, including newer installed-release identity and current edit approval names; these are local fixtures, not hosted qualification. Documentation links and whitespace checks passed. RC 2.2.1 archive packaged offline from `ccfbbd6`: archive SHA-256 `2731c0b8ab76736e827d17fb370fd65f27d84f17984bfcc4b50ea884f03d66d4`, candidate `a4181ea8362939697649234aee1d6b2ae68d7b026ec021781bc168119b0c5ac6`, conformance script `9440f1379c6bfcabb78232a11042e09e329e16c787256e995e3a4b6fcc136fe8`. Target candidate preparation against Vibe 3.0.4 passed (`verdict: none-observed-control-validated`); hosted qualification is pending. See [the owner decision and approach](planning/development-strategy.md#flexible-vibe-compatibility--owner-decision-2026-11-01).
 
@@ -10,26 +10,26 @@
 
 **What remains.**
 
-The order, each step's outcome and the recommendation for every owner decision (D1–D6) are in the [development strategy's Direction](planning/development-strategy.md#direction--2026-10-28); this table is the status.
+The plan, its order and the recommendation for each owner decision are in the [development strategy's Direction](planning/development-strategy.md#direction--2026-11-02); this table is the status, one row per step. Update a row rather than adding a dated section below. The 2026-10-28 table is in Git history.
 
-| # | Step | Who | State |
-|---|---|---|---|
-| 1 | Record the 2.2.0 build and its two trials in `docs/acceptance.json`; then simplify the ledger to one observed-list per build | Coordinator agent | Done 2026-10-28 (D1): the ledger is one entry per build, 2.2.0 first with seven gates observed from the committed evidence and the rest open with a reason each; `npm run acceptance` reports the new shape |
-| 2 | Mark v2.2.0 latest. The owner has no spare standard macOS account (2026-10-17), so the clean-account gate is retired as a blocker; the target's fresh-prefix install and the offline smoke stand in | Owner | D2 accepted 2026-10-28; the owner marks the release latest |
-| 3 | Ten real starts through Codex on real tasks, each logged with its export and `runs usefulness` entry; the log orders the later steps | Owner uses; target agent records | D3 accepted 2026-10-28 (an allowance of about ten); two separately authorized real-use design trials are recorded in [the real-use report](research/evidence/real-use-design-20261028/README.md), both rejected; neither is retroactively charged to D3 |
-| 4 | Start friction: `vibe_status` returns the exact `task authorize` command for the connected server; the skill carries the sequence; a Codex custom agent wraps it. The single-use grant is unchanged | Coordinator agent | Done 2026-10-28 on `main` (`11a58dd`, unreleased): readiness returns `task_authorize` and a request template; the skill carries the sequence; `.codex/agents/vibe-reviewer.toml` wraps it |
-| 5 | The nested `run_typescript` probe rides on the next hosted review and settles `nested-run-typescript-shape-and-gating` | Target agent | Attempted on 2.2.1 review; PROBE_UNAVAILABLE, nested gate remains open |
-| 6 | Search context without a new boundary: the skill has Codex search first and pass the hits as `context_files`; measured on step 3's reviews | Coordinator agent | Done 2026-10-28 on `main` (`464211e`): the skill and the `vibe-reviewer` agent search first and pass at most 8 `context_files`; the measurement waits on step 3 |
-| 7 | Review search sidecar ([design](planning/2.1-designs.md#5-search-tool-for-reviews), source-checked against Vibe 3.0.2): built only if step 5 shows nested calls deniable and step 6 did not close the quality gap; it changes three AGENTS.md lines | Coordinator agent; target agent runs its hosted gate | [Design](planning/review-search-tool.md) proposed on 2026-10-28; product code deferred until steps 5 and 6 provide evidence (D4) |
-| 8 | Antigravity frozen at agy 1.4.9 (D5 accepted 2026-10-28; freeze note in ADR 0008 and security): `main` carries 1.4.7–1.4.9 and the opt-in, logged `[experimental] antigravity_skip_permissions` switch. The five target probes passed on the target machine with agy 1.4.9 and evidence is committed under `research/evidence/antigravity-1.4.9-target-20261028/`. No new agy versions, flags or features; dropped in the next minor if unused | Target agent | Frozen; 5 probes verified on target, evidence committed (`ec91006`), gates settled in `docs/acceptance.json`, and pushed to `origin/main-agy` (`de4f8d3`) |
-| 9 | Flexible Vibe versions: accept stable releases at or above 3.0.2 using installed metadata, an exact installed-file manifest and runtime compatibility checks; no per-release allowlist | Coordinator agent | Owner decision 2026-11-01 supersedes D6 and the exact-pin table. Source verified: full release checks passed (1,752 tests, one skipped); Vibe 3.0.4 preparation network request traced to completion model catalogue lookups and routed to loopback during placeholder-key checks; candidate a4181ea8… passed preparation on Vibe 3.0.4; hosted evidence pending |
-| 10 | Thin the documents: `planning/development-plan.md` to Git history, superseded briefs deleted from this file | Coordinator agent | Done 2026-10-28: the plan file points to the strategy, this file and Git history (`867ce3b`); this file keeps the current state, the other-machine commands, the open questions and the pointers; the 2.1 sketches other than the sidecar are reduced to their status |
-| 11 | Release 2.2.1 as its own candidate once step 4 lands: preparation PASS, one review, one edit, pre-release | Target agent; owner publishes | RC 2.2.1 archive packaged from `ccfbbd6` (`2731c0b8…`, candidate `a4181ea8…`); target preparation on Vibe 3.0.4 passed, native trials pending |
-| 12 | Persist the number of `context_files` per review in the run record and export, so step 3 measures step 6 without a hand log | Coordinator agent | Implemented on the qualification branch; persistence/export regression checks pass; Node 20.19.0 release verification and offline packaging passed (115 files, 1,623 passed / 1 skipped) |
-| 13 | Public surface (marketing step 1, M1–M6 accepted 2026-10-28, see [marketing/strategy.md](marketing/strategy.md)): repository description and topics; the README opening is already current | Owner | Open |
-| 14 | Mistral contact (marketing steps 2–3): the security re-check (`research/vibe-3.0.2-security-recheck-2026-10-28.md`) drafts the private note to `security@mistral.ai` on `workspaceRoots`; public bug reports on `initialize` protocol version, 3.0.3 wire rename and ADR 0009 method naming drafted in `research/mistral-upstream-disclosures-2026-11-01.md`. Private note must precede public reports; nothing sent | Owner sends; agents only draft | Drafts ready; nothing sent |
-| 15 | Target branch `codex/vibe-usability-20261028`, split 2026-11-02 | Owner decides | Intake hardening merged to `main` (`247e165`) with a bounded launch-time admission. `codex/contract-enforcement` (contract in every edit prompt, `node_test` check, TypeScript at runtime) and `codex/repair-and-check` on top of it (`task repair`, `validation check`; draft ADR 0011 folded into the strategy) wait for the owner: scope before step 3, correction reserved at grant issue or at start, and whether the supervisor runs worker-written tests. Both carry review fixes; their strategy entries are on the branches. Open: a fresh `report export` failed with `VSUP_ARTIFACT_ERROR: Cannot read directory: owner` (target, 2026-10-30), not yet investigated |
-| — | Done 2026-10-28: byte-reproducible `package:rc` (one source date, lockfile-derived SBOM namespace); two clean builds matched, so the target build of the next candidate can be compared by `SHA256SUMS` | — | Done |
+| # | Step | State |
+|---|---|---|
+| 1 | Fresh 2.2.1 candidate from current `main`; preparation, one Antigravity run, one Vibe review and edit | Open. The installed `a4181ea8` copy was patched by hand and no longer qualifies |
+| 2 | Report-export `Cannot read directory: owner` failure | Open, not investigated |
+| 3 | Machine path in `975b557` history (D7) | Owner decides; recommendation: leave it |
+| 4 | Merge `codex/contract-enforcement` (D8) | Owner decides; branch reviewed, fixed and green |
+| 5 | Edit brief requirements in the skill and `vibe-reviewer` | Open |
+| 6 | `codex/repair-and-check`: drop `validation check`, defer `task repair` (D9) | Owner decides; branch reviewed, fixed and green |
+| 7 | Ten real starts | About six spent, mostly trials; the rest after steps 4–6 |
+| 8 | Nested `run_typescript` probe | Open; last attempt `PROBE_UNAVAILABLE` |
+| 9 | Search sidecar (D4) | Waits on steps 7–8; [design](planning/review-search-tool.md) |
+| 10 | Antigravity: keep and unfreeze, or remove at 2.3 (D5 revisited) | Owner decides |
+| 11 | Standing authorization | After step 7 |
+| 12 | Re-qualification per new Vibe minor | Open |
+| 13 | Separate GitHub identity for the target agent (D10) | Owner action |
+| — | Mark v2.2.0 latest (D2) | Owner action |
+| — | Repository description and topics (marketing step 1, M1–M6 accepted) | Owner action |
+| — | Mistral contact: | 14 | Drafts ready; nothing sent |
 
 ## Testing on another machine
 
