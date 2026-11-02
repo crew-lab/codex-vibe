@@ -3,13 +3,13 @@ import { lstat, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { z } from 'zod';
 
-type FileRole = 'request' | 'contract' | 'patch' | 'validation' | 'artifact' | 'directory';
-type FileReason = 'missing' | 'permission' | 'link' | 'type' | 'owner' | 'mode' | 'size' | 'changed' | 'invalid_json' | 'invalid_schema' | 'mismatch' | 'duplicate';
+type FileRole = 'request' | 'contract' | 'patch' | 'validation' | 'artifact' | 'directory' | 'output';
+type FileReason = 'missing' | 'permission' | 'link' | 'type' | 'owner' | 'mode' | 'size' | 'changed' | 'invalid_json' | 'invalid_schema' | 'mismatch' | 'duplicate' | 'exists';
 
 function fileFailure(role: FileRole, reason: FileReason): Error {
   const code = role === 'artifact' || role === 'directory' ? 'VSUP_ARTIFACT_ERROR' : 'VSUP_INVALID_ARGUMENT';
-  const guidance = reason === 'mismatch' ? 'External validation refers to another patch; provide validation for this patch.' : reason === 'duplicate' ? 'Duplicate validation IDs; provide unique IDs.' : reason === 'invalid_json' || reason === 'invalid_schema' ? 'Provide valid JSON matching the required schema.' : role === 'directory' ? 'Use a canonical, owner-private directory.' : 'Use a canonical, owned, single-link file with safe permissions and within the size limit.';
-  return Object.assign(new Error(`Cannot read ${role}: ${reason}. ${guidance}`), { code, details: { role, reason } });
+  const guidance = reason === 'mismatch' ? 'External validation refers to another patch; provide validation for this patch.' : reason === 'duplicate' ? 'Duplicate validation IDs; provide unique IDs.' : reason === 'invalid_json' || reason === 'invalid_schema' ? 'Provide valid JSON matching the required schema.' : reason === 'exists' ? 'The output already exists; choose a new --out name.' : role === 'output' ? 'Choose --out as a new name under an existing directory you own that others cannot write to, or under a sticky shared directory such as /tmp.' : role === 'directory' ? 'Use a canonical, owner-private directory.' : 'Use a canonical, owned, single-link file with safe permissions and within the size limit.';
+  return Object.assign(new Error(`Cannot ${role === 'output' ? 'write' : 'read'} ${role}: ${reason}. ${guidance}`), { code, details: { role, reason } });
 }
 
 function failureFor(error: unknown, role: FileRole): never {
@@ -82,6 +82,24 @@ export async function readInputFile(file: string, maxBytes: number, role: 'reque
 
 export async function readOwnedFile(file: string, maxBytes = 100 * 1024 * 1024): Promise<Buffer> {
   return readChecked(file, maxBytes, 'artifact', true);
+}
+
+const STICKY = 0o1000;
+
+export async function resolveOutputPath(output: string): Promise<string> {
+  const requested = path.resolve(output);
+  try {
+    const parent = await realpath(path.dirname(requested));
+    const info = await lstat(parent);
+    if (!info.isDirectory()) throw fileFailure('output', 'type');
+    const ownedByCurrentUser = typeof process.getuid !== 'function' || info.uid === process.getuid();
+    const sticky = (info.mode & STICKY) !== 0;
+    if (!ownedByCurrentUser && !sticky) throw fileFailure('output', 'owner');
+    if (!sticky && (info.mode & 0o022) !== 0) throw fileFailure('output', 'mode');
+    const destination = path.join(parent, path.basename(requested));
+    try { await lstat(destination); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return destination; throw error; }
+    throw fileFailure('output', 'exists');
+  } catch (error) { failureFor(error, 'output'); }
 }
 
 export async function assertOwnedDirectory(directory: string): Promise<void> {

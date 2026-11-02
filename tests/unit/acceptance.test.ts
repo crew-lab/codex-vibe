@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, rm, readFile, realpath, chmod, lstat } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, readFile, readdir, realpath, chmod, lstat, symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -113,6 +113,27 @@ describe('audit bundle approval ledger and pin', () => {
     expect((await lstat(file)).mode & 0o777).toBe(0o644);
     await writeFile(file, '{ sensitive-marker');
     await expect(exportReport({ directory, output: path.join(root, 'bundle'), validationFile: file })).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', details: { role: 'validation', reason: 'invalid_json' } });
+  });
+
+  it('exports into a sticky shared directory and through a symlinked parent, atomically and without leftovers', async () => {
+    const { root, directory } = await savedRun({});
+    const shared = path.join(root, 'shared'); await mkdir(shared); await chmod(shared, 0o1777);
+    const sharedResult = await exportReport({ directory, output: path.join(shared, 'bundle') });
+    expect(sharedResult.files).toContain('report.json');
+    expect((await lstat(path.join(shared, 'bundle'))).mode & 0o777).toBe(0o700);
+    const linked = path.join(root, 'linked'); await symlink(shared, linked);
+    const linkedResult = await exportReport({ directory, output: path.join(linked, 'second') });
+    expect(linkedResult.output).toBe(path.join(shared, 'second'));
+    expect((await readdir(shared)).sort()).toEqual(['bundle', 'second']);
+  });
+
+  it('names the output as the problem when its parent is writable by others or the name exists', async () => {
+    const { root, directory } = await savedRun({});
+    const open = path.join(root, 'open'); await mkdir(open); await chmod(open, 0o777);
+    await expect(exportReport({ directory, output: path.join(open, 'bundle') })).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', details: { role: 'output', reason: 'mode' } });
+    await mkdir(path.join(root, 'taken'));
+    await expect(exportReport({ directory, output: path.join(root, 'taken') })).rejects.toMatchObject({ code: 'VSUP_INVALID_ARGUMENT', details: { role: 'output', reason: 'exists' } });
+    expect(await readdir(open)).toEqual([]);
   });
 
   it('keeps an absent ledger and an absent pin absent', async () => {

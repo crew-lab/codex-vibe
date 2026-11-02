@@ -5,7 +5,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { digest, canonical } from '../acceptance/schema.js';
-import { readInputFile, readOwnedFile, assertOwnedDirectory } from '../reporting/private-files.js';
+import { readInputFile, readOwnedFile, assertOwnedDirectory, resolveOutputPath } from '../reporting/private-files.js';
 import { resolveBaseCommit, resolveGitRoot } from '../git/worktree.js';
 import { createPrivateDir } from '../security/paths.js';
 
@@ -77,7 +77,7 @@ export async function prepareValidation(options:{source:string;base:string;patch
   const source=await resolveGitRoot(options.source);const base=await resolveBaseCommit(source,options.base);
   if(base!==options.base)throw new Error('An immutable full base commit is required');
   const patch=await readInputFile(options.patchFile,16*1024*1024,'patch');
-  const output=path.resolve(options.output);await assertOwnedDirectory(path.dirname(output));
+  const output=await resolveOutputPath(options.output);
   if(output===source||source.startsWith(output+path.sep)||output.startsWith(source+path.sep))throw new Error('Validation must be outside the source checkout');
   await mkdir(output,{mode:0o700});
   const id=randomUUID();

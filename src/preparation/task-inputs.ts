@@ -10,7 +10,7 @@ import { resolveBaseCommit, resolveGitRoot } from '../git/worktree.js';
 import { judgeWorkspacePath } from '../backends/app-server/approvals.js';
 import { workspaceAnchors } from '../security/globs.js';
 import { resolveAdmittedWorkspace, resolveCanonicalWorkspaceRoot } from '../security/paths.js';
-import { assertOwnedDirectory, parseInputJson, readInputFile, readOwnedFile } from '../reporting/private-files.js';
+import { assertOwnedDirectory, parseInputJson, readInputFile, readOwnedFile, resolveOutputPath } from '../reporting/private-files.js';
 import { sanitizeForPersistence } from '../persistence/atomic.js';
 
 export const MAX_TASK_INPUT_FILES = 12;
@@ -139,13 +139,11 @@ export async function prepareTaskInputs(options: { source: string; base: string;
   if (!outputPaths.length || new Set(outputPaths).size !== outputPaths.length) throw new Error('Output paths must be non-empty and unique');
   const scopes = options.exclusions ?? [];
   const anchors = workspaceAnchors(scopes, source);
-  const output = path.resolve(options.output);
   const problems: string[] = [];
-  if (output === source || output.startsWith(`${source}${path.sep}`) || source.startsWith(`${output}${path.sep}`)) problems.push('Prepared context must be outside source checkout; select a new directory under an owner-private parent');
-  try { await assertOwnedDirectory(path.dirname(output)); }
-  catch { problems.push('Output parent must exist, be canonical, owned by the current user and mode 0700'); }
-  try { await lstat(output); problems.push('Prepared output already exists; select a new directory'); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') problems.push('Prepared output cannot be inspected'); }
+  let output = path.resolve(options.output);
+  try { output = await resolveOutputPath(options.output); }
+  catch (error) { problems.push((error as Error).message); }
+  if (output === source || output.startsWith(`${source}${path.sep}`) || source.startsWith(`${output}${path.sep}`)) problems.push('Prepared context must be outside source checkout; choose --out elsewhere');
   let contractSha256: string | null = null;
   let contractError: (Error & { code: string; details: { role: string; reason: string } }) | undefined;
   if (options.contractFile) {

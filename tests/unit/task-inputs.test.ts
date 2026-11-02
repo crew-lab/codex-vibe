@@ -120,10 +120,12 @@ describe('prepared task inputs', () => {
     for (const file of ['.vibeignore', '.env', '.env.local', 'nested/.env.production', 'nested/.ssh/id_rsa']) await expect(prep({ source, base, files: [file], output: path.join(parent, `out-${file.replaceAll('/', '-')}`) })).rejects.toThrow();
   });
 
-  it('requires an owner-private output parent and refuses changed prepared bytes', async () => {
+  it('refuses an output parent others can write to unless it is sticky, and refuses changed prepared bytes', async () => {
     const { parent, source, base } = await fixture();
     const unsafe = path.join(parent, 'unsafe'); await mkdir(unsafe); await chmod(unsafe, 0o777);
-    await expect(prep({ source, base, files: ['tracked.txt'], output: path.join(unsafe, 'prepared') })).rejects.toThrow('Output parent must exist, be canonical, owned by the current user and mode 0700');
+    await expect(prep({ source, base, files: ['tracked.txt'], output: path.join(unsafe, 'prepared') })).rejects.toThrow('Cannot write output: mode');
+    const shared = path.join(parent, 'shared'); await mkdir(shared); await chmod(shared, 0o1777);
+    await expect(prep({ source, base, files: ['tracked.txt'], output: path.join(shared, 'prepared') })).resolves.toMatchObject({ status: 'prepared' });
     const output = path.join(parent, 'prepared'); await prep({ source, base, files: ['tracked.txt'], output });
     const copy = path.join(output, 'context', 'tracked.txt'); await chmod(copy, 0o600); await writeFile(copy, 'tampered\n');
     await expect(verify(output, source)).rejects.toThrow('Prepared context bytes changed');

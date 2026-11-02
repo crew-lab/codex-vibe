@@ -6,7 +6,7 @@ Caller-selected files and supervisor-created state have different trust requirem
 |---|---|---|
 | Explicit caller input | task authorize request JSON, task prepare contract JSON, validation prepare patch, runs export validation JSON | Read a bounded immutable snapshot of an owned canonical regular single-link file; permit ordinary 0644/0640/0600 read permissions; reject group/other writes, links, changed identity/content and excessive size. Never chmod the input. |
 | Supervisor state | grants, manifests, copied context, receipts, verification blobs, run metadata and patches | Require private owned regular files and stable identity/bytes. Ordinary 0644 saved state remains invalid. Never treat corrupted or exposed state as caller input. |
-| Output storage | validation/export/task preparation destinations | Use new owned private files/directories under the selected canonical private parent. Preserve existing-output refusal and conservative cleanup; do not chmod arbitrary parents. |
+| Output storage | validation/export/task preparation destinations | Create a new owner-private (0700) destination under an existing directory you own that others cannot write to, or a sticky shared directory such as `/tmp`; symlinks in the parent are resolved and the resolved path is returned. Preserve existing-output refusal and conservative cleanup; do not chmod arbitrary parents. |
 
 Selected-input failures use VSUP_INVALID_ARGUMENT with a bounded reason and input role. Unsafe saved-state/private-directory failures use VSUP_ARTIFACT_ERROR. Messages and details identify the condition without quoting file contents. Malformed selected JSON is an input error; unclassified internal failures remain VSUP_INTERNAL. See [error codes](errors.md).
 

@@ -15,7 +15,7 @@ The plan, its order and the recommendation for each owner decision are in the [d
 | # | Step | State |
 |---|---|---|
 | 1 | Fresh 2.2.1 candidate from current `main`; preparation, one Antigravity run, one Vibe review and edit | Open. The installed `a4181ea8` copy was patched by hand and no longer qualifies |
-| 2 | Report-export `Cannot read directory: owner` failure | Open, not investigated |
+| 2 | Report-export `Cannot read directory: owner` failure | Fixed 2026-11-02 on `main`, not yet on a target candidate. The error was about the `--out` parent, not saved state: export (and `task prepare`, `validation prepare`) required a 0700 parent you own, so `/private/tmp` failed with `owner`, `/tmp` and `$TMPDIR` with `link`, a project directory with `mode`, and the message never said it was the output. Now the parent may be yours and not writable by others, or sticky like `/tmp`; symlinks are resolved; errors name `details.role: output`; export writes to staging and renames, so a failure leaves nothing |
 | 3 | Machine path in `975b557` history (D7) | Owner decides; recommendation: leave it |
 | 4 | Merge `codex/contract-enforcement` (D8) | Owner decides; branch reviewed, fixed and green |
 | 5 | Edit brief requirements in the skill and `vibe-reviewer` | Open |

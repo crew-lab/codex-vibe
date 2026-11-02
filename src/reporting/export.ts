@@ -1,5 +1,5 @@
 import { elapsed, reportUsage, thinkingProvenance } from './telemetry.js';
-import { lstat, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, rename, rm, rmdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,7 @@ import { sanitizeForPersistence } from '../persistence/atomic.js';
 import { environmentSecrets, patchContainsCredential } from '../security/redaction.js';
 import { contractDigest, digest, validationSchema, verificationSummary } from '../acceptance/schema.js';
 import { verifySaved } from '../acceptance/verify.js';
-import { assertOwnedDirectory, invalidValidationInput, parseInputJson, readInputFile, readOwnedFile } from './private-files.js';
+import { assertOwnedDirectory, invalidValidationInput, parseInputJson, readInputFile, readOwnedFile, resolveOutputPath } from './private-files.js';
 
 const uuid = z.string().uuid({ version: 'v4' });
 const ledgerText = z.string().max(4096).nullable();
@@ -188,13 +188,17 @@ export async function exportReport(options: { directory: string; output: string;
   const sums = Object.entries(files).sort(([a], [b]) => a.localeCompare(b)).map(([name, bytes]) => `${digest(bytes)}  ${name}`).join('\n') + '\n';
   files.SHA256SUMS = Buffer.from(sums);
   if (Object.values(files).reduce((total, bytes) => total + bytes.length, 0) > record.limits.maxArtifactBytes) throw new Error('Report exceeds artifact budget');
-  const destination = path.resolve(options.output); await assertOwnedDirectory(path.dirname(destination));
-  try { await lstat(destination); throw new Error('Output already exists'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-  const staging = path.join(path.dirname(destination), `.report-${randomUUID()}`); await mkdir(staging, { mode: 0o700 });
+  const destination = await resolveOutputPath(options.output);
+  await mkdir(destination, { mode: 0o700 });
+  const staging = path.join(path.dirname(destination), `.report-${randomUUID()}`);
   try {
+    await mkdir(staging, { mode: 0o700 });
     for (const [name, bytes] of Object.entries(files)) await writeFile(path.join(staging, name), bytes, { mode: 0o600, flag: 'wx' });
-    await mkdir(destination, { mode: 0o700 });
-    for (const [name, bytes] of Object.entries(files)) await writeFile(path.join(destination, name), bytes, { mode: 0o600, flag: 'wx' });
-  } finally { await rm(staging, { recursive: true, force: true }); }
+    await rename(staging, destination);
+  } catch (error) {
+    await rm(staging, { recursive: true, force: true });
+    await rmdir(destination).catch(() => undefined);
+    throw error;
+  }
   return { run_id: record.runId, verification: verification.status, output: destination, files: Object.keys(files), ...(options.verifyOnly ? { operation: 'verify' } : {}) };
 }
