@@ -263,6 +263,7 @@ export interface SupervisorConfig {
 }
 
 export interface StartRunInput {
+  acceptanceContract?: AcceptanceContract;
   runId: string;
   mode: RunMode;
   task: string;

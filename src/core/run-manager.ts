@@ -1140,6 +1140,7 @@ export class RunManager {
       const limits = runtime.record.limits;
       const input = {
         runId: runtime.record.runId, mode: runtime.record.mode, task: runtime.task,
+        ...(runtime.record.acceptanceContract ? { acceptanceContract: runtime.record.acceptanceContract } : {}),
         cwd: runtime.record.sourceWorkspace, workerWorkspace, runDirectory: runtime.directory,
         ...(baseRef ? { baseRef } : {}), ...(contextFiles.length ? { contextFiles } : {}),
         ...(runtime.record.output ? { output: runtime.record.output } : {}),
