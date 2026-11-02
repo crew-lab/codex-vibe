@@ -185,3 +185,9 @@ All 1,752 vitest tests, offline fresh-prefix install smoke test, and determinist
    - `pin-manifest --config "$CONFIG" --force`: PASS
    - `doctor --config "$CONFIG" --json`: PASS
    - `prepare check --kit release/preparation-kit-2.2.1 --config "$CONFIG"`: **PASS** (`status: passed`, `network_observation.verdict: none-observed-control-validated`, `report_sha256: 735955a2…`)
+
+## Antigravity headless authentication on target — 2026-11-02
+
+The `missing_gemini_api_key` failure is the expected pre-spawn fail-closed behavior; preparation used the loopback fake key and did not test provider auth.
+
+`GEMINI_API_KEY` (or `GOOGLE_API_KEY`) has now been added to the supervisor process launch environment on the target machine. Reconnect / restart the supervisor process so it inherits the environment variable, verify readiness on the connection, and then proceed with the authorized test run.
