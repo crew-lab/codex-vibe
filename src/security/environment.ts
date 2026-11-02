@@ -1,9 +1,29 @@
+import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile, chmod } from 'node:fs/promises';
 import path from 'node:path';
 
 export const CHILD_MARKER = 'VIBE_SUPERVISOR_CHILD';
 
 const DEFAULT_FORWARD = new Set(['HOME', 'PATH', 'LANG', 'TMPDIR', 'MISTRAL_API_KEY']);
+export const LAUNCHCTL_CREDENTIAL_VARIABLES = ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'ANTIGRAVITY_API_KEY', 'MISTRAL_API_KEY'] as const;
+
+export function hydrateLaunchctlEnvironment(
+  target: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  runner: (args: string[]) => string = (args) => execFileSync('/bin/launchctl', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 1000 })
+): void {
+  if (platform !== 'darwin') return;
+  for (const name of LAUNCHCTL_CREDENTIAL_VARIABLES) {
+    if (!target[name]?.trim()) {
+      try {
+        const val = runner(['getenv', name]).trim();
+        if (val) target[name] = val;
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
 
 export function isSupervisorChild(env: NodeJS.ProcessEnv = process.env): boolean {
   return env[CHILD_MARKER] === '1';
