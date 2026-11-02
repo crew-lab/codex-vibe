@@ -92,16 +92,23 @@ No style advice, refactors or recommendations outside the question. No scratch f
 Final answer: the conclusion first, then the findings, under <n> lines.
 ```
 
-Edit:
+Edit. Before filling it in, settle four facts from the repository yourself; each one answers a way real edits were rejected:
+
+- **Project root.** Which directory holds the package or script, and how the code finds files at run time (an argument, the working directory, or a path relative to its own module). Name it; do not let the worker guess.
+- **Test imports.** The test framework and the exact import specifier from the test file to the code under test (for example `../src/link.mjs`), copied from an existing test where one exists.
+- **Conflicts and partial writes.** What the change must do when a destination exists, a parent is a symlink, or the second of several writes fails: usually check everything first and write nothing on failure. Put each case in the template and, where bytes can show it, in the acceptance contract; otherwise make it a coordinator validation.
+- **No execution.** The worker has no shell, network or test runner, and every call to one is refused. It must reason from source and must not plan to run or try anything.
 
 ```text
 Read <file>, <file> first.
+Project root: <directory>. The code finds files by <argument | working directory | path relative to its own module>.
 Then create or change only: <path>, <path>. Do not touch any other file.
 Change: <what to add or change, with the exact function names and semantics>.
 Must reject or preserve: <each edge case, e.g. a trailing blank line, CRLF, an unsafe path>.
-Tests: <test file> using <framework>, covering <cases>. Match named or default imports to the declared exports.
-Before the final answer, check the source and tests for consistent export and import names without executing tests.
-No shell, network or test execution.
+On a conflict or failure: <e.g. check every destination before writing; if any check fails, write nothing and report which>.
+Tests: <test file> using <framework>, importing the code as <exact specifier>, covering <cases>. Match named or default imports to the declared exports.
+Before the final answer, check the source and tests for consistent export and import names and paths.
+You cannot run anything: there is no shell, network or test runner, and every attempt is refused. Reason from the source; do not plan to execute or verify by running.
 Final answer: what changed, then an inventory of changed and scratch files.
 ```
 
