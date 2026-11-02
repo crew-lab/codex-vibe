@@ -159,4 +159,4 @@ The repository is public. Evidence recorded on the target machine (outputs of th
 | Private project domain | `<site-project-domain>` |
 | Private project root placeholder used in a runbook | `<site-project-root>` |
 
-Run `grep -rn '/Users/\|/home/' <evidence folder>` before committing; raw-byte files that still contain a path or a name are listed with the reason beside the evidence.
+Run `npx vitest run tests/unit/public-hygiene.test.ts` before committing; it fails on any home or temporary machine path in a tracked file, and CI runs it too; raw-byte files that still contain a path or a name are listed with the reason beside the evidence.

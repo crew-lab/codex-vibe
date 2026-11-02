@@ -22,7 +22,6 @@ import { startMcpStdio } from './mcp/server.js';
 import type { RunManagerTools } from './mcp/tools.js';
 import { supervisorError, type SupervisorErrorCode } from './contracts.js';
 import { environmentSecrets, redactSecrets } from './security/redaction.js';
-import { hydrateLaunchctlEnvironment } from './security/environment.js';
 
 function print(value: unknown): void { process.stdout.write(`${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}\n`); }
 async function getManager(ownerLock?: OwnerLock, configPath?: string, isolatedHome?: string): Promise<{ manager: RunManagerTools & { initialize(): Promise<void>; runsList(): Promise<unknown[]>; cleanup(id?: string): Promise<unknown>; startAutomaticRetention?(): void; shutdown(): Promise<{ timedOut: boolean }> }; config: Awaited<ReturnType<typeof loadConfig>>; dataDir: string; policy: ReturnType<typeof selectedConfigPolicy>; preparationDataDir: string }> {
@@ -39,7 +38,6 @@ async function getManager(ownerLock?: OwnerLock, configPath?: string, isolatedHo
 }
 
 async function serve(ownerLock?: OwnerLock, configPath?: string, isolated?: { sessions: string; home: string }): Promise<void> {
-  hydrateLaunchctlEnvironment();
   let ready: Awaited<ReturnType<typeof getManager>>;
   try { ready = await getManager(ownerLock, configPath, isolated?.home); }
   catch (error) { await ownerLock?.release(); throw error; }
@@ -68,7 +66,6 @@ async function cleanupWithManager(configPath: string | undefined, runId: string 
 }
 
 export async function runCli(argv = process.argv.slice(2)): Promise<void> {
-  hydrateLaunchctlEnvironment();
   const [command, ...args] = argv;
   try {
     if (command === '--version' || command === '-v') { print(APP_VERSION); return; }

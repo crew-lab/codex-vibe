@@ -2,6 +2,12 @@
 
 How vibe-supervisor is developed, verified and released: the picture, the direction, the release line and the rules. [Handoff.md](../Handoff.md) holds the current status (what is done, what remains, who acts); the live sequence is the Direction below, and the sequenced plan that led to 2.2.0 is in Git history ([development-plan.md](development-plan.md) says where). Operators follow [the local operating procedure](../docs/local-operation.md).
 
+## Antigravity key from launchd and public hygiene — owner decision, 2026-11-02
+
+A Codex host started before `launchctl setenv` never passes a Google key to the supervisor it spawns. The owner accepted reading the key from the user launchd session, scoped down from the target's version: only the Antigravity key names, only on macOS, only when the supervisor environment has none, only at run start, and never written into the supervisor's environment. The value reaches only the worker's child environment and its redaction list. `MISTRAL_API_KEY` keeps its existing environment-then-Keychain resolver. Loosening this further (other names, other platforms, process-wide hydration) needs a new decision.
+
+Two rules that had been broken repeatedly are now checked in CI by `tests/unit/public-hygiene.test.ts`: no machine home or temporary path in any tracked file, and no new source comment (the existing ones have a per-file budget that may only shrink). Target code fixes still go on a branch for review, never straight to `main`; only that last rule is not enforceable by a test, because both agents push with the same account.
+
 ## Flexible Vibe compatibility — owner decision, 2026-11-01
 
 The owner replaced the exact Vibe 3.0.2 restriction with eligibility for every stable release at or above 3.0.2. This supersedes D6's stay-on-3.0.2 rule and the proposed per-version wire-table cadence below. `vibe_version` becomes an optional minimum, defaulting to 3.0.2; existing configurations keep working without selecting a new exact release. A single stable-version validator and installed metadata discovery replace the release allowlist. New versions must satisfy the same runtime contract; there is no promise that a future incompatible protocol will pass.

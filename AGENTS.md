@@ -41,7 +41,7 @@ The main chat coordinates and independently verifies. A fallback implementer is 
 - One run owns each server/storage instance's active slot; a competing start fails immediately. A restart marks interrupted one-shot work failed and never launches Vibe, reloads a session, replays a task, restores grants, or signals a PID from saved data.
 - Preserve bounded deadlines, output limits, owner locking, retention, and process cleanup. Remove a worktree only after checking a fresh export against the saved artifact and accounting for residual files.
 - The Antigravity backend keeps its own enforcement points ([ADR 0008](docs/adr/0008-antigravity-execution-backend.md), [security](docs/security.md#antigravity-backend-experimental)): the experimental opt-in, the per-run `PreToolUse` hook that denies unless the call is the profile's tool on a readable in-workspace path, a private per-run home, an exactly filtered child environment, and the agy preparation probes that gate its receipt. Loosening one needs the owner's decision, recorded in the development strategy and Handoff.
-- Do not copy credentials into docs, prompts, transcripts, reports, or committed files. Test fixtures never use credential-shaped literals; build fakes from parts so the secret scan stays meaningful. The credential reaches the worker only as `MISTRAL_API_KEY` in its child environment.
+- Do not copy credentials into docs, prompts, transcripts, reports, or committed files. Test fixtures never use credential-shaped literals; build fakes from parts so the secret scan stays meaningful. The credential reaches the worker only as `MISTRAL_API_KEY` in its child environment. The Antigravity key is resolved at run start from the supervisor environment or, on macOS, the user launchd session, and is never written into the supervisor's own environment.
 
 ## Verification and reporting
 
@@ -64,4 +64,4 @@ The owner decided on 2026-10-16 that the target machine may fix code. The target
 
 ### Recording target evidence
 
-The repository is public. Target evidence never contains a machine path, a credential, a readiness receipt, reasoning or private session history; the placeholders and the private-path check are in [target acceptance](docs/target-acceptance.md#recording-evidence).
+The repository is public, and `tests/unit/public-hygiene.test.ts` fails CI on a machine path in any tracked file or a new source comment. Target evidence never contains a machine path, a credential, a readiness receipt, reasoning or private session history; the placeholders and the private-path check are in [target acceptance](docs/target-acceptance.md#recording-evidence).

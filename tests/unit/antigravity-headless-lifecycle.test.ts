@@ -4,7 +4,7 @@ import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:f
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AntigravityBackend, antigravityChildEnvironment, isSupportedAntigravityVersion, onlyAllowedAntigravityBuiltinSkills, selectAntigravityApiKey, type AntigravityBackendOptions } from '../../src/backends/antigravity.js';
+import { AntigravityBackend, antigravityChildEnvironment, isSupportedAntigravityVersion, resolveAntigravityApiKey, onlyAllowedAntigravityBuiltinSkills, selectAntigravityApiKey, type AntigravityBackendOptions } from '../../src/backends/antigravity.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { runToWire } from '../../src/core/serialization.js';
@@ -14,6 +14,7 @@ import { authorizedReviewStart } from '../support/authorized-start.js';
 const roots: string[] = [];
 const canonicalTmp = await realpath(tmpdir());
 const passedPreparation: AntigravityBackendOptions = {
+  launchdLookup: async () => undefined,
   preparation: { check: async () => ({ status: 'passed', candidate_sha256: 'a'.repeat(64), version: '2.1.0', reason: 'test' }) }
 };
 beforeEach(() => {
@@ -63,6 +64,24 @@ describe('Antigravity headless admission and lifecycle regressions', () => {
     expect(child.GOOGLE_API_KEY).toBe('fixed-google-value');
     expect(child.ANTIGRAVITY_API_KEY).toBeUndefined();
     expect(selectAntigravityApiKey({ GEMINI_API_KEY: ' first ', GOOGLE_API_KEY: ' second ' })).toBe('first');
+  });
+
+  it('resolves the key from the environment first and from launchd only on macOS when the environment has none', async () => {
+    const asked: string[] = [];
+    const lookup = async (name: string) => { asked.push(name); return name === 'GOOGLE_API_KEY' ? ' launchd-google-value \n' : undefined; };
+    expect(await resolveAntigravityApiKey({ GEMINI_API_KEY: ' environment-value ' }, 'darwin', lookup)).toBe('environment-value');
+    expect(asked).toEqual([]);
+    expect(await resolveAntigravityApiKey({ GEMINI_API_KEY: '  ' }, 'darwin', lookup)).toBe('launchd-google-value');
+    expect(asked).toEqual(['GEMINI_API_KEY', 'GOOGLE_API_KEY']);
+    expect(await resolveAntigravityApiKey({}, 'linux', lookup)).toBeUndefined();
+    expect(asked).toEqual(['GEMINI_API_KEY', 'GOOGLE_API_KEY']);
+    expect(await resolveAntigravityApiKey({}, 'darwin', async () => undefined)).toBeUndefined();
+  });
+
+  it('never writes a launchd-resolved key into the supervisor environment', async () => {
+    const source: NodeJS.ProcessEnv = {};
+    await resolveAntigravityApiKey(source, 'darwin', async () => 'launchd-value');
+    expect(source).toEqual({});
   });
 
   it('accepts ANTIGRAVITY_API_KEY as the last fallback and passes it on only as the selected key', () => {

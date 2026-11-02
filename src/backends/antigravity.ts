@@ -91,6 +91,32 @@ export function selectAntigravityApiKey(source: NodeJS.ProcessEnv = process.env)
   return undefined;
 }
 
+const ANTIGRAVITY_KEY_VARIABLES = ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'ANTIGRAVITY_API_KEY'] as const;
+const LAUNCHCTL = '/bin/launchctl';
+const LAUNCHD_LOOKUP_TIMEOUT_MS = 1000;
+const LAUNCHD_LOOKUP_MAX_BYTES = 4096;
+
+export type LaunchdLookup = (name: string) => Promise<string | undefined>;
+
+async function launchdValue(name: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await promisify(execFile)(LAUNCHCTL, ['getenv', name], { encoding: 'utf8', timeout: LAUNCHD_LOOKUP_TIMEOUT_MS, maxBuffer: LAUNCHD_LOOKUP_MAX_BYTES, env: {} });
+    return stdout.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function resolveAntigravityApiKey(source: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform, lookup: LaunchdLookup = launchdValue): Promise<string | undefined> {
+  const fromEnvironment = selectAntigravityApiKey(source);
+  if (fromEnvironment || platform !== 'darwin') return fromEnvironment;
+  for (const name of ANTIGRAVITY_KEY_VARIABLES) {
+    const value = (await lookup(name))?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
 export function antigravityChildEnvironment(
   source: NodeJS.ProcessEnv,
   childHome: string,
@@ -129,6 +155,7 @@ export interface AntigravityBackendOptions {
   };
   dataDir?: string;
   expectedExecutableSha256?: string | undefined;
+  launchdLookup?: LaunchdLookup;
 }
 
 const UNIFIED_TOOL_DENIES = [
@@ -675,11 +702,11 @@ export class AntigravityBackend implements SupervisorBackend {
   }
 
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
-    const apiKey = selectAntigravityApiKey(process.env);
+    const apiKey = await resolveAntigravityApiKey(process.env, process.platform, this.options.launchdLookup);
     if (!apiKey) {
       throw supervisorError(
         'VSUP_BACKEND_ERROR',
-        'Antigravity backend requires GEMINI_API_KEY, GOOGLE_API_KEY or ANTIGRAVITY_API_KEY in the environment for headless execution.',
+        'Antigravity backend requires GEMINI_API_KEY, GOOGLE_API_KEY or ANTIGRAVITY_API_KEY in the supervisor environment or, on macOS, the user launchd session (launchctl setenv) for headless execution.',
         { reason: 'missing_gemini_api_key' }
       );
     }

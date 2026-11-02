@@ -36,6 +36,7 @@ const delegateAgyProbes = `if (promptVal === ${JSON.stringify(AGY_PROBE_PROMPT)}
 const roots: string[] = [];
 
 const passedPreparation: AntigravityBackendOptions = {
+  launchdLookup: async () => undefined,
   preparation: {
     check: async () => ({
       status: 'passed',

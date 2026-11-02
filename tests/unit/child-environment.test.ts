@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { buildChildEnvironment, hydrateLaunchctlEnvironment, setupHeadlessBrowserNeutralizer } from '../../src/security/environment.js';
+import { buildChildEnvironment, setupHeadlessBrowserNeutralizer } from '../../src/security/environment.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -83,42 +83,5 @@ describe('child environment filtering', () => {
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
-  });
-
-  it('hydrates missing credentials from launchctl on darwin and preserves existing entries', () => {
-    const fakeGeminiKey = ['mock', 'gemini', 'credential', '001'].join('-');
-    const fakeGoogleKey = ['mock', 'google', 'credential', '002'].join('-');
-    const existingKey = ['existing', 'mistral', 'credential', '003'].join('-');
-
-    const target: NodeJS.ProcessEnv = {
-      MISTRAL_API_KEY: existingKey,
-      GOOGLE_API_KEY: '   '
-    };
-
-    const runner = (args: string[]) => {
-      const varName = args[1];
-      if (varName === 'GEMINI_API_KEY') return `  ${fakeGeminiKey}\n`;
-      if (varName === 'GOOGLE_API_KEY') return `${fakeGoogleKey}\n`;
-      if (varName === 'ANTIGRAVITY_API_KEY') throw new Error('not set');
-      return '';
-    };
-
-    hydrateLaunchctlEnvironment(target, 'darwin', runner);
-
-    expect(target.GEMINI_API_KEY).toBe(fakeGeminiKey);
-    expect(target.GOOGLE_API_KEY).toBe(fakeGoogleKey);
-    expect(target.MISTRAL_API_KEY).toBe(existingKey);
-    expect(target.ANTIGRAVITY_API_KEY).toBeUndefined();
-  });
-
-  it('skips launchctl hydration on non-darwin platforms', () => {
-    const target: NodeJS.ProcessEnv = {};
-    let called = false;
-    hydrateLaunchctlEnvironment(target, 'linux', () => {
-      called = true;
-      return 'val';
-    });
-    expect(called).toBe(false);
-    expect(target.GEMINI_API_KEY).toBeUndefined();
   });
 });
