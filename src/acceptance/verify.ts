@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { inspectNodeTests } from './node-test.js';
 import { z } from 'zod';
 import { atomicWriteJson } from '../persistence/atomic.js';
 import { createPrivateDir, createPrivateFile } from '../security/paths.js';
@@ -65,7 +66,10 @@ export async function verifySaved(directory: string, rawContract: AcceptanceCont
         if (check.kind === 'file_exists') passed = true;
         else if (check.kind === 'file_sha256') passed = file.sha256 === check.value;
         else if (bytes.includes(0) || !Buffer.from(bytes.toString('utf8')).equals(bytes)) reason = 'unsupported-text-encoding';
-        else passed = check.kind === 'text_contains' ? bytes.toString('utf8').includes(check.value) : !bytes.toString('utf8').includes(check.value);
+        else if (check.kind === 'node_test') {
+          const structure = inspectNodeTests(bytes.toString('utf8'), check.min_cases);
+          passed = structure.passed; reason = structure.reason;
+        } else passed = check.kind === 'text_contains' ? bytes.toString('utf8').includes(check.value) : !bytes.toString('utf8').includes(check.value);
       }
       checks.push({ id: check.id, path: check.path, status: passed ? 'passed' : 'failed', reason });
     }

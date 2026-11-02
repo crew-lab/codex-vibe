@@ -73,3 +73,5 @@ The package ships one coordinator skill at `.agents/skills/vibe-supervisor`, whe
 - [Security](docs/security.md) and [error codes](docs/errors.md)
 - [Vibe compatibility and unverified gates](docs/compatibility.md)
 - [Acceptance record](docs/acceptance.json) and the [target acceptance procedure](docs/target-acceptance.md)
+
+Contract delivery, structured Node test checks and complete authorization payloads are described in [contract workflow](docs/workflow-acceptance.md).
