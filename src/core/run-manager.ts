@@ -1124,7 +1124,10 @@ export class RunManager {
       if (runtime.preparedInputDirectory) {
         const selectedPolicy = await this.admissionPolicy();
         if (selectedPolicy.revision !== runtime.record.policyRevision || !baseRef) throw codedError("VSUP_READINESS_RECEIPT_INVALID", "Prepared input authorization or edit base changed before dispatch.");
-        const manifest = await this.assertPreparedInputAdmission({ directory: runtime.preparedInputDirectory, manifestSha256: runtime.record.preparedContextManifestSha256! }, runtime.record.acceptanceContract, { workspace: runtime.record.sourceWorkspace, exclusions: runtime.record.exclusions ?? [] }, baseRef, selectedPolicy, runtime.deadlineAt!);
+        const manifestSha256 = runtime.record.preparedContextManifestSha256;
+        if (!manifestSha256) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs have no recorded manifest digest; prepare the task context again.", { role: "prepared_inputs", reason: "manifest" });
+        const launchAdmissionDeadline = Math.min(Date.now() + START_PREPARATION_DEADLINE_MS, runtime.deadlineAt ?? Number.POSITIVE_INFINITY);
+        const manifest = await this.assertPreparedInputAdmission({ directory: runtime.preparedInputDirectory, manifestSha256 }, runtime.record.acceptanceContract, { workspace: runtime.record.sourceWorkspace, exclusions: runtime.record.exclusions ?? [] }, baseRef, selectedPolicy, launchAdmissionDeadline);
         preparedContextFiles = [];
         for (const file of manifest.files) {
           const content = await readOwnedFile(path.join(runtime.preparedInputDirectory, "context", file.path), 128 * 1024);
