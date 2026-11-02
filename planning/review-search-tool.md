@@ -1,10 +1,10 @@
-# ADR 0007: a supervisor-owned search tool for reviews
+# Review search tool: a supervisor-owned design
 
-Status: **Proposed** on 2026-10-28, for the owner's approval. No product code depends on it yet.
+Status: proposed design (drafted as ADR 0007 on 2026-10-28, kept here because no new ADRs are written), for the owner's approval. No product code depends on it yet.
 
-Reviews read one file at a time and cannot search, which is the main reason review answers miss code that a search would have found. This ADR adds two read-only tools, `list_files` and `grep`, to reviews. A supervisor-owned stdio MCP server, `supervisor_search`, serves them, and the model reaches them through `run_typescript`. Edits are unchanged.
+Reviews read one file at a time and cannot search, which is the main reason review answers miss code that a search would have found. This design adds two read-only tools, `list_files` and `grep`, to reviews. A supervisor-owned stdio MCP server, `supervisor_search`, serves them, and the model reaches them through `run_typescript`. Edits are unchanged.
 
-Every Vibe fact below was read from the v3.0.2 tag source. The paths and SHA-256 values are in [Search tool facts](../compatibility-v3.md#search-tool-facts). None of these facts has been observed on a hosted run.
+Every Vibe fact below was read from the v3.0.2 tag source. The paths and SHA-256 values are in [Search tool facts](../docs/compatibility-v3.md#search-tool-facts). None of these facts has been observed on a hosted run.
 
 ## Decision
 
@@ -76,7 +76,7 @@ A second source, a missing source, a source that is not connected, or any discov
 
 ## Prerequisites
 
-- Gate `nested-run-typescript-shape-and-gating` in [docs/acceptance.json](../acceptance.json) must be VERIFIED first. Vibe's Rust acceptance tests show that a call made inside `run_typescript` goes through the same approval as a direct call: they expect `tool_id` `file_system.read_file` or the provided route `github.create_issue`, and a rejection reaches the program. The source does not show which of `tool_id` or `display_name` (`tools.file_system.write_file`) the app-server effect's `toolName` carries for a nested call. If a nested `write_file` does not arrive as a `file_system.*` effect that is denied, enabling `run_typescript` is unsafe and this ADR stops.
+- Gate `nested-run-typescript-shape-and-gating` in [docs/acceptance.json](../docs/acceptance.json) must be VERIFIED first. Vibe's Rust acceptance tests show that a call made inside `run_typescript` goes through the same approval as a direct call: they expect `tool_id` `file_system.read_file` or the provided route `github.create_issue`, and a rejection reaches the program. The source does not show which of `tool_id` or `display_name` (`tools.file_system.write_file`) the app-server effect's `toolName` carries for a nested call. If a nested `write_file` does not arrive as a `file_system.*` effect that is denied, enabling `run_typescript` is unsafe and this ADR stops.
 - Enabling `run_typescript` makes the program's other members reachable, for example `tools.self.sleep` and nested `tools.file_system.*`. Each one still has to pass the handler. One that runs without an approval is an unapproved allowed effect, which the event validator already fails closed on. The hosted gate must show this.
 - Item 3 (`excluded_globs` per root) is merged before this, so the sidecar receives the same exclusions as `read_file`.
 
