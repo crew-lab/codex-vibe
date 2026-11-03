@@ -88,14 +88,15 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(canonicalize(value, 0)) ?? 'null';
 }
 
-function normalizedChanges(input: Record<string, unknown>): unknown {
+function normalizedChanges(input: Record<string, unknown>): unknown[] | null {
   const normalize = (change: unknown): unknown => {
-    if (change === null || typeof change !== 'object' || Array.isArray(change)) return change;
+    if (change === null || typeof change !== 'object' || Array.isArray(change)) return null;
     const record = change as Record<string, unknown>;
+    if (typeof record.oldString !== 'string' || typeof record.newString !== 'string') return null;
     return { oldString: record.oldString, newString: record.newString, replaceAll: record.replaceAll === true };
   };
-  if (Array.isArray(input.changes)) return input.changes.map(normalize);
-  return [normalize(input)];
+  const changes = (Array.isArray(input.changes) ? input.changes : [input]).map(normalize);
+  return changes.length > 0 && changes.every((change) => change !== null) ? changes : null;
 }
 
 export function inputFingerprint(tool: string, input: Record<string, unknown>): string | null {
@@ -107,9 +108,12 @@ export function inputFingerprint(tool: string, input: Record<string, unknown>): 
     case 'path_content':
       material = { tool, filePath: input[EFFECT_PATH_FIELD], content: input.content };
       break;
-    case 'path_changes':
-      material = { tool, filePath: input[EFFECT_PATH_FIELD], changes: normalizedChanges(input) };
+    case 'path_changes': {
+      const changes = normalizedChanges(input);
+      if (changes === null) return null;
+      material = { tool, filePath: input[EFFECT_PATH_FIELD], changes };
       break;
+    }
     default:
       material = { tool, input };
   }

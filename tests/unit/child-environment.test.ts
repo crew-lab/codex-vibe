@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { buildChildEnvironment, setupHeadlessBrowserNeutralizer } from '../../src/security/environment.js';
+import { buildChildEnvironment, pathWithPrefix, setupHeadlessBrowserNeutralizer } from '../../src/security/environment.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -83,5 +83,11 @@ describe('child environment filtering', () => {
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it('prefixes PATH without an empty entry, which would search the current directory, when the supervisor has none', () => {
+    expect(pathWithPrefix('/run/bin', undefined)).toBe('/run/bin');
+    expect(pathWithPrefix('/run/bin', '')).toBe('/run/bin');
+    expect(pathWithPrefix('/run/bin', '/usr/bin')).toBe(`/run/bin${path.delimiter}/usr/bin`);
   });
 });

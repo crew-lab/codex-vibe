@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { assertOwnedDirectory, parseInputJson, readInputFile, readOwnedFile } from '../../src/reporting/private-files.js';
+import { assertOwnedDirectory, outputParentRefusal, parseInputJson, readInputFile, readOwnedFile } from '../../src/reporting/private-files.js';
 import { taskCommand } from '../../src/cli/task.js';
 
 const roots: string[] = [];
@@ -64,5 +64,15 @@ describe('selected and private file intake', () => {
   it('reports unsafe private directories as artifact errors', async () => {
     const root = await fixture(); await chmod(root, 0o755);
     await expect(assertOwnedDirectory(root)).rejects.toMatchObject({ code: 'VSUP_ARTIFACT_ERROR', details: { role: 'directory', reason: 'mode' } });
+  });
+
+  it('accepts a sticky output parent only when root or the current user owns it', () => {
+    const me = 501; const other = 502; const root = 0;
+    expect(outputParentRefusal({ uid: root, mode: 0o41777 }, me)).toBeNull();
+    expect(outputParentRefusal({ uid: me, mode: 0o41777 }, me)).toBeNull();
+    expect(outputParentRefusal({ uid: other, mode: 0o41777 }, me)).toBe('owner');
+    expect(outputParentRefusal({ uid: other, mode: 0o40700 }, me)).toBe('owner');
+    expect(outputParentRefusal({ uid: me, mode: 0o40777 }, me)).toBe('mode');
+    expect(outputParentRefusal({ uid: me, mode: 0o40755 }, me)).toBeNull();
   });
 });

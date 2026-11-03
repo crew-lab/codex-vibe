@@ -6,6 +6,15 @@ const strictMethods = new Set(['strictEqual', 'notStrictEqual', 'deepStrictEqual
 const strictApi = new Set(['ok', 'equal', 'notEqual', 'deepEqual', 'notDeepEqual', ...strictMethods, 'throws', 'doesNotThrow', 'rejects', 'doesNotReject', 'ifError', 'match', 'doesNotMatch']);
 
 export function inspectNodeTests(text: string, minimum: number): NodeTestInspection {
+  try {
+    return inspectParsedNodeTests(text, minimum);
+  } catch (error) {
+    if (error instanceof RangeError) return { passed: false, reason: 'node-test-too-deeply-nested', cases: 0 };
+    throw error;
+  }
+}
+
+function inspectParsedNodeTests(text: string, minimum: number): NodeTestInspection {
   const fileName = '/node-test-input.mjs';
   const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const host: ts.CompilerHost = {

@@ -190,7 +190,7 @@ export async function prepareTaskInputs(options: { source: string; base: string;
     }
     await writeFile(path.join(output, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
   } catch (error) { throw new Error(`Prepared context creation failed; inspect the private partial directory at ${output}: ${(error as Error).message}`); }
-  return { status: 'prepared', files: manifest.total_files, bytes: manifest.total_bytes, token_count: null, manifest_sha256: manifest.manifest_sha256 };
+  return { status: 'prepared', directory: output, files: manifest.total_files, bytes: manifest.total_bytes, token_count: null, manifest_sha256: manifest.manifest_sha256 };
 }
 
 export async function verifyTaskInputs(directory: string, policy: { allowedRoots: readonly string[]; exclusions: readonly ExclusionScope[] }, requiredFiles?: readonly string[]): Promise<Record<string, unknown>> {

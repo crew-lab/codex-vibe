@@ -27,6 +27,13 @@ async function fixture(): Promise<{ parent: string; source: string; base: string
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
 describe('prepared task inputs', () => {
+  it('returns the canonical directory it wrote, which verifies when the requested parent was a symlink', async () => {
+    const { parent, source, base } = await fixture();
+    const linked = path.join(parent, 'linked'); await symlink(parent, linked);
+    const prepared = await prep({ source, base, files: ['tracked.txt'], output: path.join(linked, 'prepared') });
+    expect(prepared).toMatchObject({ status: 'prepared', directory: path.join(parent, 'prepared') });
+    await expect(verify(path.join(parent, 'prepared'), source)).resolves.toBeDefined();
+  });
   it('reports ignored inputs, contract permissions and output placement together without creating a bundle', async () => {
     const { source, base } = await fixture();
     await writeFile(path.join(source, '.gitignore'), 'ignored.txt\n');

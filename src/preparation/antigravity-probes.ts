@@ -6,7 +6,7 @@ import path from 'node:path';
 import { extractEnvelopeMeta, writeIsolatedSettings } from '../backends/antigravity.js';
 import { writeAntigravityPreToolHook } from '../backends/antigravity-hook.js';
 import { WorkspacePathError, createPrivateDir } from '../security/paths.js';
-import { setupHeadlessBrowserNeutralizer } from '../security/environment.js';
+import { pathWithPrefix, setupHeadlessBrowserNeutralizer } from '../security/environment.js';
 import { assertNoProjectAntigravityExtensions } from '../security/workspace-guard.js';
 
 export const AGY_PROBE_PROMPT = 'vibe-supervisor no-inference preparation probe. Read the probe file in the workspace, then reply done.';
@@ -623,7 +623,7 @@ function runAgy(executablePath: string, cwd: string, env: NodeJS.ProcessEnv, ski
 function probeEnvironment(childHome: string, childTmp: string, proxyPort: number, modelUrl: string | null, neutralizerBinDir?: string): NodeJS.ProcessEnv {
   const proxy = `http://127.0.0.1:${proxyPort}`;
   return {
-    PATH: neutralizerBinDir ? `${neutralizerBinDir}${path.delimiter}${process.env.PATH ?? ''}` : process.env.PATH,
+    PATH: neutralizerBinDir ? pathWithPrefix(neutralizerBinDir, process.env.PATH) : process.env.PATH,
     HOME: childHome,
     TMPDIR: childTmp,
     GEMINI_API_KEY: NO_INFERENCE_GOOGLE_API_KEY,

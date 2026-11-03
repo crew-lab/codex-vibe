@@ -39,6 +39,10 @@ export function assertNotSupervisorChild(env: NodeJS.ProcessEnv = process.env): 
   }
 }
 
+export function pathWithPrefix(prefix: string, existing: string | undefined): string {
+  return existing ? `${prefix}${path.delimiter}${existing}` : prefix;
+}
+
 export async function setupHeadlessBrowserNeutralizer(binDir: string): Promise<string> {
   await mkdir(binDir, { recursive: true, mode: 0o700 });
   const script = '#!/bin/sh\necho "[vibe-supervisor] Blocked unauthorized headless browser launch attempt: $(basename "$0")" >&2\nexit 1\n';

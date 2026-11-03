@@ -21,7 +21,7 @@ import {
   StreamingRedactor
 } from '../security/redaction.js';
 import { resolveExecutableFile } from '../security/executable.js';
-import { setupHeadlessBrowserNeutralizer } from '../security/environment.js';
+import { pathWithPrefix, setupHeadlessBrowserNeutralizer } from '../security/environment.js';
 import { createPrivateDir } from '../security/paths.js';
 import { turnBackstop } from './app-server/usage.js';
 import { buildWorkspaceListing } from './app-server/workspace-listing.js';
@@ -136,7 +136,7 @@ export function antigravityChildEnvironment(
     env.GOOGLE_API_KEY = effectiveApiKey;
   }
   if (neutralizerBinDir) {
-    env.PATH = `${neutralizerBinDir}${path.delimiter}${source.PATH ?? ''}`;
+    env.PATH = pathWithPrefix(neutralizerBinDir, source.PATH);
   }
   env.HOME = childHome;
   env.TMPDIR = childTmp;
@@ -268,7 +268,7 @@ async function probeAntigravityVersion(resolvedExecutable: string): Promise<{ st
       AGY_CLI_OSC7501: 'off',
       BROWSER: 'false',
       NO_COLOR: '1',
-      PATH: `${neutralizerBin}${path.delimiter}${process.env.PATH ?? ''}`
+      PATH: pathWithPrefix(neutralizerBin, process.env.PATH)
     };
     const result = await execFileAsync(resolvedExecutable, ['--version'], {
       cwd: probeHome,

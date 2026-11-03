@@ -21,7 +21,7 @@ import type { SupervisorConfig } from '../contracts.js';
 import { atomicWriteJson } from '../persistence/atomic.js';
 import { publicValue } from '../reporting/export.js';
 import { denylistAnchors, workspaceAnchors } from '../security/globs.js';
-import { setupHeadlessBrowserNeutralizer } from '../security/environment.js';
+import { pathWithPrefix, setupHeadlessBrowserNeutralizer } from '../security/environment.js';
 import { createPrivateDir, createPrivateFile } from '../security/paths.js';
 import { candidateIdentity, preparationIdentity, receiptPath } from './evidence.js';
 import {
@@ -221,7 +221,7 @@ async function runCliSlashCommandReadback(
         cwd,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: {
-          PATH: `${neutralizerBin}${path.delimiter}${process.env.PATH ?? ''}`,
+          PATH: pathWithPrefix(neutralizerBin, process.env.PATH),
           HOME: childHome,
           TMPDIR: childTmp,
           GEMINI_API_KEY: NO_INFERENCE_GOOGLE_API_KEY,

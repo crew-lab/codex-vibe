@@ -8,7 +8,7 @@ type FileReason = 'missing' | 'permission' | 'link' | 'type' | 'owner' | 'mode' 
 
 function fileFailure(role: FileRole, reason: FileReason): Error {
   const code = role === 'artifact' || role === 'directory' ? 'VSUP_ARTIFACT_ERROR' : 'VSUP_INVALID_ARGUMENT';
-  const guidance = reason === 'mismatch' ? 'External validation refers to another patch; provide validation for this patch.' : reason === 'duplicate' ? 'Duplicate validation IDs; provide unique IDs.' : reason === 'invalid_json' || reason === 'invalid_schema' ? 'Provide valid JSON matching the required schema.' : reason === 'exists' ? 'The output already exists; choose a new --out name.' : role === 'output' ? 'Choose --out as a new name under an existing directory you own that others cannot write to, or under a sticky shared directory such as /tmp.' : role === 'directory' ? 'Use a canonical, owner-private directory.' : 'Use a canonical, owned, single-link file with safe permissions and within the size limit.';
+  const guidance = reason === 'mismatch' ? 'External validation refers to another patch; provide validation for this patch.' : reason === 'duplicate' ? 'Duplicate validation IDs; provide unique IDs.' : reason === 'invalid_json' || reason === 'invalid_schema' ? 'Provide valid JSON matching the required schema.' : reason === 'exists' ? 'The output already exists; choose a new --out name.' : role === 'output' ? 'Choose --out as a new name under an existing directory you own that others cannot write to, or under a root-owned sticky directory such as /tmp.' : role === 'directory' ? 'Use a canonical, owner-private directory.' : 'Use a canonical, owned, single-link file with safe permissions and within the size limit.';
   return Object.assign(new Error(`Cannot ${role === 'output' ? 'write' : 'read'} ${role}: ${reason}. ${guidance}`), { code, details: { role, reason } });
 }
 
@@ -85,6 +85,14 @@ export async function readOwnedFile(file: string, maxBytes = 100 * 1024 * 1024):
 }
 
 const STICKY = 0o1000;
+const ROOT_UID = 0;
+
+export function outputParentRefusal(parent: { uid: number; mode: number }, currentUid: number): 'owner' | 'mode' | null {
+  const sticky = (parent.mode & STICKY) !== 0;
+  if (parent.uid !== currentUid && !(sticky && parent.uid === ROOT_UID)) return 'owner';
+  if (!sticky && (parent.mode & 0o022) !== 0) return 'mode';
+  return null;
+}
 
 export async function resolveOutputPath(output: string): Promise<string> {
   const requested = path.resolve(output);
@@ -92,10 +100,8 @@ export async function resolveOutputPath(output: string): Promise<string> {
     const parent = await realpath(path.dirname(requested));
     const info = await lstat(parent);
     if (!info.isDirectory()) throw fileFailure('output', 'type');
-    const ownedByCurrentUser = typeof process.getuid !== 'function' || info.uid === process.getuid();
-    const sticky = (info.mode & STICKY) !== 0;
-    if (!ownedByCurrentUser && !sticky) throw fileFailure('output', 'owner');
-    if (!sticky && (info.mode & 0o022) !== 0) throw fileFailure('output', 'mode');
+    const refusal = outputParentRefusal(info, typeof process.getuid === 'function' ? process.getuid() : info.uid);
+    if (refusal) throw fileFailure('output', refusal);
     const destination = path.join(parent, path.basename(requested));
     try { await lstat(destination); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return destination; throw error; }
     throw fileFailure('output', 'exists');

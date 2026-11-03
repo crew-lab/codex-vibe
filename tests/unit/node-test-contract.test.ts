@@ -9,6 +9,10 @@ import { acceptanceContractSchema } from '../../src/acceptance/schema.js';
 
 const prefix = `import test from 'node:test'; import assert from 'node:assert/strict';`;
 describe('node:test structural contract', () => {
+  it('fails one check, rather than throwing, on a file nested too deeply to parse', () => {
+    const nested = `${prefix} const x = ${'['.repeat(5000)}${']'.repeat(5000)};`;
+    expect(inspectNodeTests(nested, 1)).toEqual({ passed: false, reason: 'node-test-too-deeply-nested', cases: 0 });
+  });
   it.each([
     `import test from 'node:test'; import assert from 'node:assert/strict'; test('boundary', () => { assert.equal(100, 100); });`,
     `import {test as run} from 'node:test'; import {strict as check} from 'node:assert'; run('boundary', () => { check.equal(100, 100); });`,

@@ -286,6 +286,14 @@ describe('input fingerprints', () => {
     expect(inputFingerprint(edit, { filePath: 'a.ts', changes: [{ oldString: 'a', newString: 'b' }, { oldString: 'c', newString: 'd' }] })).not.toBe(batch);
   });
 
+  it('returns null for an edit whose changes carry no string oldString and newString, so differing edits never share a fingerprint', () => {
+    const flat = { filePath: 'a.ts', old_string: 'x', new_string: 'y' };
+    expect(inputFingerprint(edit, flat)).toBeNull();
+    expect(inputFingerprint(edit, { ...flat, new_string: 'other', replace_all: true })).toBeNull();
+    expect(inputFingerprint(edit, { filePath: 'a.ts', changes: [] })).toBeNull();
+    expect(inputFingerprint(edit, { filePath: 'a.ts', changes: [{ oldString: 'a', newString: 'b' }, 'raw'] })).toBeNull();
+  });
+
   it('ignores read ranges, hashes the whole input of other tools and returns null for input too deep to hash', () => {
     expect(inputFingerprint(read, { filePath: 'a.ts', offset: 1, limit: 5 })).toBe(inputFingerprint(read, { filePath: 'a.ts' }));
     expect(inputFingerprint('file_system.bash', { command: 'ls' })).not.toBe(inputFingerprint('file_system.bash', { command: 'rm' }));
