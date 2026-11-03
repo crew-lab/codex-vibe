@@ -19,7 +19,7 @@ The plan, its order and the recommendation for each owner decision are in the [d
 | 3 | Machine path in `975b557` history (D7) | Owner decides; recommendation: leave it |
 | 4 | Merge `codex/contract-enforcement` (D8) | Done 2026-11-03 on `main`, not yet on a target candidate: both backends append the frozen contract and per-check requirements to the edit prompt, `node_test` counts named strict-assertion cases by parsing, and `task authorize` returns the full `start_request`. TypeScript is now a runtime dependency |
 | 5 | Edit brief requirements in the skill and `vibe-reviewer` | Done 2026-11-02 on `main`: every edit task now names the project root and how code finds files, the test import specifier, conflict and partial-write behaviour (in the contract or a coordinator validation), and that the worker cannot run anything. Measured on step 7's edits |
-| 6 | `codex/repair-and-check`: drop `validation check`, defer `task repair` (D9) | Owner decides; branch reviewed, fixed and green |
+| 6 | `codex/repair-and-check`: drop `validation check`, defer `task repair` (D9) | Decided 2026-11-03: neither feature merges. The branch stays parked, unmerged, as the only copy of both features and the target's 2026-10-29 evidence; `task repair` returns only if step 7's log shows a correction rescuing edits, consumed at run start |
 | 7 | Ten real starts | About six spent, mostly trials; the rest after steps 4–6 |
 | 8 | Nested `run_typescript` probe | Open; last attempt `PROBE_UNAVAILABLE` |
 | 9 | Search sidecar (D4) | Waits on steps 7–8; [design](planning/review-search-tool.md) |
