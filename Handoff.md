@@ -14,7 +14,7 @@ The plan, its order and the recommendation for each owner decision are in the [d
 
 | # | Step | State |
 |---|---|---|
-| 1 | Fresh 2.2.1 candidate from current `main`; preparation, one Antigravity run, one Vibe review and edit | Brief below, pinned to `489abc2`; waiting for the target. The installed `a4181ea8` copy was patched by hand and no longer qualifies |
+| 1 | Fresh 2.2.1 candidate from current `main`; preparation, one Antigravity run, one Vibe review and edit | Brief below, pinned to `7e2bdfa`; waiting for the target. The installed `a4181ea8` copy was patched by hand and no longer qualifies |
 | 2 | Report-export `Cannot read directory: owner` failure | Fixed 2026-11-02 on `main`, not yet on a target candidate. The error was about the `--out` parent, not saved state: export (and `task prepare`, `validation prepare`) required a 0700 parent you own, so `/private/tmp` failed with `owner`, `/tmp` and `$TMPDIR` with `link`, a project directory with `mode`, and the message never said it was the output. Now the parent may be yours and not writable by others, or sticky like `/tmp`; symlinks are resolved; errors name `details.role: output`; export writes to staging and renames, so a failure leaves nothing |
 | 3 | Machine path in `975b557` history (D7) | Owner decides; recommendation: leave it |
 | 4 | Merge `codex/contract-enforcement` (D8) | Done 2026-11-03 on `main`, not yet on a target candidate: both backends append the frozen contract and per-check requirements to the edit prompt, `node_test` counts named strict-assertion cases by parsing, and `task authorize` returns the full `start_request`. TypeScript is now a runtime dependency |
@@ -33,7 +33,7 @@ The plan, its order and the recommendation for each owner decision are in the [d
 
 ### Step 1 brief for the target agent
 
-Build and qualify one candidate from `489abc2`, following [target acceptance](docs/target-acceptance.md) steps 1–6 in order and its stop rules. The candidate carries three fixes no target build has run: the Antigravity key read from launchd ([decision](planning/development-strategy.md#antigravity-key-from-launchd-and-public-hygiene--owner-decision-2026-11-02)), the export output rule (row 2) and contract delivery with `node_test` (row 4).
+Build and qualify one candidate from `7e2bdfa`, following [target acceptance](docs/target-acceptance.md) steps 1–6 in order and its stop rules. The candidate carries three fixes no target build has run: the Antigravity key read from launchd ([decision](planning/development-strategy.md#antigravity-key-from-launchd-and-public-hygiene--owner-decision-2026-11-02)), the export output rule (row 2) and contract delivery with `node_test` (row 4). It also carries the five fixes from the 2026-11-03 pre-candidate review; `task prepare` now returns the canonical `directory`, which is the path to pass to `task verify` and `prepared_inputs`.
 
 - **Authorized.** The build, install and switch, pin manifest and `prepare check` are task-scoped preparation. Three hosted starts, counted against the D3 allowance of ten: one Vibe review, one Vibe edit, one Antigravity review. The disconnect (step 7) is not part of this sitting. No retries, no replay, no configuration edit to make a check pass.
 - **Vibe.** Use the installed stable Vibe (3.0.2 or later); record its version and the manifest. The review carries the procedure's `run_typescript` probe (row 8).
@@ -65,6 +65,8 @@ Behaviour on a running Vibe is proven only by the [target acceptance procedure](
 **For the owner.** The private project name is in `main`'s history (commit `2e920d3`); the current tree uses `<site-project>`. The recommendation stands: leave history as it is unless the name is sensitive, because a rewrite of public `main` breaks every clone.
 
 **Known limits of this state.** Linux and Windows code paths exist without a support claim; the validation helper blocks project manager configuration, local dependencies and required build scripts until a reviewed profile exists; the full list is under [documented limits](planning/development-strategy.md#where-things-stand).
+
+**Pre-candidate review, 2026-11-03.** Three cold reviews of `v2.2.0..489abc2`; five defects fixed in `7e2bdfa`. Left open, none blocking the sitting: `vibe_status` names the configured minimum `pinned_version`; a deleted preparation report reads as `missing`, not `stale`; with `antigravity_skip_permissions` on, the probes exercise the hook on a read only, not on a review-mode write or a shell tool; the release `acceptance.json` embeds the Node version, so the two CI Node builds differ.
 
 ## Evidence
 
