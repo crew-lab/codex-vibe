@@ -7,7 +7,7 @@ Codex hands a task to Vibe, Vibe reviews or implements it, and it works well eve
 ## What we work on
 
 1. **Real runs on the Vibe machine.** Build from `main`, install, prepare, and run real reviews and edits through Codex; fix what breaks. The current list of what works and what does not is in the [Handoff](../Handoff.md).
-2. **Edit quality.** Real edits failed on content the worker could have got right (named `node:test` cases, test imports, project root, partial writes). The skill's edit brief and the contract now delivered to the worker target exactly these; real edits show whether that is enough.
+2. **Edit quality.** Real edits failed on content the worker could have got right (named `node:test` cases, test imports, project root, partial writes). The skill's edit brief and the contract now delivered to the worker target exactly these; the [quality pack](../docs/quality-pack.md) shows whether that is enough.
 3. **Review quality.** Reviews stay in bounds but cannot search; they read only the files handed as `context_files`. If real reviews still miss code after search-first `context_files`, build the search sidecar ([design](review-search-tool.md)).
 4. **Antigravity.** Keep the experimental backend only if it gets used; otherwise remove it.
 

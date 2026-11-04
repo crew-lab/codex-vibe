@@ -332,7 +332,8 @@ export interface RuntimeCheck {
   executable: string;
   resolved_executable: string | null;
   executable_found: boolean;
-  pinned_version: string;
+  pinned_version: string | null;
+  minimum_version?: string;
   version_verified: false;
   note: string;
 }

@@ -61,7 +61,9 @@ export async function checkPreparation(config: SupervisorConfig, dataDirOverride
     const identity = await preparationIdentity(config,candidate);
     const targetReceiptPath = receiptPath(config, dataDirOverride);
     const receipt = receiptSchema.parse(JSON.parse((await readOwnedFile(targetReceiptPath,16*1024)).toString('utf8')));
-    if (digest(await readOwnedFile(path.join(path.dirname(targetReceiptPath), 'preparation-reports', `${receipt.report_sha256}.json`), 4*1024*1024)) !== receipt.report_sha256) throw new Error('Preparation report changed');
+    const reportFile = path.join(path.dirname(targetReceiptPath), 'preparation-reports', `${receipt.report_sha256}.json`);
+    const reportIntact = await readOwnedFile(reportFile, 4*1024*1024).then((bytes) => digest(bytes) === receipt.report_sha256, () => false);
+    if (!reportIntact) return {status:'stale',candidate_sha256:candidate,version:APP_VERSION,reason:'The receipt exists but its saved preparation report is missing or changed; run prepare check again'};
     if (receipt.identity !== identity) return {status:'stale',candidate_sha256:candidate,version:APP_VERSION,reason:'Candidate, pin, runtime or policy changed'};
     return {status:receipt.result,candidate_sha256:candidate,version:APP_VERSION,reason:'Version-matched no-inference evidence; hosted acceptance remains separate'};
   } catch(error) {

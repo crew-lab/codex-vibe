@@ -1,0 +1,55 @@
+{
+  "id": "edit-reserve-all",
+  "operation": "edit",
+  "what": "Add an all-or-nothing operation across two source files, with a new error class and its own tests.",
+  "task": "Read README.md, src/inventory.mjs, src/errors.mjs, tests/inventory.test.mjs first.\nProject root: the repository root. The code imports its modules by paths relative to its own module (`./errors.mjs`); no file paths are read at run time.\nThen create or change only: src/inventory.mjs, src/errors.mjs, tests/reserve-all.test.mjs. Do not touch any other file.\nChange: add `export function reserveAll(stock, items)` to src/inventory.mjs, where `items` is an array of `{ sku, quantity }`. It reserves every item or none: first check every item against the current stock, counting repeated SKUs together, then reserve them all. Add `export class InsufficientStockError extends Error` to src/errors.mjs, constructed as `new InsufficientStockError(sku)`, with `name` set to `'InsufficientStockError'` and a `sku` property, next to the existing `UnknownSkuError`.\nMust reject or preserve: an unknown SKU throws the existing `UnknownSkuError`; a shortage throws `InsufficientStockError` naming the first SKU that is short; `reserve`, `release`, `createStock` and `UnknownSkuError` keep their current behaviour and exports.\nOn a conflict or failure: check every item before changing anything; if any check fails, throw and leave the stock exactly as it was, including items earlier in the list.\nTests: tests/reserve-all.test.mjs using node:test with `import test from 'node:test'` and `import assert from 'node:assert/strict'`, importing the code as `../src/inventory.mjs` and `../src/errors.mjs` (named imports), with at least 5 top-level named `test(...)` cases, each with a strict assertion inside its callback, covering success, a shortage on a later item leaving stock unchanged, an unknown SKU leaving stock unchanged, repeated SKUs that together exceed the stock, and the error's `sku`. Match named or default imports to the declared exports.\nBefore the final answer, check the source and tests for consistent export and import names and paths.\nYou cannot run anything: there is no shell, network or test runner, and every attempt is refused. Reason from the source; do not plan to execute or verify by running.\nFinal answer: what changed, then an inventory of changed and scratch files.",
+  "allowed_write_paths": [
+    "src/inventory.mjs",
+    "src/errors.mjs",
+    "tests/reserve-all.test.mjs"
+  ],
+  "acceptance_contract": {
+    "schema_version": 1,
+    "allowed_changed_paths": [
+      "src/inventory.mjs",
+      "src/errors.mjs",
+      "tests/reserve-all.test.mjs"
+    ],
+    "required_changed_paths": [
+      "src/inventory.mjs",
+      "src/errors.mjs",
+      "tests/reserve-all.test.mjs"
+    ],
+    "checks": [
+      {
+        "id": "named-tests",
+        "kind": "node_test",
+        "path": "tests/reserve-all.test.mjs",
+        "min_cases": 5
+      },
+      {
+        "id": "exports-reserve-all",
+        "kind": "text_contains",
+        "path": "src/inventory.mjs",
+        "value": "export function reserveAll"
+      },
+      {
+        "id": "exports-error",
+        "kind": "text_contains",
+        "path": "src/errors.mjs",
+        "value": "export class InsufficientStockError"
+      },
+      {
+        "id": "keeps-unknown-sku-error",
+        "kind": "text_contains",
+        "path": "src/errors.mjs",
+        "value": "export class UnknownSkuError"
+      }
+    ],
+    "required_validations": [
+      "quality-pack-check"
+    ]
+  },
+  "max_turns": 20,
+  "timeout_seconds": 420
+}

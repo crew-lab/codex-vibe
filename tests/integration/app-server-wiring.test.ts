@@ -136,7 +136,7 @@ describe('backend selection by configuration', () => {
     chmodSync(executable, 0o755);
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source], paths: { appServer: executable, vibePinManifest: path.join(base, 'manifest.json') } }), path.join(base, 'data')));
     const ready = await manager.status({ workspace: source, operation: 'review', wait_seconds: 0 });
-    expect(ready).toMatchObject({ workspace_eligible: true, eligible: false, preparation: { status: "missing" }, runtime: { executable_found: true, resolved_executable: executable, pinned_version: '3.0.2', version_verified: false } });
+    expect(ready).toMatchObject({ workspace_eligible: true, eligible: false, preparation: { status: "missing" }, runtime: { executable_found: true, resolved_executable: executable, pinned_version: null, minimum_version: '3.0.2', version_verified: false } });
 
     const absent = scratch();
     const absentSource = makeWorkspace(absent);

@@ -1,0 +1,40 @@
+{
+  "id": "edit-shipping",
+  "operation": "edit",
+  "what": "Fix an off-by-one at a documented threshold and add named node:test cases.",
+  "task": "Read README.md, src/cart.mjs, tests/cart.test.mjs first.\nProject root: the repository root. The code imports its modules by paths relative to its own module (`./money.mjs`); no file paths are read at run time.\nThen create or change only: src/cart.mjs, tests/shipping.test.mjs. Do not touch any other file.\nChange: README.md rule 4 says shipping is free when the subtotal is at least 5000 cents, but `shippingFor(subtotalCents)` in src/cart.mjs charges 499 cents at exactly 5000. Make `shippingFor` return 0 for 5000 and above and 499 below, by changing only its comparison.\nMust reject or preserve: keep every other function, export, constant and behaviour in src/cart.mjs exactly as it is, including how `orderTotal` applies discount and tax; that is out of scope for this task.\nOn a conflict or failure: this task writes two independent files; if you cannot make the comparison change, write no test file and say why.\nTests: tests/shipping.test.mjs using node:test with `import test from 'node:test'` and `import assert from 'node:assert/strict'`, importing the code as `../src/cart.mjs` (named imports `shippingFor` and `orderTotal`), with at least 4 top-level named `test(...)` cases, each with a strict assertion inside its callback, covering 4999, 5000, 5001 and an order whose lines total exactly 5000 cents. Match named or default imports to the declared exports.\nBefore the final answer, check the source and tests for consistent export and import names and paths.\nYou cannot run anything: there is no shell, network or test runner, and every attempt is refused. Reason from the source; do not plan to execute or verify by running.\nFinal answer: what changed, then an inventory of changed and scratch files.",
+  "allowed_write_paths": [
+    "src/cart.mjs",
+    "tests/shipping.test.mjs"
+  ],
+  "acceptance_contract": {
+    "schema_version": 1,
+    "allowed_changed_paths": [
+      "src/cart.mjs",
+      "tests/shipping.test.mjs"
+    ],
+    "required_changed_paths": [
+      "src/cart.mjs",
+      "tests/shipping.test.mjs"
+    ],
+    "checks": [
+      {
+        "id": "named-tests",
+        "kind": "node_test",
+        "path": "tests/shipping.test.mjs",
+        "min_cases": 4
+      },
+      {
+        "id": "threshold-constant-kept",
+        "kind": "text_contains",
+        "path": "src/cart.mjs",
+        "value": "FREE_SHIPPING_FROM_CENTS = 5000"
+      }
+    ],
+    "required_validations": [
+      "quality-pack-check"
+    ]
+  },
+  "max_turns": 16,
+  "timeout_seconds": 300
+}

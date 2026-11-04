@@ -16,7 +16,6 @@ const TOOL_DIRECTIVE = /^\/[/*]\s*(?:eslint-|@ts-|#!|#region|#endregion|istanbul
 
 const LEGACY_COMMENT_BUDGET = new Map<string, number>([
   ['scripts/disconnect-observer.mjs', 2],
-  ['scripts/fixture-verify.mjs', 1],
   ['scripts/smoke-install.mjs', 2],
   ['src/config/config.ts', 6],
   ['src/contracts.ts', 3],

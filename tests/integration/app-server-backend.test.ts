@@ -1036,7 +1036,11 @@ describe('app-server backend: probe and runtime check', () => {
       chmodSync(path.join(base, 'vibe'), 0o755);
       chmodSync(path.join(base, 'vibe-app-server'), 0o755);
       const found = await new AppServerBackend({ ...DEFAULT_CONFIG, paths: { vibe: path.join(base, 'vibe') } }).runtimeCheck();
-      expect(found).toMatchObject({ executable_found: true, resolved_executable: path.join(base, 'vibe-app-server'), pinned_version: '3.0.2', version_verified: false });
+      expect(found).toMatchObject({ executable_found: true, resolved_executable: path.join(base, 'vibe-app-server'), pinned_version: null, minimum_version: '3.0.2', version_verified: false });
+      const manifest = path.join(base, 'pin-manifest.json');
+      writeFileSync(manifest, JSON.stringify({ format: 1, version: '3.0.4', record_sha256: 'a'.repeat(64), files: {} }), { mode: 0o600 });
+      const pinned = await new AppServerBackend({ ...DEFAULT_CONFIG, paths: { vibe: path.join(base, 'vibe'), vibePinManifest: manifest } }).runtimeCheck();
+      expect(pinned).toMatchObject({ pinned_version: '3.0.4', minimum_version: '3.0.2' });
       rmSync(path.join(base, 'vibe-app-server'));
       const missing = await new AppServerBackend({ ...DEFAULT_CONFIG, paths: { vibe: path.join(base, 'vibe') } }).runtimeCheck();
       expect(missing).toMatchObject({ executable_found: false, resolved_executable: null });

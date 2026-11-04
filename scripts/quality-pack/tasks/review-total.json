@@ -1,0 +1,26 @@
+{
+  "id": "review-total",
+  "operation": "review",
+  "what": "Find two planted defects in one function by checking it against a written specification.",
+  "task": "Read only README.md, src/cart.mjs, src/money.mjs. Do not open other files.\nQuestion: does `orderTotal(lines, discountPercent)` in src/cart.mjs compute the total exactly as README.md \"Order total\" rules 1 to 5 require?\nEvaluate these inputs: one line of 1000 cents x 1 with a 10% discount; one line of 2500 cents x 2 with no discount; one line of 3000 cents x 2 with a 50% discount.\nFor each finding give the file, the function or line, the input that triggers it, and the wrong behaviour against the stated requirement.\n\"No defect found in the inspected scope\" is a valid answer; do not invent a finding.\nNo style advice, refactors or recommendations outside the question. No scratch files.\nFinal answer: the conclusion first, then the findings, under 25 lines.",
+  "context_files": [
+    "README.md",
+    "src/cart.mjs",
+    "src/money.mjs"
+  ],
+  "max_turns": 12,
+  "timeout_seconds": 240,
+  "expected": [
+    {
+      "id": "tax-on-undiscounted",
+      "pattern": "(tax[^.\\n]{0,80}(gross|undiscounted|before (the )?discount|full subtotal|original subtotal|not the discounted)|percentOf\\(gross, TAX_PERCENT\\))",
+      "explain": "tax is 20% of the subtotal before discount instead of the discounted subtotal (rule 3): 1000 cents with 10% off gives 1599 instead of 1579"
+    },
+    {
+      "id": "threshold-at-5000",
+      "pattern": "(5000|FREE_SHIPPING_FROM_CENTS|shippingFor)[\\s\\S]{0,200}(>=|at least|exactly|strict|greater than|not free|charges|499)",
+      "explain": "exactly 5000 cents still pays shipping (rule 4)"
+    }
+  ],
+  "file": "src/cart.mjs"
+}

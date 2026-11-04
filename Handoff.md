@@ -10,12 +10,12 @@
 
 - Edit quality. Real edits were rejected for content the worker could have got right: missing named `node:test` cases, a broken test import, the wrong project root, partial writes on a conflict. The edit brief in the [skill](.agents/skills/vibe-supervisor/SKILL.md) now asks for each of these, and the frozen contract now reaches the worker; neither has run on a real edit yet.
 - Review quality. Reviews stay in bounds but sometimes reach the wrong answer; they cannot search the code, only read the files given as `context_files`.
-- Small rough edges found in review and not yet fixed: `vibe_status` labels the configured minimum `pinned_version`; a deleted preparation report shows as `missing` rather than `stale`; with `antigravity_skip_permissions` on, the probes exercise the hook on a read only.
+- With `antigravity_skip_permissions` on, the agy probes exercise the hook on a read only, not on a review-mode write or a shell tool. Adding those needs agy's real tool names and argument schemas, so it is done on the machine that has agy.
 
 **Next.**
 
-1. On the machine that runs Vibe: a fresh `git clone` (history was rewritten on 2026-11-04, so older clones must go), then `npm ci`, `npm run package:rc`, install the archive, `pin-manifest`, `prepare check`, and run real reviews and edits through Codex. Fix whatever breaks, on a branch.
-2. Measure edit and review quality on those real tasks; that decides whether reviews need a search tool ([design](planning/review-search-tool.md)) and whether the Antigravity backend stays.
+1. On the machine that runs Vibe: a fresh `git clone` (history was rewritten on 2026-11-04, so older clones must go), then `npm ci`, `npm run package:rc`, install the archive, `pin-manifest`, `prepare check`, and run the [quality pack](docs/quality-pack.md) (two edits and two reviews with independent checks) plus real tasks through Codex. Fix whatever breaks, on a branch.
+2. Compare quality-pack results across changes; that decides whether reviews need a search tool ([design](planning/review-search-tool.md)) and whether the Antigravity backend stays.
 3. Release 2.2.1 once real runs work.
 
 ## Testing on another machine
@@ -38,7 +38,7 @@ Vibe runs only on the machine that has it installed. After `pin-manifest`, run `
 
 Shipped: [functionality](docs/functionality.md), [reference](docs/reference.md), [security](docs/security.md), [compatibility](docs/compatibility.md) (source basis and diagnostic reasons), [compatibility for 3.0.2](docs/compatibility-v3.md), [workflow acceptance](docs/workflow-acceptance.md), [preparation](docs/preparation.md), [validation workspaces](docs/validation-workspace.md), [local operation](docs/local-operation.md), [errors](docs/errors.md) (generated), `docs/acceptance.json` (machine-readable gates), the ADRs under `docs/adr/`, the coordinator skill `skills/vibe-supervisor`.
 
-Source repository only, not shipped: the [development strategy](planning/development-strategy.md), the [2.1 design sketches](planning/2.1-designs.md), `marketing/`, `research/`.
+Source repository only, not shipped: the [development strategy](planning/development-strategy.md), `marketing/`, `research/`.
 
 | Area | Code |
 |---|---|

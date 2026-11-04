@@ -42,24 +42,24 @@ describe('git operation bounds', () => {
 
   it('lets worktree creation take longer than the query bound but still bounds it', async () => {
     const { parent, source } = await repository();
-    await slowGit(parent, 'worktree add', 4);
-    restoreBounds = overrideGitBounds({ queryRuntimeMs: 3000, heavyRuntimeMs: 30_000 });
+    await slowGit(parent, 'worktree add', 8);
+    restoreBounds = overrideGitBounds({ queryRuntimeMs: 6000, heavyRuntimeMs: 30_000 });
     const created = await createDetachedWorktree(source, path.join(parent, 'wt-ok'), 'HEAD');
     expect(created.createdBySupervisor).toBe(true);
     restoreBounds();
-    restoreBounds = overrideGitBounds({ queryRuntimeMs: 3000, heavyRuntimeMs: 3500 });
+    restoreBounds = overrideGitBounds({ queryRuntimeMs: 6000, heavyRuntimeMs: 7000 });
     await expect(createDetachedWorktree(source, path.join(parent, 'wt-late'), 'HEAD')).rejects.toMatchObject({ code: 'VSUP_TIMEOUT', details: { operation: 'worktree', kind: 'timeout' } });
   }, 90_000);
 
   it('lets patch export take longer than the query bound and reports a timeout past the heavy bound', async () => {
     const { parent, source } = await repository();
     await writeFile(path.join(source, 'a.txt'), 'a longer second version\n');
-    await slowGit(parent, 'diff', 4);
-    restoreBounds = overrideGitBounds({ queryRuntimeMs: 3000, heavyRuntimeMs: 30_000 });
+    await slowGit(parent, 'diff', 8);
+    restoreBounds = overrideGitBounds({ queryRuntimeMs: 6000, heavyRuntimeMs: 30_000 });
     const snapshot = await captureDirtySnapshot(source);
     expect(snapshot.changedFiles).toEqual(['a.txt']);
     restoreBounds();
-    restoreBounds = overrideGitBounds({ queryRuntimeMs: 3000, heavyRuntimeMs: 3500 });
+    restoreBounds = overrideGitBounds({ queryRuntimeMs: 6000, heavyRuntimeMs: 7000 });
     await expect(captureDirtySnapshot(source)).rejects.toMatchObject({ code: 'VSUP_TIMEOUT', details: { kind: 'timeout' } });
   }, 90_000);
 

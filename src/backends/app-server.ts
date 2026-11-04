@@ -1061,16 +1061,25 @@ export class AppServerBackend implements SupervisorBackend {
 
   async preparationCheck(): Promise<PreparationStatus> { return (this.options.preparation?.check ?? checkPreparation)(this.config, this.options.dataDir); }
 
+  private async manifestVersion(): Promise<string | null> {
+    const manifestPath = this.options.pin?.manifestPath ?? this.config.paths?.vibePinManifest;
+    if (!manifestPath) return null;
+    try { return parsePinManifest((await readPinManifestBytes(manifestPath, DEFAULT_PIN_LIMITS)).toString('utf8')).version; }
+    catch { return null; }
+  }
+
   async runtimeCheck(): Promise<RuntimeCheck> {
     const command = this.options.executable ?? this.config.paths?.vibe ?? 'vibe';
-    const expectedVersion = this.expectedVersion();
-    const note = `Vibe was not launched. The app-server executable is resolved only; the minimum version ${expectedVersion}, actual installed version and installed files are verified when a run starts and drift fails that run closed.`;
+    const minimumVersion = this.expectedVersion();
+    const pinnedVersion = await this.manifestVersion();
+    const note = `Vibe was not launched. The app-server executable is resolved only; pinned_version is the version the pin manifest records${pinnedVersion === null ? ', and no readable manifest is configured' : ''}. The minimum version ${minimumVersion}, actual installed version and installed files are verified when a run starts and drift fails that run closed.`;
+    const versions = { pinned_version: pinnedVersion, minimum_version: minimumVersion, version_verified: false as const, note };
     try {
       const resolved = await this.appServerExecutable();
       await access(resolved, fsConstants.X_OK);
-      return { executable: command, resolved_executable: resolved, executable_found: true, pinned_version: expectedVersion, version_verified: false, note };
+      return { executable: command, resolved_executable: resolved, executable_found: true, ...versions };
     } catch {
-      return { executable: command, resolved_executable: null, executable_found: false, pinned_version: expectedVersion, version_verified: false, note };
+      return { executable: command, resolved_executable: null, executable_found: false, ...versions };
     }
   }
 

@@ -109,7 +109,7 @@ function linesToCheck(file: string, text: string): { number: number; text: strin
 
 function isAllowed(file: string, name: string, line: string): boolean {
   if (name === `a Vibe version below ${SUPPORTED_VIBE}` && foreignVibeVersions(line).every(version => version === '2.26.1')) {
-    const historical = ['docs/compatibility.md', 'docs/compatibility-v3.md', 'docs/adr/0009-vibe-3-supervised-corrections.md', 'docs/adr/0006-bundled-vibe-skills.md', 'docs/hosted-continuation.md', 'docs/acceptance.json', 'CHANGELOG.md'];
+    const historical = ['docs/compatibility.md', 'docs/compatibility-v3.md', 'docs/adr/0009-vibe-3-supervised-corrections.md', 'docs/adr/0006-bundled-vibe-skills.md', 'docs/acceptance.json', 'CHANGELOG.md'];
     if (historical.includes(file)) return true;
     if (file === 'Handoff.md' && (/Historical|historical|recorded build|Default engine|no-inference conformance|still the only supported/.test(line))) return true;
     if (file === 'README.md' && /published as a pre-release|historical/.test(line)) return true;
