@@ -4,7 +4,7 @@ Read-only research on 2026-10-14. Nothing was installed, run, signed up for or p
 
 Tags: **[V]** read on a Google or protocol-owner page; **[T]** third party (press, forum, GitHub issue, Wikipedia); **[I]** our inference; **[U]** not found. A forum user `Ambati_Rajendra` recurs below; the pages show no staff badge, so those replies stay [T] even where other users call them staff answers.
 
-The product under study is vibe-supervisor as it stands in this tree: five MCP tools, used from Codex, driving Vibe 2.26.1 through `vibe-app-server` ([ADR 0004](../docs/adr/0004-app-server-client.md)). [AGENTS.md](../AGENTS.md) and [Handoff.md](../Handoff.md#fixed-scope-and-safeguards) fix exactly five tools and "no ACP ... or new platform scope"; anything below that touches that line is marked as an owner decision.
+The product under study is vibe-supervisor as it stands in this tree: five MCP tools, used from Codex, driving Vibe 2.26.1 through `vibe-app-server` ([ADR 0004](../docs/adr/0004-app-server-client.md)). [AGENTS.md](../AGENTS.md) and [Handoff.md](../AGENTS.md#product-boundaries) fix exactly five tools and "no ACP ... or new platform scope"; anything below that touches that line is marked as an owner decision.
 
 ## 1. What Antigravity is now
 

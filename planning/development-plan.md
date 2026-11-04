@@ -2,7 +2,7 @@
 
 The plan no longer lives here.
 
-- The live sequence, its owner decisions and the ideas under consideration are the [Direction](development-strategy.md#direction--2026-11-02) section of the development strategy.
+- The live sequence, its owner decisions and the ideas under consideration are the [Direction](development-strategy.md) section of the development strategy.
 - The current state, what remains and who acts are in [Handoff.md](../Handoff.md).
 - The search sidecar design is [section 5 of the 2.1 design sketches](2.1-designs.md#5-search-tool-for-reviews).
 

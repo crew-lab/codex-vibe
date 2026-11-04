@@ -14,7 +14,7 @@ Each is a separate yes from the owner in chat. A yes to one does not cover anoth
 4. Hosted runs: one review and one edit, and the review task carries the policy probe below. An allowance of two runs.
 5. One MCP-client disconnect during a running hosted run. It is a third hosted run, spent only on this.
 
-The owner clarified on 2026-10-15 that a Vibe implementation request already covers its necessary task-scoped preparation: installing or switching the candidate, the no-inference check and adding only the named task repository to the allowlist, with settings preserved and rollback kept ([AGENTS.md](../AGENTS.md#task-authorization-and-coordination)). When a sitting serves such a request, authorizations 1 to 3 are covered by it; a release sitting on its own asks for each. Hosted runs (4 and 5) always need their own allowance.
+The owner clarified on 2026-10-15 that a Vibe implementation request already covers its necessary task-scoped preparation: installing or switching the candidate, the no-inference check and adding only the named task repository to the allowlist, with settings preserved and rollback kept ([AGENTS.md](../AGENTS.md)). When a sitting serves such a request, authorizations 1 to 3 are covered by it; a release sitting on its own asks for each. Hosted runs (4 and 5) always need their own allowance.
 
 The owner's own steps stay the owner's: the clean standard macOS account installation (gate `clean-account-install`) is not part of this procedure.
 

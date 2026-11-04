@@ -1,50 +1,26 @@
-# Current state — 2026-11-02
+# Current state — 2026-11-04
 
-**Compatibility source change verified — 2026-11-01.** The owner authorized stable Vibe releases at or above 3.0.2 without a per-release allowlist, superseding step 9/D6 below. `vibe_version` is an optional minimum; the actual installed version is discovered and must match its manifest and startup handshake exactly. Refresh the reviewed manifest and rerun candidate preparation after a CLI update. The shared wire contract supports the legacy and current edit approval names without adding tool or path access. Source implementation and independent read-only code review are complete. `npm run verify:release` passed on Node 24.22.1: 124 test files, 1,752 tests passed and one skipped, plus lint, typecheck, build, acceptance reporting, secret scan and SBOM generation. Focused backend/preparation fixture checks passed 136 tests, including newer installed-release identity and current edit approval names; these are local fixtures, not hosted qualification. Documentation links and whitespace checks passed. RC 2.2.1 archive packaged offline from `ccfbbd6`: archive SHA-256 `2731c0b8ab76736e827d17fb370fd65f27d84f17984bfcc4b50ea884f03d66d4`, candidate `a4181ea8362939697649234aee1d6b2ae68d7b026ec021781bc168119b0c5ac6`, conformance script `9440f1379c6bfcabb78232a11042e09e329e16c787256e995e3a4b6fcc136fe8`. Target candidate preparation against Vibe 3.0.4 passed (`verdict: none-observed-control-validated`); hosted qualification is pending. See [the owner decision and approach](planning/development-strategy.md#flexible-vibe-compatibility--owner-decision-2026-11-01).
+**The goal:** Codex hands a task to Vibe, Vibe reviews or implements it, and it works well every time. This page holds only what works, what does not, and what is next.
 
-**Source and release.** v2.2.0 was published on 2026-10-27 from `302bcf6` as a pre-release through [crew-lab/codex-vibe#11](https://github.com/crew-lab/codex-vibe/pull/11); by decision D2 (2026-10-28) the owner marks it latest without the clean-account installation. `main` carries unreleased 2.2.1 work. The target's integration branch `main-agy` was consolidated into `main` on 2026-11-02 without its contract-enforcement and repair code; the contract enforcement was merged on 2026-11-03 (row 4) and the repair code stays parked (row 6). Archive SHA-256 `6b0a120d1ae16bb102af4bc07bfa11522684f536a3a17fce3f9f93dc70d44984`, candidate `81df8140eb49afbebfb5202bc3186c97f9ea8b57a7243d108ce376cbdcc73b90`; the kit, SBOM, qualification report and run ledger are release assets. Beyond the 2.2.0 features (`allowed_write_paths`, per-field authorization diagnostics), the release carries `af82de7` (`task authorize` binds the server's selected Node runtime) and `f28a8a4` (grant storage, prepared-input and private-directory repairs, and [the local operating procedure](docs/local-operation.md)). No functional source changed after qualification.
+**Released.** v2.2.0 (2026-10-27) is the latest release. `main` carries unreleased 2.2.1; the [changelog](CHANGELOG.md) lists it: any stable Vibe at or above 3.0.2, the generated `task authorize` command, search-first `context_files`, contract delivery to the worker with the `node_test` check, the export output fix, the Antigravity key from launchd, and fixes from the 2026-11-03 code review.
 
-**Qualification.** Two native hosted trials on that archive, Node 24.21.0 on macOS arm64 with an isolated exact Vibe 3.0.2: Trial A, a one-file edit, accepted on its contract and ten independent numeric cases; Trial B, a review, accepted on three evidence-backed boundaries with all 274 project-file hashes unchanged. Both workers exited, private state was removed and the slot is free; Trial A's dirty worktree is retained with its verified export; both authorized starts are consumed, with no replay or fallback. Package verification on Node 20.19.0: 109 files, 1,567 tests. The [evidence](research/evidence/v2.2.0-local-workflow-20261027/README.md) does not certify general reliability, a clean account, the newer Vibe CLI on the target's PATH (3.0.3, separate from the supervised runtime) or Antigravity. The trials did not carry the nested `run_typescript` probe, so `nested-run-typescript-shape-and-gating` stays unverified.
+**What works.** The boundary has held on every real run: reviews stay read-only, edits stay in their worktree, nothing reaches shell or network, and runs clean up after themselves.
 
-**Operating.** Follow [the local operating procedure](docs/local-operation.md). Preserve the qualified installation, settings and rollback.
+**What does not work well yet.**
 
-**What remains.**
+- Edit quality. Real edits were rejected for content the worker could have got right: missing named `node:test` cases, a broken test import, the wrong project root, partial writes on a conflict. The edit brief in the [skill](.agents/skills/vibe-supervisor/SKILL.md) now asks for each of these, and the frozen contract now reaches the worker; neither has run on a real edit yet.
+- Review quality. Reviews stay in bounds but sometimes reach the wrong answer; they cannot search the code, only read the files given as `context_files`.
+- Small rough edges found in review and not yet fixed: `vibe_status` labels the configured minimum `pinned_version`; a deleted preparation report shows as `missing` rather than `stale`; with `antigravity_skip_permissions` on, the probes exercise the hook on a read only.
 
-The plan, its order and the recommendation for each owner decision are in the [development strategy's Direction](planning/development-strategy.md#direction--2026-11-02); this table is the status, one row per step. Update a row rather than adding a dated section below. The 2026-10-28 table is in Git history.
+**Next.**
 
-| # | Step | State |
-|---|---|---|
-| 1 | Fresh 2.2.1 candidate from current `main`; preparation, one Antigravity run, one Vibe review and edit | Brief below, pinned to `ab4fdfd`; waiting for the target. The installed `a4181ea8` copy was patched by hand and no longer qualifies |
-| 2 | Report-export `Cannot read directory: owner` failure | Fixed 2026-11-02 on `main`, not yet on a target candidate. The error was about the `--out` parent, not saved state: export (and `task prepare`, `validation prepare`) required a 0700 parent you own, so `/private/tmp` failed with `owner`, `/tmp` and `$TMPDIR` with `link`, a project directory with `mode`, and the message never said it was the output. Now the parent may be yours and not writable by others, or sticky like `/tmp`; symlinks are resolved; errors name `details.role: output`; export writes to staging and renames, so a failure leaves nothing |
-| 3 | Machine paths and the project name in history (D7) | Done 2026-11-04: the owner reversed D7 and history was rewritten; no machine path or project name is left in any commit. Every hash changed ([old-to-new map](research/history-rewrite-2026-11-04.md)); every clone must be replaced, the target's included. Old commits stay reachable through GitHub's pull-request refs until GitHub Support purges them (owner action) |
-| 4 | Merge `codex/contract-enforcement` (D8) | Done 2026-11-03 on `main`, not yet on a target candidate: both backends append the frozen contract and per-check requirements to the edit prompt, `node_test` counts named strict-assertion cases by parsing, and `task authorize` returns the full `start_request`. TypeScript is now a runtime dependency |
-| 5 | Edit brief requirements in the skill and `vibe-reviewer` | Done 2026-11-02 on `main`: every edit task now names the project root and how code finds files, the test import specifier, conflict and partial-write behaviour (in the contract or a coordinator validation), and that the worker cannot run anything. Measured on step 7's edits |
-| 6 | `codex/repair-and-check`: drop `validation check`, defer `task repair` (D9) | Decided 2026-11-03: neither feature merges. The branch stays parked, unmerged, as the only copy of both features and the target's 2026-10-29 evidence; `task repair` returns only if step 7's log shows a correction rescuing edits, consumed at run start |
-| 7 | Ten real starts | About six spent, mostly trials; the rest after steps 4–6 |
-| 8 | Nested `run_typescript` probe | Open; last attempt `PROBE_UNAVAILABLE` |
-| 9 | Search sidecar (D4) | Waits on steps 7–8; [design](planning/review-search-tool.md) |
-| 10 | Antigravity: keep and unfreeze, or remove at 2.3 (D5 revisited) | Owner decides |
-| 11 | Standing authorization | After step 7 |
-| 12 | Re-qualification per new Vibe minor | Dropped by the owner, 2026-11-04: Vibe ships almost daily, so an upgrade needs only the refreshed manifest and a preparation PASS; hosted evidence of a version comes from real runs, whose exports name it (`pin.vibe_version`) |
-| 13 | Separate GitHub identity for the target agent (D10) | Declined for now, 2026-11-04: both agents keep one account, so "the target never pushes to `main`" stays a written rule no check enforces |
-| — | Mark v2.2.0 latest (D2) | Owner action |
-| — | Repository description and topics (marketing step 1, M1–M6 accepted) | Owner action |
-| — | Mistral contact | Drafts ready; nothing sent |
-
-### Step 1 brief for the target agent
-
-Build and qualify one candidate from `ab4fdfd`, following [target acceptance](docs/target-acceptance.md) steps 1–6 in order and its stop rules. History was rewritten on 2026-11-04: replace any existing clone with a fresh `git clone` before building, and never push from an older clone. The candidate carries three fixes no target build has run: the Antigravity key read from launchd ([decision](planning/development-strategy.md#antigravity-key-from-launchd-and-public-hygiene--owner-decision-2026-11-02)), the export output rule (row 2) and contract delivery with `node_test` (row 4). It also carries the five fixes from the 2026-11-03 pre-candidate review; `task prepare` now returns the canonical `directory`, which is the path to pass to `task verify` and `prepared_inputs`.
-
-- **Authorized.** The build, install and switch, pin manifest and `prepare check` are task-scoped preparation. Three hosted starts, counted against the D3 allowance of ten: one Vibe review, one Vibe edit, one Antigravity review. The disconnect (step 7) is not part of this sitting. No retries, no replay, no configuration edit to make a check pass.
-- **Vibe.** Use the installed stable Vibe (3.0.2 or later); record its version and the manifest. The review carries the procedure's `run_typescript` probe (row 8).
-- **Edit.** Write the task to the skill's edit template (row 5): project root, test import specifier, conflict behaviour, no execution. The contract adds `{"id":"named-tests","kind":"node_test","path":"<test file>","min_cases":5}` to the procedure's checks. Record whether the prompt carried the rendered requirements (`runs export --include events`).
-- **Export.** Export every run with `runs export --out` under `/tmp` or a directory you own; an `owner`, `link` or `mode` refusal is a row 2 regression, stop.
-- **Antigravity.** Configure the candidate with `experimental.antigravity = true` and `backend = "antigravity"` in a separate configuration, with the Gemini key set only in the launchd session (`launchctl setenv`), not in the shell or the Codex environment. `prepare check` runs the agy probes; then one review on the fixture. A `missing_gemini_api_key` refusal is a regression, stop. Never record the key.
-- **Recording.** Evidence under `research/evidence/v2.2.1-<archive short hash>-<date>/` with the placeholders, one build entry in `docs/acceptance.json`, and rows 1, 2, 4 and 8 of this table updated in place, no dated section. Run `npx vitest run tests/unit/public-hygiene.test.ts`, commit on a branch from `main` and push with `make push-branch BRANCH=<name>`; never push `main`. A code fix goes on its own branch and ends the sitting: it is a new candidate.
+1. On the machine that runs Vibe: a fresh `git clone` (history was rewritten on 2026-11-04, so older clones must go), then `npm ci`, `npm run package:rc`, install the archive, `pin-manifest`, `prepare check`, and run real reviews and edits through Codex. Fix whatever breaks, on a branch.
+2. Measure edit and review quality on those real tasks; that decides whether reviews need a search tool ([design](planning/review-search-tool.md)) and whether the Antigravity backend stays.
+3. Release 2.2.1 once real runs work.
 
 ## Testing on another machine
 
-GitHub holds `main` only; every former branch is in its history. On another Mac (Apple silicon, Node 20.19 or later, Git):
+On another Mac (Apple silicon, Node 20.19 or later, Git):
 
 ```bash
 git clone https://github.com/crew-lab/codex-vibe.git vibe-supervisor && cd vibe-supervisor && npm ci && npm run verify:release
@@ -56,40 +32,7 @@ git clone https://github.com/crew-lab/codex-vibe.git vibe-supervisor && cd vibe-
 CACHE="$PWD/.npm-offline-cache" && node -e 'const l=require("./package-lock.json");const s=new Set();for(const[k,v]of Object.entries(l.packages)){if(!k||v.link||!v.version)continue;s.add((v.name||k.slice(k.lastIndexOf("node_modules/")+13))+"@"+v.version)}console.log([...s].join("\n"))' | xargs -P 8 -n 1 npm cache add --cache "$CACHE" && VIBE_SUPERVISOR_TEST_NPM_CACHE="$CACHE" npm run package:rc
 ```
 
-Behaviour on a running Vibe is proven only by the [target acceptance procedure](docs/target-acceptance.md) on the machine that runs it. After `pin-manifest`, run `vibe-supervisor prepare check --kit <absolute path of the kit> --config "$CONFIG"` once, because readiness and every start need its pass.
-
-## Open questions
-
-**Only the target can answer.** The protocol questions that fail closed are listed in the [strategy's verification model](planning/development-strategy.md#verification-model), and the [procedure](docs/target-acceptance.md) records which way each goes. The 2.2.0 trials completed without a refusal on that build; one hosted observation is still owed: `nested-run-typescript-shape-and-gating` (Direction step 5, on the next hosted review). The five `antigravity-*` probe gates are observed and committed under `research/evidence/antigravity-1.4.9-target-20261028/` for candidate `14c74597…` with agy 1.4.9. A new build reopens every observation.
-
-**For the owner.** Ask GitHub Support to purge the pre-rewrite commits of `crew-lab/codex-vibe` (cached views and the twelve pull-request refs still reach them); the [map](research/history-rewrite-2026-11-04.md) lists them.
-
-**Known limits of this state.** Linux and Windows code paths exist without a support claim; the validation helper blocks project manager configuration, local dependencies and required build scripts until a reviewed profile exists; the full list is under [documented limits](planning/development-strategy.md#where-things-stand).
-
-**Pre-candidate review, 2026-11-03.** Three cold reviews of `v2.2.0..cd78d97`; five defects fixed in `ab4fdfd`. Left open, none blocking the sitting: `vibe_status` names the configured minimum `pinned_version`; a deleted preparation report reads as `missing`, not `stale`; with `antigravity_skip_permissions` on, the probes exercise the hook on a read only, not on a review-mode write or a shell tool; the release `acceptance.json` embeds the Node version, so the two CI Node builds differ.
-
-## Evidence
-
-The rules are in [target acceptance](docs/target-acceptance.md#recording-evidence) (the placeholders, the private-path grep, what never reaches a committed file) and its [code-fix rule](AGENTS.md#code-changes-on-the-target-machine); the two-machine principle is in the [strategy's working rules](planning/development-strategy.md#working-rules). Evidence names the exact source, archive and installed distribution it belongs to and never transfers to other bytes; missing evidence stays unverified; `docs/acceptance.json` is the per-build observed ledger.
-
-Sanitized evidence folders under `research/evidence/`:
-
-| Folder | What it records |
-|---|---|
-| `package-kit-identity-2026-10-15` | The 2.0.1 packaging and kit identity repair; native readiness addendum of 2026-10-16 |
-| `hosted-2.0.1-2026-10-16` | The 2.0.1 hosted review, rejected on worker answer quality |
-| `disconnect-2a49abd-2026-10-16` | The MCP-client disconnect PASS |
-| `release-2.0.2-347bf79-2026-10-16` | The 2.0.2 packet, native readiness after restart, carry-over assessment and coordinator review |
-| `antigravity-backend-2026-10-17` | The Antigravity no-inference check |
-| `vibe-302-stability-20261026` | The 2.1.0 qualification: preparation, native readiness and one accepted fixture edit |
-| `v2.2.0-local-workflow-20261027` | The 2.2.0 trials: one accepted native edit and one accepted native review |
-| `qualification-221-20261028` | The 2.2.1 candidate trials: preparation, native readiness, accepted review, rejected edit |
-| `real-use-design-20261028` | Two separately authorized real-use design trials on 2.2.0, both rejected |
-| `antigravity-1.4.9-target-20261028` | The Antigravity 1.4.9 target probes: 5 probe gates observed and preparation receipt |
-| `mechanism-resilience-20261029` | The mechanism resilience and external-input reader candidate evidence |
-| `contract-repair-20261029` | The contract-bound fresh repairs and weather fixture acceptance |
-
-The workflow candidate's 2026-10-15 packet is at commit `1687aa5`.
+Vibe runs only on the machine that has it installed. After `pin-manifest`, run `vibe-supervisor prepare check --kit <absolute path of the kit> --config "$CONFIG"` once, because readiness and every start need its pass.
 
 ## Pointers
 
@@ -112,97 +55,3 @@ Source repository only, not shipped: the [development strategy](planning/develop
 | Configuration and `--isolated` session homes | `src/config/` |
 | CLI: `setup`, `allow`, `doctor`, `pin-manifest`, `serve`, `prepare`, `validation`, `runs`, `task` | `src/cli.ts`, `src/cli/`, `src/diagnostics/doctor.ts` |
 | Release, conformance and coordinator scripts (only the conformance script ships, for the kit) | `scripts/` |
-
-## Fixed scope and safeguards
-
-Exactly five one-shot MCP tools; one owned active slot; canonical allowlists; no ACP, continuation, recovery replay, queue, automatic patch application, worker shell or network, extra hosted starts or new platform scope. Reviews are read-only; edits use isolated detached worktrees. Bundled skills stay inside the same tool and path policy. The enforcement points and the pin are listed in the [strategy](planning/development-strategy.md#architecture-and-enforcement-points) and fixed by [AGENTS.md](AGENTS.md). Private runtime state stays private and evidence is sanitized; uncertain cleanup retains files. These are application-policy controls, not an OS sandbox. Missing evidence remains unknown: each archive has its own target evidence, and no other platform or universal answer-quality guarantee is made.
-
-## History
-
-The dated checkpoints, target briefs, 2.0.x and 2.1 sitting records, cold-review findings and superseded "Remaining" tables that this file carried up to 2026-10-28 are in Git history at `417341f` (`git show 417341f:Handoff.md`); the decisions they recorded are summarized in the strategy, and their evidence is in the folders above.
-
-## 2.2.1 qualification preparation — 2026-10-28
-
-Isolated source based on main da1d78c plus uncommitted context-count, version and evidence changes. Candidate 65dbafd0700891c72978e35df8a599a1c110ba37d13ff68bb19a3004cbe1e716; archive SHA-256 18744750fb5e1bf1695e1aa25b1ef2b6caddb746fadb08c6222cc4b53f0d2afc. Node 20.19.0 package:rc passed release verification (115 test files; 1,623 passed, one skipped), offline installed-package smoke and final kit/archive identity checks. Delivery is retained in the task worktree release directory with preparation-kit-2.2.1 and SHA256SUMS.
-
-Side-by-side target installation was not executed: host automatic approval review could not complete because of an account usage limit. No prefix was created, no configuration or registration changed, no pin/preparation run occurred and no hosted grant or start was spent. The existing 2.2.0 installation remains selected. Resolve host approval availability before target installation, matched no-inference preparation, native reconnect/readiness and the authorized review/edit qualification. The review must carry the nested policy probe. No hosted or preparation PASS is claimed for 2.2.1. No source commit, push or publication occurred.
-
-### Preparation resumed
-
-The host approval route is available again. Side-by-side offline installation, pin/doctor and matched preparation passed for candidate 65dbafd0 under Node 24.21.0. Registration now selects 2.2.1 with backup retained. The existing native connection still reports 2.2.0; reconnect is required before qualification. Zero grants or hosted starts spent. See [preparation evidence](research/evidence/qualification-221-20261028/README.md). This supersedes the earlier installation blocker; hosted acceptance remains unverified.
-
-### Hosted qualification outcomes
-
-Native 2.2.1 readiness passed after reconnect. Both starts consumed: review accepted independently on five cases and read-only integrity, context_file_count 2 observed in export; nested probe unavailable and gate remains open. Edit semantic checks (nine) and worker tests (five) pass, but frozen literal import assertion fails despite equivalent strict assertions; closed rejected under the unchanged contract. Both runs closed, slot free; dirty edit worktree retained. No accepted-edit qualification, replay, fallback, integration, commit or publication. See [hosted evidence](research/evidence/qualification-221-20261028/README.md).
-
-### Local usability follow-up — 2026-10-28
-
-A local source repair on codex/vibe-usability-20261028 makes validation --no-install copy generic Git fixtures without a package manifest, lockfile or manager execution. Install-mode offline safeguards remain. The active coordinator skill and example contract now trace required checks to the requested outcome, accept equivalent strict assertion imports and require separate named node:test inspection plus validation preflight. The preserved repeated-trial patch passes five generated tests and eight independent cases under this diagnostic; its historical literal-contract rejection remains unchanged. Local release verification passed on Node 24.22.1. Fresh independent Sol/high acceptance VERIFIED follow-up R6/R7 under the owner-approved instruction-based read-only amendment; source, archive and installed candidate remain separate. No packaging, installation, new hosted start or publication follows this source check. See [local follow-up evidence](research/evidence/vibe-usability-20261028/followup/README.md).
-
-### Routine integration recovery — 2026-10-28
-
-An external integration test stopped before inference on a coordinator-created 0644 patch. A verified mode-only repair to 0600 made preflight pass; skill/docs now state private file creation and bounded diagnosed pre-start repair. Two authorized hosted starts then completed on unchanged candidate 65dbafd0: review accepted, edit rejected because generated tests omitted the node:test import. The unchanged function passes eight independent numeric cases; its generated tests fail ReferenceError. A separate coordinator-only import repair passes five tests and detects the original equality defect; it is not Vibe success or integrated output. Both runs closed, configuration restored byte-for-byte, slot free, original fixture clean. [Recovery evidence](research/evidence/vibe-usability-20261028/preflight-recovery/README.md) preserves the original rejection and correction attribution. No new hosted start or publication is authorized by this result.
-
-## Local mechanism resilience candidate — 2026-10-29
-
-The mechanism review separates explicit caller inputs from private state. Local source accepts ordinary owned 0644 request/contract/patch/validation files unchanged, returns typed bounded input diagnoses and retains strict private artifact checks. Full prepared-input verification now runs before grant issue and consumption, again at launch, and materialized context is checked by byte length/hash. Known-invalid preparation spends no attempt; a change after consumption never replays. No worker tool/path or authorization boundary changed. The first full gate exposed missing-versus-stale receipt classification; a narrow integration repair passed both affected suites. The second full gate passed 118 test files, 1,657 tests and one skipped on Node 24.22.1; fresh independent local R1–R5 verification returned VERIFIED. [Evidence](research/evidence/mechanism-resilience-20261029/README.md) and [specification/remaining work](planning/mechanism-resilience-20261028.md) are source-only. The installed candidate is unchanged; no new archive, installation, hosted test or publication occurred.
-
-## Resilience candidate installation — 2026-10-29
-
-Commit 12bc355 pushed to codex/vibe-usability-20261028. Offline package:rc passed release verification, installed-package smoke and matched kit checks. Archive SHA-256 360d704905a12acb36b3cbc53c182adcfa56d79907190124d3c02a609d4c3b4f; candidate a535e3263de76a2fca01eb54329a8af7f8ecc41995cd0971d5578be27ce16423. Side-by-side installation and matched preparation passed under Node 24.21.0. Installed CLI accepts an unchanged 0644 patch, reconstructs exact copies and cleans them with fingerprint checks. Registration selects the new candidate and retains its prior backup. The existing native connection still reports old candidate 65dbafd0 and refuses expected-candidate admission; restart Codex before hosted testing. No hosted start was spent on the wrong candidate. Prior installation remains available for rollback. No release publication or merge to main occurred.
-
-## Reconnected integration — 2026-10-29
-
-New candidate connected. Artifact/request intake and copy-only validation passed with normal0644 inputs. Review accepted; edit rejected for omitted named node:test cases despite passing behavior and negative control. Both closed; temporary allowlist restored. See [test evidence](research/evidence/reconnect-integration-20261029/RESULT.md). Requirement enforcement and validation feedback remain open.
-
-## Contract enforcement and repair candidate — 2026-10-29
-
-The target installed and exercised a candidate built from the full usability branch, including a native weather XML acceptance run. That record and its evidence live on `codex/repair-and-check` with the code they describe (row 6).
-
-## RC 2.2.1 packaging with flexible Vibe compatibility — 2026-11-01
-
-Following the owner decision to support stable Vibe versions $\ge 3.0.2$, both edit approval names, and loopback provider catalogue routing for no-inference preparation, commit `ccfbbd6` was packaged offline via `package:rc`:
-- Archive: `release/vibe-supervisor-2.2.1.tgz` (SHA-256: `2731c0b8ab76736e827d17fb370fd65f27d84f17984bfcc4b50ea884f03d66d4`)
-- Candidate SHA-256: `a4181ea8362939697649234aee1d6b2ae68d7b026ec021781bc168119b0c5ac6`
-- Conformance script SHA-256: `9440f1379c6bfcabb78232a11042e09e329e16c787256e995e3a4b6fcc136fe8`
-- Kit directory: `release/preparation-kit-2.2.1/` (SHA256SUMS: `149fd79956bbf235f3e4b89bb1dbe9f5f69bf5eccd812e7a2de6692aa361401a`)
-- SBOM: `release/sbom.spdx.json` (SHA-256: `8ac39a2798afce6bb716aa93663bbc9c717fbe6cce2429a0d796a914c2160abe`)
-- Acceptance record: `release/acceptance.json` (SHA-256: `8bffac19fc491c322fb3ff263387605b2c3766531b158bd4ce8ab58e0a76317e`)
-
-All 1,752 vitest tests, offline fresh-prefix install smoke test, and deterministic acceptance checks passed.
-
-### Target observation and settlement on Vibe 3.0.4 — 2026-11-01
-
-1. **Root-Cause Trace of Initial Failure**:
-   On candidate `62aaf0b7…` (`b6ac0fd`), `prepare check` failed with `CONNECT api.mistral.ai:443` in both review and edit subject runs. Source tracing in Vibe 3.0.4 confirmed:
-   - Caller: `vibe.app_server._completion_facts:compile_session_model_facts` -> `_catalogue_lookups` -> `MistralCatalogueFetcher.fetch`
-   - Trigger: Occurred during `session/start` whenever `MISTRAL_API_KEY` was resolved (set by `--placeholder-key` to bypass startup credential blocks).
-   - Traffic: Outbound `GET /v1/models/{model}` for model completion profile parameters (context window size and reasoning limits).
-   - Subsystem: Pure completion facts catalog lookup; not telemetry, not auto-update, and not experiments.
-
-2. **Loopback Routing Settlement**:
-   In `scripts/v2-conformance-check.mjs`, when `--placeholder-key` is used on subject runs, provider `mistral`'s `api_base` is routed to the supervisor's owned loopback endpoint `${managedConfigEndpoint.url}/v1`. Because `127.0.0.1` is in `NO_PROXY`, the request is answered locally without touching the proxy or leaving the machine. Live supervisor runs (real inference) remain untouched with `api_base = https://api.mistral.ai/v1`.
-
-3. **Candidate `a4181ea8…` Preparation Verification**:
-   Testing candidate `a4181ea8…` against installed Vibe 3.0.4 passed every stage:
-   - `pin-manifest --config "$CONFIG" --force`: PASS
-   - `doctor --config "$CONFIG" --json`: PASS
-   - `prepare check --kit release/preparation-kit-2.2.1 --config "$CONFIG"`: **PASS** (`status: passed`, `network_observation.verdict: none-observed-control-validated`, `report_sha256: 735955a2…`)
-
-## Antigravity headless authentication on target — 2026-11-02
-
-Run `373546ce-2b8e-4e00-b606-6993193a8da6` failed before launch with `missing_gemini_api_key`, the expected fail-closed refusal. The Codex host had been started before `launchctl setenv`, so its environment, and the supervisor it spawned, had no Google key; `env_vars` forwarding in the Codex MCP configuration cannot supply a key its parent never had.
-
-The target's first fix copied every provider key from `launchctl getenv` into the supervisor's global environment at each CLI start and was pushed straight to `main`. The coordinator replaced it on 2026-11-02: the Antigravity backend resolves its key when a run starts, from the supervisor environment first and then, on macOS only, from the user launchd session, without writing it into the supervisor environment; the key reaches only the child and stays in redaction. `MISTRAL_API_KEY` keeps its own resolver (environment, then Keychain). The target had also copied a build into the installed `a4181ea8` candidate and stopped its server processes; that changed the installed bytes, so the fix needs a fresh candidate, matching preparation and a hosted run before the authentication problem counts as solved.
-
-Credentials never go into a project repository or workspace; the supervisor passes them only into the worker's child environment.
-
-`validation prepare` on the template baseline (`d8b480b`) stopped at fingerprinting on a symlink whose target lies outside the copy; it now reports `Broken symbolic link at <path>` instead of a bare `ENOENT`. Readiness on `<target-home>/src/OKF/_template` returned `VSUP_WORKSPACE_INVALID`: the template and its parent carry `.agents` and `AGENTS.md`, which the Antigravity extension guard refuses. Dispatch stopped there without retries.
-
-## Linking-helper backend failures — 2026-11-02
-
-[Consolidated problem report](research/evidence/linking-helper-backends-20261102/REPORT.md) records agy admission/authentication blockers, coordinator preparation mistakes, and the independently rejected Vibe patch. agy run `373546ce-2b8e-4e00-b606-6993193a8da6` failed before worker launch with `missing_gemini_api_key` despite command-shell credential presence; shell presence does not establish MCP-server authentication. The clean task snapshot passed admission while the original template remained protected. No agy implementation was produced.
-
-Vibe3.0.4 on an unmodified, freshly installed `a4181ea8…` archive passed matched preparation, then run `da015524-9dda-45ff-8240-15b3ede6ff9e` changed the three requested files and failed after three denied shell calls. Independent reconstruction of the exact patch found a broken test import, incorrect project root, partial writes on a second-destination conflict and destination-parent symlink escape in the generated helper. This last failure was reproduced only in disposable coordinator fixtures, not as a supervisor workspace escape. Implementation rejected; no integration or fallback. Both runs closed, original template preserved, Vibe dirty worktree retained. See the report for exact identities and evidence limits.
-
-**Correction to the installation note above:** copying the credential-hydration build into the old `a4181ea8` prefix changes its identity; the old archive/kit/preparation no longer qualifies those modified installed bytes. The hydration fix needs a fresh packaged candidate, matching preparation and a successful hosted test before claiming the agy authentication problem resolved. The unmodified archive used in the Vibe trial remains a separate identity. Neither backend has accepted the linking-helper task.
