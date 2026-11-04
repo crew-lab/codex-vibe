@@ -3,7 +3,7 @@
   "supported_release": "2.2.0",
   "updated_at": "2026-10-28",
   "scope": "One-shot review and isolated edit with vibe-app-server as the default engine, pinned to exactly Vibe 3.0.2 (one process per run; backend = \"app-server\"); Google Antigravity (agy 1.4.0, 1.4.3, 1.4.4, 1.4.7, 1.4.8 and 1.4.9; backend = \"antigravity\") as an opt-in experimental second backend, frozen on 2026-10-28 and not for production until its antigravity-* gates are recorded; one active run per owning server/storage instance; five MCP tools; a single-use dispatch grant per start; restart never resumes or replays work. Around the five tools: optional frozen acceptance contracts checked against the exact exported patch, append-only coordinator assessments, sanitized run reports, a version-matched preparation PASS that gates ordinary dispatch, and owned validation copies.",
-  "rule": "One entry per build. A gate is listed under observed only when sanitized evidence for that exact archive is committed under research/evidence/ and cited by path; everything else stays under open with one line saying why. Evidence never transfers between builds. The mechanical gates (npm run verify:release, the offline installed-package smoke and the preparation PASS) run on every build and are not listed per build. A build is one archive on one Vibe version; re-qualifying an archive on a new Vibe minor adds its own entry.",
+  "rule": "One entry per build. A gate is listed under observed only when sanitized evidence for that exact archive is committed under research/evidence/ and cited by path; everything else stays under open with one line saying why. Evidence never transfers between builds. The mechanical gates (npm run verify:release, the offline installed-package smoke and the preparation PASS) run on every build and are not listed per build.",
   "gates": [
     {
       "name": "package-kit-identity-binding",
@@ -104,10 +104,6 @@
     {
       "name": "antigravity-project-config-not-loaded",
       "settles": "prepare check reports agy_probes.project_config_not_loaded pass: planted ancestor configuration above an isolated workspace reaches no read-back, request, hook or MCP command."
-    },
-    {
-      "name": "vibe-version-requalification",
-      "settles": "On this archive and the Vibe version named in the build's runtime: a reviewed refreshed manifest, a preparation PASS with the archive's kit, and one completed fixture review with approved reads, no unapproved effect, a correct answer and verified cleanup (target acceptance, New Vibe version)."
     }
   ],
   "builds": [
@@ -237,10 +233,6 @@
         {
           "gate": "antigravity-project-config-not-loaded",
           "why": "Not in this archive; observed on the unreleased candidate with agy 1.4.9 (research/evidence/antigravity-1.4.9-target-20261028/)."
-        },
-        {
-          "gate": "vibe-version-requalification",
-          "why": "Recorded per Vibe minor after an upgrade; 2.2.0 was qualified on Vibe 3.0.2 only."
         }
       ],
       "real_use_evidence": "research/evidence/real-use-design-20261028/README.md"

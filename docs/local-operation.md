@@ -18,7 +18,7 @@ vibe-supervisor doctor --config "$CONFIG" --json
 vibe-supervisor prepare check --kit <path-to-kit> --config "$CONFIG"
 ```
 
-The `--force` flag allows updating the existing manifest with the newly installed Vibe files. Running `doctor` and `prepare check` confirms manifest integrity, version match, and runtime compatibility before any task is dispatched. A new minor version (`major.minor`) is not used for real tasks until its [light re-qualification](target-acceptance.md#new-vibe-version) is recorded.
+The `--force` flag allows updating the existing manifest with the newly installed Vibe files. Running `doctor` and `prepare check` confirms manifest integrity, version match, and runtime compatibility before any task is dispatched. No hosted re-qualification is needed for a new Vibe release; each run's export names the Vibe version it ran.
 
 ## Authorize and start
 

@@ -25,7 +25,7 @@ The plan, its order and the recommendation for each owner decision are in the [d
 | 9 | Search sidecar (D4) | Waits on steps 7–8; [design](planning/review-search-tool.md) |
 | 10 | Antigravity: keep and unfreeze, or remove at 2.3 (D5 revisited) | Owner decides |
 | 11 | Standing authorization | After step 7 |
-| 12 | Re-qualification per new Vibe minor | Done 2026-11-04 in [target acceptance](docs/target-acceptance.md#new-vibe-version): a new minor gets a refreshed manifest, a preparation PASS and one fixture review, recorded as its own ledger entry under gate `vibe-version-requalification`, before real tasks; a patch release needs only the manifest and preparation |
+| 12 | Re-qualification per new Vibe minor | Dropped by the owner, 2026-11-04: Vibe ships almost daily, so an upgrade needs only the refreshed manifest and a preparation PASS; hosted evidence of a version comes from real runs, whose exports name it (`pin.vibe_version`) |
 | 13 | Separate GitHub identity for the target agent (D10) | Declined for now, 2026-11-04: both agents keep one account, so "the target never pushes to `main`" stays a written rule no check enforces |
 | — | Mark v2.2.0 latest (D2) | Owner action |
 | — | Repository description and topics (marketing step 1, M1–M6 accepted) | Owner action |
