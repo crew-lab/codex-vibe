@@ -16,7 +16,7 @@ The plan, its order and the recommendation for each owner decision are in the [d
 |---|---|---|
 | 1 | Fresh 2.2.1 candidate from current `main`; preparation, one Antigravity run, one Vibe review and edit | Brief below, pinned to `7e2bdfa`; waiting for the target. The installed `a4181ea8` copy was patched by hand and no longer qualifies |
 | 2 | Report-export `Cannot read directory: owner` failure | Fixed 2026-11-02 on `main`, not yet on a target candidate. The error was about the `--out` parent, not saved state: export (and `task prepare`, `validation prepare`) required a 0700 parent you own, so `/private/tmp` failed with `owner`, `/tmp` and `$TMPDIR` with `link`, a project directory with `mode`, and the message never said it was the output. Now the parent may be yours and not writable by others, or sticky like `/tmp`; symlinks are resolved; errors name `details.role: output`; export writes to staging and renames, so a failure leaves nothing |
-| 3 | Machine path in `975b557` history (D7) | Owner decides; recommendation: leave it |
+| 3 | Machine path in `975b557` history (D7) | Decided 2026-11-04: left in history. The tree is clean and the `public-hygiene` test blocks new paths |
 | 4 | Merge `codex/contract-enforcement` (D8) | Done 2026-11-03 on `main`, not yet on a target candidate: both backends append the frozen contract and per-check requirements to the edit prompt, `node_test` counts named strict-assertion cases by parsing, and `task authorize` returns the full `start_request`. TypeScript is now a runtime dependency |
 | 5 | Edit brief requirements in the skill and `vibe-reviewer` | Done 2026-11-02 on `main`: every edit task now names the project root and how code finds files, the test import specifier, conflict and partial-write behaviour (in the contract or a coordinator validation), and that the worker cannot run anything. Measured on step 7's edits |
 | 6 | `codex/repair-and-check`: drop `validation check`, defer `task repair` (D9) | Decided 2026-11-03: neither feature merges. The branch stays parked, unmerged, as the only copy of both features and the target's 2026-10-29 evidence; `task repair` returns only if step 7's log shows a correction rescuing edits, consumed at run start |
@@ -25,8 +25,8 @@ The plan, its order and the recommendation for each owner decision are in the [d
 | 9 | Search sidecar (D4) | Waits on steps 7–8; [design](planning/review-search-tool.md) |
 | 10 | Antigravity: keep and unfreeze, or remove at 2.3 (D5 revisited) | Owner decides |
 | 11 | Standing authorization | After step 7 |
-| 12 | Re-qualification per new Vibe minor | Open |
-| 13 | Separate GitHub identity for the target agent (D10) | Owner action |
+| 12 | Re-qualification per new Vibe minor | Done 2026-11-04 in [target acceptance](docs/target-acceptance.md#new-vibe-version): a new minor gets a refreshed manifest, a preparation PASS and one fixture review, recorded as its own ledger entry under gate `vibe-version-requalification`, before real tasks; a patch release needs only the manifest and preparation |
+| 13 | Separate GitHub identity for the target agent (D10) | Declined for now, 2026-11-04: both agents keep one account, so "the target never pushes to `main`" stays a written rule no check enforces |
 | — | Mark v2.2.0 latest (D2) | Owner action |
 | — | Repository description and topics (marketing step 1, M1–M6 accepted) | Owner action |
 | — | Mistral contact | Drafts ready; nothing sent |
