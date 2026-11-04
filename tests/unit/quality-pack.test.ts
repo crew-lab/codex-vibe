@@ -29,7 +29,7 @@ async function tasks(): Promise<Task[]> {
 
 async function nodeTest(cwd: string, targets: string[]): Promise<{ ok: boolean; output: string }> {
   try {
-    const { stdout } = await exec(process.execPath, ['--test', ...targets], { cwd, timeout: 30_000 });
+    const { stdout } = await exec(process.execPath, ['--test', '--test-reporter=tap', ...targets], { cwd, timeout: 30_000 });
     return { ok: true, output: stdout };
   } catch (error) {
     return { ok: false, output: String((error as { stdout?: string }).stdout ?? error) };
@@ -64,11 +64,15 @@ describe('quality pack', () => {
   it('ships a project whose own tests pass and whose hidden edit checks fail until the task is done', async () => {
     const copy = path.join(await scratch(), 'project');
     await cp(path.join(pack, 'project'), copy, { recursive: true });
-    expect((await nodeTest(copy, ['tests/'])).ok).toBe(true);
+    const ownTests = (await readdir(path.join(copy, 'tests'))).filter((name) => name.endsWith('.test.mjs')).map((name) => `tests/${name}`);
+    expect(ownTests.length).toBeGreaterThan(0);
+    expect((await nodeTest(copy, ownTests)).ok).toBe(true);
     await mkdir(path.join(copy, 'quality-check'));
     for (const task of (await tasks()).filter((candidate) => candidate.operation === 'edit')) {
       await cp(path.join(pack, 'checks', `${task.id}.test.mjs`), path.join(copy, 'quality-check', `${task.id}.test.mjs`));
-      expect((await nodeTest(copy, [`quality-check/${task.id}.test.mjs`])).ok, task.id).toBe(false);
+      const hidden = await nodeTest(copy, [`quality-check/${task.id}.test.mjs`]);
+      expect(hidden.ok, task.id).toBe(false);
+      expect(hidden.output, task.id).toMatch(/^# fail [1-9]/m);
     }
   });
 });

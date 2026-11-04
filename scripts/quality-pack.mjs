@@ -72,6 +72,15 @@ async function request(id, cwd) {
   return { operation: 'edit', request: { ...common, base_ref: git(root, ['rev-parse', 'HEAD']), acceptance_contract: definition.acceptance_contract, allowed_write_paths: definition.allowed_write_paths } };
 }
 
+async function testFiles(root, directories) {
+  const found = [];
+  for (const directory of directories) {
+    const names = await readdir(path.join(root, directory)).catch(() => []);
+    found.push(...names.filter((name) => name.endsWith('.test.mjs')).sort().map((name) => `${directory}/${name}`));
+  }
+  return found;
+}
+
 function countFromTap(output, label) {
   const match = new RegExp(`^# ${label} (\\d+)$`, 'm').exec(output);
   return match ? Number(match[1]) : null;
@@ -89,7 +98,7 @@ async function checkEdit(definition, patchFile) {
     git(copy, ['apply', patch]);
     await mkdir(path.join(copy, 'quality-check'));
     await cp(path.join(PACK, 'checks', `${definition.id}.test.mjs`), path.join(copy, 'quality-check', `${definition.id}.test.mjs`));
-    const run = spawnSync(process.execPath, ['--test', 'tests/', 'quality-check/'], { cwd: copy, encoding: 'utf8', timeout: TEST_TIMEOUT_MS, env: { PATH: process.env.PATH ?? '', HOME: scratch, TMPDIR: scratch } });
+    const run = spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...await testFiles(copy, ['tests', 'quality-check'])], { cwd: copy, encoding: 'utf8', timeout: TEST_TIMEOUT_MS, env: { PATH: process.env.PATH ?? '', HOME: scratch, TMPDIR: scratch } });
     const output = `${run.stdout}\n${run.stderr}`;
     const passedTests = countFromTap(output, 'pass');
     const failedTests = countFromTap(output, 'fail');

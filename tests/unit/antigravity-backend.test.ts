@@ -1954,7 +1954,7 @@ console.log(JSON.stringify({ type: 'result', status: 'SUCCESS', response: 'done'
         workerWorkspace: workspace,
         runDirectory: runDir,
         output: 'summary',
-        limits: { timeoutSeconds: 5, maxTurns: 1, maxEventBytes: 1024, maxTranscriptBytes: 1024 }
+        limits: { timeoutSeconds: 30, maxTurns: 1, maxEventBytes: 1024, maxTranscriptBytes: 1024 }
       },
       {
         onEvent: async () => {},
