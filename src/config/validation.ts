@@ -75,7 +75,7 @@ const baseSchema = z.object({
   }).strict().optional()
 }).strict().superRefine((value, context) => {
   if (value.backend === "antigravity" && value.experimental?.antigravity !== true) {
-    context.addIssue({ code: "custom", path: ["backend"], message: `"antigravity" is an experimental backend and is off by default; set [experimental] antigravity = true to opt in after following docs/target-acceptance.md, or remove backend to use the default app-server.` });
+    context.addIssue({ code: "custom", path: ["backend"], message: `"antigravity" is an experimental backend and is off by default; set [experimental] antigravity = true to opt in, or remove backend to use the default app-server.` });
   }
   if (value.experimental?.antigravity_skip_permissions === true && value.experimental.antigravity !== true) {
     context.addIssue({ code: "custom", path: ["experimental", "antigravity_skip_permissions"], message: "antigravity_skip_permissions applies only to the experimental Antigravity backend; set [experimental] antigravity = true as well, or remove it." });

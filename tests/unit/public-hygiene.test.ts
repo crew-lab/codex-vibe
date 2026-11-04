@@ -17,7 +17,6 @@ const TOOL_DIRECTIVE = /^\/[/*]\s*(?:eslint-|@ts-|#!|#region|#endregion|istanbul
 const LEGACY_COMMENT_BUDGET = new Map<string, number>([
   ['scripts/disconnect-observer.mjs', 2],
   ['scripts/fixture-verify.mjs', 1],
-  ['scripts/package-rc.mjs', 1],
   ['scripts/smoke-install.mjs', 2],
   ['src/config/config.ts', 6],
   ['src/contracts.ts', 3],
@@ -69,7 +68,7 @@ describe('public repository hygiene', () => {
       const text = textOf(file);
       return text === undefined ? [] : machinePaths(text).map((found) => `${file}: ${found}`);
     });
-    expect(offenders, 'Replace machine paths with the placeholders in docs/target-acceptance.md#recording-evidence').toEqual([]);
+    expect(offenders, 'Replace machine paths with placeholders such as <target-home>').toEqual([]);
   });
 
   it('adds no source comments beyond the legacy budget, which only shrinks', () => {

@@ -4,8 +4,6 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { nodeVersionAtLeast } from '../dist/runtime/node-version.js';
-import { sourceDate } from './source-date.mjs';
-import { buildAcceptanceReport } from './acceptance-report.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const packageJson = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
@@ -22,7 +20,7 @@ try {
 const version = spawnSync(process.execPath, [path.join(root, 'dist', 'cli.js'), '--version'], { encoding: 'utf8', timeout: 5000, maxBuffer: 8192 });
 record('cli-version', version.status === 0 && version.stdout.trim() === packageJson.version, version.status === 0 ? version.stdout.trim() : (version.stderr || 'CLI failed').trim());
 const expectedTools = ['vibe_review_start', 'vibe_edit_start', 'vibe_status', 'vibe_result', 'vibe_close'];
-const smokeRoot = await mkdtemp(path.join(await realpath(os.tmpdir()), 'vsup-acceptance-mcp-'));
+const smokeRoot = await mkdtemp(path.join(await realpath(os.tmpdir()), 'vsup-release-checks-mcp-'));
 const smokeHome = path.join(smokeRoot, 'home');
 const smokeData = path.join(smokeHome, 'VibeSupervisor-oneshot');
 await Promise.all([mkdir(smokeHome, { recursive: true, mode: 0o700 }), mkdir(smokeData, { recursive: true, mode: 0o700 })]);
@@ -32,7 +30,7 @@ const smokeEnv = { ...process.env, HOME: smokeHome, USERPROFILE: smokeHome };
 const { Client } = await import('@modelcontextprotocol/client');
 const { StdioClientTransport } = await import('@modelcontextprotocol/client/stdio');
 const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'dist', 'cli.js'), 'serve', '--stdio', '--config', smokeConfig], env: smokeEnv, stderr: 'pipe' });
-const client = new Client({ name: 'vibe-supervisor-acceptance', version: packageJson.version });
+const client = new Client({ name: 'vibe-supervisor-release-checks', version: packageJson.version });
 try {
   await client.connect(transport);
   const listed = await client.listTools();
@@ -47,7 +45,5 @@ try {
   await client.close().catch(() => undefined);
   await rm(smokeRoot, { recursive: true, force: true });
 }
-const ledger = JSON.parse(await readFile(path.join(root, 'docs', 'acceptance.json'), 'utf8'));
-const report = buildAcceptanceReport({ ledger, checks, generatedAt: sourceDate(root) });
-process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+process.stdout.write(`${JSON.stringify({ checks }, null, 2)}\n`);
 if (checks.some((check) => check.status === 'FAIL')) process.exitCode = 1;

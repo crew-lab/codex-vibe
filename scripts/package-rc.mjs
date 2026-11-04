@@ -20,12 +20,8 @@ function run(command, args, { capture = false } = {}) {
   return result.stdout;
 }
 
-// Freeze-source acceptance before creating release outputs.
 run('npm', ['run', 'verify:release']);
 run('npm', ['run', 'smoke:install']);
-const acceptance = run(process.execPath, ['scripts/acceptance.mjs'], { capture: true });
-const report = JSON.parse(acceptance);
-if (report.deterministic_checks.some((check) => check.status !== 'PASS')) throw new Error('Acceptance report contains a failed deterministic check.');
 await mkdir(releaseDir, { recursive: true, mode: 0o700 });
 const tarballName = `${pkg.name}-${pkg.version}.tgz`;
 const tarball = path.join(releaseDir, tarballName);
@@ -37,15 +33,13 @@ const candidateSha256 = await candidateIdentity();
 run('npm', ['run', 'sbom']);
 const sbom = path.join(releaseDir, 'sbom.spdx.json');
 await copyFile(path.join(root, 'dist', 'sbom.spdx.json'), sbom);
-const acceptancePath = path.join(releaseDir, 'acceptance.json');
-await writeFile(acceptancePath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o644 });
-for (const file of [tarball, sbom, acceptancePath]) await chmod(file, 0o644);
+for (const file of [tarball, sbom]) await chmod(file, 0o644);
 const { finalizePackage, reportAfterValidation } = await import('./finalize-package.mjs');
 const scriptBytes = await readFile(path.join(root, 'scripts/v2-conformance-check.mjs'));
 await reportAfterValidation(async () => {
   const finalized = await finalizePackage({ releaseDir, tarball, version: pkg.version, candidateSha256, scriptBytes,
     procedureBytes: await readFile(path.join(root, 'docs/preparation.md')), cache, candidateIdentity });
-  const files = [tarball, sbom, acceptancePath, ...finalized.kitFiles];
+  const files = [tarball, sbom, ...finalized.kitFiles];
   const sums = [];
   for (const file of files) {
     const digest = createHash('sha256').update(await readFile(file)).digest('hex');

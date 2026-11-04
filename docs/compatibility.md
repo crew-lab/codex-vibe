@@ -6,7 +6,7 @@ Current source policy admits **stable Mistral Vibe versions at or above 3.0.2**,
 
 The following source review and target reports are historical evidence for the exact 2.26.1 source or archive named in each section. They do not describe the current default and do not qualify Vibe 3.0.2.
 
-This historical profile used Vibe 2.26.1. The protocol carried no version field, so its pin required the server to report exactly `serverInfo.version` 2.26.1 and the installed package files to match a manifest generated for that candidate. Those source findings came from Vibe's tagged source (`v2.26.1`) read without running it, supplemented by one no-inference observation with an earlier build of this workflow ([candidate acceptance](#candidate-acceptance)). They do not certify other builds or operating systems. The historical supported platform claim was macOS Apple silicon.
+This historical profile used Vibe 2.26.1. The protocol carried no version field, so its pin required the server to report exactly `serverInfo.version` 2.26.1 and the installed package files to match a manifest generated for that candidate. Those source findings came from Vibe's tagged source (`v2.26.1`) read without running it, supplemented by one no-inference observation with an earlier build of this workflow. They do not certify other builds or operating systems. The historical supported platform claim was macOS Apple silicon.
 
 ## The pin and its manifest
 
@@ -20,7 +20,7 @@ Before each spawn the supervisor locates the Python environment from the `vibe-a
 
 Historical wire facts for Vibe 2.26.1 only. The Vibe 3.0.2 tagged-source assessment is maintained separately in [compatibility-v3](compatibility-v3.md); neither source review proves current target qualification.
 
-Read from the source at the Vibe tag, commit `4ae5c5955da8e761318916bdb1a7f46f0b50c7d0`; the files and their hashes are in [Source basis](#source-basis). The no-inference checks of the workflow candidate and of the corrected 2.0.1 archive on a running server confirmed the handshake and configuration read-back subset below. One hosted review on the corrected archive then observed approved `read_file` calls through the handler, `runtime/updated` and `session/updated` as ignored notification methods, and no handoff or turn retry; it did not exercise a nested write, a denied write or an edit on main's evidence. The [unverified gates](#unverified-gates) say which parts the target must still confirm. A source-read fact is not an observed gate.
+Read from the source at the Vibe tag, commit `4ae5c5955da8e761318916bdb1a7f46f0b50c7d0`; the files and their hashes are in [Source basis](#source-basis). The no-inference checks of the workflow candidate and of the corrected 2.0.1 archive on a running server confirmed the handshake and configuration read-back subset below. One hosted review on the corrected archive then observed approved `read_file` calls through the handler, `runtime/updated` and `session/updated` as ignored notification methods, and no handoff or turn retry; it did not exercise a nested write, a denied write or an edit on main's evidence. A source-read fact is not an observed gate.
 
 - **Framing and handshake.** One compact JSON object per line. `initialize` carries `clientInfo` with the entrypoint value set by `CLIENT_ENTRYPOINT` in `src/backends/app-server/protocol.ts` and `capabilities.callbackKinds = ["approval"]`; without that declaration the server crashes on its first approval. The result's `serverInfo.version` is checked against the pin, then the client sends `initialized`. The server sends error codes as strings (`unauthorized`, `invalid_params`, `not_initialized`, and others); `unauthorized` maps to `VSUP_AUTH_REQUIRED`.
 - **Strictness.** The server's models forbid unknown fields and require `params`, camelCase. The client sends exactly what it builds and tolerates unknown fields on read, but requires the fields it depends on.
@@ -134,76 +134,7 @@ Use `npm run verify:release` for local code and security verification and `npm r
 
 The declared Node floor is 20.19.0. Release acceptance compares major, minor, and patch components; a passing run on another Node version does not establish that the minimum runtime itself was exercised. Verify the frozen package on Node 20.19.0 before making a stable compatibility claim.
 
-`vibe-supervisor prepare check --kit <preparation-kit-VERSION> --config <path>` is the local check that exercises initialization without inference: for `backend = "app-server"`, it launches the installed `vibe-app-server`, runs the no-inference conformance check from the version-matched kit with a fixed fake key and the refusing network observer, and never sends `turn/start`. When `backend = "antigravity"`, `prepare check` verifies the `agy` executable and SHA-256 digest (pinned to `agy 1.4.0`, `1.4.3`, `1.4.4`), validates isolated `settings.json` unified permission rules and `hooks.json` configuration, runs zero-inference `/config`, `/hooks`, `/permissions`, `/skills`, `/agents` slash-command read-backs against a refusing loopback proxy, executes synthetic `PreToolUse` hook checks, and then runs the [agy probes](target-acceptance.md#antigravity-backend-probes) through agy itself (hook invocation and deny, hook failure modes, stream tool-event shape, proxy egress, project configuration above the workspace), failing the receipt unless each passes. Both backends save the private receipt that ordinary dispatch requires ([preparation](preparation.md)). Its pass is initialization evidence for that candidate, pin, runtime and policy, not hosted acceptance.
-
-## Candidate acceptance
-
-The 2.0.1 release integrates the one-version cleanup with the coordinator workflow and is published from the archive its target sitting ran on, the **corrected archive**: source `5a17ac20a21c4c6116ef3f66e15c3e016334f63a`, archive SHA-256 `7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e`, candidate identity `8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4`, packaged and installed on the target (macOS arm64, Node 20.19.0, npm 10.8.2, Vibe 2.26.1). The packet built before it, from `38046fc`, was rejected at archive inspection because its kit named bytes that were not in the archive. The sanitized records are under `research/evidence/` (source only, never shipped); see [machine-readable gates](acceptance.json) and the [target acceptance procedure](target-acceptance.md). The source has since moved to 2.0.2, which changes the runtime in reporting only (execution outcome, start time and reasoning counts), so its archive is a new candidate and none of this evidence transfers to it; each 2.0.2 gate's `carry_over` in `acceptance.json` says whether a 2.0.1 result is a reasonable basis and what 2.0.2 still needs.
-
-| Check on the corrected archive | Observed result and boundary |
-|---|---|
-| Package and kit identity | PASS: the archive, the kit's candidate and the installed package match, verified by `package:rc`'s offline lifecycle-disabled installation and by a separate one; delivery and kit checksums pass. |
-| Release verification on Node 20.19.0 | PASS inside `package:rc`: 89 files, 1,296 tests, lint, strict types, build, acceptance, secret scan, SBOM and the offline installed-package smoke. |
-| No-inference conformance | PASS once with the matched kit: 783-file pin reviewed, `doctor` passed, pin hashing 149 to 166 ms; zero read-back mismatches for both profiles, thinking off, the bundled skills with their provenance; no subject network request with a validated observer; clean shutdown. Two informational `runtime/updated` findings. |
-| Installed and native readiness | PASS through the official SDK, then on 2026-10-16 on the native desktop connection after a reconnect: expected candidate, preparation passed, eligible, free slot, exactly five tools. |
-| Hosted review | Completed `end_turn` with read-only integrity, two approved `read_file` calls, no unapproved effect and verified cleanup; **rejected** by the coordinator because the final answer reversed both negative-number cases. The nested-write probe was not exercised (the worker called a member that does not exist). The export showed execution `unknown`, the reporting defect since fixed in source. |
-| Hosted edit | Reported only on an unmerged target branch, on source `459bba3`: completed `end_turn` and **rejected** by its frozen acceptance contract (wrong `node:assert` import, no `node:test`). No evidence packet is on main. |
-| Disconnect | Not run; the owner authorized the last hosted start for it on 2026-10-16. |
-
-An earlier build of the same workflow, the **workflow candidate**, was observed on the target on 2026-10-15: source `57f6ec0ec0fec0c91889c7e2690cce4e0dfb2f1e`, frozen archive SHA-256 `d1fd22ec04e50048c052cdf013b4d235b525dffc2efb11596dd29f8253003f6a`, installed distribution identity `a3600f7632ea42a221d342734dd1b6cb17deaaf072211693a728e31c0437b053`. The sanitized records are the evidence packet at commit 1687aa5 (source only, never shipped), summarized in `acceptance.json` under `evidence_builds` and the `workflow-candidate-*` entries. That evidence belongs to that archive; the integrated build's bytes differ, so none of it closes a gate here. It does show what to expect when the same checks are rerun.
-
-| Check on the workflow candidate | Observed result and boundary |
-|---|---|
-| Release verification | PASS: 1,260 tests across 87 files, lint, strict types, build, acceptance, secret scan and SBOM on Node 24.21.0. |
-| Offline installed package | PASS: installed CLI, five-tool catalogue, isolated reconnect smoke; no hosted inference. |
-| No-inference conformance | PASS once on the installed Vibe 2.26.1 with a fixed fake key and no `turn/start`: pin and tamper control, handshake, review and edit initialization, the full read-back before and after thinking (including the owned managed-config URL and the four bundled skills with source `plugin`, scope `builtin`), and cleanup with nothing left in `tmp` after stdin EOF. One unknown notification method, `runtime/updated`, was ignored as designed. |
-| Network observation | `none-observed-control-validated`: no subject request and an observed control. Experiments-specific attribution stays `unverified-host-only-observation`; that gate is not promoted from a host name. |
-| Installed readiness and drift | PASS through the official SDK over stdio: the matching candidate eligible with preparation passed, a deliberately wrong `expected_candidate` rejected. The intended desktop connection was not tested. |
-| Validation helper | PASS for independent copies, source preservation, cleanup refusal after a change, and a real npm dependency-free offline fixture with lifecycle scripts off. Populated pnpm dependency graphs are not demonstrated. |
-
-## Verified gates
-
-Recorded per build in `acceptance.json` as each build's `observed` list. For the supported 2.2.0 build these are the Node floor, the no-inference conformance check, native readiness, the hosted review and edit, execution provenance, usage and the export; the table below is historical, from the corrected 2.0.1 archive (candidate `8b1b7dd556ea985e`), the 1.4.0 Antigravity no-inference check and the pnpm validation.
-
-| Gate | Result |
-|---|---|
-| Package and kit identity | PASS 2026-10-15: archive, kit candidate, installed identity, version and conformance script match; delivery and kit checksums verify. |
-| Target no-inference conformance check | PASS 2026-10-15, once, with the matched kit: reviewed 783-file pin and `doctor`, hashing cost recorded, zero read-back mismatches, no subject request with a validated observer, clean shutdown. |
-| Native readiness | PASS 2026-10-16 on the native desktop connection with `expected_candidate`: preparation passed, eligible, free slot, no blockers, exactly five tools. |
-| Exact Node 20.19.0 floor | PASS 2026-10-15 for the frozen source `5a17ac2` (89 files, 1,296 tests). Later source is not covered. |
-| Populated pnpm validation | PASSED_LOCALLY 2026-10-15 on a public fixture with pnpm 9.15.4; no hosted run needed. |
-| Antigravity backend target no-inference check (`antigravity-backend-no-inference-check`) | PASS 2026-10-17 on target machine with agy 1.4.0 (sha256: `a4502aaf310b2fd6eb657fcfec2fcc31a690fbbd0c2d14c8eefbb556409024ce`): zero-inference slash-command read-backs (`/config`, `/hooks`, `/permissions`, `/skills`, `/agents`) passed with 0 tokens. Refusing loopback proxy intercepted and refused (403) all background updater/telemetry connections with zero provider inference endpoints contacted. 6/6 synthetic `PreToolUse` hook checks passed writing 6 audited entries to the approval ledger. Clean shutdown and temporary directory cleanup verified. Bound to candidate `cfa7fbecc59ccce422d88874798d5e9cae27772f0906f4c4a9ac2f2020e5738c`. Scope: agy read the written settings back and the supervisor ran the hook script directly; agy never called the hook, and the classifier then in use did not cover Code Assist hosts. It proves none of the five Antigravity gates below and does not transfer to the 2026-10-19 fixes. |
-
-## Reporting repair target: disconnect observation
-
-On 2026-10-16, exact target source `459bba3`, archive SHA-256 `133e77bdf20fc1cc839d3f0e5bfcdc644aa5ec09e4eb02558fb43cd1b8d191a8` and candidate `1c3c135862e2fe888428a2bf67fc6cd02fe9852259a494e7d624e2a3e96a45c0` passed the real hosted disconnect procedure under Node 20.19.0/Vibe 2.26.1 on macOS arm64. The official client closed while running; observer evidence shows released lock and worker groups after exit; reconnect read failed without replay; private directories were removed; the source stayed unchanged; native close removed the clean worktree after a separate live owner released its lock. Bound evidence is source-only: `research/evidence/disconnect-2a49abd-2026-10-16/REPORT.md`. This is a per-build verified entry in acceptance.json; the existing global packaging snapshot names different bytes and is not promoted by this evidence. Review/edit acceptance remains failed/unverified and no hosted allowance remains.
-
-## Frozen 2.0.2 target preparation
-
-Source 2dd484c, archive SHA-256 `84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09`, candidate `eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1`: full packaging/Node floor (89 files/1,305 tests), mandatory and separate installed-archive identity verification, pin/doctor, one matched no-inference check and installed SDK readiness PASS on 2026-10-16. The native gate remains pending reconnect. No hosted start or automatic carry-over is claimed. The source-only record is `research/evidence/release-2.0.2-347bf79-2026-10-16/REPORT.md`; acceptance.json names the exact frozen archive.
-
-## Unverified gates
-
-`acceptance.json` is one observed list per build: the build's identity (source, archive and candidate SHA-256, runtime, Node 20.19.0 verification), the gates observed on that archive with a committed evidence path each, and the gates still open with one line why. A gate moves to observed only when sanitized evidence for that exact archive is committed under `research/evidence/` and cited; nothing transfers between builds, and the preparation PASS stays the one mechanical gate at dispatch. On the supported 2.2.0 archive the two accepted trials settled the Node floor, the preparation check, native readiness, a hosted review and edit, execution provenance, usage recording and the run export. These stay open on 2.2.0:
-
-| Gate | Why it is open |
-|---|---|
-| `package-kit-identity-binding` | The preparation PASS shows the kit matched the installed candidate; the packaging-time identity report is not in the committed evidence. |
-| `installed-sdk-readiness` | Native readiness was recorded instead; the SDK-over-stdio pass and the wrong `expected_candidate` rejection were not. |
-| `hosted-close-acceptance-recorded` | The hash-bound accepted assessment is in the Trial A export; its `runs usefulness` row was not recorded. |
-| `hosted-excluded-glob-readback-and-denial` | Zero tool denials in both trials; no exclusion was exercised, so Vibe has still not been seen denying a merged denylist entry. |
-| `permission-ask-visible-in-effective-config` | The handler half is observed (in-workspace reads reached the handler); the per-tool configuration fields stay in the target's private conformance report. |
-| `mcp-client-disconnect-hosted` | Not exercised on 2.2.0; observed once on the `459bba3` repair build. |
-| `thinking-off-effect` | Thinking read back off and the reasoning counts were zero; zero counts cannot show the generation effect. |
-| `experiments-fetch-off` | A host-only proxy observation cannot attribute a request to experiments. |
-| `nested-run-typescript-shape-and-gating` | The trials did not carry the probe in the [target acceptance procedure](target-acceptance.md); it rides the next hosted review. |
-| `validation-populated-pnpm-dependencies` | Passed locally on 2026-10-15 on a public fixture with pnpm 9.15.4; not rerun on this build. |
-| `clean-account-install` | Not run: no spare standard macOS account. Retired as a latest-release blocker by decision D2; the target's fresh-prefix installation and the offline smoke stand in. |
-| `antigravity-backend-no-inference-check` | Observed on 2026-10-17 for the agy 1.4.0 candidate only; not rerun. |
-| `antigravity-backend-hosted-review-edit` | No hosted Antigravity run. |
-| `antigravity-hook-invoked-and-deny-honoured`, `antigravity-hook-failure-denies`, `antigravity-stream-tool-shape`, `antigravity-proxy-honoured`, `antigravity-project-config-not-loaded` | Not in the 2.2.0 archive; observed on the unreleased candidate with agy 1.4.9 (`research/evidence/antigravity-1.4.9-target-20261028/`). The backend is frozen (ADR 0008). |
-
-macOS Apple silicon is the supported platform. Linux and Windows code paths may exist, but no support claim is made for them, and Intel and other MCP clients have no acceptance. Codex plugin packaging is not offered.
+`vibe-supervisor prepare check --kit <preparation-kit-VERSION> --config <path>` is the local check that exercises initialization without inference: for `backend = "app-server"`, it launches the installed `vibe-app-server`, runs the no-inference conformance check from the version-matched kit with a fixed fake key and the refusing network observer, and never sends `turn/start`. When `backend = "antigravity"`, `prepare check` verifies the `agy` executable and SHA-256 digest (pinned to `agy 1.4.0`, `1.4.3`, `1.4.4`), validates isolated `settings.json` unified permission rules and `hooks.json` configuration, runs zero-inference `/config`, `/hooks`, `/permissions`, `/skills`, `/agents` slash-command read-backs against a refusing loopback proxy, executes synthetic `PreToolUse` hook checks, and then runs the [agy probes](preparation.md#antigravity-probes) through agy itself (hook invocation and deny, hook failure modes, stream tool-event shape, proxy egress, project configuration above the workspace), failing the receipt unless each passes. Both backends save the private receipt that ordinary dispatch requires ([preparation](preparation.md)). Its pass is initialization evidence for that candidate, pin, runtime and policy, not hosted acceptance.
 
 ## Antigravity trust assumptions
 
@@ -214,7 +145,7 @@ The app-server backend's guarantees come from the protocol: Vibe asks the superv
 - agy's stream-json names each executed and denied call in the shape the audit parser reads, so the post-run match against the hook ledger is meaningful;
 - agy sends its inference traffic through `HTTPS_PROXY`, so the no-inference preparation can observe it.
 
-The five gates in [unverified gates](#unverified-gates) are those assumptions, and [the probes](target-acceptance.md#antigravity-backend-probes) in `prepare check` test them through agy with a fixed fake key and a scripted loopback model. Until they pass on the candidate, the backend is experimental, off unless `experimental.antigravity = true`, and not for production. Running agy headless under a consumer Google sign-in may be outside Antigravity's consumer terms; prefer an API key or enterprise authentication. The [security model](security.md#antigravity-backend-experimental) has the rest.
+The probes in `prepare check` ([preparation](preparation.md)) test these assumptions through agy with a fixed fake key and a scripted loopback model. Until they pass on the candidate, the backend is experimental, off unless `experimental.antigravity = true`, and not for production. Running agy headless under a consumer Google sign-in may be outside Antigravity's consumer terms; prefer an API key or enterprise authentication. The [security model](security.md#antigravity-backend-experimental) has the rest.
 
 ## Target conformance corrections
 

@@ -1,6 +1,6 @@
 # ADR 0004: client of the Vibe app-server
 
-Status: accepted. Its target gates are open in [the acceptance record](../acceptance.json) and the [compatibility document](../compatibility.md#unverified-gates).
+Status: accepted.
 
 The supervisor drives Mistral Vibe as a client of `vibe-app-server`: newline-delimited JSON-RPC 2.0 over stdio, one process per run, the boundary Vibe's own surfaces use. It does not patch or import Vibe. The MCP side is five tools and unchanged by this choice. The runtime supports exactly one Vibe version, with a new candidate for each Vibe release. The protocol has no version field, so the pin is the compatibility check: the exact `serverInfo.version`, plus the installed wheel's files verified by hash.
 

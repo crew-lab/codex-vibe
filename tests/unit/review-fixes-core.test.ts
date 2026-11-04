@@ -77,7 +77,7 @@ describe('Google credential redaction (F3)', () => {
 
 describe('experimental Antigravity opt-in', () => {
   it('rejects backend = "antigravity" without experimental.antigravity, accepts it with the opt-in, and defaults to app-server', async () => {
-    expect(() => validateConfig({ version: 1, backend: 'antigravity' })).toThrow(/experimental[\s\S]*antigravity = true[\s\S]*docs\/target-acceptance\.md/);
+    expect(() => validateConfig({ version: 1, backend: 'antigravity' })).toThrow(/experimental[\s\S]*antigravity = true/);
     expect(() => validateConfig({ version: 1, backend: 'antigravity', experimental: { antigravity: false } })).toThrow(/experimental/);
     expect(() => validateConfig({ version: 1, backend: 'antigravity', experimental: { antigravity: 'yes' } })).toThrow();
     expect(() => validateConfig({ version: 1, paths: pin, experimental: { other: true } })).toThrow();

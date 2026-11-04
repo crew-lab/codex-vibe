@@ -1,6 +1,6 @@
 # History rewrite — 2026-11-04
 
-History rewritten 2026-11-04 by the owner's decision (D7 reversed): every commit, file name and message had the machine home paths, macOS temporary paths and the private project name replaced with the placeholders from [recording evidence](../docs/target-acceptance.md#recording-evidence), plus `<coordinator-home>` and `<machine-temp>`. Every commit hash changed; tags and releases were re-pointed. Docs outside `research/evidence/` cite the new hashes. Sealed evidence keeps its exact bytes, so hashes it cites are pre-rewrite: look them up below.
+History rewritten 2026-11-04 by the owner's decision (D7 reversed): every commit, file name and message had the machine home paths, macOS temporary paths and the private project name replaced with the placeholders from recording evidence, plus `<coordinator-home>` and `<machine-temp>`. Every commit hash changed; tags and releases were re-pointed. Docs outside `research/evidence/` cite the new hashes. Sealed evidence keeps its exact bytes, so hashes it cites are pre-rewrite: look them up below.
 
 | Before | After |
 |---|---|

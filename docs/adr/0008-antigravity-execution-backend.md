@@ -1,6 +1,6 @@
 # ADR 0008: optional Antigravity CLI execution backend
 
-Status: owner-approved on 2026-10-17; implemented on main; ships in 2.1.0 off by default behind `experimental.antigravity = true` (owner decision 2026-10-19); experimental until the target checks in [docs/target-acceptance.md](../target-acceptance.md#antigravity-backend-probes) pass.
+Status: owner-approved on 2026-10-17; implemented on main; ships in 2.1.0 off by default behind `experimental.antigravity = true` (owner decision 2026-10-19); experimental until the target checks in [probes](../preparation.md#antigravity-probes) pass.
 
 **Frozen 2026-10-28 (owner decision D5).** The backend stays as it is: `agy` 1.4.0, 1.4.3, 1.4.4, 1.4.7, 1.4.8 and 1.4.9 remain supported, and no new agy version, flag or feature is added. The target's reported pass of all five probes on agy 1.4.9 with `antigravity_skip_permissions` on is recorded as claimed, not recorded, until its sanitized evidence is committed under `research/evidence/`; the five `antigravity-*` gates in `docs/acceptance.json` stay open until then. The backend remains opt-in and tested, and is dropped at the next minor release if the owner has not opted in by then, with this ADR kept as history.
 

@@ -53,4 +53,4 @@ The owner must name the backend and authorize an allowance and budget before eit
 
 A worker-quality rejection is separate from a supervisor failure. A deterministic supervisor failure stops the trial. No automatic fallback, replay, raised limits, live analytics, contact messages, publication, deployment or release promotion is included.
 
-This minimal fixture does not contain an exclusion-probe file and has no disconnect sitting. Do not mark excluded-glob denial, disconnect, clean-account installation, another backend or another client as verified from this trial. Those need their own named fixtures, scope and evidence under the [target procedure](target-acceptance.md).
+This minimal fixture does not contain an exclusion-probe file and has no disconnect sitting.
