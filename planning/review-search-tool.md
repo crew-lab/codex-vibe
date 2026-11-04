@@ -36,7 +36,7 @@ Every Vibe fact below was read from the v3.0.2 tag source. The paths and SHA-256
 
    This per-file layer is what built-in `grep` lacks.
 
-6. **Bounds.** Each call returns at most 64 KiB of result and at most 500 matches. `grep` reads at most 64 MiB of file content per call and has a 10-second call deadline, below Vibe's default 60-second MCP tool timeout. Each file's regular expression runs in a worker thread that is terminated after 2 seconds; that call then returns an error instead of hanging. The server serves one request at a time and refuses a concurrent one. `list_files` cursors are HMAC-signed with a per-process key, and `list_files` stops at 1000 entries per page. The bounds are the parallel branch's `search.ts` values (`c3678cc`).
+6. **Bounds.** Each call returns at most 64 KiB of result and at most 500 matches. `grep` reads at most 64 MiB of file content per call and has a 10-second call deadline, below Vibe's default 60-second MCP tool timeout. Each file's regular expression runs in a worker thread that is terminated after 2 seconds; that call then returns an error instead of hanging. The server serves one request at a time and refuses a concurrent one. `list_files` cursors are HMAC-signed with a per-process key, and `list_files` stops at 1000 entries per page. The bounds are the parallel branch's `search.ts` values (`7b72e42`).
 
 7. **Lifetime.** The sidecar does not share the worker's process group. Vibe starts it through the `mcp` Python SDK's `stdio_client`, which spawns with `start_new_session=True` on Unix. The supervisor's process-group kill therefore does not reach it, and AGENTS.md forbids signalling a PID read from saved data. The sidecar ends itself in three ways:
    - when stdin closes;

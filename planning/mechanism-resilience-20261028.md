@@ -6,7 +6,7 @@
 
 The owner requests review of the whole mechanism after repeated Unsafe artifact failures, and resilient tool-owned preparation/recovery rather than correctness depending on skill/prompt details. This explicitly expands scope from the previously completed usability EDD. Its 3/3 historical product rounds and original trial failures remain unchanged. This is a new bounded mechanism stage, not a reset of those rounds.
 
-Worktree: retained codex/vibe-usability-20261028 at 939ba8a. Preserve all existing dirty skill/adapter/Handoff/local-operation/local-trial/validation/workflow/strategy/source/test changes and evidence. Main checkout remains clean at 018f17b. Existing local Node 24.22.1, pinned dependencies/lock, TypeScript 5.9.3. Code changes affect a local candidate only; installed/archive/hosted qualification does not transfer. No commit, push, publish, automatic patch integration, provider retry, tool/profile broadening or global configuration change. Existing authority permits local task repair and necessary tests; this stage needs no hosted starts.
+Worktree: retained codex/vibe-usability-20261028 at 7668a84. Preserve all existing dirty skill/adapter/Handoff/local-operation/local-trial/validation/workflow/strategy/source/test changes and evidence. Main checkout remains clean at 018f17b. Existing local Node 24.22.1, pinned dependencies/lock, TypeScript 5.9.3. Code changes affect a local candidate only; installed/archive/hosted qualification does not transfer. No commit, push, publish, automatic patch integration, provider retry, tool/profile broadening or global configuration change. Existing authority permits local task repair and necessary tests; this stage needs no hosted starts.
 
 ## Architecture and findings
 

@@ -110,7 +110,7 @@
     {
       "label": "2.2.0",
       "release": "v2.2.0, published 2026-10-27 as a pre-release from this archive; marked latest by the owner's decision D2 (2026-10-28), the clean-account gate retired as a blocker",
-      "source_commit": "cea6bed",
+      "source_commit": "302bcf6",
       "archive_sha256": "6b0a120d1ae16bb102af4bc07bfa11522684f536a3a17fce3f9f93dc70d44984",
       "candidate_sha256": "81df8140eb49afbebfb5202bc3186c97f9ea8b57a7243d108ce376cbdcc73b90",
       "runtime": "macOS arm64, Node 24.21.0, isolated Vibe 3.0.2 (pin manifest 3221c7dc42b95092a0a347d05cab9f850c673b0b64f62d27de6954fb82e72f48)",
@@ -184,7 +184,7 @@
         },
         {
           "gate": "mcp-client-disconnect-hosted",
-          "why": "Not exercised on this build; observed once on the 2a49abd repair build."
+          "why": "Not exercised on this build; observed once on the 459bba3 repair build."
         },
         {
           "gate": "thinking-off-effect",
@@ -388,7 +388,7 @@
     {
       "label": "2.0.2",
       "release": "v2.0.2, pre-release, tagged at the true source commit",
-      "source_commit": "347bf79",
+      "source_commit": "2dd484c",
       "archive_sha256": "84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09",
       "candidate_sha256": "eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1",
       "runtime": "macOS arm64, Node 20.19.0, npm 10.8.2, Vibe 2.26.1",
@@ -430,9 +430,9 @@
       "open": []
     },
     {
-      "label": "reporting repair 2a49abd",
+      "label": "reporting repair 459bba3",
       "release": "never published; the 2.0.2 reporting fixes as built on the target",
-      "source_commit": "2a49abdb0fda49aada8ea4724361d64c46664c92",
+      "source_commit": "459bba3374be3a68981b00eadcc8924aaa3c63d8",
       "archive_sha256": "133e77bdf20fc1cc839d3f0e5bfcdc644aa5ec09e4eb02558fb43cd1b8d191a8",
       "candidate_sha256": "1c3c135862e2fe888428a2bf67fc6cd02fe9852259a494e7d624e2a3e96a45c0",
       "runtime": "macOS arm64, Node 20.19.0, Vibe 2.26.1",
@@ -451,7 +451,7 @@
     {
       "label": "2.0.1 corrected archive",
       "release": "v2.0.1, pre-release, from this archive",
-      "source_commit": "44dc6f815c1b80ac75c0ce2613373e38ed2421c8",
+      "source_commit": "5a17ac20a21c4c6116ef3f66e15c3e016334f63a",
       "archive_sha256": "7978719c0010c8bad27ff9982ee930b392040b5f5339cb1493467d5dae2bae4e",
       "candidate_sha256": "8b1b7dd556ea985e27f9886b31d2fea7952861c831f2b24e22f273a64dba93a4",
       "runtime": "macOS arm64, Node 20.19.0, npm 10.8.2, Vibe 2.26.1",
@@ -463,7 +463,7 @@
           "gate": "package-kit-identity-binding",
           "result": "pass",
           "evidence": "research/evidence/package-kit-identity-2026-10-15/REPORT.md",
-          "note": "Supersedes the rejected 8b288b8 packet, whose kit named bytes not in its archive."
+          "note": "Supersedes the rejected 38046fc packet, whose kit named bytes not in its archive."
         },
         {
           "gate": "node-floor-20.19.0",
@@ -507,7 +507,7 @@
     {
       "label": "antigravity 1.4.9 candidate",
       "release": "unreleased; source on main with agy 1.4.9 support and probe resolution",
-      "source_commit": "a95a659f4b8e4cfc5f14141f62e455e693245186",
+      "source_commit": "04e87f38dae38aa2b504e054754bf8aeb9bac408",
       "candidate_sha256": "14c7459770c79fadd71293ffacd23406a689c9918fbd29515d1458de00733faa",
       "runtime": "macOS arm64, Node 24.22.1, agy 1.4.9 (binary sha256 a66421b7962ffe5642e00cffdd2844dfde440e540502a29d206be5544a065c7b)",
       "recorded_on": "2026-10-30",
@@ -559,8 +559,8 @@
     },
     {
       "label": "antigravity 1.4.0 candidate",
-      "release": "never published; source 51f34b0 with the Antigravity backend",
-      "source_commit": "51f34b065f0634a624a928ca9604da8ee6c81c14",
+      "release": "never published; source ffba4c9 with the Antigravity backend",
+      "source_commit": "ffba4c96118d5527257a6d49b557db0785765c1c",
       "candidate_sha256": "cfa7fbecc59ccce422d88874798d5e9cae27772f0906f4c4a9ac2f2020e5738c",
       "runtime": "macOS arm64, Node 24.21.0, agy 1.4.0 (binary sha256 a4502aaf310b2fd6eb657fcfec2fcc31a690fbbd0c2d14c8eefbb556409024ce)",
       "recorded_on": "2026-10-17",
@@ -578,7 +578,7 @@
     {
       "label": "workflow candidate",
       "release": "never published; the coordinator workflow before the one-version cleanup",
-      "source_commit": "91afad4a9b6c598d2486c5d22e902f32972e4cac",
+      "source_commit": "57f6ec0ec0fec0c91889c7e2690cce4e0dfb2f1e",
       "archive_sha256": "d1fd22ec04e50048c052cdf013b4d235b525dffc2efb11596dd29f8253003f6a",
       "candidate_sha256": "a3600f7632ea42a221d342734dd1b6cb17deaaf072211693a728e31c0437b053",
       "runtime": "macOS arm64, Node 24.21.0, Vibe 2.26.1",
@@ -590,7 +590,7 @@
           "gate": "target-no-inference-conformance-check",
           "result": "pass",
           "evidence": null,
-          "note": "Sanitized packet at commit 2e920d3, source only: pin with tamper control, handshake, review and edit initialization, full read-back before and after thinking, cleanup; network none-observed-control-validated."
+          "note": "Sanitized packet at commit 1687aa5, source only: pin with tamper control, handshake, review and edit initialization, full read-back before and after thinking, cleanup; network none-observed-control-validated."
         },
         {
           "gate": "installed-sdk-readiness",
@@ -611,19 +611,19 @@
   "superseded_without_observations": [
     {
       "label": "2.0.1 rejected packet",
-      "source_commit": "8b288b8",
+      "source_commit": "38046fc",
       "archive_sha256": "18d46d1c1d803518842a14973ef037412add927104c74b1bf5198229c79f6312",
-      "note": "Rejected at archive inspection: npm ran prepare during pack and the kit named bytes not in the archive. Repaired by 44dc6f8."
+      "note": "Rejected at archive inspection: npm ran prepare during pack and the kit named bytes not in the archive. Repaired by 5a17ac2."
     },
     {
       "label": "2.0.1 reference package",
-      "source_commit": "9d2bbde",
+      "source_commit": "fb3aa78",
       "archive_sha256": "73c28081bfad86d1cd2b2ec16d7ba22c28a4e82b4e5f903e5c9341ff4acf4010",
       "note": "Packaged on the preparing machine (Node 20.19.0, 88 files, 1,292 tests); archives are not byte-reproducible across machines then, so the target-built archive was tested instead."
     },
     {
       "label": "2.0.0 draft release",
-      "source_commit": "f2c2119",
+      "source_commit": "1ccbdaf",
       "archive_sha256": "485ecce329560507e54f1450790629f877e3623754e56ea11343a81dc753576f",
       "note": "Never published; its first no-inference check failed on the null harness provenance and startup connections repaired by ADR 0005."
     }

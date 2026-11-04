@@ -4,7 +4,7 @@ Status on 2026-10-17: pending. The owner has no separate clean standard macOS ac
 
 ## Frozen candidate
 
-Use version 2.0.2 from source `347bf79`, archive SHA-256 `84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09`, installed distribution SHA-256 `eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1`. Transfer the exact frozen archive, matching preparation kit, SBOM and checksum manifests; never rebuild it for this check. The [packet report](../research/evidence/release-2.0.2-347bf79-2026-10-16/REPORT.md) records preparation and identities.
+Use version 2.0.2 from source `2dd484c`, archive SHA-256 `84bff94130ea342baa26be3a7567c282ff22ef7b3f32c0f7817113afc8a3cf09`, installed distribution SHA-256 `eaa40320873caf810900cf201862695a82e1dc499807bb81ca25235b955d12c1`. Transfer the exact frozen archive, matching preparation kit, SBOM and checksum manifests; never rebuild it for this check. The [packet report](../research/evidence/release-2.0.2-347bf79-2026-10-16/REPORT.md) records preparation and identities.
 
 ## When a separate standard account is available
 
