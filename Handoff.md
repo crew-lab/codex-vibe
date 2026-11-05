@@ -1,4 +1,4 @@
-# Current state — 2026-11-04
+# Current state — 2026-11-05
 
 **The goal:** Codex hands a task to Vibe, Vibe reviews or implements it, and it works well every time. This page holds only what works, what does not, and what is next; the order of work is in the [development strategy](planning/development-strategy.md).
 
@@ -7,7 +7,7 @@
 - **Released.** v2.2.0 (2026-10-27) is the latest release.
 - **On `main`, unreleased 2.2.1** ([changelog](CHANGELOG.md)): any stable Vibe at or above 3.0.2; the generated `task authorize` command and complete `start_request`; search-first `context_files`; the frozen contract delivered to the worker with the `node_test` check; edit briefs that name the project root, test imports, conflict behaviour and no execution; the export output fix; the Antigravity key from the launchd session; readiness `pinned_version` from the manifest; the [quality pack](docs/quality-pack.md).
 - **Checked here.** CI is green on Node 20.19.0 and 24.21.0. `verify:release` passes on both, `package:rc` runs end to end with an offline cache, and the quality pack's checkers pass correct solutions and fail wrong ones on both Node versions.
-- **Not yet checked on a real Vibe.** Nothing above has run against Vibe or agy since v2.2.0.
+- **Target machine prepared against Vibe 3.1.0.** Vibe was upgraded from 3.0.4 to 3.1.0 (`mistral-vibe v3.1.0`). Manifest generated with `pin-manifest --force` (747 files, RECORD SHA-256 `0e7fb0930517c6d46d07adbd90a9de666ee733cc19d3c4125864e10171b8ba3d`). Candidate `package:rc` built (candidate SHA-256 `c34bf3f0ead29d40b83b30a54171ec96a9ba1323dd5a9d0e1a32ac282d281bdf`, archive SHA-256 `3196a417a139bea525a94d9009604fe13c326ffa897a122817ff11eebbb03a17`) and installed at `~/.local/share/vibe-supervisor/2.2.1-vibe-310-c34bf3f0/`. `doctor --json` and `prepare check` passed with `status: passed` (report SHA-256 `3306bbf5c488204dce2badb110423da7a8d035e16074b9168736f847deec6807`, network verdict: `none-observed-control-validated`). Codex MCP registration updated to the new candidate. Next is running the quality pack through Codex.
 
 ## What works
 
