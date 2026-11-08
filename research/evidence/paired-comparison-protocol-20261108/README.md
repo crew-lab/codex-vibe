@@ -39,23 +39,23 @@ Both tracks start from the identical clean commit `dcc431785a4cce5e238a4603d4d0e
 
 ## Track A Protocol (Codex -> Vibe Supervisor -> Mistral Vibe 3.1.0)
 
-1. Verify readiness via `vibe_status`.
-2. Generate single-use authorization token:
+1. Verify readiness via `vibe_status` (`workspace: "$ROOT/orders-quality"`, `operation: "review"` or `"edit"`, plus `base_ref: "dcc431785a4cce5e238a4603d4d0e58306913cd9"` for edit) and record `readiness_receipt` and `task_authorize.argv`.
+2. Generate single-use authorization token using the server's reported Node runtime (or run the exact `task_authorize.argv` returned by readiness):
    ```bash
-   node "$INSTALL_DIR/node_modules/vibe-supervisor/dist/cli.js" task authorize \
+   "$REPORTED_NODE" "$INSTALL_DIR/node_modules/vibe-supervisor/dist/cli.js" task authorize \
      --request "$REQUEST_JSON" \
      --owner-reference "<reference>" \
      --expires-at "$(date -u -v+15M +%Y-%m-%dT%H:%M:%SZ)" \
      --config "$CONFIG_PATH"
    ```
-3. Start run via `vibe_review_start` or `vibe_edit_start` in Codex.
+3. Start run via `vibe_review_start` or `vibe_edit_start` in Codex using the returned `start_request` plus `readiness_receipt`.
 4. Export result:
    - For review: capture final answer text.
    - For edit: export patch:
      ```bash
-     node "$INSTALL_DIR/node_modules/vibe-supervisor/dist/cli.js" runs export \
-       --dir "$DATA_DIR" \
-       --run "$RUN_ID" \
+     "$REPORTED_NODE" "$INSTALL_DIR/node_modules/vibe-supervisor/dist/cli.js" \
+       runs --config "$CONFIG_PATH" \
+       export "$RUN_ID" \
        --include patch \
        --out "$EXPORT_DIR"
      ```
@@ -64,14 +64,15 @@ Both tracks start from the identical clean commit `dcc431785a4cce5e238a4603d4d0e
 
 ## Track B Protocol (Direct Codex + Ollama)
 
-Record Ollama model name, parameter count, quantization, and context window size before starting.
+Record Ollama model name (`glm-5.3:cloud` if selectable), parameter count, quantization, and context window size before starting.
 
 1. **Prompt adjustment:** Remove artificial execution restrictions. Permit Codex to run local tests via `node --test` as normal.
-2. Provide prompt to Codex inside `$ROOT/orders-quality-ollama`.
+2. Provide prompt to Codex inside `$ROOT/orders-quality-ollama` in fresh task sessions so neither sees the other's answer or scoring criteria.
 3. Capture outputs:
    - For review: save answer text to file.
-   - For edit: generate clean diff:
+   - For edit: stage new test file intent and generate clean diff:
      ```bash
+     git -C "$ROOT/orders-quality-ollama" add -N -- tests/shipping.test.mjs
      git -C "$ROOT/orders-quality-ollama" diff > "$EXPORT_DIR/changes.patch"
      ```
 4. Evaluate using the same `scripts/quality-pack.mjs check` commands.
