@@ -4,6 +4,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat } from 'node:
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { checkOrderTotalCases } from './quality-pack/checks/review-total.mjs';
 
 const PACK = path.join(path.dirname(fileURLToPath(import.meta.url)), 'quality-pack');
 const PROJECT = path.join(PACK, 'project');
@@ -18,7 +19,7 @@ function usage() {
     'node scripts/quality-pack.mjs list',
     'node scripts/quality-pack.mjs create <new-directory>',
     'node scripts/quality-pack.mjs request <task-id> --cwd <fixture-directory>',
-    'node scripts/quality-pack.mjs check <task-id> --patch <exported-patch> | --answer <review-answer-file>'
+    'node scripts/quality-pack.mjs check <task-id> --patch <exported-patch> | --answer <review-answer-file> [--findings-only]'
   ].join('\n');
 }
 
@@ -114,13 +115,16 @@ async function checkEdit(definition, patchFile) {
   }
 }
 
-async function checkReview(definition, answerFile) {
+async function checkReview(definition, answerFile, findingsOnly) {
   const answer = await readFile(path.resolve(answerFile), 'utf8');
   const checks = definition.expected.map((expected) => {
     const match = new RegExp(expected.pattern, 'i').exec(answer);
     return { id: expected.id, passed: Boolean(match), detail: match ? `found: ${match[0].slice(0, 120)}` : `missing: ${expected.explain}` };
   });
   checks.push({ id: 'cites-file', passed: answer.includes(definition.file), detail: definition.file });
+  if (definition.id === 'review-total' && !findingsOnly) {
+    checks.push(...await checkOrderTotalCases(PROJECT, answer));
+  }
   return { task: definition.id, passed: checks.every((check) => check.passed), checks, note: 'Pattern checks are a first pass; read the answer before accepting it.' };
 }
 
@@ -133,7 +137,7 @@ async function check(id, args) {
   }
   const answer = option(args, '--answer');
   if (!answer) fail('A review check needs --answer <review-answer-file>.');
-  return checkReview(definition, answer);
+  return checkReview(definition, answer, args.includes('--findings-only'));
 }
 
 const [command, id, ...rest] = process.argv.slice(2);

@@ -8,7 +8,7 @@ Codex hands a task to Vibe, Vibe reviews or implements it, and it works well eve
 
 Feature work and the 2.2.1 release are on hold. The next work is the paired comparison in the [Handoff](../Handoff.md). It measures the value of keeping Codex as the coordinator and delegating a bounded task to Vibe, using direct work with an Ollama model in Codex as the baseline.
 
-If the handoff earns its keep, use the observed friction and failures to choose what to fix. The [quality pack](../docs/quality-pack.md) can isolate review or edit failures. The [review search design](review-search-tool.md) and experimental Antigravity work are deferred.
+Mistral Vibe remains the worker. Use observed friction and failures to improve the handoff until it is as easy to use as direct Codex with Ollama. The [quality pack](../docs/quality-pack.md) can isolate review or edit failures. The [review search design](review-search-tool.md) and experimental Antigravity work are deferred.
 
 ## Architecture and enforcement points
 

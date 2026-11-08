@@ -1,5 +1,6 @@
 import { authorizedReviewStart } from "../support/authorized-start.js";
 import { randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -370,6 +371,43 @@ async function call(client: Client, name: string, args: Record<string, unknown>,
 }
 
 describe('end to end through the MCP surface with the fake app-server', () => {
+  it('delivers the ordered review context and exact evidence to the app-server', async () => {
+    const stack = await buildStack('allowed-call');
+    execFileSync('git', ['init', '-q'], { cwd: stack.source });
+    const contextFiles = ['README.md', 'src/index.ts', 'src/rules.ts'];
+    writeFileSync(path.join(stack.source, 'README.md'), 'Fixture rule: 5000 cents ships free.\n');
+    writeFileSync(path.join(stack.source, 'src/rules.ts'), 'export const threshold = 5000;\n');
+    const task = [
+      'Trace the reported discrepancies to the source.',
+      'Case 1 — expected 1579, observed 1599.',
+      'Case 2 — expected 6000, observed 6499.',
+      'Case 3 — expected 3600, observed 4200.'
+    ].join('\n');
+    const readiness = await call(stack.client, 'vibe_status', { workspace: stack.source, operation: 'review' });
+    expect(readiness).toMatchObject({ eligible: true, readiness_receipt: expect.any(String) });
+    const finished = await call(stack.client, 'vibe_review_start', {
+      cwd: stack.source, task, context_files: contextFiles, readiness_receipt: readiness.readiness_receipt, wait_seconds: 30
+    }, stack.manager);
+    expect(finished).toMatchObject({ state: 'completed' });
+
+    const frames = readFileSync(stack.logFile, 'utf8').trim().split('\n')
+      .map((line) => JSON.parse(line) as { kind: string; frame?: { method?: string; params?: unknown } })
+      .filter((entry) => entry.kind === 'frame' && entry.frame?.method === 'turn/start');
+    const prompt = [
+      'Workspace files (paths relative to the workspace root):',
+      ...contextFiles.map((file) => `- ${file}`),
+      '',
+      ...contextFiles.map((file) => `Approved context path: ${path.join(stack.source, file)}`),
+      '',
+      'Task:',
+      task
+    ].join('\n');
+    expect(frames.map((entry) => entry.frame?.params)).toEqual([
+      { sessionId: expect.any(String), message: [{ type: 'text', text: prompt }] }
+    ]);
+    expect(await call(stack.client, 'vibe_close', { run_id: finished.run_id })).toMatchObject({ state: 'closed' });
+  }, 60_000);
+
   it('runs a review to completion, reports usage and events, and closes without private state', async () => {
     const stack = await buildStack('allowed-call');
     const finished = await call(stack.client, 'vibe_review_start', { task: 'Review the repository.', cwd: stack.source, wait_seconds: 30 }, stack.manager);

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -59,6 +59,36 @@ describe('quality pack', () => {
         for (const expected of task.expected ?? []) expect(() => new RegExp(expected.pattern, 'i')).not.toThrow();
       }
     }
+  });
+
+  it('checks review totals against the fixture even when the findings contain the expected keywords', async () => {
+    const answer = path.join(await scratch(), 'review.txt');
+    const findings = 'src/cart.mjs calculates tax from gross. In shippingFor, subtotalCents > FREE_SHIPPING_FROM_CENTS excludes equality at 5000.';
+    const cases = [
+      'Input 1: 1000 cents with a 10% discount\nExpected: tax 180, shipping 499, total 1579\nActual: tax 200, shipping 499, total 1599',
+      'Input 2: 5000 cents with no discount\nExpected: tax 1000, shipping 0, total 6000\nActual: tax 1000, shipping 499, total 6499',
+      'Input 3: 6000 cents with a 50% discount\nExpected: tax 600, shipping 0, total 3600\nActual: tax 1200, shipping 0, total 4200'
+    ].join('\n\n');
+    const command = [script, 'check', 'review-total', '--answer', answer];
+
+    await writeFile(answer, `${findings}\n\n${cases}\n`);
+    expect(JSON.parse((await exec(process.execPath, command)).stdout)).toMatchObject({ passed: true });
+
+    await writeFile(answer, `src/cart.mjs calculates tax from gross. Passing gross to shippingFor causes a 499 charge at 5000.\n\n${cases}\n`);
+    await expect(exec(process.execPath, command)).rejects.toMatchObject({
+      code: 1,
+      stdout: expect.stringContaining('"id": "threshold-at-5000",\n      "passed": false')
+    });
+
+    await writeFile(answer, `${findings}\n\n${cases.replace('Actual: tax 1000, shipping 499, total 6499', 'Actual: tax 1000, shipping 0, total 6000')}\n`);
+    await expect(exec(process.execPath, command)).rejects.toMatchObject({
+      code: 1,
+      stdout: expect.stringContaining('"id": "input-2-actual",\n      "passed": false')
+    });
+
+    await writeFile(answer, findings);
+    await expect(exec(process.execPath, command)).rejects.toMatchObject({ code: 1 });
+    expect(JSON.parse((await exec(process.execPath, [...command, '--findings-only'])).stdout)).toMatchObject({ passed: true });
   });
 
   it('ships a project whose own tests pass and whose hidden edit checks fail until the task is done', async () => {

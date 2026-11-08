@@ -20,6 +20,8 @@ vibe-supervisor prepare check --kit <path-to-kit> --config "$CONFIG"
 
 The `--force` flag allows updating the existing manifest with the newly installed Vibe files. Running `doctor` and `prepare check` confirms manifest integrity, version match, and runtime compatibility before any task is dispatched. No hosted re-qualification is needed for a new Vibe release; each run's export names the Vibe version it ran.
 
+When Codex already has a connection, use the Node executable, CLI and config from its workspace readiness reply to run `prepare check`. A check run with a different Node version can pass locally while Codex reports the result as stale. Rerun preparation with the connected runtime and keep the existing pin if the Vibe installation still matches it.
+
 ## Authorize and start
 
 Before dispatch, trace required criteria to the request or repository rules. Keep optional spelling/style preferences advisory, and use coordinator validations for semantic equivalence. The tool distinguishes caller-selected request/contract/patch/validation files from saved supervisor state. Normal owned `0644` inputs are accepted without a chmod step, while unsafe links, foreign ownership, group/other writes, oversized or changed files fail with a specific input diagnosis. Generated state stays private. Prepare output under an existing directory you own that others cannot write to, or a root-owned sticky directory such as `/tmp`; the tool never changes permissions on existing directories. See [artifact handling](artifact-handling.md). Preflight the selected validation command on the baseline, including its actual artifact-permission and package/lockfile/manager requirements; a preparation PASS for Vibe does not prove the project validation path is ready.
