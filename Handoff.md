@@ -1,30 +1,31 @@
-# Current state — 2026-11-05
+# Current state — 2026-11-08
 
-**The goal:** Codex hands a task to Vibe, Vibe reviews or implements it, and it works well every time. This page holds only what works, what does not, and what is next; the order of work is in the [development strategy](planning/development-strategy.md).
+The goal is for Codex to hand a task to Vibe and reliably get back a useful review or an isolated patch. Feature work and the 2.2.1 release are on hold while we compare that workflow with using an Ollama model directly in Codex. See the [development strategy](planning/development-strategy.md).
 
 ## Where things are
 
 - **Released.** v2.2.0 (2026-10-27) is the latest release.
 - **On `main`, unreleased 2.2.1** ([changelog](CHANGELOG.md)): any stable Vibe at or above 3.0.2; the generated `task authorize` command and complete `start_request`; search-first `context_files`; the frozen contract delivered to the worker with the `node_test` check; edit briefs that name the project root, test imports, conflict behaviour and no execution; the export output fix; the Antigravity key from the launchd session; readiness `pinned_version` from the manifest; the [quality pack](docs/quality-pack.md).
 - **Checked here.** CI is green on Node 20.19.0 and 24.21.0. `verify:release` passes on both, `package:rc` runs end to end with an offline cache, and the quality pack's checkers pass correct solutions and fail wrong ones on both Node versions.
-- **Target machine prepared against Vibe 3.1.0.** Vibe was upgraded from 3.0.4 to 3.1.0 (`mistral-vibe v3.1.0`). Manifest generated with `pin-manifest --force` (747 files, RECORD SHA-256 `0e7fb0930517c6d46d07adbd90a9de666ee733cc19d3c4125864e10171b8ba3d`). Candidate `package:rc` built (candidate SHA-256 `c34bf3f0ead29d40b83b30a54171ec96a9ba1323dd5a9d0e1a32ac282d281bdf`, archive SHA-256 `3196a417a139bea525a94d9009604fe13c326ffa897a122817ff11eebbb03a17`) and installed at `~/.local/share/vibe-supervisor/2.2.1-vibe-310-c34bf3f0/`. `doctor --json` and `prepare check` passed with `status: passed` (report SHA-256 `3306bbf5c488204dce2badb110423da7a8d035e16074b9168736f847deec6807`, network verdict: `none-observed-control-validated`). Codex MCP registration updated to the new candidate. Next is running the quality pack through Codex.
+- **Target machine prepared against Vibe 3.1.0 on 2026-11-08.** Candidate `c34bf3f0ead29d40b83b30a54171ec96a9ba1323dd5a9d0e1a32ac282d281bdf` passed `doctor` and the no-inference `prepare check`. The Codex MCP registration was updated to that candidate. The repository has no recorded real-task result for that build or paired result against Ollama. [Preparation details](https://github.com/crew-lab/codex-vibe/commit/0caf629)
 
 ## What works
 
-The boundary has held on every real run: reviews stay read-only, edits stay in their worktree, nothing reaches shell or network, and runs clean up after themselves.
+In recorded default-backend runs, reviews stayed read-only and edits stayed in their worktrees. An independently checked review and edit were accepted on the released 2.2.0 build. [2.2.0 run evidence](research/evidence/v2.2.0-local-workflow-20261027/README.md)
 
 ## What does not work well yet
 
-- **Edit quality.** Real edits were rejected for content the worker could have got right: missing named `node:test` cases, a broken test import, the wrong project root, partial writes on a conflict. The brief and the delivered contract target each; the quality pack's two edits show whether that is enough.
-- **Review quality.** Reviews stay in bounds but sometimes reach the wrong answer; they read only the files given as `context_files` and cannot search.
-- **Antigravity probes.** With `antigravity_skip_permissions` on, the agy probes exercise the hook on a read only, not on a review-mode write or a shell tool. Adding those needs agy's real tool names and argument schemas, so it is done on the machine that has agy.
+- **Edit quality.** Real edits were rejected for missing named `node:test` cases, a broken test import, the wrong project root and partial writes on a conflict. The updated brief and contract target those failures. [Real-use edit evidence](research/evidence/real-use-design-20261028/README.md) and [linking-helper trial](research/evidence/linking-helper-backends-20261102/REPORT.md)
+- **Review quality.** Reviews sometimes reach the wrong answer. The worker can read files and has no search tool.
+- **Antigravity probes.** With `antigravity_skip_permissions` enabled, the probes exercise the hook on a read. Coverage for review-mode writes and shell calls remains open. Antigravity is outside this comparison.
 
 ## Next
 
-1. **On the machine that runs Vibe:** replace any existing checkout with a fresh `git clone` (history was rewritten on 2026-11-04; never push from an older clone), build, install and prepare as below, then run the [quality pack](docs/quality-pack.md) and real tasks through Codex. Fix whatever breaks, on a branch.
-2. **Compare quality-pack results** across changes; they decide whether reviews need a search tool ([design](planning/review-search-tool.md)) and whether the Antigravity backend stays.
-3. **Release 2.2.1** once real runs work.
-4. **Owner:** ask GitHub Support to purge the pre-rewrite commits of `crew-lab/codex-vibe`; they stay reachable through the twelve pull-request refs and GitHub's cache. The old-to-new commit map is in [research](research/history-rewrite-2026-11-04.md).
+1. Pick one real review and one small real edit with independently checkable outcomes. Use a repository suitable for both providers. Run each task through the prepared Vibe candidate and directly in Codex with one Ollama model. Use the same committed base, brief and acceptance criteria, with separate clean copies for edits.
+2. Record correctness, elapsed time from starting the task to a verified result, and hands-on interventions such as gathering context, retrying or repairing output. Use each workflow as it is normally used and count that effort in the comparison. The [quality pack](docs/quality-pack.md) remains available to diagnose a specific failure.
+3. Keep working on the supervisor if its handoff produces useful results with less effort. Shelve it if direct use through Ollama is at least as useful and easier. Keep the release, review search and backend work on hold until the comparison is in.
+
+The 2026-11-04 history rewrite still requires a fresh clone for pre-rewrite checkouts. The owner follow-up with GitHub Support about cached commits and pull-request refs is tracked in the [rewrite notes](research/history-rewrite-2026-11-04.md).
 
 ## Build, install and prepare
 

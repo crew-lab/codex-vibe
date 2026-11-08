@@ -6,15 +6,9 @@ Codex hands a task to Vibe, Vibe reviews or implements it, and it works well eve
 
 ## What we work on
 
-The current state, step by step, is in the [Handoff](../Handoff.md). In order:
+Feature work and the 2.2.1 release are on hold. The next work is the paired comparison in the [Handoff](../Handoff.md). It measures the value of keeping Codex as the coordinator and delegating a bounded task to Vibe, using direct work with an Ollama model in Codex as the baseline.
 
-1. **Real runs on the Vibe machine.** Build from `main`, install, prepare, then run the [quality pack](../docs/quality-pack.md) and real tasks through Codex; fix what breaks. Everything on `main` since v2.2.0 is checked by tests and CI only, not yet by a real Vibe.
-2. **Edit quality.** Real edits failed on content the worker could have got right: named `node:test` cases, test imports, the project root, partial writes on a conflict. The skill's edit brief now asks for each, and the frozen contract now reaches the worker; the quality pack's two edits measure exactly these failures.
-3. **Review quality.** Reviews stay in bounds but cannot search; they read only the files handed as `context_files`. If the quality-pack reviews and real reviews still miss code after search-first `context_files`, build the search sidecar ([design](review-search-tool.md)).
-4. **Antigravity.** Keep the experimental backend only if it gets used; otherwise remove it. If it stays, its probes need to cover a review-mode write and a shell tool when `antigravity_skip_permissions` is on.
-5. **Release 2.2.1** once real runs work.
-
-Work that makes none of these better waits.
+If the handoff earns its keep, use the observed friction and failures to choose what to fix. The [quality pack](../docs/quality-pack.md) can isolate review or edit failures. The [review search design](review-search-tool.md) and experimental Antigravity work are deferred.
 
 ## Architecture and enforcement points
 
