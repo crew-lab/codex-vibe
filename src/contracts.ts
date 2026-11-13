@@ -322,7 +322,7 @@ export interface SupervisorBackend {
   readonly kind: BackendKind;
   probe(): Promise<BackendCapabilities>;
   start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult>;
-  cancel(handle: BackendRunHandle): Promise<void>;
+  cancel(handle: BackendRunHandle, reason?: SupervisorErrorCode): Promise<void>;
   close(handle: BackendRunHandle): Promise<void>;
   terminateNow?(handle: BackendRunHandle): Promise<void>;
   runtimeCheck?(): Promise<RuntimeCheck>;

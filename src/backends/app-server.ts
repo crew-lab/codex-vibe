@@ -6,7 +6,7 @@ import { access, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   ApprovalLedgerEntry, ApprovalLedgerSnapshot, BackendCallbacks, BackendCapabilities, BackendKind, BackendRunHandle, BackendStartResult, EventSeverity,
-  PinIdentity, ProcessRecord, ResultSummary, RuntimeCheck, StartRunInput, SupervisorBackend, SupervisorConfig, SupervisorError, ToolCallCounts
+  PinIdentity, ProcessRecord, ResultSummary, RuntimeCheck, StartRunInput, SupervisorBackend, SupervisorConfig, SupervisorError, SupervisorErrorCode, ToolCallCounts
 } from '../contracts.js';
 import { MAX_APPROVAL_LEDGER_RECORDS, supervisorError } from '../contracts.js';
 import { describeFailure, reportBackgroundFailure } from '../diagnostics/background.js';
@@ -60,6 +60,9 @@ const CLOSE_INPUT_WAIT_MS = 1000;
 const EXIT_WAIT_MS = 1500;
 const BACKGROUND_WAIT_MS = 2000;
 const MAX_STDERR_DETAIL_CHARS = 400;
+const WIRE_TRACE_LIMIT = 128;
+
+type WireTraceEntry = { at_ms: number; kind: string; method?: string; reason?: SupervisorErrorCode };
 
 const TOOL_NAMES: Readonly<Record<string, string>> = Object.fromEntries(PINNED_WIRE.tools.flatMap((tool) => approvalNames(tool).map((name) => [name, tool.configName])));
 const TOOL_KINDS: Readonly<Record<string, string>> = Object.fromEntries(PINNED_WIRE.tools.map((tool) => [tool.configName, tool.access]));
@@ -282,6 +285,15 @@ class AppServerRun {
   private stderrTail = '';
   private lastUsageEmit = 0;
   private deniedUnsafeStreak = 0;
+  private readonly wireTrace = process.env.VSUP_TRACE_VIBE_WIRE === '1' ? {
+    started: performance.now(),
+    entries: [] as WireTraceEntry[],
+    omitted: 0,
+    completionFrames: 0,
+    completionReceivedAt: null as number | null,
+    completionAcceptedAt: null as number | null,
+    deadlineAt: null as number | null
+  } : undefined;
 
   constructor(parts: RunParts) {
     this.preparation = parts.preparation;
@@ -340,9 +352,13 @@ class AppServerRun {
     return { handle: this.handle, initialState: 'running', ...(process ? { process } : {}) };
   }
 
-  async cancel(): Promise<void> {
+  async cancel(reason: SupervisorErrorCode = 'VSUP_CANCELLED'): Promise<void> {
+    if (this.wireTrace) {
+      this.traceWire('cancel_requested', undefined, reason);
+      if (reason === 'VSUP_TIMEOUT') this.wireTrace.deadlineAt ??= this.traceWire('deadline');
+    }
     this.handler.revoke();
-    if (!this.concludeStarted) this.addCondition({ kind: 'cancelled' });
+    if (!this.concludeStarted) this.addCondition({ kind: reason === 'VSUP_TIMEOUT' ? 'deadline' : 'cancelled' });
     if (!this.turnStarted) {
       this.hurry();
       this.abortStartup(supervisorError('VSUP_CANCELLED', 'The run was cancelled before the turn started.'));
@@ -402,6 +418,7 @@ class AppServerRun {
     this.child = child;
     const { stdout, stdin } = child.child;
     if (!stdout || !stdin) throw supervisorError('VSUP_INTERNAL', 'The Vibe app-server was spawned without piped standard streams.');
+    const trace = this.wireTrace;
     this.client = new JsonRpcClient({
       input: stdout,
       output: stdin,
@@ -409,6 +426,19 @@ class AppServerRun {
       maxInboundBytes: inboundBudget,
       defaultTimeoutMs: this.timing.requestTimeoutMs,
       onActivity: () => this.callbacks.onActivity?.('stdout'),
+      ...(trace ? {
+        onOutboundRequest: (method) => {
+          if (method === 'turn/interrupt') this.traceWire('interrupt_sent');
+        },
+        onInboundFrame: (kind, method) => {
+          const knownMethod = kind === 'notification' ? PINNED_WIRE.notificationMethods.find((name) => name === method) : undefined;
+          const at = this.traceWire(kind, knownMethod);
+          if (knownMethod === 'turn/completed') {
+            trace.completionFrames++;
+            trace.completionReceivedAt ??= at;
+          }
+        }
+      } : {}),
       onDiagnostic: (message) => this.emit('diagnostic', 'warning', { text: message }, 'supervisor'),
       onFatal: (error) => this.onClientFatal(error),
       onEnd: (info) => { if (info.reason === 'eof') this.onUnexpectedEnd('the app-server closed its output stream'); }
@@ -508,6 +538,7 @@ class AppServerRun {
 
   private async beginTurn(): Promise<void> {
     this.turnStarting = true;
+    if (this.wireTrace) this.traceWire('turn_start_requested');
     const started = await this.rpc(buildTurnStart(this.sessionId, buildTaskPrompt(this.input, this.listing.text)), parseTurnStartResult, this.startupTimeout());
     if (this.startAbort) throw this.startAbort;
     this.turnId = started.turn.id;
@@ -623,6 +654,9 @@ class AppServerRun {
   private onTurnCompleted(turn: Turn): void {
     if (this.turnId !== '' && turn.id !== this.turnId) return;
     if (this.turnId === '') this.turnId = turn.id;
+    if (this.wireTrace && this.wireTrace.completionAcceptedAt === null) {
+      this.wireTrace.completionAcceptedAt = this.traceWire('turn_completion_accepted');
+    }
     this.completedTurn = turn;
     this.turnStarting = false;
     this.turnDone.resolve('turn');
@@ -676,6 +710,7 @@ class AppServerRun {
   }
 
   private onDeadline(): void {
+    if (this.wireTrace) this.wireTrace.deadlineAt ??= this.traceWire('deadline');
     this.handler.revoke();
     this.addCondition({ kind: 'deadline' });
     if (!this.turnStarted) this.abortStartup(supervisorError('VSUP_TIMEOUT', 'The run exceeded its configured timeout before the turn started.'));
@@ -758,6 +793,17 @@ class AppServerRun {
       .then(() => undefined, (error: unknown) => reportBackgroundFailure('app-server-event', error));
   }
 
+  private traceWire(kind: string, method?: string, reason?: SupervisorErrorCode): number {
+    const trace = this.wireTrace!;
+    const at = Math.round(performance.now() - trace.started);
+    if (trace.entries.length === WIRE_TRACE_LIMIT) {
+      trace.entries.shift();
+      trace.omitted++;
+    }
+    trace.entries.push({ at_ms: at, kind, ...(method === undefined ? {} : { method }), ...(reason === undefined ? {} : { reason }) });
+    return at;
+  }
+
   private emitEffect(effect: { entryId: string; tool: string; outcome: EffectRecord['outcome']; path: string | null }): void {
     if (this.emittedEffects.has(effect.entryId)) return;
     this.emittedEffects.add(effect.entryId);
@@ -812,6 +858,20 @@ class AppServerRun {
     catch (error) {
       reportBackgroundFailure('app-server-cleanup', error);
       outcome = { state: 'failed', warnings: [], error: supervisorError('VSUP_BACKEND_ERROR', 'The Vibe app-server termination could not be verified; the run keeps its handle so cleanup can be retried.') };
+    }
+    const trace = this.wireTrace;
+    if (trace) {
+      this.traceWire(outcome.state);
+      this.emit('diagnostic', 'info', {
+        reason: 'app_server_wire_trace',
+        terminal_state: outcome.state,
+        completion_frames: trace.completionFrames,
+        first_completion_received_at_ms: trace.completionReceivedAt,
+        completion_accepted_at_ms: trace.completionAcceptedAt,
+        deadline_at_ms: trace.deadlineAt,
+        omitted_entries: trace.omitted,
+        entries: trace.entries
+      }, 'supervisor');
     }
     await this.eventChain;
     const warnings = [...outcome.warnings, ...this.warnings];
@@ -1110,8 +1170,8 @@ export class AppServerBackend implements SupervisorBackend {
     return run.start();
   }
 
-  async cancel(handle: BackendRunHandle): Promise<void> {
-    await (handle.opaque as AppServerRun).cancel();
+  async cancel(handle: BackendRunHandle, reason?: SupervisorErrorCode): Promise<void> {
+    await (handle.opaque as AppServerRun).cancel(reason);
   }
 
   async terminateNow(handle: BackendRunHandle): Promise<void> {

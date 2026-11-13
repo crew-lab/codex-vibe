@@ -1325,7 +1325,7 @@ export class RunManager {
   private async cancelBackendSession(runtime: Runtime, deadlineMs = BACKEND_RELEASE_DEADLINE_MS, waitForStartup = true): Promise<void> {
     const backend = runtime.backend; const handle = runtime.handle;
     if (backend && handle) {
-      const cancellation = Promise.resolve().then(() => backend.cancel(handle));
+      const cancellation = Promise.resolve().then(() => backend.cancel(handle, runtime.requestedOutcome?.error?.code));
       if (!await settlesWithin(cancellation, deadlineMs)) {
         this.reportBackground(runtime, "backend-cancel", new Error("Worker cancellation exceeded its shutdown deadline."));
         const terminateNow = backend.terminateNow;

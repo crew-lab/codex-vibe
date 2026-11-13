@@ -6,7 +6,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSy
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parse } from 'smol-toml';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppServerBackend, type AppServerBackendOptions, type AppServerTiming } from '../../src/backends/app-server.js';
 import { ResolvedCredential, type CredentialResolution } from '../../src/backends/app-server/credentials.js';
 import { PinCheckError } from '../../src/backends/app-server/pin.js';
@@ -202,6 +202,7 @@ class Harness {
 const harnesses: Harness[] = [];
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   for (const harness of harnesses.splice(0)) {
     if (harness.handle) await harness.backend.close(harness.handle).catch(() => undefined);
     const pid = harness.pid;
@@ -397,15 +398,31 @@ describe('app-server backend: clean runs', () => {
   });
 
   it('reads every server frame tolerantly: unknown fields, stale events and unknown notifications', async () => {
+    vi.stubEnv('VSUP_TRACE_VIBE_WIRE', '0');
     for (const scenario of ['extra-fields', 'stale-event', 'unknown-notification']) {
       const harness = new Harness(scenario);
       const terminal = await harness.run();
       expect(terminal.state, scenario).toBe('completed');
+      expect(harness.eventsOfType('diagnostic').some((event) => event.data.reason === 'app_server_wire_trace')).toBe(false);
     }
+    vi.stubEnv('VSUP_TRACE_VIBE_WIRE', '1');
     const harness = new Harness('unknown-notification');
     await harness.run();
     const diagnostic = harness.eventsOfType('diagnostic').find((event) => event.data.reason === 'ignored_notifications');
     expect(diagnostic?.data).toMatchObject({ unknown_notifications: 1, unknown_methods: ['session/futureThing'] });
+    const trace = harness.eventsOfType('diagnostic').find((event) => event.data.reason === 'app_server_wire_trace')?.data;
+    expect(trace).toMatchObject({
+      terminal_state: 'completed',
+      completion_frames: 1,
+      first_completion_received_at_ms: expect.any(Number),
+      completion_accepted_at_ms: expect.any(Number),
+      deadline_at_ms: null,
+      entries: expect.arrayContaining([
+        { at_ms: expect.any(Number), kind: 'notification' },
+        { at_ms: expect.any(Number), kind: 'notification', method: 'turn/completed' }
+      ])
+    });
+    expect(JSON.stringify(trace)).not.toContain('session/futureThing');
   });
 });
 
@@ -875,22 +892,64 @@ describe('app-server backend: transport failures', () => {
 });
 
 describe('app-server backend: deadline, cancel, close and termination', () => {
+  it('traces supervisor timeout cancellation before interrupt completion', async () => {
+    vi.stubEnv('VSUP_TRACE_VIBE_WIRE', '1');
+    const harness = new Harness('hold');
+    const started = await harness.start();
+    harness.handle = started.handle;
+    await harness.backend.cancel(started.handle, 'VSUP_TIMEOUT');
+    const terminal = await harness.terminal;
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal).code).toBe('VSUP_TIMEOUT');
+    expect(harness.fixtureEvents('interrupt')).toHaveLength(1);
+    const trace = harness.eventsOfType('diagnostic').find((event) => event.data.reason === 'app_server_wire_trace')?.data;
+    expect(trace).toMatchObject({ deadline_at_ms: expect.any(Number), terminal_state: 'failed' });
+    const entries = (trace?.entries as Json[]).filter((entry) =>
+      ['cancel_requested', 'deadline', 'interrupt_sent'].includes(String(entry.kind)) || entry.method === 'turn/completed'
+    );
+    expect(entries).toEqual([
+      { kind: 'cancel_requested', reason: 'VSUP_TIMEOUT', at_ms: expect.any(Number) },
+      { kind: 'deadline', at_ms: expect.any(Number) },
+      { kind: 'interrupt_sent', at_ms: expect.any(Number) },
+      { kind: 'notification', method: 'turn/completed', at_ms: expect.any(Number) }
+    ]);
+    expect(entries.map((entry) => Number(entry.at_ms))).toEqual(entries.map((entry) => Number(entry.at_ms)).sort((a, b) => a - b));
+    harness.expectCleanedUp();
+  });
+
   it('interrupts at the deadline and fails with a timeout', async () => {
+    vi.stubEnv('VSUP_TRACE_VIBE_WIRE', '1');
     const harness = new Harness('hold', { limits: { timeoutSeconds: 8 } });
     const terminal = await harness.run();
 
     expect(terminal.state).toBe('failed');
     expect(errorOf(terminal).code).toBe('VSUP_TIMEOUT');
     expect(harness.fixtureEvents('interrupt')).toHaveLength(1);
+    const trace = harness.eventsOfType('diagnostic').find((event) => event.data.reason === 'app_server_wire_trace')?.data;
+    expect(trace).toMatchObject({
+      terminal_state: 'failed',
+      first_completion_received_at_ms: expect.any(Number),
+      deadline_at_ms: expect.any(Number)
+    });
+    expect(Number(trace?.first_completion_received_at_ms)).toBeGreaterThanOrEqual(Number(trace?.deadline_at_ms));
     harness.expectCleanedUp();
   }, 40_000);
 
   it('kills a wedged server that ignores SIGTERM and fails with a timeout', async () => {
+    vi.stubEnv('VSUP_TRACE_VIBE_WIRE', '1');
     const harness = new Harness('wedge', { limits: { timeoutSeconds: 8 } });
     const terminal = await harness.run();
 
     expect(terminal.state).toBe('failed');
     expect(errorOf(terminal).code).toBe('VSUP_TIMEOUT');
+    expect(harness.eventsOfType('diagnostic').find((event) => event.data.reason === 'app_server_wire_trace')?.data).toMatchObject({
+      terminal_state: 'failed',
+      completion_frames: 0,
+      first_completion_received_at_ms: null,
+      completion_accepted_at_ms: null,
+      deadline_at_ms: expect.any(Number)
+    });
     expect(harness.fixtureEvents('wedged')).toHaveLength(1);
     expect(harness.fixtureEvents('signalIgnored').length).toBeGreaterThanOrEqual(1);
     harness.expectCleanedUp();

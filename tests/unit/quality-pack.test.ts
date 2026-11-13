@@ -105,4 +105,37 @@ describe('quality pack', () => {
       expect(hidden.output, task.id).toMatch(/^# fail [1-9]/m);
     }
   });
+
+  it('runs a new test file added by the edit patch', async () => {
+    const root = await scratch();
+    const fixture = path.join(root, 'orders');
+    const patch = path.join(root, 'shipping.patch');
+    await exec(process.execPath, [script, 'create', fixture]);
+    const cart = path.join(fixture, 'src', 'cart.mjs');
+    await writeFile(cart, (await readFile(cart, 'utf8')).replace('subtotalCents > FREE_SHIPPING_FROM_CENTS', 'subtotalCents >= FREE_SHIPPING_FROM_CENTS'));
+    const shipping = path.join(fixture, 'tests', 'shipping.test.mjs');
+    const testName = 'runs the test added by the patch';
+    const passingTest = [
+      "import test from 'node:test';",
+      "import assert from 'node:assert/strict';",
+      "import { shippingFor } from '../src/cart.mjs';",
+      `test('${testName}', () => assert.equal(shippingFor(5000), 0));`,
+      ''
+    ].join('\n');
+    await writeFile(shipping, passingTest);
+    await exec('git', ['add', '--intent-to-add', '--', 'tests/shipping.test.mjs'], { cwd: fixture });
+    const command = [script, 'check', 'edit-shipping', '--patch', patch];
+    await writeFile(patch, (await exec('git', ['diff'], { cwd: fixture })).stdout);
+    expect(JSON.parse((await exec(process.execPath, command)).stdout)).toMatchObject({
+      passed: true,
+      checks: expect.arrayContaining([{ id: 'all-tests-pass', passed: true, detail: '11 passed, 0 failed' }])
+    });
+
+    await writeFile(shipping, passingTest.replace('shippingFor(5000), 0', 'shippingFor(5000), 499'));
+    await writeFile(patch, (await exec('git', ['diff'], { cwd: fixture })).stdout);
+    await expect(exec(process.execPath, command)).rejects.toMatchObject({
+      code: 1,
+      stdout: expect.stringContaining(`10 passed, 1 failed: ${testName}`)
+    });
+  });
 });

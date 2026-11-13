@@ -85,6 +85,8 @@ export interface JsonRpcClientOptions {
   defaultTimeoutMs?: number;
   onNotification?: NotificationHandler;
   onActivity?: () => void;
+  onInboundFrame?: (kind: 'request' | 'notification' | 'response' | 'invalid', method?: string) => void;
+  onOutboundRequest?: (method: string) => void;
   onDiagnostic?: (message: string) => void;
   onFatal?: (error: JsonRpcFatalError) => void;
   onEnd?: (info: JsonRpcEndInfo) => void;
@@ -218,6 +220,7 @@ export class JsonRpcClient {
       this.pending.set(id, { method, resolve, reject, timer });
       try {
         this.write({ jsonrpc: '2.0', id, method, params });
+        this.options.onOutboundRequest?.(method);
       } catch (error) {
         clearTimeout(timer);
         this.pending.delete(id);
@@ -322,6 +325,7 @@ export class JsonRpcClient {
     try {
       frame = JSON.parse(this.decoder.decode(line));
     } catch {
+      this.options.onInboundFrame?.('invalid');
       this.fail(new JsonRpcFatalError('malformed_frame', 'inbound line is not valid UTF-8 JSON', { bytes: line.length }));
       return;
     }
@@ -335,10 +339,12 @@ export class JsonRpcClient {
 
   private dispatch(frame: unknown, bytes: number): void {
     if (!isPlainObject(frame) || frame.jsonrpc !== '2.0') {
+      this.options.onInboundFrame?.('invalid');
       this.fail(new JsonRpcFatalError('malformed_frame', 'inbound frame is not a JSON-RPC 2.0 object', { bytes }));
       return;
     }
     if (typeof frame.method === 'string') {
+      this.options.onInboundFrame?.('id' in frame ? 'request' : 'notification', frame.method);
       const params = frame.params === undefined ? {} : frame.params;
       if (!isPlainObject(params)) {
         this.fail(new JsonRpcFatalError('malformed_frame', 'inbound params must be an object', { method: frame.method }));
@@ -359,9 +365,11 @@ export class JsonRpcClient {
     const hasResult = 'result' in frame;
     const hasError = 'error' in frame;
     if (hasResult === hasError || !('id' in frame)) {
+      this.options.onInboundFrame?.('invalid');
       this.fail(new JsonRpcFatalError('malformed_frame', 'inbound frame is neither a request, a notification nor a response', { bytes }));
       return;
     }
+    this.options.onInboundFrame?.('response');
     this.handleResponse(frame, hasError);
   }
 
