@@ -5,6 +5,7 @@ import path from 'node:path';
 import { parse } from 'smol-toml';
 import { runCli } from '../../src/cli.js';
 import { applyCodexPlan, planCodexConfig } from '../../src/cli/codex.js';
+import { parseSetupArgs } from '../../src/cli/setup.js';
 import { generatePinManifest, serializePinManifest } from '../../src/backends/app-server/pin.js';
 import { makeFakeVibeEnvironment } from './support/fake-vibe-environment.js';
 
@@ -51,6 +52,27 @@ describe('CLI local setup', () => {
     await configureCodex();
     expect(await readFile(file, 'utf8')).toBe(updated);
     expect((await readdir(codex)).filter((name) => name.startsWith('config.toml.bak-'))).toHaveLength(1);
+  });
+
+  it('registers a second, named server beside the default one, each with its own config, idempotently', async () => {
+    const home = await tempDir(); vi.stubEnv('HOME', home);
+    const vibeConfig = path.join(home, 'vibe', 'config.toml'); const agyConfig = path.join(home, 'agy', 'config.toml');
+    for (const [config, name] of [[vibeConfig, undefined], [agyConfig, 'vibe-supervisor-agy']] as const) {
+      const plan = await planCodexConfig('user', process.cwd(), true, config, name);
+      if (plan.changed) await applyCodexPlan(plan);
+    }
+    const servers = parse(await readFile(path.join(home, '.codex', 'config.toml'), 'utf8')).mcp_servers as Record<string, { args: string[] }>;
+    expect(Object.keys(servers).sort()).toEqual(['vibe-supervisor', 'vibe-supervisor-agy']);
+    expect(servers['vibe-supervisor']!.args).toContain(vibeConfig);
+    expect(servers['vibe-supervisor-agy']!.args).toContain(agyConfig);
+    expect((await planCodexConfig('user', process.cwd(), true, agyConfig, 'vibe-supervisor-agy')).changed).toBe(false);
+  });
+
+  it('accepts --name only as a safe key and only with its own --config', () => {
+    expect(parseSetupArgs(['--workspace', '/w', '--config', '/c/agy/config.toml', '--name', 'vibe-supervisor-agy'])).toMatchObject({ serverName: 'vibe-supervisor-agy', configPath: '/c/agy/config.toml' });
+    expect(() => parseSetupArgs(['--workspace', '/w', '--name', 'vibe-supervisor-agy'])).toThrow(/own --config/);
+    expect(() => parseSetupArgs(['--workspace', '/w', '--config', '/c/x.toml', '--name', 'bad name'])).toThrow(/letters, digits/);
+    expect(() => parseSetupArgs(['--workspace', '/w', '--config', '/c/x.toml', '--name', 'a]b'])).toThrow(/letters, digits/);
   });
 
   it('registers isolated startup idempotently without changing other settings', async () => {

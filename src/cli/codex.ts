@@ -10,6 +10,8 @@ export interface CodexPlan { file: string; baseDir: string; block: string; chang
 
 const CODEX_TOOL_TIMEOUT_SECONDS = 600;
 const CODEX_STARTUP_TIMEOUT_SECONDS = 30;
+export const DEFAULT_SERVER_NAME = 'vibe-supervisor';
+const SERVER_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 
 function quoteToml(value: string): string { return JSON.stringify(value); }
 
@@ -18,7 +20,12 @@ async function assertSafeFile(file: string): Promise<void> {
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
 }
 
-export async function planCodexConfig(scope: CodexScope, projectPath: string, isolated: boolean, configPath?: string): Promise<CodexPlan> {
+export function isServerName(value: string): boolean {
+  return SERVER_NAME.test(value);
+}
+
+export async function planCodexConfig(scope: CodexScope, projectPath: string, isolated: boolean, configPath?: string, serverName: string = DEFAULT_SERVER_NAME): Promise<CodexPlan> {
+  if (!isServerName(serverName)) fail('The server name may use letters, digits, - and _ only (at most 64).', 2);
   if (scope === 'project') {
     const info = await lstat(path.resolve(projectPath));
     if (info.isSymbolicLink() || !info.isDirectory()) fail('Project path must be an existing real directory.', 2);
@@ -29,7 +36,7 @@ export async function planCodexConfig(scope: CodexScope, projectPath: string, is
   const executable = process.execPath;
   const cliPath = path.resolve(process.argv[1] ?? 'dist/cli.js');
   const launchArgs = [cliPath, 'serve', '--stdio', ...(isolated ? ['--isolated'] : []), ...(configPath ? ['--config', path.resolve(configPath)] : [])];
-  const block = `[mcp_servers.vibe-supervisor]\ncommand = ${quoteToml(executable)}\nargs = [${launchArgs.map(quoteToml).join(', ')}]\nstartup_timeout_sec = ${CODEX_STARTUP_TIMEOUT_SECONDS}\ntool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SECONDS}\n`;
+  const block = `[mcp_servers.${serverName}]\ncommand = ${quoteToml(executable)}\nargs = [${launchArgs.map(quoteToml).join(', ')}]\nstartup_timeout_sec = ${CODEX_STARTUP_TIMEOUT_SECONDS}\ntool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SECONDS}\n`;
   let original = '';
   try { original = await readFile(file, 'utf8'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   let parsedExisting: Record<string, unknown> = {};
@@ -39,7 +46,7 @@ export async function planCodexConfig(scope: CodexScope, projectPath: string, is
   }
   const servers = parsedExisting.mcp_servers;
   if (servers !== undefined && (!servers || typeof servers !== 'object' || Array.isArray(servers))) fail('Codex config mcp_servers must be a table; no changes were made.', 2);
-  const existingEntry = servers && typeof servers === 'object' ? (servers as Record<string, unknown>)['vibe-supervisor'] : undefined;
+  const existingEntry = servers && typeof servers === 'object' ? (servers as Record<string, unknown>)[serverName] : undefined;
   const target = { command: executable, args: launchArgs, startup_timeout_sec: CODEX_STARTUP_TIMEOUT_SECONDS, tool_timeout_sec: CODEX_TOOL_TIMEOUT_SECONDS };
   if (existingEntry && typeof existingEntry === 'object' && !Array.isArray(existingEntry)) {
     const entry = existingEntry as Record<string, unknown>;
@@ -47,7 +54,8 @@ export async function planCodexConfig(scope: CodexScope, projectPath: string, is
       return { file, baseDir, block, changed: false, original, updated: original };
     }
   }
-  const targetHeader = /^\s*(?:\[\s*mcp_servers\s*\.\s*(?:"vibe-supervisor"|'vibe-supervisor'|vibe-supervisor)\s*\]|\[\s*"mcp_servers"\s*\.\s*(?:"vibe-supervisor"|'vibe-supervisor'|vibe-supervisor)\s*\])\s*(?:#.*)?$/m;
+  const key = `(?:"${serverName}"|'${serverName}'|${serverName})`;
+  const targetHeader = new RegExp(`^\\s*(?:\\[\\s*mcp_servers\\s*\\.\\s*${key}\\s*\\]|\\[\\s*"mcp_servers"\\s*\\.\\s*${key}\\s*\\])\\s*(?:#.*)?$`, 'm');
   const headerMatch = targetHeader.exec(original);
   let updated: string;
   if (headerMatch) {
@@ -58,7 +66,7 @@ export async function planCodexConfig(scope: CodexScope, projectPath: string, is
     const end = next?.index ?? original.length;
     updated = `${original.slice(0, start)}${block.trimEnd()}\n${original.slice(end)}`;
   } else {
-    if (existingEntry !== undefined) fail('Found a non-section mcp_servers.vibe-supervisor entry that cannot be updated safely.', 2);
+    if (existingEntry !== undefined) fail(`Found a non-section mcp_servers.${serverName} entry that cannot be updated safely.`, 2);
     updated = `${original}${original.length === 0 || original.endsWith('\n\n') ? '' : original.endsWith('\n') ? '\n' : '\n\n'}${block}`;
   }
   try { parse(updated); } catch { fail('Generated Codex TOML did not validate; no changes were made.', 2); }

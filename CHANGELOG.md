@@ -19,6 +19,7 @@
 - Added: opt-in `app_server_wire_trace` diagnostics that record supervisor timeouts, cancellation requests, interrupts and completion frames.
 - Fixed: `runs usage --since` and `runs usefulness --since` share one calendar-date check that rejects impossible dates such as `2026-13-01` and a non-leap `02-29` with the usage error instead of throwing; regression tests cover both commands.
 - Changed: the skill and the `vibe-reviewer` agent ask an edit brief to name the project's type-checker settings (for example `noUncheckedIndexedAccess`), ask a review brief to include the failing command and its exact error, and accept a proposed fix only after the failing command passes on the exported patch.
+- Added: `setup --name <server>` registers a second Codex server with its own `--config`, so Codex can use Vibe and agy side by side ([two workers](docs/local-operation.md#two-workers-vibe-and-agy)).
 - Changed: `npm run package:rc` is reproducible. The SBOM and acceptance report date comes from `SOURCE_DATE_EPOCH`, else the HEAD commit time; the SBOM namespace is derived from the package name, version and lockfile hash. A clean rebuild at the same commit can be compared by `SHA256SUMS`.
 
 ## 2.2.0 — unreleased

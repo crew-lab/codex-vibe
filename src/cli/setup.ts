@@ -8,7 +8,7 @@ import { APP_VERSION } from '../version.js';
 import { validateConfig } from '../config/validation.js';
 import { formatDoctorCheck, runDoctor } from '../diagnostics/doctor.js';
 import { assertWorkspaceRootScope, createPrivateDir, createPrivateFile, expandHome, resolveCanonicalWorkspaceRoot, validateWorkspaceRootsAtUse } from '../security/paths.js';
-import { applyCodexPlan, planCodexConfig, type CodexScope } from './codex.js';
+import { DEFAULT_SERVER_NAME, applyCodexPlan, isServerName, planCodexConfig, type CodexScope } from './codex.js';
 import { configInvalid, fail } from './fail.js';
 
 type Document = Record<string, unknown>;
@@ -16,6 +16,7 @@ type Document = Record<string, unknown>;
 export interface SetupOptions {
   workspace: string;
   configPath?: string;
+  serverName?: string;
   codex: CodexScope;
   isolated: boolean;
   yes: boolean;
@@ -161,17 +162,18 @@ function reportUpdate(update: WorkspaceUpdate): void {
 }
 
 export function parseSetupArgs(args: string[]): Omit<SetupOptions, 'interactive' | 'confirm'> {
-  let workspace: string | undefined; let configPath: string | undefined; let codex: CodexScope = 'user'; let isolated = true; let yes = false; let dryRun = false;
+  let workspace: string | undefined; let configPath: string | undefined; let serverName: string | undefined; let codex: CodexScope = 'user'; let isolated = true; let yes = false; let dryRun = false;
   const seen = new Set<string>();
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
-    if (arg === '--workspace' || arg === '--codex' || arg === '--config') {
+    if (arg === '--workspace' || arg === '--codex' || arg === '--config' || arg === '--name') {
       if (seen.has(arg)) fail(`${arg} may be supplied once.`, 2);
       seen.add(arg);
       const value = args[++index];
       if (!value || value.startsWith('--')) fail(`${arg} requires a value.`, 2);
       if (arg === '--workspace') workspace = value;
       else if (arg === '--config') configPath = value;
+      else if (arg === '--name') { if (!isServerName(value)) fail('--name may use letters, digits, - and _ only (at most 64).', 2); serverName = value; }
       else if (value === 'user' || value === 'project') codex = value;
       else fail('--codex must be user or project.', 2);
     } else if (arg === '--isolated' || arg === '--yes' || arg === '--dry-run') {
@@ -181,11 +183,12 @@ export function parseSetupArgs(args: string[]): Omit<SetupOptions, 'interactive'
       else if (arg === '--yes') yes = true;
       else dryRun = true;
     }
-    else fail(`Unknown setup argument: ${String(arg)}. Usage: vibe-supervisor setup --workspace <dir> [--codex user|project] [--isolated] [--yes|--dry-run]`, 2);
+    else fail(`Unknown setup argument: ${String(arg)}. Usage: vibe-supervisor setup --workspace <dir> [--config <path>] [--name <server>] [--codex user|project] [--isolated] [--yes|--dry-run]`, 2);
   }
-  if (!workspace) fail('Usage: vibe-supervisor setup --workspace <dir> [--codex user|project] [--isolated] [--yes|--dry-run]', 2);
+  if (!workspace) fail('Usage: vibe-supervisor setup --workspace <dir> [--config <path>] [--name <server>] [--codex user|project] [--isolated] [--yes|--dry-run]', 2);
   if (yes && dryRun) fail('--yes and --dry-run cannot be combined.', 2);
-  return { workspace, ...(configPath ? { configPath } : {}), codex, isolated, yes, dryRun };
+  if (serverName !== undefined && serverName !== DEFAULT_SERVER_NAME && configPath === undefined) fail('A second server needs its own --config in its own directory, so its runs, receipts and lock stay separate.', 2);
+  return { workspace, ...(configPath ? { configPath } : {}), ...(serverName ? { serverName } : {}), codex, isolated, yes, dryRun };
 }
 
 async function askYesNo(question: string): Promise<boolean> {
@@ -201,7 +204,7 @@ export async function runSetup(options: SetupOptions): Promise<void> {
     ? (await loadResolvedConfig({ configPath: configPlan.file })).config
     : validateConfig(parse(configPlan.text));
   const plannedFingerprint = configFingerprint(plannedConfig);
-  const plan = await planCodexConfig(options.codex, canonical, options.isolated, configPlan.file);
+  const plan = await planCodexConfig(options.codex, canonical, options.isolated, configPlan.file, options.serverName);
   if (options.dryRun) {
     say(`Dry run: ${configPlan.created ? 'would create private config' : 'would use config'} at ${configPlan.file}`);
     say(`Provenance: ${JSON.stringify({ executable: process.execPath, application_version: APP_VERSION, config_path: configPlan.file, config_source: selection.source, config_fingerprint: plannedFingerprint, data_directory: selection.dataDir, storage_role: 'configuration-template', vibe_version: 'unknown-not-probed' })}`);

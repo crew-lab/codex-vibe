@@ -8,6 +8,17 @@ Read the connected tool schemas and call workspace readiness with the intended o
 
 Use the matching installed CLI, reported Node executable and explicit selected configuration for every administrative command. Preserve settings, allowed roots and rollback. Prepare only explicit reviewed inputs; quoted context is not an overlay. See [task inputs](task-inputs.md).
 
+### Two workers: Vibe and agy
+
+One server runs one worker, chosen by `backend` and fixed until restart. To give Codex both, register two servers, each with its own configuration file in its own directory; that directory holds its runs, receipts, sessions and lock, so the two never share a slot or a grant:
+
+```bash
+vibe-supervisor setup --workspace "$WORKSPACE" --config "$SUPERVISOR_HOME/vibe/config.toml"
+vibe-supervisor setup --workspace "$WORKSPACE" --config "$SUPERVISOR_HOME/agy/config.toml" --name vibe-supervisor-agy
+```
+
+The first registers as `vibe-supervisor` (Vibe, the default backend). In the second configuration set `backend = "antigravity"` and `[experimental] antigravity = true`, then run `prepare check` with that configuration. Codex lists each server's five tools under its own name; take the `task authorize` command from the readiness reply of the server that will run the task, because a grant is bound to that server's configuration.
+
 ### Vibe CLI upgrade and manifest refresh
 
 When the underlying `mistral-vibe` CLI is upgraded to another supported stable version ($\ge 3.0.2$), review and regenerate the installed file manifest and refresh candidate preparation before dispatch:
