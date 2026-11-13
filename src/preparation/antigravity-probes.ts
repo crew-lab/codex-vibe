@@ -769,14 +769,17 @@ function runAgy(executablePath: string, cwd: string, env: NodeJS.ProcessEnv, ski
       size += chunk.length;
       if (size <= MAX_STDOUT_BYTES) chunks.push(Buffer.from(chunk));
     });
-    child.once('error', () => {
+    let settled = false;
+    const settle = (exitCode: number | null, signal: NodeJS.Signals | null, stdout: string): void => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
-      resolve({ exitCode: null, timedOut, stdout: '', signal: null, stderr: readStderrTail(stderrCapture) });
-    });
+      resolve({ exitCode, timedOut, stdout, signal, stderr: readStderrTail(stderrCapture) });
+    };
+    child.once('error', () => settle(null, null, ''));
     child.once('close', (code, signal) => {
-      clearTimeout(timer);
       killProcessGroup(child);
-      resolve({ exitCode: code, timedOut, stdout: Buffer.concat(chunks).toString('utf8'), signal, stderr: readStderrTail(stderrCapture) });
+      settle(code, signal, Buffer.concat(chunks).toString('utf8'));
     });
   });
 }
