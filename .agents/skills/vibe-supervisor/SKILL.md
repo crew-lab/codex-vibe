@@ -84,15 +84,26 @@ A completed run is not a useful answer. The tasks that produced accepted answers
 
 The supervisor already gives every worker a fixed rule text: what its tools are and their limits, that nothing can be run, how to report a finding, edit hygiene (exact `old_string`, smallest diff, no new comments, no trailing whitespace, no scratch files), and to stop once it has answered. Vibe receives it as its system prompt and agy at the head of its prompt. Do not repeat those rules; spend the task text on what only you know about this task.
 
-Review:
+Review. Before filling it in, do the three things that decided whether real reviews came back usable:
+
+- **Run what you can run.** The worker cannot execute anything, and arithmetic or tracing in its head is where its answers went wrong. For every input you name, run the code yourself first and put what you observed in the task. The worker then explains a difference you measured instead of guessing at one.
+- **Ask for the working before the answer.** A worker told to answer in a few lines skips the trace and gets it wrong. Ask for the steps first, with intermediate values, and let it be long.
+- **Give the answer as a form to fill in.** Write out the exact lines you will read, with the fixed parts already in place and a placeholder for each value, and say that only the placeholders change. Ask for the wrong source line quoted exactly, not described. When you read the answer, take the values from the filled-in form and ignore the same labels in the working; never reject a review for its layout when its substance can be checked.
 
 ```text
 Read only <file>, <file>[, <file>]. Do not open other files.
 Question: <one question, e.g. whether parseLimit(value) rejects negative input as CONTRACT.md requires>.
-Failing evidence: <the command you ran and its exact error or wrong output, e.g. `node --test tests/` exits 1 with MODULE_NOT_FOUND | none>.
-Evaluate these inputs or paths: <input>, <input>, <input>.
+Evaluate these inputs: <input>; <input>; <input>.
+Failing evidence: <what you ran and what it returned for each input, e.g. `parseLimit("-1")` returns -1 | the failing command and its exact error | none>.
+Work first, answer second. Under the heading "Working", take each input through the code step by step and write every intermediate value: once following <the requirement> and once following the code exactly as written. At each comparison use the operator the code really has. <If you gave observed values: your result must equal them; if it does not, trace again.>
+Then return this form with each <...> replaced and nothing else changed:
+<Input 1: the first input>
+<Expected: ...>
+<Actual: ...>
+Then one line per finding: "Finding: <file>, <function>: <the source line that is wrong, quoted exactly> - <what it does wrong and which input shows it>".
+"No defect found in the inspected scope" is a valid answer; do not invent a finding.
 No style advice, refactors or recommendations outside the question.
-Final answer: the conclusion first, then the findings, under <n> lines.
+Order of the final answer: the conclusion in one line, the working, the filled-in form, the findings.
 ```
 
 Edit. Before filling it in, settle four facts from the repository yourself; each one answers a way real edits were rejected:
