@@ -65,6 +65,23 @@ Vibe 3.1.2 ran identical requests on the prepared baseline (`f963acd`) and the n
 - **After a failed check.** The skill says to compile an exported edit first and allows one separately authorized correction that carries the exact failure.
 - **agy probes record what agy emitted** (`agy_probes.<probe>.<run>.diagnostics` in the saved preparation report). Nothing about the hook, flags or settings changed.
 
+## Review repair handoff
+
+On `48227ac` with Vibe 3.1.2, the `ff4e23b` baseline, thinking off and thinking high each passed 0/5 on both reviews. All 30 turns ended normally. The two latest-build edits passed the independent quality checker. Use separate pin directories for the thinking configurations because preparation receipts are stored beside the pin.
+
+- Start with the review briefs in `scripts/quality-pack/`. Run the exact outgoing review context test in `tests/integration/app-server-wiring.test.ts`, then compare the requested context files with actual read paths for one live run of each review with thinking off.
+- For total, require a trace through `shippingFor` at exactly 5000 cents and all three expected and actual tax, shipping and total triples. In a failed run the answer reported actual shipping as 0 at the boundary (verified 499) and expected total as 1379 on input 1 (verified 1579). The checker distinguishes missing findings from incorrect numbers and malformed answers.
+- For stock, the no-defect conclusion needs evidence that shortage and over-release throw `RangeError` and unknown SKU throws `UnknownSkuError`, with a citation to `src/inventory.mjs`.
+- Keep the independent checker unchanged while adjusting the briefs. Save its full output for each failed run before expanding the sample. The separate date correction still needs the compiler diagnostic about potentially undefined month and day under `noUncheckedIndexedAccess`.
+
+## Antigravity 1.5.8 on 48227ac
+
+Both checks used candidate `6717dfd56b15580217e875f80423b5373a48ac966ae4c137a38315932b96ab18`. The strict preparation report is `9b145330d8db4c77b420437f722c589a6a2f2dcec1a3cddc497b6e1df1997de7`. The optional mode passed in report `c29f018bd01b6c6cbe45af1076d5dbaa05c4c200807cd48370187a997c1f03a4`.
+
+
+- Strict preparation still fails the hook invocation and denial, hook failure denial, and stream tool shape probes.
+- Preparation passes with `antigravity_skip_permissions = true`, where the supervisor hook enforces tool policy. A live read-only `review-stock` attempt was admitted and then failed before inference with `VSUP_BACKEND_ERROR` (`missing_gemini_api_key`). Run `9b5b92e9-e1e8-4d55-8fec-6c81746ac84e` failed after about one second and was closed. Headless execution requires one of `GEMINI_API_KEY`, `GOOGLE_API_KEY` or `ANTIGRAVITY_API_KEY` in the supervisor environment or macOS user launchd session. Once a key is available to the supervisor, rerun the read-only review with the prepared policy. Hosted review quality and edit behavior remain unverified.
+
 ## Next
 
 1. **Review baseline first, on the build already installed (`ff4e23b`).** Run `review-total` and `review-stock` five times each before updating. For each run record the verdict, seconds, model calls and tokens, and commit the full `node scripts/quality-pack.mjs check` output of every failed run: its detail lines tell a wrong value from a wrong format.
