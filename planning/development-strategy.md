@@ -6,9 +6,9 @@ Codex hands a task to Vibe, Vibe reviews or implements it, and it works well eve
 
 ## What we work on
 
-The current state is in the [Handoff](../Handoff.md). Mistral Vibe is the worker; the direct-Ollama comparison was dropped on 2026-11-13. In order:
+The current state is in the [Handoff](../Handoff.md). Mistral Vibe is the worker for upcoming trials. In order:
 
-1. **Real runs on the Vibe machine.** Build from `main`, install, prepare, and run real tasks through Codex; fix what breaks.
+1. **Real runs on the Vibe machine.** Build from `main` with the default prompt order, install and prepare against the installed Vibe, then run a small real bug fix through Codex. Verify what reaches the app-server and independently check the exported patch against the reproduction, regression tests and hygiene rules. Keep task-first on the experiment branch.
 2. **Runtime friction.** Remove what makes a correct result fail: the deadline and Node-version fixes of 2026-11-13 are on `main`; turns that stall after the patch is ready are next, diagnosed with `app_server_wire_trace`.
 3. **Review quality.** Reviews miss defects that need comparing the code with a written rule. Briefs carry the failing command and its error; the [quality pack](../docs/quality-pack.md) isolates a failure. If reviews still miss code they were not given, build the search sidecar ([design](review-search-tool.md)).
 4. **Antigravity.** Keep the experimental backend only if it gets used; otherwise remove it.

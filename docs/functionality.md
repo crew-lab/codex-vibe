@@ -119,7 +119,7 @@ Each worker receives an owned loopback `vibe_base_url` serving only a disabled m
 
 ## Bundled Vibe skills
 
-The permitted Vibe bundled plugin skills are permitted by owner decision ([ADR 0006](adr/0006-bundled-vibe-skills.md)): `vibe:create-plugin`, `vibe:skill-creator`, `vibe:vibe`, `vibe:worktree`. The runtime read-back requires plugin source, builtin scope and no registry reference, and rejects unknown or duplicate names; the `config/read` skill count above counts root user and project skills, which stay disabled, so it must still be 0. User/project/registry skills remain disabled. Skills are guidance; their instructions do not authorize tools, paths, shell or network access. The exact review/edit file-tool profiles and approval handler remain unchanged.
+The permitted Vibe bundled plugin skills are permitted by owner decision ([ADR 0006](adr/0006-bundled-vibe-skills.md)): `vibe:create-plugin`, `vibe:import`, `vibe:skill-creator`, `vibe:vibe`, `vibe:worktree`. The runtime read-back requires plugin source, builtin scope and no registry reference, and rejects unknown or duplicate names; the `config/read` skill count above counts root user and project skills, which stay disabled, so it must still be 0. User/project/registry skills remain disabled. Skills are guidance; their instructions do not authorize tools, paths, shell or network access. The exact review/edit file-tool profiles and approval handler remain unchanged.
 
 ## Artifact acceptance and reproducible validation
 

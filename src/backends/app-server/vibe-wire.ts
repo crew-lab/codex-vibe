@@ -77,7 +77,7 @@ export const VIBE_WIRE: VibeWireFacts = {
   managedConfig: { route: '/api/v1/code/managed-config', baseUrlSetting: 'vibe_base_url' },
   configRead: { harnessSelectionSourceOptional: true },
   bundledSkills: {
-    names: ['vibe:create-plugin', 'vibe:skill-creator', 'vibe:vibe', 'vibe:worktree'],
+    names: ['vibe:create-plugin', 'vibe:import', 'vibe:skill-creator', 'vibe:vibe', 'vibe:worktree'],
     provenance: { source: 'plugin', scope: 'builtin', registry: null }
   },
   historyEntryKinds: ['message', 'reasoning', 'effect', 'callback'],
