@@ -58,7 +58,7 @@ Collect the desired outcome, concrete acceptance criteria, canonical allowed wor
 4. Start with exactly the same request plus `authorization_id`, `attempt_id` and the `readiness_receipt`, before `receipt_expires_at`, on the same connection. On `VSUP_AUTHORIZATION_INVALID`, inspect `details.differing_fields` and determine the cause; re-check readiness for runtime drift. Only after an identified correction and within the authorized attempt budget may a new grant be registered. Never retry blindly or reuse identifiers; stop if the cause or allowance is unclear.
 5. Follow the run with cursor-based `vibe_status` calls, read `vibe_result`, then close as described below.
 
-The readiness receipt is admission evidence and does not replace the grant; the grant authorizes one start of one exact request. One started run owns the instance's active slot until backend close verifies termination. If close reports termination unverified, keep the run inspectable and do not start another run on that slot. Do not queue, retry automatically, or replay a task after restart or failure. The Codex custom agent in [.codex/agents/vibe-reviewer.toml](../../../.codex/agents/vibe-reviewer.toml) runs this sequence for one bounded task.
+The readiness receipt is admission evidence and does not replace the grant; the grant authorizes one start of one exact request. One started run owns the instance's active slot until backend close verifies termination. If close reports termination unverified, keep the run inspectable and do not start another run on that slot. Do not queue, retry automatically, or replay a task after restart or failure. A correction after a failed check is a new, separately authorized task, not a replay ([After a failed check](#after-a-failed-check)). The Codex custom agent in [.codex/agents/vibe-reviewer.toml](../../../.codex/agents/vibe-reviewer.toml) runs this sequence for one bounded task.
 
 Files matched by the root's `excluded_globs` or the fixed secret denylist are refused to the worker; leave them out of the file scope. A root with a daily budget refuses a start with `VSUP_BUDGET_EXCEEDED` once its 24-hour spending reaches the ceiling; do not move the task to another root to get around it.
 
@@ -121,6 +121,17 @@ Match the limits to the template: a review of two or three files fits `max_turns
 When a review or edit proposes a fix for a failure, accept it only after the failing command passes on the exported patch in a validation copy; a correct diagnosis is not a working fix. For a review, check the final answer, stop reason, warnings, integrity result and `usage.tool_calls` (a review that read nothing answered from nothing); `vibe-supervisor runs sarif <run-id>` exports its findings as SARIF. For an edit, inspect the result, fresh exported patch, changed and residual files, and hashes while the worktree remains available. Request a transcript only if needed to resolve a specific uncertainty; keep it private and out of reports. Verify the exact candidate in a separate disposable copy; do not run commands or tests inside the worker worktree or original source checkout. Accept only the reviewed delta. Coordinator verification does not turn an unsuccessful Vibe run into a Vibe success.
 
 Close the run after verification. Request cleanup only when the exported artifact is current. A pristine worktree can be removed after ownership checks; a dirty or uncertain one is retained with its path and reason for review. Keep the exported patch available and do not force-delete retained data. Report the server version, source/base, actual checks, stop reason, authentication outcome if observed, and any unresolved cleanup or acceptance gate. macOS Apple silicon is the supported platform; a clean-account installation is not yet verified. A run proves execution, not that the answer is correct.
+
+## After a failed check
+
+Check an exported edit in a validation copy in this order: the project's compiler or type checker, then its linter and whitespace check, then the tests and the reproduction. Stop at the first failure; a patch that does not compile has nothing else to tell you.
+
+When a check fails on a patch that is otherwise on the right track, you may start one correction. It is a new task, not a replay:
+
+- **A new start.** An ordinary edit from the same immutable base, with its own readiness call, request file and grant. It spends one hosted start from the user's allowance; if none remains, stop and report.
+- **The task text is the original task plus the failure:** the exact command, its exact output for the first few failures (file, line, message), the lines of the previous patch they point at, and one sentence on what the previous attempt got wrong, for example "the parsed month and day may be undefined under `noUncheckedIndexedAccess`; narrow them before use". Do not hand the worker the old patch to apply; it starts from the base.
+- **At most one correction per task.** If its patch fails a check too, close both runs as rejected and fix the change yourself or report it. Do not start a third.
+- **Record both runs:** the first as rejected with the failing check, the second on its own result.
 
 ## References
 
