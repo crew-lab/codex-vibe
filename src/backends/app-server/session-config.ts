@@ -6,7 +6,8 @@ import { excludedGlobProblem } from '../../config/validation.js';
 import { workerRules } from '../../core/worker-context.js';
 import { anchoredDenylistPatterns, type DenylistAnchor } from '../../security/globs.js';
 import { buildConfigModelWrite, type SessionAgentConfigInput } from './protocol.js';
-import { THINKING_OFF, type ReadbackExpectation, type SettingExpectation, type ToolPolicyExpectation } from './readback.js';
+import { type ReadbackExpectation, type SettingExpectation, type ToolPolicyExpectation } from './readback.js';
+import { sessionThinking, type SessionThinking } from './thinking.js';
 import { PINNED_WIRE, type WireSetting, type WireSettingValue } from './vibe-wire.js';
 
 export const PROFILE_TOOLS: Readonly<Record<RunMode, readonly string[]>> = PINNED_WIRE.profiles;
@@ -39,6 +40,7 @@ export interface SessionConfigInput {
   runDirectory: string;
   maxTurns: number;
   excludedGlobs?: readonly DenylistExclusion[];
+  reviewThinking?: SessionThinking;
 }
 
 export interface AgentProfileDocument {
@@ -122,10 +124,10 @@ function buildEnvironment(directories: SessionDirectories, agent: string): Recor
   return environment;
 }
 
-function buildExpectation(workspace: string, agent: string, tools: readonly string[], denylist: readonly string[]): ReadbackExpectation {
+function buildExpectation(workspace: string, agent: string, tools: readonly string[], denylist: readonly string[], thinking: SessionThinking): ReadbackExpectation {
   const toolPolicies: Record<string, ToolPolicyExpectation> = Object.fromEntries(tools.map((tool) => [tool, { permission: TOOL_PERMISSION, denylist }]));
   const settings: SettingExpectation[] = runtimeSettings(agent).map((setting) => ({ path: setting.key.split('.'), value: setting.value, match: setting.match ?? 'equal' }));
-  return { harness: PINNED_WIRE.harness, agent, cwd: workspace, tools, disabledTools: DISABLED_TOOLS, toolPolicies, settings };
+  return { harness: PINNED_WIRE.harness, agent, cwd: workspace, tools, disabledTools: DISABLED_TOOLS, toolPolicies, settings, thinking };
 }
 
 export function buildSessionConfig(input: SessionConfigInput): SessionConfigPlan {
@@ -150,7 +152,7 @@ export function buildSessionConfig(input: SessionConfigInput): SessionConfigPlan
     agentConfig: { cwd: workspace, agent, enabledTools: [...tools], disabledTools: [...DISABLED_TOOLS], maxTurns: input.maxTurns, systemPrompt: workerRules('vibe', input.mode) },
     profile: { directory: profileDirectory, file: path.join(profileDirectory, `${agent}.toml`), document, content: stringify(document) },
     environment: buildEnvironment(directories, agent),
-    expectation: buildExpectation(workspace, agent, tools, denylist)
+    expectation: buildExpectation(workspace, agent, tools, denylist, sessionThinking(input.mode, input.reviewThinking))
   };
 }
 
@@ -162,6 +164,6 @@ export async function writeSessionFiles(plan: SessionConfigPlan): Promise<void> 
   await createPrivateFile(plan.profile.file, plan.profile.content, 'w');
 }
 
-export function buildThinkingOffWrite(sessionId: string): ReturnType<typeof buildConfigModelWrite> {
-  return buildConfigModelWrite(sessionId, { reasoningEffort: THINKING_OFF });
+export function buildThinkingWrite(sessionId: string, plan: Pick<SessionConfigPlan, 'expectation'>): ReturnType<typeof buildConfigModelWrite> {
+  return buildConfigModelWrite(sessionId, { reasoningEffort: plan.expectation.thinking });
 }

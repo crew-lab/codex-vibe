@@ -364,7 +364,7 @@ async function main(argv) {
       server_requests: [], server_warnings: [], stats_after: null, stderr: { bytes: 0, tail: '' }, shutdown: null, blocked: null
     };
     const note = (id, severity, message, details) => addFinding(id, severity, message, label, details);
-    const plan = sessionConfig.buildSessionConfig({ mode, workspace, runDirectory, maxTurns: MAX_TURNS, excludedGlobs: options.excludedGlobs });
+    const plan = sessionConfig.buildSessionConfig({ mode, workspace, runDirectory, maxTurns: MAX_TURNS, excludedGlobs: options.excludedGlobs, ...(config.vibeReviewThinking === undefined ? {} : { reviewThinking: config.vibeReviewThinking }) });
     await sessionConfig.writeSessionFiles(plan);
     const childEnvironment = { ...environment.buildChildEnvironment(process.env), ...plan.environment };
     delete childEnvironment.MISTRAL_API_KEY;
@@ -503,7 +503,7 @@ async function main(argv) {
         if ((configRead.value.hooksCount ?? 0) !== 0) before.push({ path: 'config/read.hooksCount', expected: 0, actual: configRead.value.hooksCount });
         if ((configRead.value.skillsCount ?? 0) !== 0) before.push({ path: 'config/read.skillsCount', expected: 0, actual: configRead.value.skillsCount });
 
-        const write = await stage('config/model/write', async () => call(sessionConfig.buildThinkingOffWrite(sessionId), protocol.parseConfigModelWriteResult));
+        const write = await stage('config/model/write', async () => call(sessionConfig.buildThinkingWrite(sessionId, plan), protocol.parseConfigModelWriteResult));
         lap('thinking_write');
         const secondRuntime = await stage('runtime/read', async () => call(protocol.buildRuntimeRead(sessionId), protocol.parseRuntimeReadResult));
         const secondEffective = await stage('config/effective/read', async () => call(protocol.buildConfigEffectiveRead(sessionId), protocol.parseConfigEffectiveReadResult));
@@ -533,6 +533,7 @@ async function main(argv) {
         const alias = secondRuntime.value.runtime.activeModel?.alias ?? null;
         const activeRaw = valueAt(secondRuntime.raw, ['runtime', 'config', 'activeModel']);
         record.thinking = {
+          requested: plan.expectation.thinking,
           write_status: write.value.status,
           before: firstRuntime.value.runtime.activeModel?.thinking ?? null,
           after: secondRuntime.value.runtime.activeModel?.thinking ?? null,
@@ -697,12 +698,12 @@ async function main(argv) {
   const profileTools = (run) => run.observed?.tool_policies ?? {};
   const askVisible = subjectRuns.length > 0 && subjectRuns.every((item) => item.observed?.permission_ask_visible === true);
   const askAbsent = subjectRuns.some((item) => item.observed !== null && Object.values(profileTools(item)).some((policy) => policy.permission !== 'ask'));
-  const thinkingConfirmed = subjectRuns.length > 0 && subjectRuns.every((item) => item.thinking?.after === 'off' && item.thinking?.effective_models_thinking === 'off');
+  const thinkingConfirmed = subjectRuns.length > 0 && subjectRuns.every((item) => typeof item.thinking?.requested === 'string' && item.thinking.after === item.thinking.requested && item.thinking.effective_models_thinking === item.thinking.requested);
   const experimentsOff = subjectRuns.length > 0 && subjectRuns.every((item) => item.observed?.settings?.['experiments.enable']?.actual === false);
   report.gates = {
     'target-no-inference-conformance-check': report.result,
     'permission-ask-visible-in-effective-config': { config: askVisible ? 'visible' : askAbsent ? 'not-visible' : 'unknown', approval_handler_reached: 'needs-hosted-run' },
-    'thinking-off-effect': { setting_read_back: thinkingConfirmed, levels: subjectRuns[0]?.thinking?.levels ?? null, effect: 'needs-hosted-run' },
+    'thinking-effect': { setting_read_back: thinkingConfirmed, levels: subjectRuns[0]?.thinking?.levels ?? null, effect: 'needs-hosted-run' },
     'experiments-fetch-off': { setting_read_back: experimentsOff, network: report.network_observation?.experiments_verdict ?? 'not-observed' },
     'nested-run-typescript-shape-and-gating': { check: 'needs-hosted-run' }
   };

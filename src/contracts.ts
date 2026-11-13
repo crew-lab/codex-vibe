@@ -241,6 +241,7 @@ export interface SupervisorConfig {
   version: 1;
   backend?: BackendKind;
   vibeVersion?: import("./backends/app-server/supported-vibe.js").SelectableVibeVersion;
+  vibeReviewThinking?: import("./backends/app-server/thinking.js").SessionThinking;
   allowedWorkspaceRoots: string[];
   retention: { days: number };
   limits: {

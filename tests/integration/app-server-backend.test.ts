@@ -69,6 +69,7 @@ interface HarnessOptions {
   excludedGlobs?: string[];
   effectiveExcludedGlobs?: string[];
   anchorAtParent?: boolean;
+  config?: Partial<SupervisorConfig>;
 }
 
 class Harness {
@@ -123,7 +124,7 @@ class Harness {
       ...supplied,
       timing: { ...FAST_TIMING, ...supplied.timing }
     };
-    this.backend = new AppServerBackend(DEFAULT_CONFIG, options);
+    this.backend = new AppServerBackend({ ...DEFAULT_CONFIG, ...harness.config }, options);
     this.input = {
       runId: `run-${path.basename(this.base)}`,
       mode: harness.mode ?? 'review',
@@ -247,7 +248,7 @@ describe('app-server backend: clean runs', () => {
     expect(toolCall).toHaveLength(1);
     expect(toolCall[0]?.data).toMatchObject({ name: 'read_file', tool: 'file_system.read_file', kind: 'read', outcome: 'executed' });
 
-    expect(harness.states.flatMap(item => item.update?.modelObservations ?? [])).toEqual(expect.arrayContaining([expect.objectContaining({ source: 'runtime/read', thinking: 'off' })]));
+    expect(harness.states.flatMap(item => item.update?.modelObservations ?? [])).toEqual(expect.arrayContaining([expect.objectContaining({ source: 'runtime/read', thinking: 'off', requested_thinking: 'off', requested_thinking_source: 'supervisor-session-config' })]));
     expect(terminal.update?.usage?.tokensUsed).toBe(1500);
     expect(terminal.update?.usage?.cost?.authoritative).toBe(false);
     expect(terminal.update?.usage?.cost?.amount).toBeCloseTo(0.00108, 8);
@@ -313,6 +314,20 @@ describe('app-server backend: clean runs', () => {
       systemPrompt: workerRules('vibe', 'review')
     });
     expect(session.initializedNotificationSeen).toBe(true);
+  });
+
+  it('runs a review at high thinking only when configured, an edit always with thinking off, and reports the level it requested', async () => {
+    const observed = (harness: Harness) => harness.states.flatMap((item) => item.update?.modelObservations ?? []);
+    const highReview = new Harness('allowed-call', { config: { vibeReviewThinking: 'high' } });
+    expect((await highReview.run()).state).toBe('completed');
+    expect(highReview.frames('config/model/write').map((frame) => (frame.params as Json).reasoningEffort)).toEqual(['high']);
+    expect(observed(highReview)).toEqual(expect.arrayContaining([expect.objectContaining({ thinking: 'high', requested_thinking: 'high' })]));
+
+    const edit = new Harness('edit-call', { mode: 'edit', config: { vibeReviewThinking: 'high' } });
+    expect((await edit.run()).state).toBe('completed');
+    expect(edit.frames('config/model/write').map((frame) => (frame.params as Json).reasoningEffort)).toEqual(['off']);
+    expect(observed(edit).length).toBeGreaterThan(0);
+    expect(observed(edit).every((observation) => observation.thinking === 'off' && observation.requested_thinking === 'off')).toBe(true);
   });
 
   it('completes an edit with an approved search_replace and reports it as a write', async () => {
@@ -820,7 +835,7 @@ describe('app-server backend: startup failures', () => {
     const failure = await rejection(harness.start());
 
     expect(failure.details?.reason).toBe('readback_mismatch');
-    expect(failure.details?.fields).toContain('runtime.config.activeModel.thinking');
+    expect(failure.details?.fields).toEqual(expect.arrayContaining(['runtime.config.activeModel.thinking', 'config.models["mistral-medium-3.5"].thinking']));
     expect(harness.frames('config/model/write')).toHaveLength(1);
     expect(harness.frames('turn/start')).toHaveLength(0);
     harness.expectCleanedUp();

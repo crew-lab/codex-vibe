@@ -38,7 +38,7 @@ import {
   type AgentStats, type RuntimeReadResult, type SessionStartResult, type Turn
 } from './app-server/protocol.js';
 import { compareReadback, formatReadbackMismatches, type ReadbackMismatch } from './app-server/readback.js';
-import { buildSessionConfig, buildThinkingOffWrite, writeSessionFiles, type SessionConfigPlan } from './app-server/session-config.js';
+import { buildSessionConfig, buildThinkingWrite, writeSessionFiles, type SessionConfigPlan } from './app-server/session-config.js';
 import { UsageTracker, describeUsageFault, turnBackstop, type BudgetCeilings, type UsageFault, type UsageUpdate } from './app-server/usage.js';
 import { buildWorkspaceListing, NO_LISTING, type ListingLimits, type WorkspaceListing } from './app-server/workspace-listing.js';
 import { resolveCommand, spawned } from './app-server/executable.js';
@@ -505,7 +505,7 @@ class AppServerRun {
     const ready = await this.rpc(buildSessionReadyWait(this.sessionId), parseSessionReadyWaitResult, this.startupTimeout());
     if (!ready.ready) throw supervisorError('VSUP_BACKEND_ERROR', 'The Vibe session did not become ready.');
     await this.readback({ checkThinking: false, checkCounts: true, session: started });
-    await this.rpc(buildThinkingOffWrite(this.sessionId), parseConfigModelWriteResult, this.startupTimeout());
+    await this.rpc(buildThinkingWrite(this.sessionId, this.plan), parseConfigModelWriteResult, this.startupTimeout());
     const second = await this.readback({ checkThinking: true, checkCounts: false, session: started });
     const tracker = new UsageTracker(second.runtime.stats, {
       maxModelCalls: turnBackstop(this.input.limits.maxTurns, this.options.turnBackstopMargin),
@@ -532,7 +532,7 @@ class AppServerRun {
     }
     if (checkThinking) {
       if (this.modelObservations.length >= 100) throw supervisorError('VSUP_OUTPUT_LIMIT', 'Model observation limit exceeded.');
-      this.modelObservations.push(modelObservationSchema.parse({ observed_at: new Date().toISOString(), source: 'runtime/read', reported_name: runtime.runtime.activeModel?.name ?? null, prices_per_million: { input: runtime.runtime.stats.inputPricePerMillion, output: runtime.runtime.stats.outputPricePerMillion, cached_input: runtime.runtime.stats.cachedInputPricePerMillion }, session_model: sessionStart.state.session.model, alias: runtime.runtime.activeModel?.alias ?? null, thinking: runtime.runtime.activeModel?.thinking ?? null, requested_thinking: 'off', requested_thinking_source: 'supervisor-session-config', requested_model: null, requested_model_source: 'unavailable' }));
+      this.modelObservations.push(modelObservationSchema.parse({ observed_at: new Date().toISOString(), source: 'runtime/read', reported_name: runtime.runtime.activeModel?.name ?? null, prices_per_million: { input: runtime.runtime.stats.inputPricePerMillion, output: runtime.runtime.stats.outputPricePerMillion, cached_input: runtime.runtime.stats.cachedInputPricePerMillion }, session_model: sessionStart.state.session.model, alias: runtime.runtime.activeModel?.alias ?? null, thinking: runtime.runtime.activeModel?.thinking ?? null, requested_thinking: this.plan.expectation.thinking, requested_thinking_source: 'supervisor-session-config', requested_model: null, requested_model_source: 'unavailable' }));
       if (this.startReported.settled) await this.callbacks.onState('running', { modelObservations: [...this.modelObservations] });
     }
     return runtime;
@@ -1162,7 +1162,7 @@ export class AppServerBackend implements SupervisorBackend {
     let anchors: ReturnType<typeof workspaceAnchors>;
     try {
       anchors = workspaceAnchors(input.exclusions, input.cwd);
-      plan = buildSessionConfig({ mode: input.mode, workspace: input.workerWorkspace, runDirectory: input.runDirectory, maxTurns: input.limits.maxTurns, excludedGlobs: denylistAnchors(input.exclusions, input.cwd, input.workerWorkspace) });
+      plan = buildSessionConfig({ mode: input.mode, workspace: input.workerWorkspace, runDirectory: input.runDirectory, maxTurns: input.limits.maxTurns, excludedGlobs: denylistAnchors(input.exclusions, input.cwd, input.workerWorkspace), ...(this.config.vibeReviewThinking === undefined ? {} : { reviewThinking: this.config.vibeReviewThinking }) });
     } catch (error) { throw toSupervisorError(error, []); }
     const listing = promptTakesListing(input) ? await buildWorkspaceListing(input.workerWorkspace, this.options.listing, anchors) : NO_LISTING;
     const run = new AppServerRun({

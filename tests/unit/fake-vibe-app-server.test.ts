@@ -370,7 +370,7 @@ describe('fake vibe-app-server session and read-back', () => {
     expect(at(await client.ok('config/effective/read', { sessionId: 'fake-session-0001' }), 'config.active_model')).toBe('mistral-medium-3.5');
   });
 
-  it('applies a thinking-off model write to both read-backs, unless the scenario ignores it', async () => {
+  it('applies any thinking level, listed or not, to both read-backs as Vibe does, and can ignore the write', async () => {
     const client = new FakeClient('allowed-call');
     await client.open();
     expect(at(await client.ok('runtime/read', { sessionId: 'fake-session-0001' }), 'runtime.config.activeModel.thinking')).toBe('high');
@@ -378,7 +378,13 @@ describe('fake vibe-app-server session and read-back', () => {
     expect(write.status).toBe('applied');
     expect(at(write, 'runtime.config.activeModel.thinking')).toBe('off');
     expect(await thinking(client)).toBe('off');
-    expect(at(await client.call('config/model/write', { sessionId: 'fake-session-0001', reasoningEffort: 'maximum' }), 'error.code')).toBe('invalid_params');
+    const high = await client.ok('config/model/write', { sessionId: 'fake-session-0001', reasoningEffort: 'high' });
+    expect(high.status).toBe('applied');
+    expect(await thinking(client)).toBe('high');
+    expect(at(await client.ok('runtime/read', { sessionId: 'fake-session-0001' }), 'runtime.config.activeModel.thinking')).toBe('high');
+    const unlisted = await client.ok('config/model/write', { sessionId: 'fake-session-0001', reasoningEffort: 'maximum' });
+    expect(unlisted.status).toBe('applied');
+    expect(await thinking(client)).toBe('maximum');
 
     const ignoring = new FakeClient({ name: 'ignore-write', modelWrite: { ignore: true } });
     await ignoring.open();

@@ -1,5 +1,6 @@
 import { configFingerprint, loadConfig } from "./config.js";
 import { SUPPORTED_VIBE } from "../backends/app-server/supported-vibe.js";
+import { DEFAULT_REVIEW_THINKING } from "../backends/app-server/thinking.js";
 import type { SupervisorConfig } from "../contracts.js";
 import { inspectWorkspaceRoots } from "../security/paths.js";
 import type { UnavailableWorkspaceRoot } from "../security/paths.js";
@@ -27,6 +28,7 @@ export function fixedPolicy(config: SupervisorConfig): PolicySource {
 const BOOT_BOUND_SETTINGS: ReadonlyArray<readonly [string, (config: SupervisorConfig) => unknown]> = [
   ["version", (config) => config.version],
   ["vibe_version", (config) => config.vibeVersion ?? SUPPORTED_VIBE],
+  ["vibe_review_thinking", (config) => config.vibeReviewThinking ?? DEFAULT_REVIEW_THINKING],
   ["retention.days", (config) => config.retention.days],
   ["limits.review_timeout_seconds", (config) => config.limits.reviewTimeoutSeconds],
   ["limits.edit_timeout_seconds", (config) => config.limits.editTimeoutSeconds],

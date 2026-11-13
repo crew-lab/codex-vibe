@@ -21,7 +21,7 @@ import {
   type ReadbackMismatch,
   type ReadbackObservation
 } from '../../src/backends/app-server/readback.js';
-import { buildSessionConfig, buildThinkingOffWrite, writeSessionFiles, type SessionConfigPlan } from '../../src/backends/app-server/session-config.js';
+import { buildSessionConfig, buildThinkingWrite, writeSessionFiles, type SessionConfigPlan } from '../../src/backends/app-server/session-config.js';
 
 type Json = Record<string, unknown>;
 
@@ -234,6 +234,21 @@ describe('compareReadback on unit inputs', () => {
     expect(compareReadback(review.expectation, observe(cleanWire(review.expectation, 'off')), { checkThinking: true })).toEqual([]);
     expect(paths(compareReadback(review.expectation, observe(cleanWire(plan.expectation, 'off')), { checkThinking: true }))).toEqual(['runtime.tools', 'runtime.activeAgent.name', 'config.enabled_tools', 'config.default_agent', 'config.enabled_agents']);
   });
+
+  it('expects the thinking level the plan carries in both the runtime and the effective model entry', () => {
+    const high = buildSessionConfig({ mode: 'review', workspace, runDirectory: '/srv/runs/run-0003', maxTurns: 5, reviewThinking: 'high' });
+    const off = buildSessionConfig({ mode: 'review', workspace, runDirectory: '/srv/runs/run-0003', maxTurns: 5 });
+    const thinkingPaths = ['runtime.config.activeModel.thinking', `config.models["${alias}"].thinking`];
+    expect(paths(compareReadback(high.expectation, observe(cleanWire(high.expectation, 'off')), { checkThinking: true }))).toEqual(thinkingPaths);
+    expect(compareReadback(off.expectation, observe(cleanWire(off.expectation, 'off')), { checkThinking: true })).toEqual([]);
+    expect(paths(compareReadback(off.expectation, observe(cleanWire(off.expectation, 'high')), { checkThinking: true }))).toEqual(thinkingPaths);
+    const runtimeOnly = cleanWire(high.expectation, 'high');
+    assign(runtimeOnly.effective as Json, ['config', 'models', alias, 'thinking'], 'off');
+    expect(paths(compareReadback(high.expectation, observe(runtimeOnly), { checkThinking: true }))).toEqual([`config.models["${alias}"].thinking`]);
+    const effectiveOnly = cleanWire(high.expectation, 'high');
+    assign(effectiveOnly.runtime as Json, ['runtime', 'config', 'activeModel', 'thinking'], 'off');
+    expect(paths(compareReadback(high.expectation, observe(effectiveOnly), { checkThinking: true }))).toEqual(['runtime.config.activeModel.thinking']);
+  });
 });
 
 class FixtureClient {
@@ -314,7 +329,7 @@ async function readBack(patch: Json, options: { applyEnvironment?: boolean; thin
   });
   const first = compareReadback(sessionPlan.expectation, await read(), { checkThinking: false });
   if (options.thinkingOff !== true) return { first, second: null };
-  await client.call('config/model/write', buildThinkingOffWrite(sessionId).params);
+  await client.call('config/model/write', buildThinkingWrite(sessionId, sessionPlan).params);
   return { first, second: compareReadback(sessionPlan.expectation, await read(), { checkThinking: true }) };
 }
 

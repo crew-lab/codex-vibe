@@ -1,0 +1,11 @@
+{
+  "name": "reasoning-sentinel",
+  "steps": [
+    { "op": "reasoning", "text": "REASONING-SENTINEL-7f3a9c added whole", "summary": ["REASONING-SENTINEL-7f3a9c in a summary"] },
+    { "op": "reasoning", "text": "REASONING-SENTINEL-7f3a9c REASONING-SENTINEL-7f3a9c", "summary": ["REASONING-SENTINEL-7f3a9c streamed summary"], "stream": true },
+    { "op": "call", "tool": "file_system.read_file", "mode": "approval", "input": { "filePath": "${cwd}/src/index.ts", "offset": null, "limit": 2000 } },
+    { "op": "reasoning", "text": "REASONING-SENTINEL-7f3a9c REASONING-SENTINEL-7f3a9c", "stream": true },
+    { "op": "stats", "stats": { "modelCalls": 2, "sessionPromptTokens": 1200, "sessionCompletionTokens": 300, "sessionCachedTokens": 200, "inputPricePerMillion": 0.4, "outputPricePerMillion": 2, "toolCallsAgreed": 1, "toolCallsSucceeded": 1 } },
+    { "op": "say", "text": "The review found no issues.", "stream": true }
+  ]
+}

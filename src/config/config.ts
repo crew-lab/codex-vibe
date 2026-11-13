@@ -87,6 +87,7 @@ export function configFingerprint(config: SupervisorConfig): string {
   const semantic = {
     version: config.version,
     ...(config.vibeVersion ? { vibeVersion: config.vibeVersion } : {}),
+    ...(config.vibeReviewThinking ? { vibeReviewThinking: config.vibeReviewThinking } : {}),
     allowedWorkspaceRoots: config.allowedWorkspaceRoots.map(resolveConfiguredRoot),
     ...excludedGlobsSemantics(config),
     ...budgetsSemantics(config),

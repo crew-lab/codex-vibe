@@ -233,6 +233,24 @@ describe("app-server keys", () => {
     expect(() => validateConfig({ ...appServer, experimental: { correctable: true } })).toThrow(/correctable/);
   });
 
+  it("takes vibe_review_thinking as off or high only and leaves it unset when absent", () => {
+    expect(validateConfig(appServer)).not.toHaveProperty("vibeReviewThinking");
+    expect(validateConfig({ ...appServer, vibe_review_thinking: "off" })).toMatchObject({ vibeReviewThinking: "off" });
+    expect(validateConfig({ ...appServer, vibe_review_thinking: "high" })).toMatchObject({ vibeReviewThinking: "high" });
+    for (const value of ["medium", "max", "HIGH", "", true, 1]) {
+      expect(() => validateConfig({ ...appServer, vibe_review_thinking: value }), String(value)).toThrow(/vibe_review_thinking/);
+    }
+  });
+
+  it("treats a change of vibe_review_thinking between off and high as a boot-bound policy change", () => {
+    const off = validateConfig({ ...appServer, vibe_review_thinking: "off" });
+    const high = validateConfig({ ...appServer, vibe_review_thinking: "high" });
+    expect(configFingerprint(off)).not.toBe(configFingerprint(high));
+    expect(bootBoundDrift(off, high)).toEqual(["vibe_review_thinking"]);
+    expect(bootBoundDrift(validateConfig(appServer), off)).toEqual([]);
+    expect(bootBoundDrift(validateConfig(appServer), high)).toEqual(["vibe_review_thinking"]);
+  });
+
   it("loads the new keys from TOML and reports a missing manifest as a stable configuration error", async () => {
     const root = await mkdtemp(join(canonicalTmp, "vsup-config-")); roots.push(root);
     const manifest = join(root, "vibe-pin-manifest.json");
@@ -268,7 +286,9 @@ describe("app-server keys", () => {
       validateConfig({ ...appServer, limits: { max_cost_usd: 1 } }),
       validateConfig({ ...appServer, backend: "antigravity", experimental: { antigravity: true } }),
       validateConfig({ ...appServer, paths: { ...appServer.paths, antigravity: "/opt/bin/agy" } }),
-      validateConfig({ ...appServer, vibe_version: "3.1.2" })
+      validateConfig({ ...appServer, vibe_version: "3.1.2" }),
+      validateConfig({ ...appServer, vibe_review_thinking: "off" }),
+      validateConfig({ ...appServer, vibe_review_thinking: "high" })
     ];
     for (const variant of variants) expect(configFingerprint(variant)).not.toBe(revision);
     expect(variants.map((variant) => bootBoundDrift(base, variant))).toEqual([
@@ -278,7 +298,9 @@ describe("app-server keys", () => {
       ["limits.max_cost_usd"],
       ["backend", "experimental.antigravity"],
       ["paths.antigravity"],
-      []
+      [],
+      [],
+      ["vibe_review_thinking"]
     ]);
     expect(bootBoundDrift(base, validateConfig(appServer))).toEqual([]);
   });

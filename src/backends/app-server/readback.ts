@@ -2,6 +2,7 @@ import { BUNDLED_SKILL_NAMES, BUNDLED_SKILL_PROVENANCE, onlyBundledSkills } from
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { RuntimeReadResult, SessionStartResult } from './protocol.js';
+import type { SessionThinking } from './thinking.js';
 
 export interface SettingExpectation {
   path: readonly string[];
@@ -22,6 +23,7 @@ export interface ReadbackExpectation {
   disabledTools: readonly string[];
   toolPolicies: Readonly<Record<string, ToolPolicyExpectation>>;
   settings: readonly SettingExpectation[];
+  thinking: SessionThinking;
 }
 
 export interface ReadbackObservation {
@@ -40,7 +42,6 @@ export interface ReadbackMismatch {
   actual: unknown;
 }
 
-export const THINKING_OFF = 'off';
 const MAX_FORMATTED_MISMATCHES = 20;
 const MAX_FORMATTED_VALUE_CHARS = 120;
 
@@ -127,10 +128,10 @@ export function compareReadback(expected: ReadbackExpectation, observed: Readbac
 
   if (options.checkThinking) {
     const active = runtime.activeModel;
-    equal('runtime.config.activeModel.thinking', THINKING_OFF, active?.thinking ?? undefined);
+    equal('runtime.config.activeModel.thinking', expected.thinking, active?.thinking ?? undefined);
     const alias = active?.alias ?? null;
     if (alias === null) mismatches.push({ path: 'runtime.config.activeModel.alias', expected: 'a model alias', actual: undefined });
-    else equal(`config.${describePath(['models', alias, 'thinking'])}`, THINKING_OFF, valueAt(config, ['models', alias, 'thinking']));
+    else equal(`config.${describePath(['models', alias, 'thinking'])}`, expected.thinking, valueAt(config, ['models', alias, 'thinking']));
   }
 
   return mismatches;

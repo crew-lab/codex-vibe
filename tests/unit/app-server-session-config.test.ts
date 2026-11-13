@@ -9,7 +9,7 @@ import {
   DISABLED_TOOLS,
   PROFILE_TOOLS,
   buildSessionConfig,
-  buildThinkingOffWrite,
+  buildThinkingWrite,
   sessionDirectories,
   workspaceDenylist,
   writeSessionFiles
@@ -206,10 +206,24 @@ describe('child process environment additions', () => {
   });
 });
 
-describe('thinking off write', () => {
-  it('is a config/model/write that only sets the reasoning effort', () => {
-    expect(buildThinkingOffWrite('session-1')).toEqual({ method: 'config/model/write', params: { sessionId: 'session-1', reasoningEffort: 'off' } });
-    expect(() => buildThinkingOffWrite('')).toThrow(TypeError);
+describe('session thinking', () => {
+  const runDirectory = '/srv/runs/run-thinking';
+  const workspace = '/srv/work/space';
+  const plan = (mode: 'review' | 'edit', reviewThinking?: 'off' | 'high') => buildSessionConfig({ mode, workspace, runDirectory, maxTurns: 5, ...(reviewThinking === undefined ? {} : { reviewThinking }) });
+
+  it('keeps thinking off in a review by default, takes high only when configured, and never thinks in an edit', () => {
+    expect(plan('review').expectation.thinking).toBe('off');
+    expect(plan('review', 'off').expectation.thinking).toBe('off');
+    expect(plan('review', 'high').expectation.thinking).toBe('high');
+    expect(plan('edit').expectation.thinking).toBe('off');
+    expect(plan('edit', 'high').expectation.thinking).toBe('off');
+  });
+
+  it('writes the plan level as a config/model/write that only sets the reasoning effort', () => {
+    expect(buildThinkingWrite('session-1', plan('review'))).toEqual({ method: 'config/model/write', params: { sessionId: 'session-1', reasoningEffort: 'off' } });
+    expect(buildThinkingWrite('session-1', plan('review', 'high'))).toEqual({ method: 'config/model/write', params: { sessionId: 'session-1', reasoningEffort: 'high' } });
+    expect(buildThinkingWrite('session-1', plan('edit', 'high'))).toEqual({ method: 'config/model/write', params: { sessionId: 'session-1', reasoningEffort: 'off' } });
+    expect(() => buildThinkingWrite('', plan('review'))).toThrow(TypeError);
   });
 });
 

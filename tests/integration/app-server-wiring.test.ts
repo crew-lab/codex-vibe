@@ -21,6 +21,7 @@ import { RunManager } from '../../src/core/run-manager.js';
 import { runToWire } from '../../src/core/serialization.js';
 import { runDoctor } from '../../src/diagnostics/doctor.js';
 import { createSupervisorMcpServer } from '../../src/mcp/server.js';
+import { exportReport } from '../../src/reporting/export.js';
 import { makeFakeVibeEnvironment } from '../unit/support/fake-vibe-environment.js';
 
 const repoRoot = path.resolve(import.meta.dirname, '..', '..');
@@ -434,6 +435,44 @@ describe('end to end through the MCP surface with the fake app-server', () => {
     expect(everything).not.toContain('private reasoning');
     expect(JSON.parse(readFileSync(path.join(runDirectory, 'meta.json'), 'utf8'))).toMatchObject({ backend: 'app-server', state: 'closed' });
     expect(readFileSync(stack.logFile, 'utf8')).toContain('"method":"turn/start"');
+  }, 60_000);
+
+  it('leaves no reasoning in the supervisor data directory when a review opts into high thinking with the wire trace on (Vibe private store not covered)', async () => {
+    const sentinel = 'REASONING-SENTINEL-7f3a9c';
+    vi.stubEnv('VSUP_TRACE_VIBE_WIRE', '1');
+    const stack = await buildStack('reasoning-sentinel', { config: { vibeReviewThinking: 'high' } });
+    const filesUnder = (directory: string): string[] => readdirSync(directory, { withFileTypes: true, recursive: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => path.join(entry.parentPath, entry.name));
+    const leaks = () => filesUnder(stack.data).filter((file) => readFileSync(file).includes(sentinel));
+
+    const finished = await call(stack.client, 'vibe_review_start', { task: 'Review the repository.', cwd: stack.source, wait_seconds: 30 }, stack.manager);
+    expect(finished).toMatchObject({ state: 'completed', result: { summary: 'The review found no issues.' } });
+    const runId = finished.run_id as string;
+    const runDirectory = path.join(stack.data, 'runs', runId);
+
+    const log = readFileSync(stack.logFile, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as { kind: string; frame?: { method?: string; params?: { reasoningEffort?: string } } });
+    expect(log.filter((entry) => entry.kind === 'frame' && entry.frame?.method === 'config/model/write').map((entry) => entry.frame?.params?.reasoningEffort)).toEqual(['high']);
+    const status = await call(stack.client, 'vibe_status', { run_id: runId, after_seq: 0, max_events: 100, wait_seconds: 0 });
+    expect(JSON.stringify(status)).not.toContain(sentinel);
+    const result = await call(stack.client, 'vibe_result', { run_id: runId, detail: 'full', include_transcript: true });
+    expect(JSON.stringify(result)).not.toContain(sentinel);
+    mkdirSync(path.join(stack.data, 'reports'), { mode: 0o700 });
+    await exportReport({ directory: runDirectory, output: path.join(stack.data, 'reports', runId), include: ['events'] });
+
+    const events = readFileSync(path.join(runDirectory, 'events.ndjson'), 'utf8').trim().split('\n').map((line) => JSON.parse(line) as { type: string; data: Record<string, unknown> });
+    const diagnostics = events.filter((event) => event.type === 'diagnostic').map((event) => event.data);
+    expect(diagnostics.find((data) => data.reason === 'app_server_wire_trace')).toMatchObject({ terminal_state: 'completed', entries: expect.arrayContaining([expect.objectContaining({ kind: 'notification', method: 'history/entryUpdated' })]) });
+    expect(diagnostics.find((data) => data.reason === 'reasoning_observation')).toMatchObject({ streamed_entries: 3, history_entries: 3, history_audited: true });
+    expect(filesUnder(path.join(stack.data, 'reports', runId)).length).toBeGreaterThan(0);
+    expect(filesUnder(runDirectory).map((file) => path.relative(runDirectory, file))).toEqual(expect.arrayContaining(['meta.json', 'events.ndjson']));
+    expect(leaks()).toEqual([]);
+
+    await call(stack.client, 'vibe_close', { run_id: runId });
+    expect(leaks()).toEqual([]);
+    const canary = path.join(runDirectory, 'canary.txt');
+    writeFileSync(canary, `${sentinel}\n`);
+    expect(leaks()).toEqual([canary]);
   }, 60_000);
 
   it('surfaces a refused write as a tool_denied event and still completes the review', async () => {

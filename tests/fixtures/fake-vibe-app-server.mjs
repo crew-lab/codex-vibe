@@ -580,9 +580,7 @@ async function runStep(step, turn, raceInterrupt) {
   const silent = step.silent === true;
   switch (step.op) {
     case 'say': return say(step, turn, silent);
-    case 'reasoning':
-      await addEntry(baseEntry(turn, { type: 'reasoning', text: step.text ?? '', summary: [] }), { silent });
-      return undefined;
+    case 'reasoning': return reason(step, turn, silent);
     case 'stats': {
       Object.assign(state.stats, step.stats ?? {});
       await send(notification('session/statsUpdated', nextEventId(), { stats: clone(state.stats), contextWindow: scenario.contextWindow ?? 128000 }));
@@ -613,6 +611,22 @@ async function runStep(step, turn, raceInterrupt) {
     case 'partialFrame': await writeRaw('{"jsonrpc":"2.0","method":"history/entryAdded","params":{"eventId":'); return undefined;
     default: throw new Error(`unhandled step ${step.op}`);
   }
+}
+
+async function reason(step, turn, silent) {
+  const summary = step.summary ?? [];
+  if (!step.stream) {
+    await addEntry(baseEntry(turn, { type: 'reasoning', text: step.text ?? '', summary }), { silent });
+    return undefined;
+  }
+  const entry = baseEntry(turn, { type: 'reasoning', text: '', summary, generationStatus: 'in_progress' });
+  await addEntry(entry, { silent });
+  const text = step.text ?? '';
+  for (const piece of [text.slice(0, Math.ceil(text.length / 2)), text.slice(Math.ceil(text.length / 2))]) {
+    if (piece) await patchEntry(entry, [{ op: 'append', path: '/text', value: piece }], { silent });
+  }
+  await patchEntry(entry, [{ op: 'replace', path: '/generationStatus', value: 'completed' }], { silent });
+  return undefined;
 }
 
 async function say(step, turn, silent) {
@@ -970,8 +984,6 @@ const handlers = {
   },
   'config/model/write'(params) {
     requireSession(params);
-    const levels = scenario.thinkingLevels ?? ['off', 'high'];
-    if (params.reasoningEffort && !levels.includes(params.reasoningEffort)) throw new RpcError('invalid_params', 'Invalid reasoning effort', { errorCount: 1, issues: [{ path: ['reasoningEffort'], message: `Input should be one of: ${levels.join(', ')}` }] });
     const write = scenario.modelWrite ?? {};
     if (!write.ignore) {
       if (params.modelAlias) { state.session.modelAlias = params.modelAlias; state.session.modelPinned = true; }
