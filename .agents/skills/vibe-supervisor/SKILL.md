@@ -128,10 +128,10 @@ Check an exported edit in a validation copy in this order: the project's compile
 
 When a check fails on a patch that is otherwise on the right track, you may start one correction. It is a new task, not a replay:
 
+- **Close the first run first.** Export its patch, validate it, and close the run as rejected with the failing check. A started run holds the one slot until it is closed, so the correction cannot start before that.
 - **A new start.** An ordinary edit from the same immutable base, with its own readiness call, request file and grant. It spends one hosted start from the user's allowance; if none remains, stop and report.
 - **The task text is the original task plus the failure:** the exact command, its exact output for the first few failures (file, line, message), the lines of the previous patch they point at, and one sentence on what the previous attempt got wrong, for example "the parsed month and day may be undefined under `noUncheckedIndexedAccess`; narrow them before use". Do not hand the worker the old patch to apply; it starts from the base.
-- **At most one correction per task.** If its patch fails a check too, close both runs as rejected and fix the change yourself or report it. Do not start a third.
-- **Record both runs:** the first as rejected with the failing check, the second on its own result.
+- **At most one correction per task.** If its patch fails a check too, close it as rejected as well and fix the change yourself or report it. Do not start a third.
 
 ## References
 

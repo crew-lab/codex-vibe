@@ -60,20 +60,22 @@ Vibe 3.1.2 ran identical requests on the prepared baseline (`f963acd`) and the n
 
 ## Changed after those results, not yet run on a worker
 
-- **Reviews can think.** `vibe_review_thinking = "high"` makes Vibe review sessions ask for thinking; the default stays `off`, and edit sessions are always off. The supervisor's own files never hold reasoning (a test with a sentinel in reasoning text, summaries and streamed updates finds nothing in its data directory). Vibe's own private session store does hold it while such a run lasts, which is why it is opt-in.
+- **Reviews can think.** `vibe_review_thinking = "high"` makes Vibe review sessions ask for thinking; the default stays `off`, and edit sessions are always off. The supervisor's own files never hold reasoning (a test with a sentinel in reasoning text, summaries and streamed updates finds nothing in its data directory). Vibe's own private session store can hold it while such a run lasts, which is why it is opt-in.
 - **Review rules ask for evidence:** the code's result and deciding line for every input the task names, the threshold value itself and either side of it, and the task's exact output format.
 - **After a failed check.** The skill says to compile an exported edit first and allows one separately authorized correction that carries the exact failure.
 - **agy probes record what agy emitted** (`agy_probes.<probe>.<run>.diagnostics` in the saved preparation report). Nothing about the hook, flags or settings changed.
 
 ## Next
 
-1. **On the Vibe machine,** build `main`, install it and run `prepare check` (the policy changed, so the earlier receipt is stale).
-2. **Reviews, five runs per cell.** Run `review-total` and `review-stock` five times with the default (thinking off) and five times with `vibe_review_thinking = "high"` in the configuration (it is boot-bound: restart the server and run `prepare check` after changing it). For each run record the verdict, seconds, model calls and tokens, and commit the full `node scripts/quality-pack.mjs check` output of every failed run: its detail lines tell a wrong value from a wrong format.
-3. **Edits.** Run `edit-shipping` and `edit-reserve-all` once each, to confirm nothing regressed.
-4. **Calendar-date replay.** In a validation copy compile the exported patch before anything else. If it fails, start one correction as the skill's "After a failed check" section describes, with the exact compiler output in the task, and record both runs.
-5. **agy 1.5.8.** Run `prepare check` twice, with `[experimental] antigravity_skip_permissions = true` and with it `false`, and commit the `agy_probes` section of each saved report (it holds tool names, event types, statuses and a redacted stderr tail, no prompt or model text). Say which of the two the earlier failure was.
-6. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
-7. **Release 2.2.1** once the reviews pass on Vibe.
+1. **Review baseline first, on the build already installed (`ff4e23b`).** Run `review-total` and `review-stock` five times each before updating. For each run record the verdict, seconds, model calls and tokens, and commit the full `node scripts/quality-pack.mjs check` output of every failed run: its detail lines tell a wrong value from a wrong format.
+2. **Then build `main`,** install it and run `prepare check` (the policy changed, so the earlier receipt is stale).
+3. **Reviews on the new build, five runs each,** with the default configuration (thinking off). Record and commit the same things. This measures the new review rules alone.
+4. **Reviews with thinking, only if the owner agrees.** `vibe_review_thinking = "high"` is opt-in because Vibe's own private session store in the run's `TMPDIR` can then hold reasoning text until the run is closed. With that agreed: set the key, restart the server, run `prepare check`, and repeat the five runs of each review task.
+5. **Edits.** Run `edit-shipping` and `edit-reserve-all` once each, to confirm nothing regressed.
+6. **Calendar-date replay.** In a validation copy compile the exported patch before anything else. If it fails, close the run as rejected, then start one correction as the skill's "After a failed check" section describes, with the exact compiler output in the task.
+7. **agy 1.5.8.** Run `prepare check` twice, with `[experimental] antigravity_skip_permissions = true` and with it `false`, and commit the `diagnostics` objects under `agy_probes` from each saved report (tool names, event types, statuses, a redacted stderr tail; no prompt or model text). Say which of the two the earlier failure was.
+8. **Owner:** decide whether review thinking may be used and whether it should become the default; ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
+9. **Release 2.2.1** once the reviews pass on Vibe.
 
 ## Build, install and prepare
 
