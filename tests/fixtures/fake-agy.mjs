@@ -148,7 +148,7 @@ if (modes.has('no-function-response')) {
   process.stderr.write('warning: tool call needs approval\n');
   process.stderr.write(`cannot open:${process.env.HOME}/.gemini/config/hooks.json or file:///Users/someone/project/secret.txt\n`);
   process.stderr.write('auth failed with key AIzaSyFAKEKEYFORREDACTIONTEST0123456789 and GEMINI_API_KEY=SENTINEL_KEY_VALUE_1234\n');
-  emit({ event: 'result', result: { status: 'SUCCESS', finished_reason: 'END_TURN', response: 'SENTINEL_TEXT' } });
+  await new Promise((resolve) => process.stdout.write(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', finished_reason: 'END_TURN', response: 'SENTINEL_TEXT' } }) + '\n', resolve));
   process.exit(0);
 }
 if (call) {
