@@ -1947,6 +1947,8 @@ console.log(JSON.stringify({ type: 'result', status: 'SUCCESS', response: 'done'
     let finalState: string | undefined;
     let finalDetail: unknown;
     const observed: unknown[] = [];
+    let reportTerminal: () => void = () => undefined;
+    const terminal = new Promise<void>((resolve) => { reportTerminal = resolve; });
     const { handle, process: childProcess } = await backend.start(
       {
         runId: 'google-key-run',
@@ -1960,10 +1962,14 @@ console.log(JSON.stringify({ type: 'result', status: 'SUCCESS', response: 'done'
       },
       {
         onEvent: async (event) => { observed.push(event); },
-        onState: async (state, detail) => { finalState = state; finalDetail = detail; }
+        onState: async (state, detail) => {
+          finalState = state; finalDetail = detail;
+          if (state === 'completed' || state === 'failed' || state === 'cancelled') reportTerminal();
+        }
       }
     );
     const exit = await childProcess.done;
+    await terminal;
     await backend.close(handle);
 
     const capturedText = await readFile(path.join(workspace, 'captured.json'), 'utf8').catch(() => null);
@@ -1972,6 +1978,6 @@ console.log(JSON.stringify({ type: 'result', status: 'SUCCESS', response: 'done'
     expect(captured.modelProvider).toBe('gemini');
     expect(captured.pathHasNeutralizer).toBe(true);
     expect(captured.browserVar).toBe('false');
-    expect(finalState).toBe('completed');
+    expect(finalState, JSON.stringify(finalDetail).slice(0, 2000)).toBe('completed');
   });
 });
