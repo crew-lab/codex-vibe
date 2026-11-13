@@ -70,11 +70,11 @@ Vibe 3.1.2 ran identical requests on the prepared baseline (`f963acd`) and the n
 1. **Review baseline first, on the build already installed (`ff4e23b`).** Run `review-total` and `review-stock` five times each before updating. For each run record the verdict, seconds, model calls and tokens, and commit the full `node scripts/quality-pack.mjs check` output of every failed run: its detail lines tell a wrong value from a wrong format.
 2. **Then build `main`,** install it and run `prepare check` (the policy changed, so the earlier receipt is stale).
 3. **Reviews on the new build, five runs each,** with the default configuration (thinking off). Record and commit the same things. This measures the new review rules alone.
-4. **Reviews with thinking, only if the owner agrees.** `vibe_review_thinking = "high"` is opt-in because Vibe's own private session store in the run's `TMPDIR` can then hold reasoning text until the run is closed. With that agreed: set the key, restart the server, run `prepare check`, and repeat the five runs of each review task.
+4. **Reviews with thinking** (the owner agreed on 2026-11-13). `vibe_review_thinking = "high"` is opt-in because Vibe's own private session store in the run's `TMPDIR` can then hold reasoning text until the run is closed. Set the key, restart the server, run `prepare check`, and repeat the five runs of each review task.
 5. **Edits.** Run `edit-shipping` and `edit-reserve-all` once each, to confirm nothing regressed.
 6. **Calendar-date replay.** In a validation copy compile the exported patch before anything else. If it fails, close the run as rejected, then start one correction as the skill's "After a failed check" section describes, with the exact compiler output in the task.
 7. **agy 1.5.8.** Run `prepare check` twice, with `[experimental] antigravity_skip_permissions = true` and with it `false`, and commit the `diagnostics` objects under `agy_probes` from each saved report (tool names, event types, statuses, a redacted stderr tail; no prompt or model text). Say which of the two the earlier failure was.
-8. **Owner:** decide whether review thinking may be used and whether it should become the default; ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
+8. **Owner:** decide from the results whether review thinking becomes the default; ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
 9. **Release 2.2.1** once the reviews pass on Vibe.
 
 ## Build, install and prepare
