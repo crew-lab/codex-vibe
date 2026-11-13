@@ -29,8 +29,8 @@ export async function checkOrderTotalCases(project, answer) {
     const sections = answer.replaceAll('\r\n', '\n').split(/^Input (\d+):[^\n]*$/im);
     return CASES.flatMap(({ unitCents, quantity, discountPercent, expected }, index) => {
       const id = `input-${index + 1}`;
-      const rows = sections.filter((_, part) => part % 2 === 0 && part > 0 && sections[part - 1] === String(index + 1));
-      if (rows.length !== 1) return [{ id, passed: false, detail: 'Expected exactly one input section' }];
+      const rows = sections.filter((section, part) => part % 2 === 0 && part > 0 && sections[part - 1] === String(index + 1) && /^(Expected|Actual):/im.test(section));
+      if (rows.length !== 1) return [{ id, passed: false, detail: `Expected exactly one input section with Expected and Actual lines, found ${rows.length}` }];
       const gross = unitCents * quantity;
       const discounted = gross - Math.round(gross * discountPercent / 100);
       const shipping = shippingFor(gross);

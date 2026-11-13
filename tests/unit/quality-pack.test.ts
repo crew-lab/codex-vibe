@@ -86,6 +86,16 @@ describe('quality pack', () => {
       stdout: expect.stringContaining('"id": "input-2-actual",\n      "passed": false')
     });
 
+    const working = 'Working\n\nInput 1: 1000 cents with a 10% discount\n- tax: 20% of 900 = 180; code percentOf(1000, 20) = 200\n\nInput 2: 5000 cents\n- shipping: 5000 > 5000 is false, so 499';
+    await writeFile(answer, `${findings}\n\n${working}\n\n${cases}\n`);
+    expect(JSON.parse((await exec(process.execPath, command)).stdout)).toMatchObject({ passed: true });
+
+    await writeFile(answer, `${findings}\n\n${cases}\n\n${cases}\n`);
+    await expect(exec(process.execPath, command)).rejects.toMatchObject({
+      code: 1,
+      stdout: expect.stringContaining('Expected exactly one input section with Expected and Actual lines, found 2')
+    });
+
     await writeFile(answer, findings);
     await expect(exec(process.execPath, command)).rejects.toMatchObject({ code: 1 });
     expect(JSON.parse((await exec(process.execPath, [...command, '--findings-only'])).stdout)).toMatchObject({ passed: true });
