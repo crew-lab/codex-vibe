@@ -24,6 +24,8 @@
 
 ## What does not work well yet
 
+- **Replay with the build from `f963acd`.** The packaged build passed preparation against Vibe 3.1.2. All 15 calendar-date regression tests on that checkout and the fake app-server review-input test passed. A live replay on the original buggy revision again produced a patch that failed TypeScript compilation because parsed date components could be undefined. The run was closed and the patch was left out of main.
+
 - **Calendar-date repeat on Vibe 3.1.2.** Replaying the same task on the original buggy revision reached the turn limit. Vibe read and edited both expected files. The exported patch failed TypeScript compilation because the parsed date components could be undefined. The run was closed and the patch was left out of main.
 
 - **Review quality.** `review-total` found the tax defect and missed the shipping defect at exactly 5000 cents in three runs with different briefs, including one given the observed values. [Review evidence](research/evidence/paired-comparison-protocol-20261108/README.md#vibe-review-follow-up)
