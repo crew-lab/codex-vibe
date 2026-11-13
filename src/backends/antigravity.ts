@@ -25,7 +25,9 @@ import { pathWithPrefix, setupHeadlessBrowserNeutralizer } from '../security/env
 import { createPrivateDir } from '../security/paths.js';
 import { turnBackstop } from './app-server/usage.js';
 import { buildWorkspaceListing } from './app-server/workspace-listing.js';
-import { buildTaskPrompt } from '../core/task-prompt.js';
+import { buildTaskPrompt, promptTakesListing } from '../core/task-prompt.js';
+import { isStableVersionAtLeast } from '../core/stable-version.js';
+import { workerRules } from '../core/worker-context.js';
 import { anchoredDenylistPatterns, denylistAnchors, workspaceAnchors, type DenylistAnchor } from '../security/globs.js';
 import {
   parseToolArguments,
@@ -38,29 +40,14 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-export const SUPPORTED_ANTIGRAVITY_VERSIONS = ['1.4.0', '1.4.3', '1.4.4', '1.4.7', '1.4.8', '1.4.9'] as const;
-export type SupportedAntigravityVersion = (typeof SUPPORTED_ANTIGRAVITY_VERSIONS)[number];
-export const SUPPORTED_ANTIGRAVITY_VERSION = '1.4.9';
+export const MINIMUM_ANTIGRAVITY_VERSION = '1.5.8';
 
-export const ALLOWED_ANTIGRAVITY_BUILTIN_SKILLS = [
-  'agy-customizations',
-  'antigravity-guide',
-  'antigravity_guide',
-  'automation',
-  'generative_ui',
-  'migrate-workflows',
-  'permissioned-github',
-  'plugin',
-  'run-workflow',
-  'ui-plugin-navigation'
-] as const;
-
-export function onlyAllowedAntigravityBuiltinSkills(value: readonly unknown[]): boolean {
+export function onlyBuiltinAntigravitySkills(value: readonly unknown[]): boolean {
   const seen = new Set<string>();
   return value.every((entry) => {
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return false;
     const skill = entry as Record<string, unknown>;
-    if (typeof skill.name !== 'string' || !(ALLOWED_ANTIGRAVITY_BUILTIN_SKILLS as readonly string[]).includes(skill.name) || seen.has(skill.name)) return false;
+    if (typeof skill.name !== 'string' || skill.name.length === 0 || seen.has(skill.name)) return false;
     seen.add(skill.name);
     return skill.builtin === true;
   });
@@ -77,8 +64,8 @@ function permissionLayerWarnings(layer: AntigravityPermissionLayer): { warnings?
   return layer === 'bypassed' ? { warnings: [PERMISSION_LAYER_BYPASSED_MESSAGE] } : {};
 }
 
-export function isSupportedAntigravityVersion(version: string | null | undefined): version is SupportedAntigravityVersion {
-  return typeof version === 'string' && (SUPPORTED_ANTIGRAVITY_VERSIONS as readonly string[]).includes(version);
+export function isSupportedAntigravityVersion(version: string | null | undefined): version is string {
+  return typeof version === 'string' && isStableVersionAtLeast(version, MINIMUM_ANTIGRAVITY_VERSION);
 }
 
 export function selectAntigravityApiKey(source: NodeJS.ProcessEnv = process.env): string | undefined {
@@ -204,6 +191,7 @@ export interface AntigravityHandle extends BackendRunHandle {
 interface ParsedEnvelopeMeta {
   status?: string;
   error?: string;
+  finishedReason?: string;
   usage?: UsageState;
   numTurns?: number;
   stepIdx?: number;
@@ -413,6 +401,7 @@ export function extractEnvelopeMeta(entry: unknown): ParsedEnvelopeMeta {
 
   if (typeof obj.status === 'string') meta.status = obj.status.toUpperCase();
   if (typeof obj.error === 'string' && obj.error.trim().length > 0) meta.error = obj.error.trim();
+  if (top.event === 'result' && typeof obj.finished_reason === 'string') meta.finishedReason = obj.finished_reason;
   if (!meta.type && typeof obj.type === 'string') meta.type = obj.type;
 
   if (Array.isArray(obj.tool_calls)) {
@@ -512,6 +501,7 @@ function createStreamOutputParser(
       withheld ||
       meta.status ||
       meta.error ||
+      meta.finishedReason ||
       meta.usage ||
       meta.numTurns !== undefined ||
       meta.stepIdx !== undefined ||
@@ -606,6 +596,7 @@ export async function writeIsolatedSettings(
 
   const settings = {
     ...(options.modelProvider ? { modelProvider: options.modelProvider } : {}),
+    ...(mode === 'review' ? { agentMode: '' } : {}),
     toolPermission: 'strict',
     enableTerminalSandbox: true,
     allowNonWorkspaceAccess: false,
@@ -662,8 +653,8 @@ export class AntigravityBackend implements SupervisorBackend {
         version: resolved.version,
         details: {
           code: 'VSUP_VIBE_VERSION_UNSUPPORTED',
-          error: `Unsupported Antigravity CLI version ${resolved.version}; supported versions: ${SUPPORTED_ANTIGRAVITY_VERSIONS.join(', ')}.`,
-          expected_version: SUPPORTED_ANTIGRAVITY_VERSIONS.join(', '),
+          error: `Unsupported Antigravity CLI version ${resolved.version}; use a stable release at or above ${MINIMUM_ANTIGRAVITY_VERSION}.`,
+          expected_version: `>=${MINIMUM_ANTIGRAVITY_VERSION}`,
           actual_version: resolved.version
         }
       };
@@ -686,14 +677,14 @@ export class AntigravityBackend implements SupervisorBackend {
     const resolved = await resolveAntigravityExecutable(cmd);
     this.probedSha256 = resolved.sha256 ?? undefined;
     const versionVerified = Boolean(resolved.version && isSupportedAntigravityVersion(resolved.version));
-    const pinnedVersion = versionVerified && resolved.version ? resolved.version : SUPPORTED_ANTIGRAVITY_VERSION;
+    const pinnedVersion = versionVerified && resolved.version ? resolved.version : MINIMUM_ANTIGRAVITY_VERSION;
     return {
       executable: cmd,
       resolved_executable: resolved.resolvedPath,
       executable_found: Boolean(resolved.resolvedPath && versionVerified),
       pinned_version: pinnedVersion,
       version_verified: false,
-      note: `Antigravity CLI (agy) execution backend pinned to ${SUPPORTED_ANTIGRAVITY_VERSIONS.join(', ')}${resolved.sha256 ? ` (sha256: ${resolved.sha256})` : ''}.`
+      note: `Antigravity CLI (agy) execution backend requires a stable release at or above ${MINIMUM_ANTIGRAVITY_VERSION}${resolved.sha256 ? ` (sha256: ${resolved.sha256})` : ''}.`
     };
   }
 
@@ -722,8 +713,8 @@ export class AntigravityBackend implements SupervisorBackend {
     if (!isSupportedAntigravityVersion(resolved.version)) {
       throw supervisorError(
         'VSUP_VIBE_VERSION_UNSUPPORTED',
-        `Antigravity CLI version ${resolved.version} is not supported; exact version in [${SUPPORTED_ANTIGRAVITY_VERSIONS.join(', ')}] is required.`,
-        { expected_version: SUPPORTED_ANTIGRAVITY_VERSIONS.join(', '), actual_version: resolved.version }
+        `Antigravity CLI version ${resolved.version} is not supported; use a stable release at or above ${MINIMUM_ANTIGRAVITY_VERSION}.`,
+        { expected_version: `>=${MINIMUM_ANTIGRAVITY_VERSION}`, actual_version: resolved.version }
       );
     }
     const executablePath = resolved.resolvedPath;
@@ -806,8 +797,8 @@ export class AntigravityBackend implements SupervisorBackend {
       maxModelCalls
     });
 
-    const listing = input.mode === 'review' ? await buildWorkspaceListing(input.workerWorkspace, {}, anchors) : null;
-    const prompt = buildTaskPrompt(input, listing?.text ?? null);
+    const listing = input.mode === 'review' && promptTakesListing(input) ? await buildWorkspaceListing(input.workerWorkspace, {}, anchors) : null;
+    const prompt = buildTaskPrompt(input, listing?.text ?? null, workerRules('agy', input.mode));
 
     const permissionLayer = antigravityPermissionLayer(this.config);
     const args = [
@@ -824,6 +815,7 @@ export class AntigravityBackend implements SupervisorBackend {
     let latestUsage: UsageState | undefined;
     let envelopeStatus: string | undefined;
     let envelopeError: string | undefined;
+    let finishedReason: string | undefined;
     let outputChain = Promise.resolve();
     let stderrChain = Promise.resolve();
     let streamExecutedCalls = 0;
@@ -840,6 +832,7 @@ export class AntigravityBackend implements SupervisorBackend {
     const chunks = createStreamOutputParser(async ({ text, withheld, meta }) => {
       if (meta.status) envelopeStatus = meta.status;
       if (meta.error) envelopeError = meta.error;
+      if (meta.finishedReason) finishedReason = meta.finishedReason;
       if (meta.thoughtObserved || withheld) reasoningObservedCount += 1;
       if (withheld) withheldTextCount += 1;
       if (meta.isModelCallStep) observedModelCalls += 1;
@@ -1163,17 +1156,29 @@ export class AntigravityBackend implements SupervisorBackend {
             approvals,
             result: { stopReason: limitStopReason, summary: opaque.latestSummary || 'Antigravity run stopped at configured limit.', ...permissionLayerWarnings(permissionLayer) }
           });
-        } else if (code === 0 && (envelopeStatus === 'ERROR' || envelopeStatus === 'INVALID')) {
+        } else if (finishedReason === 'print_timeout') {
+          await callbacks.onState('failed', {
+            usage: finalUsage,
+            approvals,
+            error: supervisorError('VSUP_TIMEOUT', 'Antigravity stopped at its print timeout before finishing the turn.')
+          });
+        } else if (finishedReason === 'error' || (code === 0 && (envelopeStatus === 'ERROR' || envelopeStatus === 'INVALID'))) {
           const detail = envelopeError ? `: ${redact(envelopeError).slice(0, 300)}` : '';
           await callbacks.onState('failed', {
             usage: finalUsage,
             approvals,
-            error: supervisorError('VSUP_ANTIGRAVITY_EXEC_FAILED', `Antigravity reported terminal envelope status ${envelopeStatus}${detail}.`)
+            error: supervisorError('VSUP_ANTIGRAVITY_EXEC_FAILED', `Antigravity reported ${finishedReason === 'error' ? 'finished_reason error' : `terminal envelope status ${envelopeStatus}`}${detail}.`)
           });
         } else if (code === 0 && (envelopeStatus === 'CANCELED' || envelopeStatus === 'INTERRUPTED')) {
           await callbacks.onState('cancelled', {
             usage: finalUsage,
             approvals
+          });
+        } else if (code === 0 && finishedReason === 'interrupted') {
+          await callbacks.onState('failed', {
+            usage: finalUsage,
+            approvals,
+            error: supervisorError('VSUP_ANTIGRAVITY_EXEC_FAILED', 'Antigravity reported finished_reason interrupted that the supervisor did not request.')
           });
         } else if (code === 0 && envelopeStatus === 'SUCCESS') {
           await callbacks.onState('completed', {

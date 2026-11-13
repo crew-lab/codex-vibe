@@ -7,10 +7,9 @@ import path from 'node:path';
 import { digest } from '../acceptance/schema.js';
 import {
   isSupportedAntigravityVersion,
-  onlyAllowedAntigravityBuiltinSkills,
+  MINIMUM_ANTIGRAVITY_VERSION,
+  onlyBuiltinAntigravitySkills,
   resolveAntigravityExecutable,
-  SUPPORTED_ANTIGRAVITY_VERSION,
-  SUPPORTED_ANTIGRAVITY_VERSIONS,
   writeIsolatedSettings
 } from '../backends/antigravity.js';
 import {
@@ -310,7 +309,7 @@ export async function runAntigravityPreparationCheck(
     findings.push({
       level: 'fail',
       code: 'version_mismatch',
-      message: `Antigravity CLI version ${resolved.version} does not match supported pinned versions (${SUPPORTED_ANTIGRAVITY_VERSIONS.join(', ')}).`
+      message: `Antigravity CLI version ${resolved.version} is not supported; use a stable release at or above ${MINIMUM_ANTIGRAVITY_VERSION}.`
     });
   } else {
     findings.push({
@@ -382,6 +381,7 @@ export async function runAntigravityPreparationCheck(
       const hookScriptPath = path.join(childHome, '.gemini', 'antigravity-cli', 'pre-tool-hook.mjs');
 
       const settings = JSON.parse(await readFile(settingsPath, 'utf8')) as {
+        agentMode?: string;
         toolPermission?: string;
         enableTerminalSandbox?: boolean;
         allowNonWorkspaceAccess?: boolean;
@@ -402,6 +402,7 @@ export async function runAntigravityPreparationCheck(
         (mode === 'review' ? denyList.includes('write_file(*)') : true);
 
       profileResults[mode].settings_valid =
+        (mode === 'review' ? settings.agentMode === '' : settings.agentMode === undefined) &&
         settings.toolPermission === 'strict' &&
         settings.enableTerminalSandbox === true &&
         settings.allowNonWorkspaceAccess === false &&
@@ -506,7 +507,7 @@ export async function runAntigravityPreparationCheck(
 
             const permsMatches = antigravityPermissionsMatch(permsCmd?.data?.permissions, allowList, denyList);
 
-            const skillsMatches = Boolean(Array.isArray(innerSkills) && onlyAllowedAntigravityBuiltinSkills(innerSkills));
+            const skillsMatches = Boolean(Array.isArray(innerSkills) && onlyBuiltinAntigravitySkills(innerSkills));
             const agentsEmpty = Boolean(!innerAgents || (Array.isArray(innerAgents) && innerAgents.length === 0));
 
             profileResults[mode].cli_readback_passed =
@@ -535,7 +536,7 @@ export async function runAntigravityPreparationCheck(
         findings.push({
           level: 'fail',
           code: `${mode}_cli_unavailable`,
-          message: `Antigravity CLI executable is unavailable or version does not match supported versions (${SUPPORTED_ANTIGRAVITY_VERSIONS.join(', ')}).`
+          message: `Antigravity CLI executable is unavailable or version is not a stable release at or above ${MINIMUM_ANTIGRAVITY_VERSION}.`
         });
       }
 
@@ -695,7 +696,7 @@ export async function runAntigravityPreparationCheck(
       resolved_path: resolved.resolvedPath ? '<private-path>' : null,
       sha256: resolved.sha256,
       version: resolved.version,
-      expected_version: resolved.version && isSupportedAntigravityVersion(resolved.version) ? resolved.version : SUPPORTED_ANTIGRAVITY_VERSION
+      expected_version: resolved.version && isSupportedAntigravityVersion(resolved.version) ? resolved.version : MINIMUM_ANTIGRAVITY_VERSION
     },
     profiles: profileResults,
     network_observation: {

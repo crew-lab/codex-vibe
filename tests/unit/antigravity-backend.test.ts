@@ -3,11 +3,11 @@ import { execSync } from 'node:child_process';
 import { appendFile, chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { workerRules } from '../../src/core/worker-context.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AntigravityBackend,
-  SUPPORTED_ANTIGRAVITY_VERSION,
-  SUPPORTED_ANTIGRAVITY_VERSIONS,
+  MINIMUM_ANTIGRAVITY_VERSION,
   writeIsolatedSettings,
   type AntigravityBackendOptions,
   type AntigravityHandle
@@ -91,7 +91,7 @@ describe('AntigravityBackend (agy supported versions)', () => {
     await writeExecutable(script, `#!/bin/sh
 if [ "$1" = "--version" ]; then
   echo x >> "${counter}"
-  echo "${SUPPORTED_ANTIGRAVITY_VERSION}"
+  echo "${MINIMUM_ANTIGRAVITY_VERSION}"
   exit 0
 fi
 exit 1
@@ -109,12 +109,12 @@ exit 1
       const probeResult = await backend.probe();
       expect(probeResult.available).toBe(true);
       expect(probeResult.backend).toBe('antigravity');
-      expect(probeResult.version).toBe(SUPPORTED_ANTIGRAVITY_VERSION);
+      expect(probeResult.version).toBe(MINIMUM_ANTIGRAVITY_VERSION);
       expect(typeof probeResult.details?.sha256).toBe('string');
 
       const runtimeCheck = await backend.runtimeCheck();
       expect(runtimeCheck.executable_found).toBe(true);
-      expect(runtimeCheck.pinned_version).toBe(SUPPORTED_ANTIGRAVITY_VERSION);
+      expect(runtimeCheck.pinned_version).toBe(MINIMUM_ANTIGRAVITY_VERSION);
       expect(runtimeCheck.version_verified).toBe(false);
 
       const prep = await backend.preparationCheck();
@@ -143,7 +143,7 @@ exit 1
       else process.env.VIBE_SUPERVISOR_HOME = prevHome;
     }
 
-    for (const ver of SUPPORTED_ANTIGRAVITY_VERSIONS) {
+    for (const ver of ['1.5.8', '1.5.9', '2.0.0']) {
       const verScript = path.join(root, `mock-agy-${ver}.sh`);
       await writeExecutable(verScript, `#!/bin/sh
 if [ "$1" = "--version" ]; then
@@ -199,7 +199,7 @@ exit 1
     expect(runtimeCheck.executable_found).toBe(false);
   });
 
-  it('runs a review task with agy 1.4.0 stream-json envelopes, unified settings.json rules, secret redaction, cleanup, and distinguishes turns from modelCalls', async () => {
+  it('runs a review task with agy 1.5.8 stream-json envelopes, unified settings.json rules, secret redaction, cleanup, and distinguishes turns from modelCalls', async () => {
     const root = await makeRoot();
     const workspace = path.join(root, 'workspace');
     const runDir = path.join(root, 'run');
@@ -216,7 +216,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('1.4.0');
+  console.log('1.5.8');
   process.exit(0);
 }
 fs.writeFileSync(${JSON.stringify(recordedArgsFile)}, JSON.stringify(args));
@@ -335,7 +335,7 @@ process.exit(0);
     });
 
     const recordedArgs = JSON.parse(await readFile(recordedArgsFile, 'utf8')) as string[];
-    // Review mode omits --mode plan so --disable-slash-commands does not emit a warning in agy 1.4.0
+    // Review mode omits --mode plan so --disable-slash-commands does not emit a warning in agy 1.5.8
     expect(recordedArgs).not.toContain('--mode');
     expect(recordedArgs).toContain('--output-format');
     expect(recordedArgs).toContain('stream-json');
@@ -343,9 +343,12 @@ process.exit(0);
     expect(recordedArgs).toContain('--sandbox');
     expect(recordedArgs).toContain('--print-timeout');
     expect(recordedArgs).toContain('30s');
+    expect(recordedArgs[0]).toBe('-p');
+    expect(recordedArgs[1].startsWith(workerRules('agy', 'review'))).toBe(true);
     expect(recordedArgs[1]).toContain('sample.ts');
 
     const settings = JSON.parse(await readFile(recordedSettingsFile, 'utf8'));
+    expect(settings.agentMode).toBe('');
     expect(settings.toolPermission).toBe('strict');
     expect(settings.allowNonWorkspaceAccess).toBe(false);
     expect(settings.enableTerminalSandbox).toBe(true);
@@ -381,7 +384,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('1.4.0');
+  console.log('1.5.8');
   process.exit(0);
 }
 fs.writeFileSync(${JSON.stringify(recordedArgsFile)}, JSON.stringify(args));
@@ -424,11 +427,56 @@ process.exit(0);
     const recordedArgs = JSON.parse(await readFile(recordedArgsFile, 'utf8'));
     expect(recordedArgs).toContain('--mode');
     expect(recordedArgs).toContain('accept-edits');
+    expect(recordedArgs[1].startsWith(workerRules('agy', 'edit'))).toBe(true);
 
     const settings = JSON.parse(await readFile(recordedSettingsFile, 'utf8'));
+    expect(settings).not.toHaveProperty('agentMode');
     expect(settings.permissions.allow).toContain(`write_file(${workspace})`);
     expect(settings.permissions.allow).toContain(`write_file(${workspace}/**)`);
     expect(settings.permissions.deny).not.toContain('write_file(*)');
+  });
+
+  it.each([
+    { name: 'print_timeout with a success status', result: { status: 'SUCCESS', response: 'partial', finished_reason: 'print_timeout' }, code: 3, expected: 'VSUP_TIMEOUT' },
+    { name: 'exit code 3 with no reason, which agy also uses for model and agent errors', result: { status: 'SUCCESS', response: 'partial' }, code: 3, expected: 'VSUP_BACKEND_CRASHED' },
+    { name: 'finished_reason error with exit code 3', result: { status: 'ERROR', response: 'partial', finished_reason: 'error' }, code: 3, expected: 'VSUP_ANTIGRAVITY_EXEC_FAILED' },
+    { name: 'finished_reason error with a success status', result: { status: 'SUCCESS', response: 'x', finished_reason: 'error' }, code: 0, expected: 'VSUP_ANTIGRAVITY_EXEC_FAILED' },
+    { name: 'finished_reason interrupted with a success status', result: { status: 'SUCCESS', response: 'x', finished_reason: 'interrupted' }, code: 0, expected: 'VSUP_ANTIGRAVITY_EXEC_FAILED' }
+  ])('ends the run as a failure for $name', async ({ result: envelope, code, expected }) => {
+    const root = await makeRoot();
+    const script = path.join(root, 'mock-agy.sh');
+    await writeExecutable(script, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('1.5.8');
+  process.exit(0);
+}
+console.log(JSON.stringify({ event: 'result', result: ${JSON.stringify(envelope)} }));
+process.exit(${code});
+`);
+    const backend = new AntigravityBackend({ ...DEFAULT_CONFIG, backend: 'antigravity', paths: { antigravity: script } }, passedPreparation);
+    const states: string[] = [];
+    let failureError: SupervisorError | undefined;
+    const started = await backend.start({
+      runId: '33333333-4444-4555-8666-777777777779',
+      mode: 'review',
+      task: 'Check why the turn ended',
+      cwd: root,
+      workerWorkspace: root,
+      runDirectory: root,
+      exclusions: [],
+      limits: { timeoutSeconds: 30, maxTurns: 5, maxEventBytes: 10240, maxTranscriptBytes: 10240, maxArtifactBytes: 10240 }
+    }, {
+      onEvent() {},
+      onState(state, update) {
+        states.push(state);
+        if (state === 'failed') failureError = update?.error;
+      }
+    });
+    await (started.handle as AntigravityHandle).opaque.process.done;
+    await waitFor(() => states, (seen) => seen.includes('failed') || seen.includes('completed'));
+    expect(states).not.toContain('completed');
+    expect(failureError?.code).toBe(expected);
   });
 
   it('fails closed when nested result.status is ERROR even if exit code is 0, and rejects unsupported ceilings (maxCostUsd, maxTokens) before dispatch', async () => {
@@ -438,7 +486,7 @@ process.exit(0);
     await writeExecutable(script, `#!/usr/bin/env node
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('1.4.0');
+  console.log('1.5.8');
   process.exit(0);
 }
 console.log(JSON.stringify({
@@ -531,7 +579,7 @@ process.exit(0);
     await writeExecutable(script, `#!/usr/bin/env node
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('1.4.0');
+  console.log('1.5.8');
   process.exit(0);
 }
 console.log(JSON.stringify({
@@ -617,7 +665,7 @@ setTimeout(() => process.exit(0), 30000);
 
     const script = path.join(root, 'mock-agy.sh');
     await writeExecutable(script, `#!/bin/sh
-echo "1.4.0"
+echo "1.5.8"
 exit 0
 `);
 
@@ -667,7 +715,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('1.4.0');
+  console.log('1.5.8');
   process.exit(0);
 }
 fs.writeFileSync(${JSON.stringify(recordedArgsFile)}, JSON.stringify(args));
@@ -741,7 +789,7 @@ const path = require('node:path');
 const { execSync } = require('node:child_process');
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('1.4.0');
+  console.log('1.5.8');
   process.exit(0);
 }
 const hooksJsonPath = path.join(process.env.HOME, '.gemini', 'config', 'hooks.json');
@@ -877,7 +925,7 @@ const path = require('node:path');
 const { execSync } = require('node:child_process');
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('1.4.0');
+  console.log('1.5.8');
   process.exit(0);
 }
 // Support zero-inference slash commands during runAntigravityPreparationCheck
@@ -983,7 +1031,7 @@ process.exit(0);
       expect(exportResult.files).toContain('events.json');
 
       const exportedReport = JSON.parse(await readFile(path.join(exportBundle, 'report.json'), 'utf8'));
-      expect(exportedReport.pin).toMatchObject({ vibe_version: '1.4.0' });
+      expect(exportedReport.pin).toMatchObject({ vibe_version: '1.5.8' });
 
       const exportedApprovals = JSON.parse(await readFile(path.join(exportBundle, 'approvals.json'), 'utf8'));
       expect(exportedApprovals.records).toHaveLength(2);
@@ -1006,7 +1054,7 @@ process.exit(0);
     await writeExecutable(script, `#!/usr/bin/env node
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('1.4.0');
+  console.log('1.5.8');
   process.exit(0);
 }
 // Reproduce the exit-42 probe from independent review
@@ -1039,7 +1087,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('1.4.0');
+  console.log('1.5.8');
   process.exit(0);
 }
 const promptIdx = args.indexOf('-p');
@@ -1094,7 +1142,7 @@ process.exit(1);
     expect(doctorReport.provenance.backend).toBe('antigravity');
     const agyCheck = doctorReport.checks.find((c) => c.name === 'antigravity');
     expect(agyCheck?.ok).toBe(true);
-    expect(agyCheck?.version).toBe('1.4.0');
+    expect(agyCheck?.version).toBe('1.5.8');
     expect(agyCheck?.message).toContain('sha256:');
   });
 
@@ -1102,7 +1150,7 @@ process.exit(1);
     const root = await makeRoot();
     const script = path.join(root, 'mock-agy.sh');
     await writeExecutable(script, `#!/bin/sh
-if [ "$1" = "--version" ]; then echo "1.4.0"; exit 0; fi
+if [ "$1" = "--version" ]; then echo "1.5.8"; exit 0; fi
 sleep 10
 `);
 
@@ -1140,7 +1188,7 @@ sleep 10
     const root = await makeRoot();
     const script = path.join(root, 'tamper-agy.sh');
     await writeExecutable(script, `#!/bin/sh
-echo "1.4.0"
+echo "1.5.8"
 exit 0
 `);
 
@@ -1182,7 +1230,7 @@ exit 0
     await writeExecutable(script, `#!/usr/bin/env node
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('1.4.0');
+  console.log('1.5.8');
   process.exit(0);
 }
 // Exit 0 with non-SUCCESS terminal status
@@ -1576,7 +1624,7 @@ process.exit(0);
     await writeExecutable(script, `#!/usr/bin/env node
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('1.4.0');
+  console.log('1.5.8');
   process.exit(0);
 }
 console.log(JSON.stringify({ type: 'message', message: { role: 'assistant', content: [{ type: 'text', text: 'Completed task.' }] } }));
@@ -1845,7 +1893,7 @@ process.exit(0);
   it('refuses headless dispatch when GEMINI_API_KEY and GOOGLE_API_KEY are missing or whitespace-only', async () => {
     const root = await makeRoot();
     const fakeAgy = path.join(root, 'agy');
-    await writeExecutable(fakeAgy, `#!/bin/sh\necho "1.4.4"\n`);
+    await writeExecutable(fakeAgy, `#!/bin/sh\necho "1.5.8"\n`);
     const backend = new AntigravityBackend(
       {
         ...DEFAULT_CONFIG,
@@ -1925,7 +1973,7 @@ fs.writeFileSync(path.join(process.cwd(), 'captured.json'), JSON.stringify(out))
 console.log(JSON.stringify({ type: 'result', status: 'SUCCESS', response: 'done' }));
 `
     );
-    await writeExecutable(fakeAgy, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "1.4.4"; exit 0; fi\nexec "${process.execPath}" "${runnerScript}" "$@"\n`);
+    await writeExecutable(fakeAgy, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "1.5.8"; exit 0; fi\nexec "${process.execPath}" "${runnerScript}" "$@"\n`);
     const backend = new AntigravityBackend(
       {
         ...DEFAULT_CONFIG,

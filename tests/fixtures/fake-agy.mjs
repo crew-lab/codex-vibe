@@ -11,17 +11,8 @@ const modes = new Set((modeArg ? modeArg.slice('--fake-mode='.length) : '').spli
 const args = rawArgs.filter((arg) => arg !== modeArg);
 
 if (args[0] === '--version') {
-  if (modes.has('version-1.4.9')) {
-    process.stdout.write('1.4.9\n');
-  } else if (modes.has('version-1.4.8')) {
-    process.stdout.write('1.4.8\n');
-  } else if (modes.has('version-1.4.7')) {
-    process.stdout.write('1.4.7\n');
-  } else if (modes.has('version-1.4.4')) {
-    process.stdout.write('1.4.4\n');
-  } else {
-    process.stdout.write('1.4.0\n');
-  }
+  const versionMode = [...modes].find((mode) => mode.startsWith('version-'));
+  process.stdout.write(`${versionMode ? versionMode.slice('version-'.length) : '1.5.8'}\n`);
   process.exit(0);
 }
 
@@ -57,7 +48,7 @@ if (slash.includes(prompt)) {
   if (prompt === '/skills') {
     const planted = modes.has('load-project-config') ? (plantedText(process.cwd()).match(/vsup-planted-[a-z0-9-]+/g) ?? []) : [];
     const skills = modes.has('builtin-skill')
-      ? [{ name: 'unknown-built-in', builtin: true }]
+      ? [{ name: 'planted-skill', builtin: false }]
       : modes.has('allowed-builtin-skills')
         ? [{ name: 'agy-customizations', builtin: true }, { name: 'automation', builtin: true }]
         : planted.map((name) => ({ name }));

@@ -107,8 +107,8 @@ describe('experimental Antigravity opt-in', () => {
   it('reports the antigravity backend as experimental in doctor and readiness', async () => {
     const stub = {
       kind: 'antigravity',
-      probe: async () => ({ available: true, backend: 'antigravity', executable: '/x/agy', version: '1.4.0', details: { sha256: 'f'.repeat(64) } }),
-      runtimeCheck: async () => ({ executable: 'agy', resolved_executable: '/x/agy', executable_found: true, pinned_version: '1.4.0', version_verified: false }),
+      probe: async () => ({ available: true, backend: 'antigravity', executable: '/x/agy', version: '1.5.8', details: { sha256: 'f'.repeat(64) } }),
+      runtimeCheck: async () => ({ executable: 'agy', resolved_executable: '/x/agy', executable_found: true, pinned_version: '1.5.8', version_verified: false }),
       preparationCheck: async () => ({ status: 'missing', candidate_sha256: null, version: '0', reason: 'test' })
     } as unknown as SupervisorBackend;
     const config: SupervisorConfig = { ...DEFAULT_CONFIG, backend: 'antigravity', experimental: { antigravity: true } };

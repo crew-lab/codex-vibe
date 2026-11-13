@@ -304,36 +304,30 @@ describe('Antigravity preparation probes through a fake agy', () => {
     expect(out.report.agy_probes.hook_failure_denies.result).toBe('pass');
   }, 90_000);
 
-  it('does not accept arbitrary built-in skills as a substitute for the disabled-skill policy', async () => {
+  it('does not accept a non-built-in skill as a substitute for the disabled-skill policy', async () => {
     const out = await prepareWith('builtin-skill');
     expect(out.status).toBe('failed');
     expect(out.report.profiles.review.cli_readback_passed).toBe(false);
     expect(out.report.findings.map((f) => f.code)).toContain('review_cli_readback_mismatch');
   }, 90_000);
 
-  it('accepts pinned built-in skills with provenance while rejecting arbitrary skills', async () => {
+  it('accepts built-in skills by flag while rejecting skills without it', async () => {
     const out = await prepareWith('allowed-builtin-skills');
     expect(out.status).toBe('passed');
     expect(out.report.profiles.review.cli_readback_passed).toBe(true);
     expect(out.report.profiles.edit.cli_readback_passed).toBe(true);
   }, 90_000);
 
-  it('accepts agy 1.4.7 executable during preparation', async () => {
-    const out = await prepareWith('version-1.4.7');
+  it('accepts agy 1.5.9 executable during preparation', async () => {
+    const out = await prepareWith('version-1.5.9');
     expect(out.status).toBe('passed');
-    expect(out.report.executable.version).toBe('1.4.7');
+    expect(out.report.executable.version).toBe('1.5.9');
   }, 90_000);
 
-  it('accepts agy 1.4.8 executable during preparation', async () => {
-    const out = await prepareWith('version-1.4.8');
-    expect(out.status).toBe('passed');
-    expect(out.report.executable.version).toBe('1.4.8');
-  }, 90_000);
-
-  it('accepts agy 1.4.9 executable during preparation', async () => {
-    const out = await prepareWith('version-1.4.9');
-    expect(out.status).toBe('passed');
-    expect(out.report.executable.version).toBe('1.4.9');
+  it('refuses agy 1.5.7 executable during preparation', async () => {
+    const out = await prepareWith('version-1.5.7');
+    expect(out.status).toBe('failed');
+    expect(out.report.findings.map((f) => f.code)).toContain('version_mismatch');
   }, 90_000);
 
   it('fails the receipt when agy lets a failed hook allow the call', async () => {

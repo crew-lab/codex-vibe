@@ -115,7 +115,7 @@ const VERSION_PREAMBLE = `#!/usr/bin/env node
 const fs = require('node:fs');
 const path = require('node:path');
 const args = process.argv.slice(2);
-if (args[0] === '--version') { console.log('1.4.0'); process.exit(0); }
+if (args[0] === '--version') { console.log('1.5.8'); process.exit(0); }
 `;
 
 describe('Antigravity hook path arguments (F1)', () => {
@@ -316,13 +316,13 @@ console.log(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', respo
     const script = path.join(root, 'mock-agy');
     await writeExecutable(script, `#!/usr/bin/env node
 require('node:fs').writeFileSync(${JSON.stringify(probeFile)}, JSON.stringify({ env: process.env, cwd: process.cwd() }));
-console.log('1.4.0');
+console.log('1.5.8');
 `);
     const saved = { ...process.env };
     Object.assign(process.env, { GEMINI_API_KEY: 'probe-gemini-value', MISTRAL_API_KEY: 'probe-mistral-value', ANTIGRAVITY_HOME: '/redirected' });
     try {
       const resolved = await resolveAntigravityExecutable(script);
-      expect(resolved.version).toBe('1.4.0');
+      expect(resolved.version).toBe('1.5.8');
     } finally {
       for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key];
       Object.assign(process.env, saved);

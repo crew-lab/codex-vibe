@@ -87,7 +87,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const args = process.argv.slice(2);
 if (args[0] === '--version') {
-  console.log('1.4.0');
+  console.log('1.5.8');
   process.exit(0);
 }
 const promptIdx = args.indexOf('-p');

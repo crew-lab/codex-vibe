@@ -4,7 +4,7 @@ import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:f
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AntigravityBackend, antigravityChildEnvironment, isSupportedAntigravityVersion, resolveAntigravityApiKey, onlyAllowedAntigravityBuiltinSkills, selectAntigravityApiKey, type AntigravityBackendOptions } from '../../src/backends/antigravity.js';
+import { AntigravityBackend, antigravityChildEnvironment, isSupportedAntigravityVersion, resolveAntigravityApiKey, onlyBuiltinAntigravitySkills, selectAntigravityApiKey, type AntigravityBackendOptions } from '../../src/backends/antigravity.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { runToWire } from '../../src/core/serialization.js';
@@ -34,7 +34,7 @@ async function fixture() {
   execFileSync('git', ['init', '-q', workspace]);
   const marker = path.join(root, 'invocations');
   const executable = path.join(root, 'mock-agy');
-  const prefix = `#!${process.execPath}\nconst fs = require('node:fs');\nfs.appendFileSync(${JSON.stringify(marker)}, process.argv.includes('--version') ? 'version\\n' : 'worker\\n');\nif (process.argv.includes('--version')) { console.log('1.4.4'); process.exit(0); }\n`;
+  const prefix = `#!${process.execPath}\nconst fs = require('node:fs');\nfs.appendFileSync(${JSON.stringify(marker)}, process.argv.includes('--version') ? 'version\\n' : 'worker\\n');\nif (process.argv.includes('--version')) { console.log('1.5.8'); process.exit(0); }\n`;
   const config = { ...DEFAULT_CONFIG, backend: 'antigravity' as const, experimental: { antigravity: true }, allowedWorkspaceRoots: [workspace], paths: { antigravity: executable } };
   const backend = new AntigravityBackend(config, passedPreparation);
   const input: StartRunInput = {
@@ -93,17 +93,22 @@ describe('Antigravity headless admission and lifecycle regressions', () => {
     expect(child.ANTIGRAVITY_API_KEY).toBeUndefined();
   });
 
-  it('accepts a pinned skill only with builtin: true, and only qualified agy versions', () => {
-    expect(onlyAllowedAntigravityBuiltinSkills([{ name: 'automation', builtin: true }])).toBe(true);
-    expect(onlyAllowedAntigravityBuiltinSkills([{ name: 'antigravity-guide', builtin: true }])).toBe(true);
-    expect(onlyAllowedAntigravityBuiltinSkills([{ name: 'antigravity_guide', builtin: true }])).toBe(true);
-    expect(onlyAllowedAntigravityBuiltinSkills([{ name: 'automation', scope: 'builtin' }])).toBe(false);
-    expect(onlyAllowedAntigravityBuiltinSkills([{ name: 'automation', builtin: false, scope: 'builtin' }])).toBe(false);
-    expect(onlyAllowedAntigravityBuiltinSkills([{ name: 'automation', builtin: true }, { name: 'automation', builtin: true }])).toBe(false);
-    expect(isSupportedAntigravityVersion('1.4.9')).toBe(true);
-    expect(isSupportedAntigravityVersion('1.4.8')).toBe(true);
-    expect(isSupportedAntigravityVersion('1.4.7')).toBe(true);
-    expect(isSupportedAntigravityVersion('1.4.6')).toBe(false);
+  it('accepts any built-in skill by flag and refuses everything else', () => {
+    expect(onlyBuiltinAntigravitySkills([])).toBe(true);
+    expect(onlyBuiltinAntigravitySkills([{ name: 'automation', builtin: true }, { name: 'brand-new-skill', builtin: true }])).toBe(true);
+    expect(onlyBuiltinAntigravitySkills([{ name: 'automation', scope: 'builtin' }])).toBe(false);
+    expect(onlyBuiltinAntigravitySkills([{ name: 'automation', builtin: false, scope: 'builtin' }])).toBe(false);
+    expect(onlyBuiltinAntigravitySkills([{ name: 'automation', builtin: true }, { name: 'automation', builtin: true }])).toBe(false);
+    expect(onlyBuiltinAntigravitySkills([{ name: '', builtin: true }])).toBe(false);
+    expect(onlyBuiltinAntigravitySkills([{ name: 7, builtin: true }])).toBe(false);
+    expect(onlyBuiltinAntigravitySkills([{ builtin: true }])).toBe(false);
+    expect(onlyBuiltinAntigravitySkills(['automation'])).toBe(false);
+    expect(onlyBuiltinAntigravitySkills([null])).toBe(false);
+  });
+
+  it('accepts stable agy versions at or above the minimum only', () => {
+    for (const version of ['1.5.8', '1.5.9', '1.6.0', '2.0.0']) expect(isSupportedAntigravityVersion(version)).toBe(true);
+    for (const version of ['1.5.7', '1.4.9', '1.5.8-beta', 'garbage', '', null, undefined]) expect(isSupportedAntigravityVersion(version)).toBe(false);
   });
 
   it('refuses missing credentials before any executable invocation or private directory creation', async () => {
