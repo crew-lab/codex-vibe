@@ -166,7 +166,7 @@ function run(executable, args, timeoutMs = 600_000) {
     const timeout = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
     child.once('close', () => clearTimeout(timeout));
     child.once('error', reject);
-    child.once('exit', (code) => code === 0 ? resolve() : reject(new Error(`Runtime install command failed with exit code ${code}${stderr ? `: ${stderr.trim()}` : ''}.`)));
+    child.once('close', (code) => code === 0 ? resolve() : reject(new Error(`Runtime install command failed with exit code ${code}${stderr ? `: ${stderr.trim()}` : ''}.`)));
   });
 }
 
@@ -177,7 +177,7 @@ function readVersion(executable) {
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk) => { output += chunk; });
     child.once('error', reject);
-    child.once('exit', (code) => {
+    child.once('close', (code) => {
       const match = /^vibe (\d+\.\d+\.\d+)\s*$/m.exec(output);
       if (code === 0 && match) resolve(match[1]);
       else reject(new Error('Installed Vibe executable did not report a valid version.'));
@@ -192,7 +192,7 @@ function readPythonVersion(executable) {
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk) => { output += chunk; });
     child.once('error', reject);
-    child.once('exit', (code) => {
+    child.once('close', (code) => {
       const match = /^Python (\d+\.\d+\.\d+.*)$/m.exec(output.trim());
       if (code === 0 && match) resolve(match[1]);
       else reject(new Error('Python executable did not report a valid version.'));
