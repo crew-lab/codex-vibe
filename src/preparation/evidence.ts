@@ -42,17 +42,21 @@ export function receiptPath(config: SupervisorConfig, dataDirOverride?: string):
   }
   throw new Error('Absolute pin manifest required');
 }
-export async function preparationIdentity(config: SupervisorConfig, candidate?: string): Promise<string> {
+export function nodeMajor(version: string = process.versions.node): string {
+  return version.replace(/^v/, '').split('.')[0] ?? version;
+}
+
+export async function preparationIdentity(config: SupervisorConfig, candidate?: string, nodeVersion: string = process.versions.node): Promise<string> {
   candidate ??= await candidateIdentity();
   const policy = { ...config, allowedWorkspaceRoots: [] };
   if (config.backend === 'antigravity') {
     const resolvedBinary = await resolveExecutableFile(config.paths?.antigravity ?? 'agy');
     const pinSha256 = digest(await readFile(resolvedBinary));
-    return digest(canonical({ backend: 'antigravity', candidate, pin_sha256: pinSha256, policy, platform: process.platform, arch: process.arch, node: process.version }));
+    return digest(canonical({ backend: 'antigravity', candidate, pin_sha256: pinSha256, policy, platform: process.platform, arch: process.arch, node_major: nodeMajor(nodeVersion) }));
   }
   const pin = config.paths?.vibePinManifest;
   if (!pin) throw new Error('Pin manifest required');
-  return digest(canonical({ candidate, pin_sha256: digest(await readOwnedFile(await realpath(pin), 4*1024*1024)), policy, platform: process.platform, arch: process.arch, node: process.version }));
+  return digest(canonical({ candidate, pin_sha256: digest(await readOwnedFile(await realpath(pin), 4*1024*1024)), policy, platform: process.platform, arch: process.arch, node_major: nodeMajor(nodeVersion) }));
 }
 export async function checkPreparation(config: SupervisorConfig, dataDirOverride?: string): Promise<PreparationStatus> {
   let candidate: string | null = null;

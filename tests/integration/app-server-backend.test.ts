@@ -11,6 +11,7 @@ import { AppServerBackend, type AppServerBackendOptions, type AppServerTiming } 
 import { ResolvedCredential, type CredentialResolution } from '../../src/backends/app-server/credentials.js';
 import { PinCheckError } from '../../src/backends/app-server/pin.js';
 import { CLIENT_ENTRYPOINT } from '../../src/backends/app-server/protocol.js';
+import { TIMEOUT_RESULT_WARNING } from '../../src/backends/app-server/outcome.js';
 import { PROFILE_TOOLS, TOOL_PERMISSION, workspaceDenylist } from '../../src/backends/app-server/session-config.js';
 import { denylistAnchors } from '../../src/security/globs.js';
 import { SUPPORTED_VIBE } from '../../src/backends/app-server/supported-vibe.js';
@@ -1367,6 +1368,31 @@ describe('app-server backend: audit after a forced limit stop', () => {
     expect(terminal.update?.result?.warnings?.length).toBeGreaterThan(0);
     expect(harness.frames('session/history/list').length).toBeGreaterThanOrEqual(1);
   });
+
+  it('completes an edit that made approved writes before the deadline cut it off, with a timeout stop reason', async () => {
+    const harness = new Harness({
+      name: 'deadline-after-write',
+      steps: [
+        { op: 'call', tool: 'file_system.write_file', mode: 'approval', input: { filePath: '${cwd}/src/added.ts', content: 'export const b = 2;\n' } },
+        { op: 'hold' }
+      ]
+    }, { mode: 'edit', limits: { timeoutSeconds: 8 } });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(terminal.update?.result).toMatchObject({ stopReason: 'timeout', warnings: [TIMEOUT_RESULT_WARNING] });
+    expect(harness.eventsOfType('tool_call').map((event) => event.data.name)).toEqual(['write_file']);
+    harness.expectCleanedUp();
+  }, 40_000);
+
+  it('keeps the timeout for an edit that wrote nothing before the deadline', async () => {
+    const harness = new Harness({ name: 'deadline-no-write', steps: [{ op: 'hold' }] }, { mode: 'edit', limits: { timeoutSeconds: 8 } });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal).code).toBe('VSUP_TIMEOUT');
+    harness.expectCleanedUp();
+  }, 40_000);
 
   it('audits the history at the deadline and reports the unapproved write instead of a plain timeout', async () => {
     const harness = new Harness({ name: 'deadline-hidden-write', interrupt: 'ignore', steps: [SILENT_WRITE, { op: 'hold' }] }, { limits: { timeoutSeconds: 8 } });

@@ -1,42 +1,37 @@
-# Current state — 2026-11-08
+# Current state — 2026-11-13
 
-The goal is for Codex to hand a task to Vibe and reliably get back a useful review or an isolated patch. Feature work and the 2.2.1 release are on hold while we compare that workflow with using an Ollama model directly in Codex. See the [development strategy](planning/development-strategy.md).
+**The goal:** Codex hands a task to Vibe, Vibe reviews or implements it, and it works well every time. This page holds only what works, what does not, and what is next; the order of work is in the [development strategy](planning/development-strategy.md).
 
 ## Where things are
 
 - **Released.** v2.2.0 (2026-10-27) is the latest release.
-- **On `main`, unreleased 2.2.1** ([changelog](CHANGELOG.md)): any stable Vibe at or above 3.0.2; the generated `task authorize` command and complete `start_request`; search-first `context_files`; the frozen contract delivered to the worker with the `node_test` check; edit briefs that name the project root, test imports, conflict behaviour and no execution; the export output fix; the Antigravity key from the launchd session; readiness `pinned_version` from the manifest; the [quality pack](docs/quality-pack.md).
-- **Checked here.** CI is green on Node 20.19.0 and 24.21.0. `verify:release` passes on both, `package:rc` runs end to end with an offline cache, and the quality pack's checkers pass correct solutions and fail wrong ones on both Node versions.
-- **Target machine prepared against Vibe 3.1.0 on 2026-11-08.** Candidate `c34bf3f0ead29d40b83b30a54171ec96a9ba1323dd5a9d0e1a32ac282d281bdf` initially reported stale preparation. The previous check used Node 24.22.1, while Codex used Node 24.21.0. Rerunning the matching kit with Codex's runtime restored readiness with the same candidate and pin.
-- **Paired comparison fixtures prepared.** Fixtures initialized at `$ROOT/orders-quality` (Track A, allowed in candidate config) and `$ROOT/orders-quality-ollama` (Track B, isolated clone for direct in-place edits) at base `dcc431785a4cce5e238a4603d4d0e58306913cd9`. Phase 1 baseline tasks (`review-total`, `edit-shipping`) prepared with Track B fairness adjustment (permitting standard test execution). [Protocol and scorecard](research/evidence/paired-comparison-protocol-20261108/README.md)
+- **On `main`, unreleased 2.2.1** ([changelog](CHANGELOG.md)): any stable Vibe at or above 3.0.2; the generated `task authorize` command and complete `start_request`; search-first `context_files`; the frozen contract delivered to the worker with the `node_test` check; edit briefs that name the project root, test imports, conflict behaviour and no execution; the export output fix; the Antigravity key from the launchd session; readiness `pinned_version` from the manifest; the [quality pack](docs/quality-pack.md); the opt-in `app_server_wire_trace`; a completion or audited edit at the deadline kept instead of discarded; preparation bound to the Node major version.
+- **Target machine:** prepared against Vibe 3.1.0 on 2026-11-08 (candidate `c34bf3f0…`). After installing a build with the 2026-11-13 fixes, run `prepare check` once more: the receipt identity changed to the Node major version.
+- **The Ollama comparison is dropped** (owner, 2026-11-13). Its notes stay in [research](research/evidence/paired-comparison-protocol-20261108/README.md).
 
 ## What works
 
-On this candidate, `edit-shipping` corrected the boundary, touched only the two allowed files and passed all 14 tests on the exported patch. Both fixture runs closed. The edit worktree was retained with its uncommitted changes. The Ollama trials are pending.
+- **Boundary.** Reviews stay read-only, edits stay in their worktrees, nothing reaches shell or network, and runs clean up after themselves.
+- **Edits.** On Vibe 3.1.0, `edit-shipping` fixed the threshold, touched only the two allowed files and passed all 14 tests on the exported patch.
 
-In recorded default-backend runs, reviews stayed read-only and edits stayed in their worktrees. An independently checked review and edit were accepted on the released 2.2.0 build. [2.2.0 run evidence](research/evidence/v2.2.0-local-workflow-20261027/README.md)
+## Fixed on 2026-11-13
+
+- **A finished patch lost to the deadline.** A run that reached its timeout always failed with `VSUP_TIMEOUT`, even when Vibe's completion arrived during the interrupt or the edit was already written, because the cancel path tore the server down before the final history audit and the run manager's own timeout overrode the backend. Now the cancel waits for the audit; a turn that finished at the deadline keeps its result with a warning, and an edit cut off after audited writes completes with stop reason `timeout` so its contract and checks decide. A run with no audited writes, or whose audit fails, still times out. This covers the dangling-symlink replay whose correct patch was rejected at 300 seconds.
+- **Stale preparation after a Node update.** The receipt was bound to the exact Node version, so 24.21.0 against 24.22.1 blocked dispatch. It now binds the Node major version.
 
 ## What does not work well yet
 
-- **Edit quality.** Real edits were rejected for missing named `node:test` cases, a broken test import, the wrong project root and partial writes on a conflict. The updated brief and contract target those failures. [Real-use edit evidence](research/evidence/real-use-design-20261028/README.md) and [linking-helper trial](research/evidence/linking-helper-backends-20261102/REPORT.md)
-- **Review quality.** The original `review-total` brief found the tax defect and missed the shipping defect at exactly 5000 cents. A follow-up that required a per-input breakdown missed both defects. A third run received the observed values and reported all of them correctly, but still missed the shipping defect by treating the actual charge as expected. All three runs preserved read-only integrity. [Review evidence](research/evidence/paired-comparison-protocol-20261108/README.md#vibe-review-follow-up)
-- **Antigravity probes.** With `antigravity_skip_permissions` enabled, the probes exercise the hook on a read. Coverage for review-mode writes and shell calls remains open. Antigravity is outside this comparison.
+- **Review quality.** `review-total` found the tax defect and missed the shipping defect at exactly 5000 cents in three runs with different briefs, including one given the observed values. [Review evidence](research/evidence/paired-comparison-protocol-20261108/README.md#vibe-review-follow-up)
+- **Small slips reject good edits.** Patches were rejected for a new code comment and for a wrong prefix in a regression test, while the source itself was right.
+- **Turns that stall.** Two task-first runs stalled until the deadline after their patches were ready; with the deadline fix they now complete with stop reason `timeout`, but why Vibe kept the turn open is unexplained. Run with `app_server_wire_trace` when it recurs.
+- **Antigravity probes.** With `antigravity_skip_permissions` on, the probes exercise the hook on a read only, not a review-mode write or a shell tool; that needs agy's real tool schemas.
 
 ## Next
 
-The task-first experiment timed out twice after producing patches that passed the positive and failing-test controls. A frozen replay with the opt-in `app_server_wire_trace` received and accepted `turn/completed` at about 45 seconds, before the deadline. The replay patch was identical to the rejected baseline repeat. Its hardcoded list skipped the new shipping tests, so both controls reported 10 passes. The earlier stalls remain unexplained and task-first remains experimental. Use both controls before accepting a patch from this replay. [Diagnostic reference](docs/compatibility.md#diagnostic-reasons)
-
-The default-order replay with explicit discovery of files added by a patch completed in 49.8 seconds. Its patch ran all 14 shipping tests on the positive control and found the intended failure on the negative control. The patch was rejected after historical public hygiene caught a new code comment. The coordinator corrected the initial assessment in the saved run. The current checker already discovers added files, and a new regression test checks both a passing and a failing test added by an edit patch.
-
-The default-order follow-up used a different historical bug, the dangling-symlink diagnostic at base `a40b278`. Vibe 3.1.0 completed in 35.9 seconds and changed only the two requested files. The source passed the independent reproduction, valid internal and rejected external link controls, and hygiene. The submitted regression test missed the `baseline/` prefix in the diagnostic, so the original patch was rejected. Changing only that assertion in a separate verification copy made all 14 historical validation tests pass.
-
-The paired dangling-symlink replay used the same base and clarified both diagnostic prefixes in the shared brief. Vibe 3.1.0 timed out at 300 seconds. Its exported patch passed the 14-test validation suite, four independent controls, lint, typecheck and build. The run was rejected because it timed out. The supervisor recorded its timeout before the backend accepted a completion frame during cancellation. The backend's trace deadline field was null, so use the supervisor timeout event when interpreting this trace. Codex with Ollama Gemma 4 31B Cloud reached the same limit with no patch after a shell parse error on its edit command. The planned GLM model was unavailable under the current account.
-
-1. Include the failing child command and its error when handing Vibe a review. Require a passing reproduction before accepting a proposed fix. On the historical Node 24 replay, the child error helped Vibe locate both call sites, but its proposed path prefix still failed both checks. [Historical regression comparison](research/evidence/paired-comparison-protocol-20261108/README.md#historical-node-24-regression)
-2. Record correctness, elapsed time from starting the task to a verified result, and hands-on interventions such as gathering context, retrying or repairing output. Use each workflow as it is normally used and count that effort in the comparison. The [quality pack](docs/quality-pack.md) remains available to diagnose a specific failure.
-3. Keep Mistral Vibe as the worker. Use Ollama as the usability benchmark, then verify the handoff on a small real task. Keep the release, review search and additional backend work on hold while fixing the observed friction.
-
-The 2026-11-04 history rewrite still requires a fresh clone for pre-rewrite checkouts. The owner follow-up with GitHub Support about cached commits and pull-request refs is tracked in the [rewrite notes](research/history-rewrite-2026-11-04.md).
+1. **On the Vibe machine:** a fresh `git clone` (history was rewritten on 2026-11-04), build, install, `prepare check`, then real tasks through Codex. Fix whatever breaks, on a branch.
+2. **Review quality:** include the failing command and its error in a review brief, and accept a proposed fix only after its reproduction passes.
+3. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
+4. **Release 2.2.1** once real runs work.
 
 ## Build, install and prepare
 

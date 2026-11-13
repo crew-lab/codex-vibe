@@ -20,7 +20,7 @@ import { assertNoProjectVibeExtensions } from '../security/workspace-guard.js';
 import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { APP_VERSION } from '../version.js';
 import { buildTaskPrompt } from '../core/task-prompt.js';
-import { ApprovalHandler, type ApprovalHandlerOptions, type ApprovalRecord, type PendingApproval } from './app-server/approvals.js';
+import { ApprovalHandler, isWriteTool, type ApprovalHandlerOptions, type ApprovalRecord, type PendingApproval } from './app-server/approvals.js';
 import { resolveCredential, type CredentialResolution, type ResolvedCredential } from './app-server/credentials.js';
 import { EventProcessor, auditSessionHistory, unfinishedEffectFatal, type EffectRecord, type EventFatal, type EventSignal, type HistoryAudit } from './app-server/events.js';
 import {
@@ -264,6 +264,7 @@ class AppServerRun {
   private openedSessionId = '';
   private turnId = '';
   private completedTurn: Turn | null = null;
+  private supervision: Promise<void> = Promise.resolve();
   private processRecord: ProcessRecord | undefined;
   private failure: SupervisorError | undefined;
   private integrityFailure: SupervisorError | undefined;
@@ -347,7 +348,7 @@ class AppServerRun {
     const process = this.processRecord;
     try { await this.callbacks.onState('running', { preparation: this.preparation, ...(process ? { process } : {}), ...(this.pin ? { pin: { ...this.pin } } : {}), modelObservations: [...this.modelObservations] }); }
     catch (error) { reportBackgroundFailure('app-server-running', error); }
-    void this.supervise().catch((error: unknown) => reportBackgroundFailure('app-server-supervise', error));
+    this.supervision = this.supervise().catch((error: unknown) => reportBackgroundFailure('app-server-supervise', error));
     this.startReported.resolve();
     return { handle: this.handle, initialState: 'running', ...(process ? { process } : {}) };
   }
@@ -367,6 +368,7 @@ class AppServerRun {
     }
     if (!this.concludeStarted) this.interrupt();
     await this.turnDone.promise;
+    await this.supervision;
     await this.cleanup();
   }
 
@@ -931,7 +933,7 @@ class AppServerRun {
       const error = (budgetOnly ? this.failure : this.integrityFailure) ?? this.gapError();
       if (error) return { state: 'failed', error: this.mentionStops(error), warnings: [] };
     }
-    const outcome = mapOutcome({ turn: this.completedTurn, conditions: this.conditions, hasFinalMessage: audit?.finalMessage != null });
+    const outcome = mapOutcome({ turn: this.completedTurn, conditions: this.conditions, hasFinalMessage: audit?.finalMessage != null, auditClean: audit !== null && audit.fatal === null && audit.pendingEffects.length === 0, auditedWrites: audit?.effects.filter((effect) => effect.outcome === 'executed' && isWriteTool(effect.tool)).length ?? 0 });
     if (outcome.state === 'completed' && audit === null && this.hasCondition('budget')) {
       return {
         state: 'failed', warnings: [],

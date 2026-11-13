@@ -5,8 +5,7 @@ import {
   NO_FINAL_MESSAGE_WARNING,
   REFUSAL_WARNING,
   mapOutcome,
-  type SupervisorCondition
-} from '../../src/backends/app-server/outcome.js';
+  type SupervisorCondition, LATE_COMPLETION_WARNING, TIMEOUT_RESULT_WARNING } from '../../src/backends/app-server/outcome.js';
 import { parseTurnStartResult, type Turn } from '../../src/backends/app-server/protocol.js';
 import { runScenario } from './support/app-server-driver.js';
 
@@ -95,8 +94,20 @@ describe('supervisor conditions', () => {
     expect(order).toEqual(['VSUP_BACKEND_CRASHED', 'VSUP_OUTPUT_LIMIT', 'VSUP_BACKEND_ERROR', 'VSUP_TIMEOUT', 'VSUP_NO_PROGRESS', 'cancelled', 'completed', 'completed']);
   });
 
-  it('beats a clean completed turn: a limit detected by the supervisor wins over a normal end', () => {
+  it('fails a deadline whose final audit did not run cleanly, even after a normal end', () => {
     expect(mapOutcome({ turn: turn(), conditions: [{ kind: 'deadline' }], hasFinalMessage: true })).toMatchObject({ error: { code: 'VSUP_TIMEOUT' } });
+    expect(mapOutcome({ turn: turn(), conditions: [{ kind: 'deadline' }], hasFinalMessage: true, auditClean: false, auditedWrites: 2 })).toMatchObject({ error: { code: 'VSUP_TIMEOUT' } });
+  });
+
+  it('keeps a turn that finished at the deadline when the final audit is clean', () => {
+    expect(mapOutcome({ turn: turn(), conditions: [{ kind: 'deadline' }], hasFinalMessage: true, auditClean: true })).toEqual({ state: 'completed', stopReason: 'end_turn', warnings: [LATE_COMPLETION_WARNING] });
+  });
+
+  it('completes an edit cut off at the deadline only when it made audited writes', () => {
+    const cut = (auditedWrites: number) => mapOutcome({ turn: interrupted, conditions: [{ kind: 'deadline' }], hasFinalMessage: false, auditClean: true, auditedWrites });
+    expect(cut(1)).toEqual({ state: 'completed', stopReason: 'timeout', warnings: [TIMEOUT_RESULT_WARNING] });
+    expect(cut(0)).toMatchObject({ state: 'failed', error: { code: 'VSUP_TIMEOUT' } });
+    expect(mapOutcome({ turn: null, conditions: [{ kind: 'deadline' }], hasFinalMessage: false, auditClean: true, auditedWrites: 1 })).toMatchObject({ state: 'completed', stopReason: 'timeout' });
   });
 });
 

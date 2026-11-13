@@ -1307,6 +1307,7 @@ export class RunManager {
 
   private reportedOutcome(runtime: Runtime, state: RunState, error: SupervisorError | undefined): SettleOutcome | undefined {
     if (state !== "completed" && state !== "failed" && state !== "cancelled") return undefined;
+    if (state === "completed" && runtime.requestedOutcome?.error?.code === "VSUP_TIMEOUT") return { state };
     if (runtime.requestedOutcome) return runtime.requestedOutcome;
     if (state === "completed") return { state };
     if (state === "failed" && error?.code === "VSUP_BACKEND_CRASHED" && runtime.deadlineAt !== undefined && Date.now() >= runtime.deadlineAt) {

@@ -51,7 +51,9 @@ Outcomes come from the turn status, its stop reason and error code, and the limi
 | `limits.max_cost_usd` crossed | `completed` | `price_limit`, with the warning |
 | The model declined (error code `refusal`) | `completed` | `refusal`, with a warning that the result is not a review or an edit |
 | `vibe_close` or cancel | `cancelled` | `cancelled` |
-| Run deadline, or no progress | `failed` | `VSUP_TIMEOUT`, `VSUP_NO_PROGRESS` |
+| Run deadline, turn finished as the deadline cancelled it, final history audit clean | `completed` | the turn's own stop reason, with a warning that it finished at the deadline |
+| Run deadline, an edit cut off after audited writes, final history audit clean | `completed` | `timeout`, with a warning that the result may be incomplete; the contract and checks judge the patch |
+| Run deadline otherwise, or no progress | `failed` | `VSUP_TIMEOUT`, `VSUP_NO_PROGRESS` |
 | Provider rejected the key | `failed` | `VSUP_AUTH_REQUIRED` |
 | Rate limit | `failed` | `VSUP_RATE_LIMITED`, retryable |
 | Context or response too long, or stop reason `length` | `failed` | `VSUP_OUTPUT_LIMIT` |

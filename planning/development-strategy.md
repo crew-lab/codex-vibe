@@ -6,9 +6,15 @@ Codex hands a task to Vibe, Vibe reviews or implements it, and it works well eve
 
 ## What we work on
 
-Feature work and the 2.2.1 release are on hold. The next work is the paired comparison in the [Handoff](../Handoff.md). It measures the value of keeping Codex as the coordinator and delegating a bounded task to Vibe, using direct work with an Ollama model in Codex as the baseline.
+The current state is in the [Handoff](../Handoff.md). Mistral Vibe is the worker; the direct-Ollama comparison was dropped on 2026-11-13. In order:
 
-Mistral Vibe remains the worker. Use observed friction and failures to improve the handoff until it is as easy to use as direct Codex with Ollama. The [quality pack](../docs/quality-pack.md) can isolate review or edit failures. The [review search design](review-search-tool.md) and experimental Antigravity work are deferred.
+1. **Real runs on the Vibe machine.** Build from `main`, install, prepare, and run real tasks through Codex; fix what breaks.
+2. **Runtime friction.** Remove what makes a correct result fail: the deadline and Node-version fixes of 2026-11-13 are on `main`; turns that stall after the patch is ready are next, diagnosed with `app_server_wire_trace`.
+3. **Review quality.** Reviews miss defects that need comparing the code with a written rule. Briefs carry the failing command and its error; the [quality pack](../docs/quality-pack.md) isolates a failure. If reviews still miss code they were not given, build the search sidecar ([design](review-search-tool.md)).
+4. **Antigravity.** Keep the experimental backend only if it gets used; otherwise remove it.
+5. **Release 2.2.1** once real runs work.
+
+Work that makes none of these better waits.
 
 ## Architecture and enforcement points
 

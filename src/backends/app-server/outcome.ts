@@ -8,6 +8,7 @@ export const STOP_REASON_TOKEN_LIMIT = 'token_limit';
 export const STOP_REASON_PRICE_LIMIT = 'price_limit';
 export const STOP_REASON_REFUSAL = 'refusal';
 export const STOP_REASON_CANCELLED = 'cancelled';
+export const STOP_REASON_TIMEOUT = 'timeout';
 
 export type SupervisorCondition =
   | { kind: 'backend_crashed'; detail?: string }
@@ -22,6 +23,8 @@ export interface OutcomeInput {
   turn: Turn | null;
   conditions?: readonly SupervisorCondition[];
   hasFinalMessage: boolean;
+  auditClean?: boolean;
+  auditedWrites?: number;
 }
 
 export interface RunOutcome {
@@ -39,13 +42,16 @@ const BUDGET_STOP_REASONS = {
 
 export const NO_FINAL_MESSAGE_WARNING = 'The turn finished without a final assistant message.';
 export const INCOMPLETE_RESULT_WARNING = 'The run stopped at a limit before a final answer; the result may be incomplete.';
+export const LATE_COMPLETION_WARNING = 'The turn finished as the run reached its timeout; the final history audit confirmed every effect.';
+export const TIMEOUT_RESULT_WARNING = 'The run reached its timeout before the turn finished; every effect was audited, but the result may be incomplete.';
 export const REFUSAL_WARNING = 'The model declined the request (error code refusal); the result is not a review or an edit.';
 
 function failure(code: Parameters<typeof supervisorError>[0], message: string, details?: Record<string, unknown>, retryable = false): RunOutcome {
   return { state: 'failed', error: supervisorError(code, message, details, retryable), warnings: [] };
 }
 
-function conditionOutcome(conditions: readonly SupervisorCondition[]): RunOutcome | null {
+function conditionOutcome(input: OutcomeInput): RunOutcome | null {
+  const conditions = input.conditions ?? [];
   const find = <K extends SupervisorCondition['kind']>(kind: K) => conditions.find((condition): condition is Extract<SupervisorCondition, { kind: K }> => condition.kind === kind);
   const crashed = find('backend_crashed');
   if (crashed) return failure('VSUP_BACKEND_CRASHED', 'The Vibe app-server process ended before the turn completed.', crashed.detail ? { detail: crashed.detail } : undefined);
@@ -59,13 +65,24 @@ function conditionOutcome(conditions: readonly SupervisorCondition[]): RunOutcom
       ...(unsafe.fatal.entryId === null ? {} : { entry_id: unsafe.fatal.entryId })
     });
   }
-  if (find('deadline')) return failure('VSUP_TIMEOUT', 'The run exceeded its configured timeout.');
+  if (find('deadline')) return deadlineOutcome(input);
   const stalled = find('no_progress');
   if (stalled) return failure('VSUP_NO_PROGRESS', stalled.seconds === undefined ? 'The worker produced no output within the configured limit.' : `The worker produced no output for ${stalled.seconds} seconds.`);
   if (find('cancelled')) return { state: 'cancelled', stopReason: STOP_REASON_CANCELLED, warnings: [] };
   const budget = find('budget');
   if (budget) return { state: 'completed', stopReason: BUDGET_STOP_REASONS[budget.limit], warnings: [INCOMPLETE_RESULT_WARNING] };
   return null;
+}
+
+function deadlineOutcome(input: OutcomeInput): RunOutcome {
+  if (input.auditClean !== true) return failure('VSUP_TIMEOUT', 'The run exceeded its configured timeout.');
+  const turn = input.turn;
+  if (turn !== null && turn.status === 'completed' && turn.error === null) {
+    const finished = turnOutcome(turn, input.hasFinalMessage);
+    return { ...finished, warnings: [...finished.warnings, LATE_COMPLETION_WARNING] };
+  }
+  if ((input.auditedWrites ?? 0) > 0) return { state: 'completed', stopReason: STOP_REASON_TIMEOUT, warnings: [TIMEOUT_RESULT_WARNING] };
+  return failure('VSUP_TIMEOUT', 'The run exceeded its configured timeout.');
 }
 
 function errorOutcome(turn: Turn): RunOutcome | null {
@@ -108,5 +125,5 @@ function turnOutcome(turn: Turn | null, hasFinalMessage: boolean): RunOutcome {
 }
 
 export function mapOutcome(input: OutcomeInput): RunOutcome {
-  return conditionOutcome(input.conditions ?? []) ?? turnOutcome(input.turn, input.hasFinalMessage);
+  return conditionOutcome(input) ?? turnOutcome(input.turn, input.hasFinalMessage);
 }

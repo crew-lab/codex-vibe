@@ -63,13 +63,14 @@ describe('a supervisor decision wins over a backend that reports completed', () 
     } finally { await manager.shutdown(); }
   });
 
-  it('ends an expired run as failed with VSUP_TIMEOUT and records the timeout event', async () => {
+  it('keeps a completion the backend reports while the deadline cancels it, and records the timeout event', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], shouldAdvanceTime: true });
     const { manager, runId, data } = await startRunning(30);
     try {
       await vi.advanceTimersByTimeAsync(31_000);
       const status = await waitFor(() => manager.status({ run_id: runId }), (value) => value.state !== 'running');
-      expect(status).toMatchObject({ state: 'failed', error: { code: 'VSUP_TIMEOUT' } });
+      expect(status).toMatchObject({ state: 'completed' });
+      expect(status).not.toHaveProperty('error');
       expect((await readEvents(data, runId)).filter((event) => event.type === 'timeout')).toEqual([expect.objectContaining({ data: { timeout_seconds: 30 } })]);
       expect(await waitFor(async () => activeSlots(manager), (value) => value === 0)).toBe(0);
     } finally { await manager.shutdown(); }
