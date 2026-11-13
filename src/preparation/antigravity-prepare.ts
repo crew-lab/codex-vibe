@@ -621,6 +621,7 @@ export async function runAntigravityPreparationCheck(
         root: tempRoot,
         proxy,
         skipPermissions: config.experimental?.antigravitySkipPermissions === true,
+        agyVersion: resolved.version,
         readback: (slashCommand, cwd, childHome, childTmp) =>
           runCliSlashCommandReadback(executablePath, slashCommand, cwd, childHome, childTmp, proxy.port)
       });

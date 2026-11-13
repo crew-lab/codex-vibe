@@ -1,11 +1,13 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
-import { extractEnvelopeMeta, writeIsolatedSettings } from '../backends/antigravity.js';
+import { describeStreamEntry, extractEnvelopeMeta, writeIsolatedSettings } from '../backends/antigravity.js';
 import { writeAntigravityPreToolHook } from '../backends/antigravity-hook.js';
 import { WorkspacePathError, createPrivateDir } from '../security/paths.js';
+import { googleCredentialSecrets, redactSecrets } from '../security/redaction.js';
 import { pathWithPrefix, setupHeadlessBrowserNeutralizer } from '../security/environment.js';
 import { assertNoProjectAntigravityExtensions } from '../security/workspace-guard.js';
 
@@ -41,6 +43,36 @@ const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 const MAX_STDOUT_BYTES = 4 * 1024 * 1024;
 const MAX_FIELD_PATHS = 200;
 const MAX_LISTED = 64;
+const MAX_DIAGNOSTIC_EVENTS = 40;
+const MAX_DIAGNOSTIC_NAMES = 32;
+const MAX_DIAGNOSTIC_KEYS = 12;
+const MAX_DIAGNOSTIC_LEDGER = 16;
+const MAX_DIAGNOSTIC_NAME_LENGTH = 64;
+const MAX_STDERR_TAIL_BYTES = 16 * 1024;
+const STDERR_TAIL_LINES = 8;
+const STDERR_LINE_LENGTH = 240;
+
+export interface AgyDiagnosticEvent {
+  event: string | null;
+  step_type: string | null;
+  tool: string | null;
+  keys?: string[];
+}
+
+export interface AgyRunDiagnostics {
+  agy_version: string | null;
+  dangerously_skip_permissions: boolean;
+  init: { seen: boolean; tool_names: string[]; permission_mode: string | null; keys: string[] };
+  events_total: number;
+  events: AgyDiagnosticEvent[];
+  unparsed_lines: number;
+  result: { arrived: boolean; status: string | null; finished_reason: string | null };
+  exit_code: number | null;
+  signal: string | null;
+  timed_out: boolean;
+  hook_ledger: { entries: number; records: Array<{ tool: string | null; decision: string | null }> };
+  stderr_tail: string;
+}
 
 export interface ToolProbeEvidence {
   outcome: ToolProbeOutcome;
@@ -54,6 +86,7 @@ export interface ToolProbeEvidence {
   nonce_returned: boolean;
   hook_invocations: number;
   hook_payload_fields: string[];
+  diagnostics?: AgyRunDiagnostics;
 }
 
 export interface StreamToolShape {
@@ -555,6 +588,26 @@ async function markerEvidence(marker: string): Promise<{ invocations: number; fi
   return { invocations, fields: [...fields].sort().slice(0, MAX_LISTED) };
 }
 
+async function ledgerRecords(childHome: string): Promise<{ entries: number; records: Array<{ tool: string | null; decision: string | null }> }> {
+  try {
+    const policy = JSON.parse(await readFile(path.join(childHome, '.gemini', 'antigravity-cli', 'hook-policy.json'), 'utf8')) as { ledgerPath?: string };
+    if (typeof policy.ledgerPath !== 'string') return { entries: 0, records: [] };
+    const lines = (await readFile(policy.ledgerPath, 'utf8')).split('\n').filter((line) => line.trim());
+    const records: Array<{ tool: string | null; decision: string | null }> = [];
+    for (const line of lines.slice(0, MAX_DIAGNOSTIC_LEDGER)) {
+      try {
+        const entry = JSON.parse(line) as { decision?: unknown; tool?: unknown };
+        records.push({ tool: diagnosticName(entry.tool), decision: diagnosticName(entry.decision) });
+      } catch {
+        records.push({ tool: null, decision: null });
+      }
+    }
+    return { entries: lines.length, records };
+  } catch {
+    return { entries: 0, records: [] };
+  }
+}
+
 async function ledgerEvidence(childHome: string, probeTool: string | null): Promise<{ invocations: number; approvals: number }> {
   try {
     const policy = JSON.parse(await readFile(path.join(childHome, '.gemini', 'antigravity-cli', 'hook-policy.json'), 'utf8')) as { ledgerPath?: string };
@@ -575,10 +628,117 @@ async function ledgerEvidence(childHome: string, probeTool: string | null): Prom
   }
 }
 
+function diagnosticName(value: unknown): string | null {
+  return typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(value) && value.length <= MAX_DIAGNOSTIC_NAME_LENGTH ? value : null;
+}
+
+function diagnosticKeys(keys: readonly string[]): string[] {
+  return keys.slice(0, MAX_DIAGNOSTIC_KEYS).map((key) => diagnosticName(key) ?? '<key>');
+}
+
+const ABSOLUTE_PATH = /(?:file:\/\/)?\/(?:Users|home|private|var|tmp|opt|Volumes|root|mnt)\/[^\s"'`)\]>,;]*/g;
+
+function stderrTail(raw: string): string {
+  const secrets = [NO_INFERENCE_GOOGLE_API_KEY, ...googleCredentialSecrets(process.env)];
+  const lines = raw.split(/\r?\n/).map((line) => line.trimEnd()).filter((line) => line.trim()).slice(-STDERR_TAIL_LINES);
+  return lines.map((line) => redactSecrets(line, secrets).replace(ABSOLUTE_PATH, '<path>').slice(0, STDERR_LINE_LENGTH)).join('\n');
+}
+
+function readStderrTail(descriptor: number | null): string {
+  if (descriptor === null) return '';
+  try {
+    const size = fstatSync(descriptor).size;
+    const length = Math.min(size, MAX_STDERR_TAIL_BYTES);
+    const buffer = Buffer.alloc(length);
+    readSync(descriptor, buffer, 0, length, size - length);
+    const text = buffer.toString('utf8');
+    return size > length ? text.slice(text.indexOf('\n') + 1) : text;
+  } catch {
+    return '';
+  } finally {
+    try { closeSync(descriptor); } catch { }
+  }
+}
+
+function openStderrCapture(directory: string | undefined): number | null {
+  if (!directory) return null;
+  try {
+    return openSync(path.join(directory, `agy-stderr-${randomBytes(6).toString('hex')}.log`), 'w+', 0o600);
+  } catch {
+    return null;
+  }
+}
+
+export function buildRunDiagnostics(input: {
+  agyVersion: string | null;
+  skipPermissions: boolean;
+  stdout: string;
+  exitCode: number | null;
+  signal: string | null;
+  timedOut: boolean;
+  stderr: string;
+  ledger: { entries: number; records: Array<{ tool: string | null; decision: string | null }> };
+}): AgyRunDiagnostics {
+  const init: AgyRunDiagnostics['init'] = { seen: false, tool_names: [], permission_mode: null, keys: [] };
+  const events: AgyDiagnosticEvent[] = [];
+  const result: AgyRunDiagnostics['result'] = { arrived: false, status: null, finished_reason: null };
+  let total = 0;
+  let unparsed = 0;
+  for (const rawLine of input.stdout.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    let entry: unknown;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      unparsed += 1;
+      continue;
+    }
+    total += 1;
+    const described = describeStreamEntry(entry);
+    if (described.event === 'init') {
+      init.seen = true;
+      init.tool_names = [...new Set(described.initToolNames.map(diagnosticName).filter((name): name is string => name !== null))].slice(0, MAX_DIAGNOSTIC_NAMES);
+      init.permission_mode = diagnosticName(described.initPermissionMode);
+      init.keys = diagnosticKeys(described.initKeys);
+    }
+    if (described.event === 'result') {
+      result.arrived = true;
+      result.status = diagnosticName(described.resultStatus);
+      result.finished_reason = diagnosticName(described.resultFinishedReason);
+    }
+    if (events.length < MAX_DIAGNOSTIC_EVENTS) {
+      const event = diagnosticName(described.event);
+      events.push({
+        event,
+        step_type: diagnosticName(described.stepType),
+        tool: diagnosticName(described.toolName),
+        ...(event === null ? { keys: diagnosticKeys(described.keys) } : {})
+      });
+    }
+  }
+  return {
+    agy_version: diagnosticName(input.agyVersion),
+    dangerously_skip_permissions: input.skipPermissions,
+    init,
+    events_total: total,
+    events,
+    unparsed_lines: unparsed,
+    result,
+    exit_code: input.exitCode,
+    signal: input.signal !== null && /^SIG[A-Z0-9]{1,12}$/.test(input.signal) ? input.signal : null,
+    timed_out: input.timedOut,
+    hook_ledger: { entries: input.ledger.entries, records: input.ledger.records },
+    stderr_tail: stderrTail(input.stderr)
+  };
+}
+
 interface AgyRunOutput {
   exitCode: number | null;
   timedOut: boolean;
   stdout: string;
+  signal: string | null;
+  stderr: string;
 }
 
 function killProcessGroup(child: ChildProcess): void {
@@ -592,10 +752,11 @@ function killProcessGroup(child: ChildProcess): void {
 
 function runAgy(executablePath: string, cwd: string, env: NodeJS.ProcessEnv, skipPermissions: boolean): Promise<AgyRunOutput> {
   return new Promise((resolve) => {
+    const stderrCapture = openStderrCapture(env.TMPDIR);
     const child = spawn(
       executablePath,
       ['-p', AGY_PROBE_PROMPT, ...(skipPermissions ? ['--dangerously-skip-permissions'] : []), '--output-format', 'stream-json', '--disable-slash-commands', '--sandbox', '--print-timeout', '30s'],
-      { cwd, env, stdio: ['ignore', 'pipe', 'ignore'], detached: process.platform !== 'win32' }
+      { cwd, env, stdio: ['ignore', 'pipe', stderrCapture ?? 'ignore'], detached: process.platform !== 'win32' }
     );
     const chunks: Buffer[] = [];
     let size = 0;
@@ -604,18 +765,18 @@ function runAgy(executablePath: string, cwd: string, env: NodeJS.ProcessEnv, ski
       timedOut = true;
       killProcessGroup(child);
     }, PROBE_RUN_TIMEOUT_MS);
-    child.stdout.on('data', (chunk: Buffer) => {
+    child.stdout?.on('data', (chunk: Buffer) => {
       size += chunk.length;
       if (size <= MAX_STDOUT_BYTES) chunks.push(Buffer.from(chunk));
     });
     child.once('error', () => {
       clearTimeout(timer);
-      resolve({ exitCode: null, timedOut, stdout: '' });
+      resolve({ exitCode: null, timedOut, stdout: '', signal: null, stderr: readStderrTail(stderrCapture) });
     });
-    child.once('close', (code) => {
+    child.once('close', (code, signal) => {
       clearTimeout(timer);
       killProcessGroup(child);
-      resolve({ exitCode: code, timedOut, stdout: Buffer.concat(chunks).toString('utf8') });
+      resolve({ exitCode: code, timedOut, stdout: Buffer.concat(chunks).toString('utf8'), signal, stderr: readStderrTail(stderrCapture) });
     });
   });
 }
@@ -649,6 +810,7 @@ interface ProbeContext {
   model: ScriptedModelServer;
   hookScript: string;
   skipPermissions: boolean;
+  agyVersion: string | null;
 }
 
 interface ToolProbeRun {
@@ -694,6 +856,7 @@ async function runToolProbe(
   const requests = context.model.requests.filter((request) => request.run === run);
   const probeTool = context.model.issuedTool(run);
 
+  const ledger = await ledgerRecords(childHome);
   let hookInvocations = 0;
   let hookFields: string[] = [];
   if (hook.kind === 'variant') {
@@ -728,7 +891,17 @@ async function runToolProbe(
       function_response_returned: requests.some((request) => request.carries_function_response),
       nonce_returned: requests.some((request) => request.nonce_seen),
       hook_invocations: hookInvocations,
-      hook_payload_fields: hookFields
+      hook_payload_fields: hookFields,
+      diagnostics: buildRunDiagnostics({
+        agyVersion: context.agyVersion,
+        skipPermissions: context.skipPermissions,
+        stdout: output.stdout,
+        exitCode: output.exitCode,
+        signal: output.signal,
+        timedOut: output.timedOut,
+        stderr: output.stderr,
+        ledger
+      })
     }
   };
 }
@@ -833,6 +1006,7 @@ export async function runAgyProbes(options: {
   proxy: ProbeProxy;
   readback: SlashReadback;
   skipPermissions?: boolean;
+  agyVersion?: string | null;
 }): Promise<{ report: AgyProbeReport; findings: ProbeFinding[] }> {
   const findings: ProbeFinding[] = [];
   const root = path.join(options.root, 'agy-probes');
@@ -840,7 +1014,7 @@ export async function runAgyProbes(options: {
   const hookScript = path.join(root, 'probe-hook.mjs');
   await writeFile(hookScript, PROBE_HOOK_SCRIPT, { mode: 0o700 });
   const model = await startScriptedModelServer();
-  const context: ProbeContext = { executablePath: options.executablePath, root, proxy: options.proxy, model, hookScript, skipPermissions: options.skipPermissions === true };
+  const context: ProbeContext = { executablePath: options.executablePath, root, proxy: options.proxy, model, hookScript, skipPermissions: options.skipPermissions === true, agyVersion: options.agyVersion ?? null };
   const report = notRunProbeReport();
 
   try {

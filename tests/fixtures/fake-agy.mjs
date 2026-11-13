@@ -136,6 +136,21 @@ const contents = [{ role: 'user', parts: [{ text: prompt }] }];
 const first = await post(base, { systemInstruction: { parts: [{ text: systemText }] }, contents, tools: [{ functionDeclarations: modes.has('json-schema-read') ? [{ name: 'read_file', parameters: {}, parametersJsonSchema: { type: 'object', properties: { Path: { type: 'string' } }, required: ['Path'] } }] : declarations }] });
 emit({ event: 'step_update', step_update: { step_index: 0, step_type: 'planner_response', state: 'DONE' } });
 const call = first.candidates?.[0]?.content?.parts?.find((part) => part.functionCall)?.functionCall;
+if (modes.has('no-function-response')) {
+  emit({ event: 'init', init: { cwd: process.cwd(), permission_mode: 'strict', tools: [{ name: 'view_file', description: 'SENTINEL_TEXT' }, 'read_file', 'list_dir'], secret: 'SENTINEL_TEXT' } });
+  emit({ event: 'step_update', step_update: { step_index: 1, step_type: 'planner_response', state: 'DONE', text: `SENTINEL_TEXT ${prompt}` } });
+  const extra = modes.has('many-events') ? 500 : 0;
+  for (let index = 0; index < extra; index += 1) {
+    emit({ event: 'step_update', step_update: { step_index: index + 2, step_type: 'tool_call', tool_name: `tool_${index}`, state: 'CANCELLED', args: { Path: 'SENTINEL_ARG' } } });
+  }
+  emit({ event: 'step_update', step_update: { step_index: 900, step_type: 'tool_call', tool_name: call?.name ?? 'view_file', state: 'CANCELLED', args: { AbsolutePath: 'SENTINEL_ARG' } } });
+  emit({ delta: 'SENTINEL_TEXT', SentinelKeyOne: 1 });
+  process.stderr.write('warning: tool call needs approval\n');
+  process.stderr.write(`cannot open:${process.env.HOME}/.gemini/config/hooks.json or file:///Users/someone/project/secret.txt\n`);
+  process.stderr.write('auth failed with key AIzaSyFAKEKEYFORREDACTIONTEST0123456789 and GEMINI_API_KEY=SENTINEL_KEY_VALUE_1234\n');
+  emit({ event: 'result', result: { status: 'SUCCESS', finished_reason: 'END_TURN', response: 'SENTINEL_TEXT' } });
+  process.exit(0);
+}
 if (call) {
   const allowed = hookAllows(call);
   let response;

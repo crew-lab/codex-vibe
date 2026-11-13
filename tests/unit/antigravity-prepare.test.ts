@@ -379,4 +379,53 @@ describe('Antigravity preparation probes through a fake agy', () => {
     expect(out.report.agy_probes.hook_invoked_and_deny_honoured.control).toMatchObject({ outcome: 'inconclusive', reason: 'scripted_model_unreached' });
     expect(out.report.findings.map((f) => f.code)).toEqual(expect.arrayContaining(['probe_control_not_executed', 'provider_inference_attempted']));
   }, 90_000);
+
+  it('records what agy emitted for a run whose allowed read gets no function response, without copying any text, argument, prompt or secret', async () => {
+    const out = await prepareWith('no-function-response');
+    expect(out.status).toBe('failed');
+    const probes = out.report.agy_probes;
+    expect(probes.hook_invoked_and_deny_honoured.result).toBe('fail');
+    expect(probes.hook_failure_denies.result).toBe('fail');
+    expect(probes.stream_tool_shape.result).toBe('fail');
+    const control = probes.hook_invoked_and_deny_honoured.control;
+    expect(control?.diagnostics).toMatchObject({
+      agy_version: '1.5.8',
+      dangerously_skip_permissions: false,
+      init: { seen: true, tool_names: ['view_file', 'read_file', 'list_dir'], permission_mode: 'strict' },
+      events_total: 6,
+      result: { arrived: true, status: 'SUCCESS', finished_reason: 'END_TURN' },
+      exit_code: 0,
+      signal: null,
+      timed_out: false,
+      hook_ledger: { entries: 0, records: [] }
+    });
+    expect(control?.diagnostics?.events).toEqual([
+      { event: 'step_update', step_type: 'planner_response', tool: null },
+      { event: 'init', step_type: null, tool: null },
+      { event: 'step_update', step_type: 'planner_response', tool: null },
+      { event: 'step_update', step_type: 'tool_call', tool: 'view_file' },
+      { event: null, step_type: null, tool: null, keys: ['delta', 'SentinelKeyOne'] },
+      { event: 'result', step_type: null, tool: null }
+    ]);
+    expect(control?.diagnostics?.stderr_tail).toContain('warning: tool call needs approval');
+    expect(probes.hook_invoked_and_deny_honoured.deny_all?.diagnostics?.hook_ledger).toEqual({ entries: 0, records: [] });
+    expect(probes.hook_failure_denies.timeout?.diagnostics?.result.arrived).toBe(true);
+    const serialized = JSON.stringify(out.report);
+    for (const leaked of ['SENTINEL_TEXT', 'SENTINEL_ARG', 'SENTINEL_KEY_VALUE_1234', 'AIzaSyFAKEKEY', 'no-inference preparation probe']) {
+      expect(serialized).not.toContain(leaked);
+    }
+    expect(control?.diagnostics?.stderr_tail).toContain('[REDACTED]');
+    expect(control?.diagnostics?.stderr_tail).toContain('cannot open:<path> or <path>');
+    expect(control?.diagnostics?.stderr_tail).not.toMatch(/\/Users\/|\.gemini|secret\.txt/);
+  }, 120_000);
+
+  it('records the permission switch and bounds the event record when agy floods the stream', async () => {
+    const out = await prepareWith('no-function-response,many-events', true);
+    const diagnostics = out.report.agy_probes.hook_invoked_and_deny_honoured.control?.diagnostics;
+    expect(diagnostics?.dangerously_skip_permissions).toBe(true);
+    expect(diagnostics?.events_total).toBe(506);
+    expect(diagnostics?.events.length).toBe(40);
+    expect(diagnostics?.result.arrived).toBe(true);
+    expect(JSON.stringify(diagnostics).length).toBeLessThan(6000);
+  }, 120_000);
 });

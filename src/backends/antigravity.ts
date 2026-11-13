@@ -481,6 +481,60 @@ export function extractEnvelopeMeta(entry: unknown): ParsedEnvelopeMeta {
   return meta;
 }
 
+export interface StreamEntryDescription {
+  event: string | null;
+  stepType: string | null;
+  toolName: string | null;
+  keys: string[];
+  initToolNames: string[];
+  initPermissionMode: string | null;
+  initKeys: string[];
+  resultStatus: string | null;
+  resultFinishedReason: string | null;
+}
+
+const INIT_TOOL_LIST_KEYS = ['tools', 'available_tools', 'tool_names', 'toolNames', 'functions'] as const;
+const INIT_PERMISSION_KEYS = ['permission_mode', 'permissionMode', 'tool_permission', 'toolPermission', 'approval_mode', 'permissions'] as const;
+
+export function describeStreamEntry(entry: unknown): StreamEntryDescription {
+  const description: StreamEntryDescription = {
+    event: null, stepType: null, toolName: null, keys: [], initToolNames: [], initPermissionMode: null, initKeys: [],
+    resultStatus: null, resultFinishedReason: null
+  };
+  if (!isRecord(entry)) return description;
+  description.keys = Object.keys(entry);
+  if (typeof entry.event === 'string') description.event = entry.event;
+  if (isRecord(entry.step_update)) {
+    if (typeof entry.step_update.step_type === 'string') description.stepType = entry.step_update.step_type;
+    if (typeof entry.step_update.tool_name === 'string') description.toolName = entry.step_update.tool_name;
+  }
+  description.toolName ??= extractEnvelopeMeta(entry).executedCalls[0]?.tool ?? null;
+  if (entry.event === 'result' && isRecord(entry.result)) {
+    if (typeof entry.result.status === 'string') description.resultStatus = entry.result.status;
+    if (typeof entry.result.finished_reason === 'string') description.resultFinishedReason = entry.result.finished_reason;
+  }
+  if (entry.event === 'init') {
+    const init = isRecord(entry.init) ? entry.init : entry;
+    description.initKeys = Object.keys(init);
+    for (const key of INIT_TOOL_LIST_KEYS) {
+      const list = init[key];
+      if (!Array.isArray(list)) continue;
+      for (const item of list) {
+        if (typeof item === 'string') description.initToolNames.push(item);
+        else if (isRecord(item) && typeof item.name === 'string') description.initToolNames.push(item.name);
+      }
+      break;
+    }
+    for (const key of INIT_PERMISSION_KEYS) {
+      if (typeof init[key] === 'string') {
+        description.initPermissionMode = init[key];
+        break;
+      }
+    }
+  }
+  return description;
+}
+
 function createStreamOutputParser(
   onEntry: (payload: { text?: string; withheld: boolean; meta: ParsedEnvelopeMeta }) => Promise<void>,
   maxLineBytes: number
