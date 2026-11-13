@@ -53,28 +53,28 @@ afterEach(async () => {
 
 describe('isolated Vibe runtime install planning', () => {
   it('plans supported stable environments and keeps them unqualified', () => {
-    const plan = planRuntimeInstall({ version: '3.0.2', runtimeRoot: '/private/runtime', uvExecutable: '/bin/uv', pythonExecutable: '/bin/python3' });
-    expect(plan).toMatchObject({ qualification: 'unqualified', executable: '/private/runtime/vibe-3.0.2/bin/vibe' });
+    const plan = planRuntimeInstall({ version: '3.1.2', runtimeRoot: '/private/runtime', uvExecutable: '/bin/uv', pythonExecutable: '/bin/python3' });
+    expect(plan).toMatchObject({ qualification: 'unqualified', executable: '/private/runtime/vibe-3.1.2/bin/vibe' });
     expect(plan.commands.map((command) => command.executable)).toEqual(['/bin/uv', '/bin/uv']);
     expect(plan.commands[0].args).toContain('--link-mode');
     expect(plan.commands[0].args).toContain('copy');
     expect(plan.commands[0].args).toContain(plan.root);
     expect(plan.commands[1].args).toContain('--offline');
-    expect(plan.commands[1].args).toContain('mistral-vibe==3.0.2');
+    expect(plan.commands[1].args).toContain('mistral-vibe==3.1.2');
     expect(() => planRuntimeInstall({ version: '2.26.1', runtimeRoot: '/private/runtime', uvExecutable: '/bin/uv', pythonExecutable: '/bin/python3' })).toThrow();
-    for (const version of ['3.0.3', '3.0.4', '3.10.0', '4.0.0']) {
+    for (const version of ['3.1.3', '3.1.4', '3.10.0', '4.0.0']) {
       const newer = planRuntimeInstall({ version, runtimeRoot: '/private/runtime', uvExecutable: '/bin/uv', pythonExecutable: '/bin/python3' });
       expect(newer.qualification).toBe('unqualified');
       expect(newer.commands[1].args).toContain(`mistral-vibe==${version}`);
     }
-    for (const version of ['3.0.1', '3.0.4rc1', '03.0.4', '3.0.4;false']) expect(() => planRuntimeInstall({ version, runtimeRoot: '/private/runtime', uvExecutable: '/bin/uv', pythonExecutable: '/bin/python3' })).toThrow();
+    for (const version of ['3.1.1', '3.1.4rc1', '03.0.4', '3.1.4;false']) expect(() => planRuntimeInstall({ version, runtimeRoot: '/private/runtime', uvExecutable: '/bin/uv', pythonExecutable: '/bin/python3' })).toThrow();
   });
 
   it('applies only into a new private version directory and records immutable identity', async () => {
     const parent = await tempRoot();
     const mockPython = path.join(parent, 'fake-python');
     await writeFile(mockPython, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
-    const plan = planRuntimeInstall({ version: '3.0.2', runtimeRoot: path.join(parent, 'runtimes'), uvExecutable: '/bin/uv', pythonExecutable: mockPython });
+    const plan = planRuntimeInstall({ version: '3.1.2', runtimeRoot: path.join(parent, 'runtimes'), uvExecutable: '/bin/uv', pythonExecutable: mockPython });
     const calls: string[][] = [];
     const result = await applyRuntimeInstall(plan, {
       inspectPythonVersion: async () => '3.12.0',
@@ -83,14 +83,14 @@ describe('isolated Vibe runtime install planning', () => {
         if (calls.length === 1) await mkdir(path.join(plan.root, 'bin'), { recursive: true, mode: 0o700 });
         if (calls.length === 2) {
           const executable = path.join(plan.root, 'bin', 'vibe');
-          await writeFile(executable, '#!/bin/sh\nprintf "vibe 3.0.2\\n"\n');
+          await writeFile(executable, '#!/bin/sh\nprintf "vibe 3.1.2\\n"\n');
           await chmod(executable, 0o755);
-          await writeFile(path.join(plan.root, 'package.txt'), 'mistral-vibe 3.0.2');
+          await writeFile(path.join(plan.root, 'package.txt'), 'mistral-vibe 3.1.2');
         }
       },
     });
     expect(calls[1]).toContain(path.join(plan.root, 'bin', 'python'));
-    expect(result).toMatchObject({ version: '3.0.2', qualification: 'unqualified', executable: plan.executable, entries: 2, interpreterBinding: { type: 'external-verified' } });
+    expect(result).toMatchObject({ version: '3.1.2', qualification: 'unqualified', executable: plan.executable, entries: 2, interpreterBinding: { type: 'external-verified' } });
     const manifest = JSON.parse(await readFile(path.join(plan.root, 'runtime-manifest.json'), 'utf8')) as { sha256: string; qualification: string; interpreterBinding: { type: string; executable: string } };
     expect(manifest.sha256).toBe(result.manifestSha256);
     expect(manifest.qualification).toBe('unqualified');
@@ -103,17 +103,17 @@ describe('isolated Vibe runtime install planning', () => {
   it('fails closed when interpreter does not exist, is not a regular file, or version cannot be read', async () => {
     const parent = await tempRoot();
     const missingPython = path.join(parent, 'missing-python');
-    const planMissing = planRuntimeInstall({ version: '3.0.2', runtimeRoot: path.join(parent, 'runtimes'), uvExecutable: '/bin/uv', pythonExecutable: missingPython });
+    const planMissing = planRuntimeInstall({ version: '3.1.2', runtimeRoot: path.join(parent, 'runtimes'), uvExecutable: '/bin/uv', pythonExecutable: missingPython });
     await expect(applyRuntimeInstall(planMissing, { runCommand: async () => {} })).rejects.toThrow();
 
     const dirPython = path.join(parent, 'dir-python');
     await mkdir(dirPython);
-    const planDir = planRuntimeInstall({ version: '3.0.2', runtimeRoot: path.join(parent, 'runtimes'), uvExecutable: '/bin/uv', pythonExecutable: dirPython });
+    const planDir = planRuntimeInstall({ version: '3.1.2', runtimeRoot: path.join(parent, 'runtimes'), uvExecutable: '/bin/uv', pythonExecutable: dirPython });
     await expect(applyRuntimeInstall(planDir, { runCommand: async () => {} })).rejects.toThrow(/not a regular file/);
 
     const validPython = path.join(parent, 'valid-python');
     await writeFile(validPython, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
-    const planBadVersion = planRuntimeInstall({ version: '3.0.2', runtimeRoot: path.join(parent, 'runtimes'), uvExecutable: '/bin/uv', pythonExecutable: validPython });
+    const planBadVersion = planRuntimeInstall({ version: '3.1.2', runtimeRoot: path.join(parent, 'runtimes'), uvExecutable: '/bin/uv', pythonExecutable: validPython });
     await expect(applyRuntimeInstall(planBadVersion, { inspectPythonVersion: async () => 'unknown', runCommand: async () => {} })).rejects.toThrow(/Unable to determine valid Python version/);
   });
 
@@ -123,7 +123,7 @@ describe('isolated Vibe runtime install planning', () => {
     await mkdir(external);
     const mockPython = path.join(parent, 'fake-python');
     await writeFile(mockPython, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
-    const plan = planRuntimeInstall({ version: '3.0.2', runtimeRoot: path.join(parent, 'runtimes'), uvExecutable: '/bin/uv', pythonExecutable: mockPython });
+    const plan = planRuntimeInstall({ version: '3.1.2', runtimeRoot: path.join(parent, 'runtimes'), uvExecutable: '/bin/uv', pythonExecutable: mockPython });
     await mkdir(plan.runtimeRoot, { mode: 0o700 });
     await symlink(external, plan.root);
     await expect(applyRuntimeInstall(plan, { inspectPythonVersion: async () => '3.12.0', runCommand: async () => {} })).rejects.toThrow('symlink');
@@ -133,7 +133,7 @@ describe('isolated Vibe runtime install planning', () => {
     const parent = await tempRoot();
     const mockPython = path.join(parent, 'fake-python');
     await writeFile(mockPython, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
-    const plan = planRuntimeInstall({ version: '3.0.2', runtimeRoot: path.join(parent, 'runtimes'), uvExecutable: '/bin/uv', pythonExecutable: mockPython });
+    const plan = planRuntimeInstall({ version: '3.1.2', runtimeRoot: path.join(parent, 'runtimes'), uvExecutable: '/bin/uv', pythonExecutable: mockPython });
     const changed = { ...plan, commands: [{ executable: '/bin/other', args: [] }, ...plan.commands.slice(1)] };
     await expect(applyRuntimeInstall(changed, { inspectPythonVersion: async () => '3.12.0', runCommand: async () => {} })).rejects.toThrow('does not match');
     await expect(applyRuntimeInstall(plan, {
@@ -147,7 +147,7 @@ describe('isolated Vibe runtime install planning', () => {
     const parent = await tempRoot();
     const mockPython = path.join(parent, 'fake-python');
     await writeFile(mockPython, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
-    const plan = planRuntimeInstall({ version: '3.0.2', runtimeRoot: path.join(parent, 'runtimes'), uvExecutable: '/bin/uv', pythonExecutable: mockPython });
+    const plan = planRuntimeInstall({ version: '3.1.2', runtimeRoot: path.join(parent, 'runtimes'), uvExecutable: '/bin/uv', pythonExecutable: mockPython });
     let release!: () => void;
     const started = new Promise<void>((resolve) => { release = resolve; });
     let entered!: () => void;
@@ -161,25 +161,25 @@ describe('isolated Vibe runtime install planning', () => {
           await started;
           return;
         }
-        await writeFile(plan.executable, '#!/bin/sh\nprintf "vibe 3.0.2\\n"\n', { mode: 0o700 });
+        await writeFile(plan.executable, '#!/bin/sh\nprintf "vibe 3.1.2\\n"\n', { mode: 0o700 });
       }
     });
     await enteredFirst;
     await expect(applyRuntimeInstall(plan, { inspectPythonVersion: async () => '3.12.0', runCommand: async () => { throw new Error('second installer must not run'); } })).rejects.toThrow('installation lock already exists');
     release();
-    await expect(first).resolves.toMatchObject({ version: '3.0.2' });
+    await expect(first).resolves.toMatchObject({ version: '3.1.2' });
   });
 
   it.runIf(Boolean(discoveredUv && discoveredPython))('performs a real offline runtime installation with discovered uv', async () => {
     const parent = await tempRoot();
     const plan = planRuntimeInstall({
-      version: '3.0.2',
+      version: '3.1.2',
       runtimeRoot: path.join(parent, 'runtimes'),
       uvExecutable: discoveredUv!,
       pythonExecutable: discoveredPython!
     });
     const result = await applyRuntimeInstall(plan);
-    expect(result.version).toBe('3.0.2');
+    expect(result.version).toBe('3.1.2');
     expect(result.qualification).toBe('unqualified');
     expect(result.executable).toBe(plan.executable);
     expect(result.interpreterBinding).toMatchObject({
@@ -203,6 +203,6 @@ describe('isolated Vibe runtime install planning', () => {
     expect(pythonEntry?.isInterpreterSymlink).toBe(true);
 
     const versionOutput = execFileSync(result.executable, ['--version'], { encoding: 'utf8' });
-    expect(versionOutput.trim()).toBe('vibe 3.0.2');
+    expect(versionOutput.trim()).toBe('vibe 3.1.2');
   });
 });

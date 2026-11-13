@@ -53,7 +53,7 @@ describe('a configuration without paths.vibe_pin_manifest does not block its own
 
     expect(result.stderr).toBe('');
     expect(result.code).toBe(0);
-    expect(parsePinManifest(await readFile(output, 'utf8')).version).toBe('3.0.2');
+    expect(parsePinManifest(await readFile(output, 'utf8')).version).toBe('3.1.2');
   });
 
   it('pin-manifest asks for --output when neither the configuration nor the command line names one', async () => {

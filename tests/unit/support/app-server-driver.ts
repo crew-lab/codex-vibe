@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { RunMode } from '../../../src/contracts.js';
+import { workerRules } from '../../../src/core/worker-context.js';
 import { ApprovalHandler, type ApprovalVerdict } from '../../../src/backends/app-server/approvals.js';
 import { EventProcessor, auditSessionHistory, type EventSignal, type HistoryAudit } from '../../../src/backends/app-server/events.js';
 import { JsonRpcClient } from '../../../src/backends/app-server/jsonrpc.js';
@@ -151,7 +152,7 @@ export async function runScenario(options: DriverOptions): Promise<DriverResult>
     await call(buildInitialize({ name: 'vibe-supervisor', version: '2.0.0' }));
     const initialized = buildInitialized();
     client.notify(initialized.method, initialized.params);
-    const started = parseSessionStartResult(await call(buildSessionStart({ cwd: workspace, agent: 'supervisor-profile', enabledTools: mode === 'edit' ? ['read_file', 'write_file', 'edit'] : ['read_file'], maxTurns: 20 })));
+    const started = parseSessionStartResult(await call(buildSessionStart({ cwd: workspace, agent: 'supervisor-profile', enabledTools: mode === 'edit' ? ['read_file', 'write_file', 'edit'] : ['read_file'], maxTurns: 20, systemPrompt: workerRules('vibe', mode) })));
     sessionId = started.state.session.id;
     processor = new EventProcessor({ sessionId, watermark: started.state.eventId, mode, ledger: handler.ledger, ...(options.secrets ? { secrets: options.secrets } : {}) });
     processor.seed(started.state.history);

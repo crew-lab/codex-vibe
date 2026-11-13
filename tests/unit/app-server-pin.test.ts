@@ -102,7 +102,7 @@ async function expectReason(promise: Promise<unknown>, reason: PinFailureReason)
 }
 
 describe('environment location', () => {
-  it.each(['3.0.3', '3.0.4', '3.10.0', '4.0.0'])('discovers supported installed version %s without an exact selector', async (version) => {
+  it.each(['3.1.3', '3.1.4', '3.10.0', '4.0.0'])('discovers supported installed version %s without an exact selector', async (version) => {
     const env = await makeEnvironment({ version });
     expect((await locateEnvironment(env.script)).version).toBe(version);
     const manifest = await generatePinManifest({ executable: env.script });
@@ -111,14 +111,14 @@ describe('environment location', () => {
   });
 
   it('treats the configured version as a floor while keeping manifests exact', async () => {
-    const env = await makeEnvironment({ version: '3.0.4' });
-    expect((await locateEnvironment(env.script, '3.0.3')).version).toBe('3.0.4');
-    await expectReason(locateEnvironment(env.script, '3.0.5'), 'version-mismatch');
+    const env = await makeEnvironment({ version: '3.1.4' });
+    expect((await locateEnvironment(env.script, '3.1.3')).version).toBe('3.1.4');
+    await expectReason(locateEnvironment(env.script, '3.1.5'), 'version-mismatch');
     const manifest = await generatePinManifest({ executable: env.script });
-    await expectReason(verifyPinnedInstall({ executable: env.script, manifest: { ...manifest, version: '3.0.3' } }), 'manifest-version-mismatch');
+    await expectReason(verifyPinnedInstall({ executable: env.script, manifest: { ...manifest, version: '3.1.3' } }), 'manifest-version-mismatch');
   });
 
-  it.each(['2.26.1', '3.0.1', '3.0.4rc1', '03.0.4'])('rejects unsupported or nonstable version %s', async (version) => {
+  it.each(['2.26.1', '3.1.1', '3.1.4rc1', '03.0.4'])('rejects unsupported or nonstable version %s', async (version) => {
     const env = await makeEnvironment({ version });
     await expectReason(locateEnvironment(env.script), 'version-mismatch');
   });
@@ -174,7 +174,7 @@ describe('environment location', () => {
 
   it('requires exactly one dist-info', async () => {
     const env = await makeEnvironment();
-    await expectReason(locateEnvironment(env.script, '3.0.3'), 'version-mismatch');
+    await expectReason(locateEnvironment(env.script, '3.1.3'), 'version-mismatch');
     await put(path.join(env.site, 'mistral_vibe-2.26.0.dist-info', 'METADATA'), 'Version: 2.26.0\n');
     await expectReason(locateEnvironment(env.script), 'dist-info-ambiguous');
     await rm(env.site, { recursive: true });

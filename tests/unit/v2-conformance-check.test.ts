@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { generatePinManifest, serializePinManifest } from '../../src/backends/app-server/pin.js';
 import { workspaceDenylist } from '../../src/backends/app-server/session-config.js';
+import { workerRules } from '../../src/core/worker-context.js';
 import { makeFakeVibeEnvironment } from './support/fake-vibe-environment.js';
 import { makeLaunchableFakeVibe } from './support/launchable-fake-vibe.js';
 
@@ -157,6 +158,7 @@ describe('v2 conformance check against the scripted fake app-server', () => {
     expect(frames).toContain('session/start');
     expect(frames).toContain('config/model/write');
     expect(frames).not.toContain('turn/start');
+    expect(log.filter((entry) => entry.kind === 'event' && entry.name === 'sessionStart').map((entry) => at(entry, 'agentConfig.systemPrompt'))).toEqual([workerRules('vibe', 'review'), workerRules('vibe', 'edit')]);
     expect(log.filter((entry) => entry.kind === 'start').map((entry) => entry.hasMistralApiKey)).toEqual([false, false]);
 
     const text = JSON.stringify(result.report);
@@ -167,7 +169,7 @@ describe('v2 conformance check against the scripted fake app-server', () => {
   }, 90_000);
 
   it('prepares a newer installed release against its actual manifest identity without inference', async () => {
-    const version = '3.0.4';
+    const version = '3.1.4';
     const fake = await makeLaunchableFakeVibe(path.join(scratch, 'newer'), { version, scenario: { name: 'newer-version', serverVersion: version, harnessSelectionSource: null } });
     const result = await runCheck(['--manifest', fake.manifest, '--executable', fake.appServer, '--mode', 'review', '--settle-ms', '0', '--pin-runs', '1']);
     expect(result.code, result.stderr).toBe(0);

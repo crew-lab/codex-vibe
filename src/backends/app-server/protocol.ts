@@ -77,6 +77,7 @@ export type SessionAgentConfigInput = {
   enabledTools: readonly string[];
   disabledTools?: readonly string[];
   maxTurns: number;
+  systemPrompt: string;
 };
 
 export type AgentConfigParams = {
@@ -90,6 +91,7 @@ export type AgentConfigParams = {
   trustWorkspace: false;
   workspaceRoots: [];
   mcpServers: [];
+  systemPrompt: string;
 };
 
 export type SessionStartOptions = {
@@ -119,6 +121,11 @@ export type CallbackResultRequest = RequestSpec<'callback/result', {
 
 function requireText(value: unknown, name: string): string {
   if (typeof value !== 'string' || value.length === 0) throw new TypeError(`${name} must be a non-empty string`);
+  return value;
+}
+
+function requireNonBlank(value: unknown, name: string): string {
+  if (typeof value !== 'string' || value.trim().length === 0) throw new TypeError(`${name} must be a non-blank string`);
   return value;
 }
 
@@ -168,7 +175,8 @@ export function buildSessionStart(config: SessionAgentConfigInput, options: Sess
       autoApprove: false,
       trustWorkspace: false,
       workspaceRoots: [],
-      mcpServers: []
+      mcpServers: [],
+      systemPrompt: requireNonBlank(config.systemPrompt, 'systemPrompt')
     },
     historyLimit
   };

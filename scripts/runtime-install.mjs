@@ -5,17 +5,17 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const minimumRuntimeVersion = [3n, 0n, 2n];
+const minimumRuntimeVersion = [3n, 1n, 2n];
 
 const allowedPythonSymlinkPattern = process.platform === 'win32'
   ? /^Scripts[/\\]python(\d+(\.\d+)?)?\.exe$/i
   : /^bin\/python(\d+(\.\d+)?)?$/;
 
 function validVersion(version) {
-  if (typeof version !== 'string' || version.length > 64 || version.trim() !== version || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) throw new Error('A stable Vibe version at least 3.0.2 is required.');
+  if (typeof version !== 'string' || version.length > 64 || version.trim() !== version || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) throw new Error('A stable Vibe version at least 3.1.2 is required.');
   const parts = version.split('.').map((part) => BigInt(part));
   const difference = parts.findIndex((part, index) => part !== minimumRuntimeVersion[index]);
-  if (difference >= 0 && parts[difference] < minimumRuntimeVersion[difference]) throw new Error('A stable Vibe version at least 3.0.2 is required.');
+  if (difference >= 0 && parts[difference] < minimumRuntimeVersion[difference]) throw new Error('A stable Vibe version at least 3.1.2 is required.');
   return version;
 }
 

@@ -3,6 +3,7 @@ import { stringify } from 'smol-toml';
 import type { RunMode } from '../../contracts.js';
 import { WorkspacePathError, createPrivateDir, createPrivateFile } from '../../security/paths.js';
 import { excludedGlobProblem } from '../../config/validation.js';
+import { workerRules } from '../../core/worker-context.js';
 import { anchoredDenylistPatterns, type DenylistAnchor } from '../../security/globs.js';
 import { buildConfigModelWrite, type SessionAgentConfigInput } from './protocol.js';
 import { THINKING_OFF, type ReadbackExpectation, type SettingExpectation, type ToolPolicyExpectation } from './readback.js';
@@ -146,7 +147,7 @@ export function buildSessionConfig(input: SessionConfigInput): SessionConfigPlan
     mode: input.mode,
     agent,
     directories,
-    agentConfig: { cwd: workspace, agent, enabledTools: [...tools], disabledTools: [...DISABLED_TOOLS], maxTurns: input.maxTurns },
+    agentConfig: { cwd: workspace, agent, enabledTools: [...tools], disabledTools: [...DISABLED_TOOLS], maxTurns: input.maxTurns, systemPrompt: workerRules('vibe', input.mode) },
     profile: { directory: profileDirectory, file: path.join(profileDirectory, `${agent}.toml`), document, content: stringify(document) },
     environment: buildEnvironment(directories, agent),
     expectation: buildExpectation(workspace, agent, tools, denylist)

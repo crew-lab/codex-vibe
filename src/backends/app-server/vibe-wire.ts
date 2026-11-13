@@ -66,6 +66,8 @@ export const VIBE_WIRE: VibeWireFacts = {
     { key: 'enable_otel', value: false },
     { key: 'enable_update_checks', value: false },
     { key: 'enable_auto_update', value: false },
+    { key: 'enable_pr_monitoring', value: false },
+    { key: 'include_commit_signature', value: false },
     { key: 'experimental_enable_model_catalog', value: false },
     { key: 'experimental_enable_registry_skills', value: false },
     { key: 'experiments.enable', value: false },

@@ -14,6 +14,7 @@ import {
   workspaceDenylist,
   writeSessionFiles
 } from '../../src/backends/app-server/session-config.js';
+import { workerRules } from '../../src/core/worker-context.js';
 import { WorkspacePathError } from '../../src/security/paths.js';
 import { denylistAnchors } from '../../src/security/globs.js';
 
@@ -47,7 +48,8 @@ describe('session agentConfig', () => {
       agent: 'supervisor-review',
       enabledTools: ['read_file'],
       disabledTools: ['ask_user_question', 'exit_plan_mode', 'cron'],
-      maxTurns: 12
+      maxTurns: 12,
+      systemPrompt: workerRules('vibe', 'review')
     });
   });
 
@@ -57,6 +59,7 @@ describe('session agentConfig', () => {
     expect(plan.agentConfig.agent).toBe('supervisor-edit');
     expect(plan.agentConfig.cwd).toBe(workspace);
     expect(plan.agentConfig.maxTurns).toBe(30);
+    expect(plan.agentConfig.systemPrompt).toBe(workerRules('vibe', 'edit'));
   });
 
   it('is accepted by the strict session/start builder and never enables shell, search or write tools in a review', () => {
@@ -64,6 +67,7 @@ describe('session agentConfig', () => {
       const plan = buildSessionConfig({ mode, workspace, runDirectory, maxTurns: 5 });
       const request = buildSessionStart(plan.agentConfig);
       expect(request.params.agentConfig).toMatchObject({ autoApprove: false, trustWorkspace: false, workspaceRoots: [], mcpServers: [], headless: true });
+      expect(request.params.agentConfig.systemPrompt).toBe(workerRules('vibe', mode));
       expect(PROFILE_TOOLS[mode]).not.toContain('bash');
       expect(PROFILE_TOOLS[mode]).not.toContain('grep');
     }
@@ -168,6 +172,8 @@ describe('child process environment additions', () => {
       VIBE_ENABLE_OTEL: 'false',
       VIBE_ENABLE_UPDATE_CHECKS: 'false',
       VIBE_ENABLE_AUTO_UPDATE: 'false',
+      VIBE_ENABLE_PR_MONITORING: 'false',
+      VIBE_INCLUDE_COMMIT_SIGNATURE: 'false',
       VIBE_EXPERIMENTAL_ENABLE_MODEL_CATALOG: 'false',
       VIBE_EXPERIMENTAL_ENABLE_REGISTRY_SKILLS: 'false',
       VIBE_EXPERIMENTS__ENABLE: 'false',

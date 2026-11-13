@@ -13,7 +13,7 @@ describe('preparation status', () => {
   it('reports a receipt whose saved report was deleted as stale, and a deleted receipt as missing', async () => {
     const root = await mkdtemp(path.join(await realpath(os.tmpdir()), 'preparation-status-')); roots.push(root);
     const manifest = path.join(root, 'pin-manifest.json');
-    await writeFile(manifest, JSON.stringify({ format: 1, version: '3.0.2', record_sha256: 'a'.repeat(64), files: {} }), { mode: 0o600 });
+    await writeFile(manifest, JSON.stringify({ format: 1, version: '3.1.2', record_sha256: 'a'.repeat(64), files: {} }), { mode: 0o600 });
     const config = { ...DEFAULT_CONFIG, paths: { vibePinManifest: manifest } };
     const report = Buffer.from(JSON.stringify({ fixture: true }));
     const reports = path.join(root, 'preparation-reports'); await mkdir(reports, { mode: 0o700 });
@@ -30,7 +30,7 @@ describe('preparation status', () => {
   it('binds preparation to the Node major version, so a patch or minor update keeps the receipt', async () => {
     const root = await mkdtemp(path.join(await realpath(os.tmpdir()), 'preparation-node-')); roots.push(root);
     const manifest = path.join(root, 'pin-manifest.json');
-    await writeFile(manifest, JSON.stringify({ format: 1, version: '3.1.0', record_sha256: 'b'.repeat(64), files: {} }), { mode: 0o600 });
+    await writeFile(manifest, JSON.stringify({ format: 1, version: '3.2.0', record_sha256: 'b'.repeat(64), files: {} }), { mode: 0o600 });
     const config = { ...DEFAULT_CONFIG, paths: { vibePinManifest: manifest } };
     const candidate = 'c'.repeat(64);
     expect(nodeMajor('v24.22.1')).toBe('24');

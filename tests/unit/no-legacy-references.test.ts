@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SUPPORTED_VIBE, isSupportedVibeVersion } from '../../src/backends/app-server/supported-vibe.js';
+import { isStableVersionAtLeast } from '../../src/core/stable-version.js';
 
 const repo = path.resolve(import.meta.dirname, '..', '..');
 const SELF = 'tests/unit/no-legacy-references.test.ts';
@@ -9,11 +9,13 @@ const SKIPPED_DIRECTORIES = new Set(['node_modules', 'dist', '.git']);
 const SCANNED_DIRECTORIES = ['src', 'tests', 'scripts', '.agents', '.codex', 'examples', 'schemas', 'docs'];
 const SCANNED_ROOT_FILES = ['README.md', 'SECURITY.md', 'CHANGELOG.md', 'AGENTS.md', 'Handoff.md'];
 const CHANGELOG_START = /^## \d+\.\d+\.\d+\b/;
+const LEGACY_BOUNDARY = '3.0.2';
+const LEGACY_VERSION_RULE = `a Vibe version below ${LEGACY_BOUNDARY}`;
 
 const VIBE_VERSION = /\bvibe\b[ \t:=@-]*(?:(?:version|release|tag|v)[ \t:=@-]*)?v?(\d+(?:\.\d+)+)/gi;
 
 function foreignVibeVersions(text: string): string[] {
-  return [...text.matchAll(VIBE_VERSION)].map((match) => match[1]!).filter((version) => !isSupportedVibeVersion(version));
+  return [...text.matchAll(VIBE_VERSION)].map((match) => match[1]!).filter((version) => !isStableVersionAtLeast(version, LEGACY_BOUNDARY));
 }
 
 interface Forbidden { name: string; test: (file: string, line: string) => boolean }
@@ -34,7 +36,7 @@ const FORBIDDEN: Forbidden[] = [
   literal('docs/reviews'),
   pattern('v1-', /\bv1-/),
   literal('programmatic'),
-  { name: `a Vibe version below ${SUPPORTED_VIBE}`, test: (_file, line) => foreignVibeVersions(line).length > 0 }
+  { name: LEGACY_VERSION_RULE, test: (_file, line) => foreignVibeVersions(line).length > 0 }
 ];
 
 interface Exception { file: string; name: string; line: string; reason: string }
@@ -108,7 +110,7 @@ function linesToCheck(file: string, text: string): { number: number; text: strin
 }
 
 function isAllowed(file: string, name: string, line: string): boolean {
-  if (name === `a Vibe version below ${SUPPORTED_VIBE}` && foreignVibeVersions(line).every(version => version === '2.26.1')) {
+  if (name === LEGACY_VERSION_RULE && foreignVibeVersions(line).every(version => version === '2.26.1')) {
     const historical = ['docs/compatibility.md', 'docs/compatibility-v3.md', 'docs/adr/0009-vibe-3-supervised-corrections.md', 'docs/adr/0006-bundled-vibe-skills.md', 'docs/acceptance.json', 'CHANGELOG.md'];
     if (historical.includes(file)) return true;
     if (file === 'Handoff.md' && (/Historical|historical|recorded build|Default engine|no-inference conformance|still the only supported/.test(line))) return true;
@@ -166,6 +168,8 @@ describe('foreign Vibe version detection', () => {
     'Vibe 3.0.2',
     'Vibe 3.0.3',
     'Vibe 3.0.4',
+    'Vibe 3.1.1',
+    'Vibe 3.1.2',
     'Vibe 4.0.0',
     'vibe 3.0.2.',
     'Vibe version 3.0.2',

@@ -37,8 +37,8 @@ describe('the shared wire contract', () => {
   it('uses one protocol contract for stable versions at and above the minimum', () => {
     expect(wireFacts()).toBe(VIBE_WIRE);
     expect(PINNED_WIRE).toBe(VIBE_WIRE);
-    for (const version of ['3.0.3', '3.0.4', '3.1.0', '4.0.0', '100.12.3']) expect(wireFactsFor(version)).toBe(VIBE_WIRE);
-    for (const version of [UNPINNED_VERSION, '3.0.1', '3.0.4rc1', 'latest', '3.0.4-rc']) expect(wireFactsFor(version)).toBeUndefined();
+    for (const version of ['3.1.3', '3.1.4', '3.2.0', '4.0.0', '100.12.3']) expect(wireFactsFor(version)).toBe(VIBE_WIRE);
+    for (const version of [UNPINNED_VERSION, '3.0.2', '3.1.1', '3.1.4rc1', 'latest', '3.1.4-rc']) expect(wireFactsFor(version)).toBeUndefined();
     expect(() => wireFacts(UNPINNED_VERSION)).toThrow(/stable Vibe/);
   });
 
@@ -111,7 +111,7 @@ describe('modules read the pinned facts from the table', () => {
   it('treats the config/read harness field as the table says for the pin and requires it otherwise', () => {
     expect(parseConfigReadResult({ hooksCount: 0, skillsCount: 0 }).harnessSelectionSource).toBeNull();
     expect(parseConfigReadResult({ hooksCount: 0, skillsCount: 0 }, { vibeVersion: SUPPORTED_VIBE }).harnessSelectionSource).toBeNull();
-    expect(parseConfigReadResult({ hooksCount: 0, skillsCount: 0 }, { vibeVersion: '3.0.4' }).harnessSelectionSource).toBeNull();
+    expect(parseConfigReadResult({ hooksCount: 0, skillsCount: 0 }, { vibeVersion: '3.1.4' }).harnessSelectionSource).toBeNull();
     expect(() => parseConfigReadResult({ hooksCount: 0, skillsCount: 0 }, { vibeVersion: UNPINNED_VERSION })).toThrow(ProtocolParseError);
   });
 

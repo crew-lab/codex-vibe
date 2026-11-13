@@ -208,7 +208,7 @@ describe('CLI diagnostics for the app-server runtime', () => {
     await installation();
     await runCli(['doctor', '--json']);
     const report = JSON.parse(output.join('')) as { checks: Array<{ name: string; ok: boolean; version?: string }>; provenance: { backend: string } };
-    expect(report.checks.find((entry) => entry.name === 'vibe')).toMatchObject({ ok: true, version: '3.0.2' });
+    expect(report.checks.find((entry) => entry.name === 'vibe')).toMatchObject({ ok: true, version: '3.1.2' });
     expect(report.provenance.backend).toBe('app-server');
     expect(report.checks.some((entry) => entry.name.includes('acp'))).toBe(false);
   }, 30_000);

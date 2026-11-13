@@ -192,7 +192,7 @@ describe('fake vibe-app-server handshake and strictness', () => {
     expect(at(early, 'error.code')).toBe('not_initialized');
     const result = await client.handshake();
     expect(Object.keys(result).sort()).toEqual(['processId', 'serverInfo']);
-    expect(result.serverInfo).toEqual({ name: 'vibe-app-server', version: '3.0.2' });
+    expect(result.serverInfo).toEqual({ name: 'vibe-app-server', version: '3.1.2' });
     expect(result.processId).toBe(client.child.pid);
     expect(at(await client.call('initialize', { clientInfo: { name: 'a', version: '1' } }), 'error.code')).toBe('invalid_request');
     expect(at(await client.call('shell/run', {}), 'error.code')).toBe('method_not_found');
@@ -214,6 +214,21 @@ describe('fake vibe-app-server handshake and strictness', () => {
     expect(at(noParams, 'error.code')).toBe('invalid_request');
     const badMessage = await client.call('turn/start', { sessionId: 's', message: [{ type: 'text' }] });
     expect(at(badMessage, 'error.data.issues')).toEqual([{ path: ['message', 0, 'text'], message: 'Field required' }]);
+  });
+
+  it('rejects a blank or non-string systemPrompt and records the one it accepts', async () => {
+    const client = new FakeClient('allowed-call');
+    await client.handshake();
+    const blank = 'Value error, Session system prompt must not be blank';
+    const notText = 'Input should be a valid string';
+    for (const [systemPrompt, message] of [['', blank], [' \n\t', blank], [7, notText], [['rules'], notText]] as const) {
+      const refused = await client.call('session/start', { agentConfig: { cwd: '/work/space', systemPrompt } });
+      expect(at(refused, 'error.code')).toBe('invalid_params');
+      expect(at(refused, 'error.data.issues')).toEqual([{ path: ['agentConfig', 'systemPrompt'], message }]);
+    }
+    expect(client.logEvents('sessionStart')).toEqual([]);
+    await client.ok('session/start', { agentConfig: { cwd: '/work/space', systemPrompt: 'Supervisor rules.' } });
+    expect(client.logEvents('sessionStart')[0]).toMatchObject({ agentConfig: { systemPrompt: 'Supervisor rules.' } });
   });
 
   it('ends the connection on an unknown client notification, invalid JSON and an unknown scenario key', async () => {
@@ -267,7 +282,7 @@ describe('fake vibe-app-server handshake and strictness', () => {
       child.stdout.once('data', (chunk: string) => resolve(chunk));
       child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { clientInfo: { name: 'a', version: '1' } } })}\n`);
     });
-    expect(JSON.parse(line).result.serverInfo.version).toBe('3.0.2');
+    expect(JSON.parse(line).result.serverInfo.version).toBe('3.1.2');
     child.kill('SIGKILL');
   });
 });
@@ -320,8 +335,8 @@ describe('fake vibe-app-server session and read-back', () => {
     expect(selection.hooksCount).toBe(0);
   });
 
-  it('serves Vibe 3.0.2 config/read response without harnessSelectionSource', async () => {
-    const client = new FakeClient({ name: 'vibe3-config-read', serverVersion: '3.0.2' });
+  it('serves Vibe 3.1.2 config/read response without harnessSelectionSource', async () => {
+    const client = new FakeClient({ name: 'vibe3-config-read', serverVersion: '3.1.2' });
     await client.open();
     const selection = await client.ok('config/read', { sessionId: 'fake-session-0001' });
     expect(selection.harnessSelectionSource).toBeUndefined();
@@ -331,7 +346,7 @@ describe('fake vibe-app-server session and read-back', () => {
     expect(selection.strippedHistoryImages).toBe(0);
     expect(selection.mcpServersTotal).toBe(0);
     expect(selection.mcpServersEnabled).toBe(0);
-    expect(parseConfigReadResult(selection, { vibeVersion: '3.0.2' })).toEqual({
+    expect(parseConfigReadResult(selection, { vibeVersion: '3.1.2' })).toEqual({
       harnessSelectionSource: null,
       hooksCount: 0,
       skillsCount: 0

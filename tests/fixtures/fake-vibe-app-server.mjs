@@ -13,6 +13,7 @@ const MAX_SCENARIO_BYTES = 1024 * 1024;
 const MAX_PENDING_SERVER_REQUESTS = 64;
 const MAX_DELAY_MS = 10000;
 const CLOCK_BASE_MS = 1760400000000;
+const DEFAULT_SERVER_VERSION = '3.1.2';
 const FUTURE_FIELD = 'futureField';
 const STORE_PREFIX = 'vibe-session-logging-disabled-';
 
@@ -268,6 +269,10 @@ const V = {
     else if (min !== undefined && v < min) i.push({ path: p, message: `Input should be greater than or equal to ${min}` });
     else if (max !== undefined && v > max) i.push({ path: p, message: `Input should be less than or equal to ${max}` });
   },
+  nonBlank: (reason) => (v, p, i) => {
+    if (typeof v !== 'string') i.push({ path: p, message: 'Input should be a valid string' });
+    else if (v.trim() === '') i.push({ path: p, message: `Value error, ${reason}` });
+  },
   num: () => (v, p, i) => { if (typeof v !== 'number') i.push({ path: p, message: 'Input should be a valid number' }); },
   bool: () => (v, p, i) => { if (typeof v !== 'boolean') i.push({ path: p, message: 'Input should be a valid boolean' }); },
   lit: (expected) => (v, p, i) => { if (v !== expected) i.push({ path: p, message: `Input should be '${expected}'` }); },
@@ -323,7 +328,8 @@ const agentConfig = V.obj({
   maxSessionTokens: V.nullable(V.int()),
   headless: V.bool(),
   trustWorkspace: V.bool(),
-  mcpServers: V.arr(V.any())
+  mcpServers: V.arr(V.any()),
+  systemPrompt: V.nullable(V.nonBlank('Session system prompt must not be blank'))
 });
 const sessionIdOnly = V.obj({ sessionId: V.str() }, ['sessionId']);
 
@@ -792,6 +798,8 @@ function effectiveConfig() {
     tool_paths: [],
     enable_telemetry: true,
     enable_update_checks: true,
+    enable_pr_monitoring: true,
+    include_commit_signature: true,
     session_logging: { save_dir: '/fixture/vibe-home/logs/session', session_prefix: 'session', enabled: true, generate_titles: true },
     tools: {},
     bypass_tool_permissions: scenario.runtime?.bypassToolPermissions ?? options.autoApprove ?? false
@@ -910,7 +918,7 @@ const handlers = {
     state.initialized = true;
     state.clientCallbackKinds = params.capabilities?.callbackKinds ?? [];
     record('event', { name: 'initialize', callbackKinds: state.clientCallbackKinds });
-    return { serverInfo: { name: scenario.serverName ?? 'vibe-app-server', version: scenario.serverVersion ?? '3.0.2' }, processId: process.pid };
+    return { serverInfo: { name: scenario.serverName ?? 'vibe-app-server', version: scenario.serverVersion ?? DEFAULT_SERVER_VERSION }, processId: process.pid };
   },
   'session/start'(params) {
     if (state.session) throw new RpcError('conflict', 'A session is already open on this connection');
@@ -943,7 +951,7 @@ const handlers = {
     if (params.sessionId) requireSession(params);
     if (!state.session) throw new RpcError('invalid_params', 'config/read needs a session in this fixture', { errorCount: 1, issues: [{ path: ['sessionId'], message: 'Field required' }] });
     const runtime = scenario.runtime ?? {};
-    const serverVersion = scenario.serverVersion ?? '3.0.2';
+    const serverVersion = scenario.serverVersion ?? DEFAULT_SERVER_VERSION;
     const result = {
       config: runtimeSnapshot().config,
       strippedHistoryImages: 0,
@@ -952,7 +960,7 @@ const handlers = {
       mcpServersTotal: (runtime.mcpSources ?? []).length,
       mcpServersEnabled: (runtime.mcpSources ?? []).length
     };
-    if (serverVersion !== '3.0.2') {
+    if (serverVersion.startsWith('2.')) {
       result.startupIssue = null;
       result.harnessSelectionSource = Object.hasOwn(scenario, 'harnessSelectionSource') ? scenario.harnessSelectionSource : 'default';
     } else if (Object.hasOwn(scenario, 'harnessSelectionSource')) {

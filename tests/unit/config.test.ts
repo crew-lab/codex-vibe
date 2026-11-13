@@ -217,15 +217,15 @@ describe("app-server keys", () => {
   });
 
   it("accepts stable minimum versions without a release allowlist and rejects old or malformed selectors", () => {
-    expect(selectedVibeVersion(undefined)).toBe("3.0.2");
-    expect(selectedVibeVersion("3.0.2")).toBe("3.0.2");
+    expect(selectedVibeVersion(undefined)).toBe("3.1.2");
+    expect(selectedVibeVersion("3.1.2")).toBe("3.1.2");
     expect(() => selectedVibeVersion("2.26.1")).toThrow();
     expect(validateConfig(appServer)).not.toHaveProperty("vibeVersion");
-    expect(validateConfig({ ...appServer, vibe_version: "3.0.2" })).toMatchObject({ vibeVersion: "3.0.2" });
-    for (const version of ["3.0.3", "3.0.4", "3.10.0", "4.0.0"]) {
+    expect(validateConfig({ ...appServer, vibe_version: "3.1.2" })).toMatchObject({ vibeVersion: "3.1.2" });
+    for (const version of ["3.1.3", "3.1.4", "3.10.0", "4.0.0"]) {
       expect(validateConfig({ ...appServer, vibe_version: version })).toMatchObject({ vibeVersion: version });
     }
-    for (const version of ["3.0.1", "3.0.4rc1", "latest", "3.0.4;echo bad"]) {
+    for (const version of ["3.1.1", "3.1.4rc1", "latest", "3.1.4;echo bad"]) {
       expect(() => validateConfig({ ...appServer, vibe_version: version })).toThrow();
     }
     expect(() => validateConfig({ ...appServer, vibe_version: "2.26.1" })).toThrow(/vibe_version/);
@@ -268,7 +268,7 @@ describe("app-server keys", () => {
       validateConfig({ ...appServer, limits: { max_cost_usd: 1 } }),
       validateConfig({ ...appServer, backend: "antigravity", experimental: { antigravity: true } }),
       validateConfig({ ...appServer, paths: { ...appServer.paths, antigravity: "/opt/bin/agy" } }),
-      validateConfig({ ...appServer, vibe_version: "3.0.2" })
+      validateConfig({ ...appServer, vibe_version: "3.1.2" })
     ];
     for (const variant of variants) expect(configFingerprint(variant)).not.toBe(revision);
     expect(variants.map((variant) => bootBoundDrift(base, variant))).toEqual([

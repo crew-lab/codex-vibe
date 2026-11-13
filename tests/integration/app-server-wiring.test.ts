@@ -137,7 +137,7 @@ describe('backend selection by configuration', () => {
     chmodSync(executable, 0o755);
     const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source], paths: { appServer: executable, vibePinManifest: path.join(base, 'manifest.json') } }), path.join(base, 'data')));
     const ready = await manager.status({ workspace: source, operation: 'review', wait_seconds: 0 });
-    expect(ready).toMatchObject({ workspace_eligible: true, eligible: false, preparation: { status: "missing" }, runtime: { executable_found: true, resolved_executable: executable, pinned_version: null, minimum_version: '3.0.2', version_verified: false } });
+    expect(ready).toMatchObject({ workspace_eligible: true, eligible: false, preparation: { status: "missing" }, runtime: { executable_found: true, resolved_executable: executable, pinned_version: null, minimum_version: '3.1.2', version_verified: false } });
 
     const absent = scratch();
     const absentSource = makeWorkspace(absent);
@@ -487,10 +487,10 @@ describe('doctor with the app-server backend', () => {
     const { backend, launched } = wrapperBackend(base, config, async (executable) => { verified.push(executable); });
     const report = await runDoctor(config, undefined, { backend });
     const vibe = report.checks.find((check) => check.name === 'vibe');
-    expect(vibe).toMatchObject({ ok: true, status: 'ok', version: '3.0.2', message: expect.stringContaining('matches the pinned manifest') });
+    expect(vibe).toMatchObject({ ok: true, status: 'ok', version: '3.1.2', message: expect.stringContaining('matches the pinned manifest') });
     expect(verified).toEqual([path.join(base, 'vibe-app-server')]);
     expect(launched()).toBe(false);
-    expect(report.provenance).toMatchObject({ backend: 'app-server', vibe_version: '3.0.2' });
+    expect(report.provenance).toMatchObject({ backend: 'app-server', vibe_version: '3.1.2' });
     expect(report.ok).toBe(true);
   });
 
@@ -545,7 +545,7 @@ describe('pin-manifest command', () => {
     await runCli(['pin-manifest', '--config', env.configPath]);
     expect(output.err()).toBe('');
     expect(process.exitCode).toBeUndefined();
-    expect(output.out()).toContain('Wrote the pin manifest for Vibe 3.0.2');
+    expect(output.out()).toContain('Wrote the pin manifest for Vibe 3.1.2');
     expect(output.out()).toContain(env.manifest);
     expect((await stat(env.manifest)).mode & 0o777).toBe(0o600);
     const written = await readFile(env.manifest, 'utf8');
@@ -558,7 +558,7 @@ describe('pin-manifest command', () => {
     const { loadConfig } = await import('../../src/config/config.js');
     const config = await loadConfig({ configPath: env.configPath });
     const report = await runDoctor(config, { configPath: env.configPath, dataDir: env.data });
-    expect(report.checks.find((check) => check.name === 'vibe')).toMatchObject({ ok: true, status: 'ok', version: '3.0.2' });
+    expect(report.checks.find((check) => check.name === 'vibe')).toMatchObject({ ok: true, status: 'ok', version: '3.1.2' });
 
     await writeFile(path.join(env.site, 'vibe', 'app_server', '__init__.py'), 'def main():\n    return 1\n');
     const tampered = await runDoctor(config, { configPath: env.configPath, dataDir: env.data });
@@ -576,7 +576,7 @@ describe('pin-manifest command', () => {
     expect(readFileSync(env.manifest, 'utf8')).toBe('previous');
     process.exitCode = undefined;
     await runCli(['pin-manifest', '--config', env.configPath, '--force']);
-    expect(parsePinManifest(readFileSync(env.manifest, 'utf8')).version).toBe('3.0.2');
+    expect(parsePinManifest(readFileSync(env.manifest, 'utf8')).version).toBe('3.1.2');
   });
 
   it('takes an explicit executable and output path', async () => {

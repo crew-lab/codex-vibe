@@ -18,6 +18,7 @@ import { SUPPORTED_VIBE } from '../../src/backends/app-server/supported-vibe.js'
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import type { BackendCallbacks, BackendRunHandle, BackendStartResult, PinIdentity, RunLimits, RunMode, RunState, StartRunInput, SupervisorConfig, SupervisorError } from '../../src/contracts.js';
 import { RunManager } from '../../src/core/run-manager.js';
+import { workerRules } from '../../src/core/worker-context.js';
 import { exportReport } from '../../src/reporting/export.js';
 import { makeLaunchableFakeVibe } from '../unit/support/launchable-fake-vibe.js';
 
@@ -290,7 +291,9 @@ describe('app-server backend: clean runs', () => {
       VIBE_ENABLE_CONNECTORS: 'false',
       VIBE_SESSION_LOGGING__ENABLED: 'false',
       VIBE_ENABLE_TELEMETRY: 'false',
-      VIBE_DISABLED_SKILLS: '["*"]'
+      VIBE_DISABLED_SKILLS: '["*"]',
+      VIBE_ENABLE_PR_MONITORING: 'false',
+      VIBE_INCLUDE_COMMIT_SIGNATURE: 'false'
     });
     expect(start.envNames).not.toContain('UNRELATED_SECRET_TOKEN');
     expect(start.envNames).toContain('VIBE_SUPERVISOR_CHILD');
@@ -306,7 +309,8 @@ describe('app-server backend: clean runs', () => {
       autoApprove: false,
       trustWorkspace: false,
       workspaceRoots: [],
-      mcpServers: []
+      mcpServers: [],
+      systemPrompt: workerRules('vibe', 'review')
     });
     expect(session.initializedNotificationSeen).toBe(true);
   });
@@ -319,6 +323,7 @@ describe('app-server backend: clean runs', () => {
     expect(terminal.update?.result?.summary).toBe('The edit was applied.');
     expect(harness.eventsOfType('tool_call')[0]?.data).toMatchObject({ name: 'edit', tool: 'file_system.search_replace', kind: 'edit', outcome: 'executed' });
     expect((harness.fixtureEvents('sessionStart')[0]?.agentConfig as Json).enabledTools).toEqual(['read_file', 'write_file', 'edit']);
+    expect((harness.fixtureEvents('sessionStart')[0]?.agentConfig as Json).systemPrompt).toBe(workerRules('vibe', 'edit'));
     expect(harness.fixtureEvents('approvalAnswer')[0]).toMatchObject({ decision: 'approve' });
     harness.expectCleanedUp();
   });
@@ -1079,7 +1084,7 @@ describe('app-server backend: probe and runtime check', () => {
     const harness = new Harness('allowed-call');
     const probe = await harness.backend.probe();
 
-    expect(probe).toMatchObject({ available: true, version: '3.0.2' });
+    expect(probe).toMatchObject({ available: true, version: '3.1.2' });
     expect(harness.log()).toEqual([]);
 
     const failing = new AppServerBackend(DEFAULT_CONFIG, { executable: '/x/vibe-app-server', preparation: { check: async () => ({ status: "passed" as const, candidate_sha256: null, version: "fixture", reason: "Fake ACP fixture evidence only" }) }, pin: { verify: async () => { throw new PinCheckError('file-mismatch', 'differs'); } } });
@@ -1096,11 +1101,11 @@ describe('app-server backend: probe and runtime check', () => {
       chmodSync(path.join(base, 'vibe'), 0o755);
       chmodSync(path.join(base, 'vibe-app-server'), 0o755);
       const found = await new AppServerBackend({ ...DEFAULT_CONFIG, paths: { vibe: path.join(base, 'vibe') } }).runtimeCheck();
-      expect(found).toMatchObject({ executable_found: true, resolved_executable: path.join(base, 'vibe-app-server'), pinned_version: null, minimum_version: '3.0.2', version_verified: false });
+      expect(found).toMatchObject({ executable_found: true, resolved_executable: path.join(base, 'vibe-app-server'), pinned_version: null, minimum_version: '3.1.2', version_verified: false });
       const manifest = path.join(base, 'pin-manifest.json');
-      writeFileSync(manifest, JSON.stringify({ format: 1, version: '3.0.4', record_sha256: 'a'.repeat(64), files: {} }), { mode: 0o600 });
+      writeFileSync(manifest, JSON.stringify({ format: 1, version: '3.1.4', record_sha256: 'a'.repeat(64), files: {} }), { mode: 0o600 });
       const pinned = await new AppServerBackend({ ...DEFAULT_CONFIG, paths: { vibe: path.join(base, 'vibe'), vibePinManifest: manifest } }).runtimeCheck();
-      expect(pinned).toMatchObject({ pinned_version: '3.0.4', minimum_version: '3.0.2' });
+      expect(pinned).toMatchObject({ pinned_version: '3.1.4', minimum_version: '3.1.2' });
       rmSync(path.join(base, 'vibe-app-server'));
       const missing = await new AppServerBackend({ ...DEFAULT_CONFIG, paths: { vibe: path.join(base, 'vibe') } }).runtimeCheck();
       expect(missing).toMatchObject({ executable_found: false, resolved_executable: null });
@@ -1609,7 +1614,7 @@ describe('app-server backend: per-workspace exclusions', () => {
 });
 
 describe('app-server backend: pin identity and approval ledger', () => {
-  const identity: PinIdentity = { vibeVersion: '3.0.2', manifestSha256: 'a1'.repeat(32), recordSha256: 'b2'.repeat(32) };
+  const identity: PinIdentity = { vibeVersion: '3.1.2', manifestSha256: 'a1'.repeat(32), recordSha256: 'b2'.repeat(32) };
 
   it('reports the verified pin identity in the first running update only', async () => {
     const harness = new Harness('allowed-call', { options: { pin: { verify: async () => ({ ...identity }) } } });
@@ -1620,7 +1625,7 @@ describe('app-server backend: pin identity and approval ledger', () => {
     expect(terminal.state).toBe('completed');
   });
 
-  it.each(['3.0.3', '3.0.4', '3.10.0', '4.0.0'])('runs compatible %s using its actual identity and current edit wire name', async (version) => {
+  it.each(['3.1.3', '3.1.4', '3.10.0', '4.0.0'])('runs compatible %s using its actual identity and current edit wire name', async (version) => {
     const harness = new Harness({
       name: 'compatible-installed-version', serverVersion: version, harnessSelectionSource: null,
       steps: [
@@ -1638,7 +1643,7 @@ describe('app-server backend: pin identity and approval ledger', () => {
   });
 
   it('rejects startup identity drift even when both versions exceed the minimum', async () => {
-    const harness = new Harness({ name: 'version-drift', serverVersion: '3.0.4', steps: [] }, { options: { pin: { verify: async () => ({ ...identity, vibeVersion: '3.0.3' }) } } });
+    const harness = new Harness({ name: 'version-drift', serverVersion: '3.1.4', steps: [] }, { options: { pin: { verify: async () => ({ ...identity, vibeVersion: '3.1.3' }) } } });
     expect(await rejection(harness.start())).toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED' });
     expect(harness.frames('turn/start')).toHaveLength(0);
     harness.expectCleanedUp();
