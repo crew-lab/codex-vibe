@@ -41,7 +41,8 @@ describe('worker rules', () => {
       expect(workerRules(worker, 'review')).toContain('"No defect found in the inspected scope" is a valid answer');
       expect(workerRules(worker, 'review')).toContain('state the value or error the code produces and the line that decides it, whether or not it is a defect');
       expect(workerRules(worker, 'review')).toContain('check the code at exactly that value and on either side of it');
-      expect(workerRules(worker, 'review')).toContain('Follow the output format the task gives exactly');
+      expect(workerRules(worker, 'review')).toContain('When the task gives an output format, follow it exactly: its labels, their order and any JSON block it asks for.');
+      expect(workerRules(worker, 'review')).not.toMatch(/plain text|nothing added/);
       expect(edit).not.toContain('threshold');
     }
   });

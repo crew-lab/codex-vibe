@@ -27,7 +27,7 @@ const WORK: Readonly<Record<RunMode, readonly string[]>> = {
   review: [
     'Read the files the task names, in the order given, then answer. Read another file only when the question cannot be answered without it.',
     'For each input or case the task asks you to evaluate, work it through the code step by step and state the value or error the code produces and the line that decides it, whether or not it is a defect. Where a rule names a threshold, check the code at exactly that value and on either side of it.',
-    'Give the conclusion first, then each finding with its file, its function or line, the input that triggers it and the wrong behaviour against the stated requirement. "No defect found in the inspected scope" is a valid answer; do not invent a finding. Follow the output format the task gives exactly: its labels and order, in plain text, with nothing added.',
+    'Give the conclusion first, then each finding with its file, its function or line, the input that triggers it and the wrong behaviour against the stated requirement. "No defect found in the inspected scope" is a valid answer; do not invent a finding. When the task gives an output format, follow it exactly: its labels, their order and any JSON block it asks for.',
     'Once you have answered, stop.'
   ],
   edit: [
