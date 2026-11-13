@@ -29,6 +29,8 @@ const GIT_LIST_ARGUMENTS: readonly string[] = ['ls-files', '-z', '--cached', '--
 const UNSAFE_CODE_POINTS = (value: string): boolean => [...value].some((character) => { const code = character.codePointAt(0) ?? 0; return code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029 || code === 0xfffd; });
 const HEADING = 'Workspace files (paths relative to the workspace root):';
 
+export const NO_LISTING: Readonly<WorkspaceListing> = { text: null, included: 0, eligible: 0, truncated: false, unavailable: null };
+
 function unavailable(reason: ListingUnavailable): WorkspaceListing {
   return { text: null, included: 0, eligible: 0, truncated: false, unavailable: reason };
 }

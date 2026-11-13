@@ -394,9 +394,6 @@ describe('end to end through the MCP surface with the fake app-server', () => {
       .map((line) => JSON.parse(line) as { kind: string; frame?: { method?: string; params?: unknown } })
       .filter((entry) => entry.kind === 'frame' && entry.frame?.method === 'turn/start');
     const prompt = [
-      'Workspace files (paths relative to the workspace root):',
-      ...contextFiles.map((file) => `- ${file}`),
-      '',
       ...contextFiles.map((file) => `Approved context path: ${path.join(stack.source, file)}`),
       '',
       'Task:',

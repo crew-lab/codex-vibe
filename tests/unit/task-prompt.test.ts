@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { acceptanceContractSchema } from '../../src/acceptance/schema.js';
-import { buildTaskPrompt } from '../../src/core/task-prompt.js';
+import { buildTaskPrompt, promptTakesListing } from '../../src/core/task-prompt.js';
 import { renderContractRequirements } from '../../src/acceptance/requirements.js';
 import { inspectNodeTests } from '../../src/acceptance/node-test.js';
 
@@ -45,13 +45,28 @@ describe('contract-derived worker prompt', () => {
       mode: 'review', task: 'inspect', output: 'findings', contextFiles: ['src/value.ts'],
       preparedContextFiles: [{ path: 'context.txt', provenance: 'dirty-tracked', bytes: 4, sha256: 'b'.repeat(64), content: 'data' }]
     }, 'Workspace listing: src/value.ts');
-    expect(prompt).toContain('Workspace listing: src/value.ts');
+    expect(prompt).not.toContain('Workspace listing');
     expect(prompt).toContain('Approved context path: src/value.ts');
     expect(prompt).toContain('dirty-tracked; sha256 ' + 'b'.repeat(64));
     expect(prompt).toContain('<untrusted-context>\ndata\n</untrusted-context>');
     expect(prompt).toContain('Task:\ninspect');
     expect(prompt).toContain('findings');
     expect(prompt).not.toContain('Frozen acceptance contract');
+  });
+
+  it('carries the listing only when the coordinator named no files, and puts worker rules first', () => {
+    const listing = 'Workspace files (paths relative to the workspace root):\n- src/value.ts';
+    const unnamed = buildTaskPrompt({ mode: 'review', task: 'inspect' }, listing, 'RULES');
+    expect(unnamed.startsWith('RULES\n\nWorkspace files')).toBe(true);
+    expect(unnamed.endsWith('Task:\ninspect')).toBe(true);
+    const named = buildTaskPrompt({ mode: 'review', task: 'inspect', contextFiles: ['src/value.ts'] }, listing, 'RULES');
+    expect(named).toBe('RULES\n\nApproved context path: src/value.ts\n\nTask:\ninspect');
+    expect(promptTakesListing({})).toBe(true);
+    expect(promptTakesListing({ contextFiles: [] })).toBe(true);
+    expect(promptTakesListing({ contextFiles: ['src/value.ts'] })).toBe(false);
+    const bulk = ['Workspace files (paths relative to the workspace root):', ...Array.from({ length: 500 }, (_, index) => `- src/module-${index}/file-${index}.ts`)].join('\n');
+    expect(Buffer.byteLength(buildTaskPrompt({ mode: 'review', task: 'inspect', contextFiles: ['src/value.ts'] }, bulk))).toBeLessThan(200);
+    expect(Buffer.byteLength(buildTaskPrompt({ mode: 'review', task: 'inspect' }, bulk))).toBeGreaterThan(10_000);
   });
 
   it('leaves a plain task unchanged when no structured context or contract was supplied', () => {

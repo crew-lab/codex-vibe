@@ -19,7 +19,7 @@ import { denylistAnchors, workspaceAnchors } from '../security/globs.js';
 import { assertNoProjectVibeExtensions } from '../security/workspace-guard.js';
 import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { APP_VERSION } from '../version.js';
-import { buildTaskPrompt } from '../core/task-prompt.js';
+import { buildTaskPrompt, promptTakesListing } from '../core/task-prompt.js';
 import { ApprovalHandler, isWriteTool, type ApprovalHandlerOptions, type ApprovalRecord, type PendingApproval } from './app-server/approvals.js';
 import { resolveCredential, type CredentialResolution, type ResolvedCredential } from './app-server/credentials.js';
 import { EventProcessor, auditSessionHistory, unfinishedEffectFatal, type EffectRecord, type EventFatal, type EventSignal, type HistoryAudit } from './app-server/events.js';
@@ -40,7 +40,7 @@ import {
 import { compareReadback, formatReadbackMismatches, type ReadbackMismatch } from './app-server/readback.js';
 import { buildSessionConfig, buildThinkingOffWrite, writeSessionFiles, type SessionConfigPlan } from './app-server/session-config.js';
 import { UsageTracker, describeUsageFault, turnBackstop, type BudgetCeilings, type UsageFault, type UsageUpdate } from './app-server/usage.js';
-import { buildWorkspaceListing, type ListingLimits, type WorkspaceListing } from './app-server/workspace-listing.js';
+import { buildWorkspaceListing, NO_LISTING, type ListingLimits, type WorkspaceListing } from './app-server/workspace-listing.js';
 import { resolveCommand, spawned } from './app-server/executable.js';
 import {
   authFailureText, classifyFailureText, classifyStartFailure, rateLimitFailure, stderrTailText,
@@ -1164,7 +1164,7 @@ export class AppServerBackend implements SupervisorBackend {
       anchors = workspaceAnchors(input.exclusions, input.cwd);
       plan = buildSessionConfig({ mode: input.mode, workspace: input.workerWorkspace, runDirectory: input.runDirectory, maxTurns: input.limits.maxTurns, excludedGlobs: denylistAnchors(input.exclusions, input.cwd, input.workerWorkspace) });
     } catch (error) { throw toSupervisorError(error, []); }
-    const listing = await buildWorkspaceListing(input.workerWorkspace, this.options.listing, anchors);
+    const listing = promptTakesListing(input) ? await buildWorkspaceListing(input.workerWorkspace, this.options.listing, anchors) : NO_LISTING;
     const run = new AppServerRun({
       input, callbacks, preparation, options: this.runOptions, timing: this.timing, executable: verified.executable, pin: verified.pin, plan, listing,
       credential: resolution.credential, expectedVersion: verified.pin?.vibeVersion ?? this.expectedVersion()

@@ -1277,12 +1277,18 @@ describe('app-server backend: workspace file listing in the prompt', () => {
   };
   const promptOf = (harness: Harness): string => ((harness.frames('turn/start')[0]?.params as Json).message as Array<{ text: string }>)[0]?.text ?? '';
 
-  it('puts a bounded listing of the allowed files before the context paths and the task in a review', async () => {
+  it('leaves the listing out of a review whose request names context files', async () => {
     const harness = new Harness('allowed-call', { gitRepository: true, workspaceFiles: files, contextFiles: ['/ws/a.ts'], task: 'Check them.' });
+    await harness.run();
+    expect(promptOf(harness)).toBe('Approved context path: /ws/a.ts\n\nTask:\nCheck them.');
+  });
+
+  it('puts a bounded listing of the allowed files before the task in a review that names no context files', async () => {
+    const harness = new Harness('allowed-call', { gitRepository: true, workspaceFiles: files, task: 'Check them.' });
     await harness.run();
     const prompt = promptOf(harness);
 
-    expect(prompt.startsWith('Workspace files (paths relative to the workspace root):\n- .gitignore\n- README.md\n- docs/guide.md\n- src/index.ts\n\nApproved context path: /ws/a.ts\n\nTask:\nCheck them.')).toBe(true);
+    expect(prompt.startsWith('Workspace files (paths relative to the workspace root):\n- .gitignore\n- README.md\n- docs/guide.md\n- src/index.ts\n\nTask:\nCheck them.')).toBe(true);
     for (const hidden of ['.env', 'config/.env.production', 'keys/server.pem', '.vibeignore', 'ignored.log', '.git/']) expect(prompt, hidden).not.toContain(hidden);
     expect(prompt).not.toContain('truncated');
     expect(harness.eventsOfType('diagnostic').filter((event) => event.data.reason === 'file_listing_unavailable')).toHaveLength(0);
