@@ -2,19 +2,44 @@
 
 ## The goal
 
-Codex hands a task to Vibe, Vibe reviews or implements it, and it works well every time. Nothing else is a goal: no process, gates or decision records for their own sake. Work is chosen by what makes real Codex-to-Vibe runs more reliable and their results better.
+Codex hands a task to a worker, the worker reviews or implements it, and it works well every time. Two things decide every choice: the run must be **stable** (a correct result is never lost, a wrong one is never accepted) and **efficient** (no turn, token or minute is spent on something the worker cannot use). The implementation stays simple: one prompt builder, one rule text per worker, version floors instead of lists. Nothing else is a goal: no process, gates or decision records.
+
+Two workers are supported: Mistral Vibe at or above 3.1.2 (default) and Google's `agy` CLI at or above 1.5.8 (experimental).
+
+## What the 2026-11-13 source review found
+
+Read from the tagged Vibe source (`v3.0.2`, `v3.1.2`; `main` equals 3.1.2) and the public agy changelog (1.4.10 to 1.5.8).
+
+- **Vibe ran our tasks under its own product prompt.** A session without a prompt of its own gets Vibe's interactive prompt. It tells the model to keep a todo list, grep before calling an API, never edit a file in the turn it first read it, and to count the work as done only when tests pass and the code runs. Our worker has no shell, search or test runner, so each of those costs turns or keeps a turn open. Vibe 3.1.0 added a `systemPrompt` session option that replaces that text; the wire rejects it on older versions. That this prompt caused the stalled turns and the turn-limit failure is a hypothesis until real runs show it.
+- **Vibe 3.1 looks for pull requests at session load** (`enable_pr_monitoring`, on by default) and reports them as `artifacts/*` events, which our validator does not know.
+- **`read_file` limits.** One call returns at most 2,000 lines or 64,000 bytes and takes `offset` and `limit`; a directory path returns its entries. There is no search tool.
+- **Thinking.** Vibe's default is high; the supervisor switches it off. This is the next lever for review quality and is not changed in this pass.
+- **agy 1.5.7 changed the headless default mode to Auto**; `"agentMode": ""` in settings keeps the earlier default. The same release made `toolPermission: "strict"` take precedence over accept-edits, which only a run on a machine with agy can judge.
+- **agy reports why a turn ended early** (`finished_reason`: `print_timeout`, `interrupted`, `error`; exit code 3 on a print timeout), and can return schema-checked output (`--json-schema`).
+- **Both workers got the same task text**, with a file listing of up to 1,000 paths even when Codex had already named the files to read.
 
 ## What we work on
 
-The current state is in the [Handoff](../Handoff.md). Mistral Vibe is the worker for upcoming trials. In order:
+In order; each step is one commit, so a change in real results can be traced to it.
 
-1. **Real runs on the Vibe machine.** Build from `main` with the default prompt order, install and prepare against the installed Vibe, then run a small real bug fix through Codex. Verify what reaches the app-server and independently check the exported patch against the reproduction, regression tests and hygiene rules. Keep task-first on the experiment branch.
-2. **Runtime friction.** Remove what makes a correct result fail: the deadline and Node-version fixes of 2026-11-13 are on `main`; turns that stall after the patch is ready are next, diagnosed with `app_server_wire_trace`.
-3. **Review quality.** Reviews miss defects that need comparing the code with a written rule. Briefs carry the failing command and its error; the [quality pack](../docs/quality-pack.md) isolates a failure. If reviews still miss code they were not given, build the search sidecar ([design](review-search-tool.md)).
-4. **Antigravity.** Keep the experimental backend only if it gets used; otherwise remove it.
-5. **Release 2.2.1** once real runs work.
+1. **Version floors.** Vibe 3.1.2 and agy 1.5.8, each bound to its installed files and proven by `prepare check`. No per-release list for either.
+2. **agy 1.5.8 compatibility.** Keep the default agent mode for reviews, accept built-in skills by their `builtin` flag, read `finished_reason` and exit code 3.
+3. **No listing when Codex named the files.** A review with `context_files` gets no workspace listing.
+4. **Worker rules per tool.** One short rule text per worker and mode: what the tools are and their limits, that nothing can be run, the edit hygiene that rejected good patches (exact `old_string`, minimal diff, no new comments, no trailing whitespace), and to stop once the answer is given. Vibe receives it as `systemPrompt`; agy, which has no such flag, as the head of its prompt. The Codex task templates lose the lines the rules now carry.
+5. **Real runs on the worker machine**, measured as below. Keep what helps, revert what does not.
+6. **Next levers, one at a time after step 5:** Vibe thinking for reviews; agy `--json-schema` for findings; the [search sidecar](review-search-tool.md) only if reviews still miss code they were not given.
+7. **Release 2.2.1** once real runs work.
 
-Work that makes none of these better waits.
+## How we judge it
+
+Locally, with no worker installed (these prove the client against its own fakes, not against Vibe or agy):
+
+- The fake app-server receives `systemPrompt` and the new settings on `session/start`, the read-back passes, and the conformance run sends them too.
+- Version checks accept the floor and anything stable above it, and refuse anything below or pre-release.
+- Prompt size: a review with `context_files` in a 500-file repository carries no listing; the rule text stays under 2,000 bytes per worker and mode; no rule sentence is repeated in the task templates.
+- `npm run verify:release` passes on Node 20 and 24 in CI.
+
+On the worker machine, per commit from step 2 on: `prepare check`, then the four [quality pack](../docs/quality-pack.md) tasks. Record accepted or rejected, turns, tokens, duration and stop reason. A step stays when no task gets worse and turns or tokens go down, or an earlier failure passes. agy 1.5.8 counts as working only after `prepare check` passes there.
 
 ## Architecture and enforcement points
 
