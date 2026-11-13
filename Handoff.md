@@ -24,6 +24,8 @@
 
 ## What does not work well yet
 
+- **Calendar-date repeat on Vibe 3.1.2.** Replaying the same task on the original buggy revision reached the turn limit. Vibe read and edited both expected files. The exported patch failed TypeScript compilation because the parsed date components could be undefined. The run was closed and the patch was left out of main.
+
 - **Review quality.** `review-total` found the tax defect and missed the shipping defect at exactly 5000 cents in three runs with different briefs, including one given the observed values. [Review evidence](research/evidence/paired-comparison-protocol-20261108/README.md#vibe-review-follow-up)
 - **Small slips reject good edits.** Patches were rejected for a new code comment and for a wrong prefix in a regression test, while the source itself was right.
 - **Default-order replay on Vibe 3.1.2.** The same historical dangling-symlink task reached its 300-second deadline. The completion frame arrived 16 ms after the deadline was recorded, and the supervisor exported the audited patch with stop reason `timeout`. The reproduction, link-safety controls, validation suite, lint, typecheck and build passed. The patch was rejected for trailing whitespace and the run was closed.
