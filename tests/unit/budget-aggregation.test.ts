@@ -308,15 +308,16 @@ describe('usage ledger and budget aggregation', () => {
     expect(valid.since).toBe('2026-10-15');
     expect(valid.root).toBe(path.resolve('/my/project'));
 
-    // Rejection of invalid date
-    expect(() =>
-      parseOptions({
-        subcommand: 'usage',
-        positional: ['usage', '--since', 'not-a-date'],
-        configPath: undefined,
-        services: { cleanup: async () => {} }
-      })
-    ).toThrow(/calendar date as YYYY-MM-DD/);
+    for (const since of ['not-a-date', '2026-13-01', '2026-02-30', '2025-02-29']) {
+      expect(() =>
+        parseOptions({
+          subcommand: 'usage',
+          positional: ['usage', '--since', since],
+          configPath: undefined,
+          services: { cleanup: async () => {} }
+        })
+      ).toThrow(/calendar date as YYYY-MM-DD/);
+    }
 
     // Rejection of missing root argument
     expect(() =>

@@ -85,6 +85,7 @@ Review:
 ```text
 Read only <file>, <file>[, <file>]. Do not open other files.
 Question: <one question, e.g. whether parseLimit(value) rejects negative input as CONTRACT.md requires>.
+Failing evidence: <the command you ran and its exact error or wrong output, e.g. `node --test tests/` exits 1 with MODULE_NOT_FOUND | none>.
 Evaluate these inputs or paths: <input>, <input>, <input>.
 For each finding give the file, the function or line, the input that triggers it, and the wrong behaviour against the stated requirement.
 "No defect found in the inspected scope" is a valid answer; do not invent a finding.
@@ -97,6 +98,7 @@ Edit. Before filling it in, settle four facts from the repository yourself; each
 - **Project root.** Which directory holds the package or script, and how the code finds files at run time (an argument, the working directory, or a path relative to its own module). Name it; do not let the worker guess.
 - **Test imports.** The test framework and the exact import specifier from the test file to the code under test (for example `../src/link.mjs`), copied from an existing test where one exists.
 - **Conflicts and partial writes.** What the change must do when a destination exists, a parent is a symlink, or the second of several writes fails: usually check everything first and write nothing on failure. Put each case in the template and, where bytes can show it, in the acceptance contract; otherwise make it a coordinator validation.
+- **Type checking.** If the project is checked by TypeScript or another checker, name the settings that bite, for example `strict` and `noUncheckedIndexedAccess`. The worker cannot run the compiler, so it must know that regex groups, array elements and `split` results may be `undefined` and must be narrowed before use.
 - **No execution.** The worker has no shell, network or test runner, and every call to one is refused. It must reason from source and must not plan to run or try anything.
 
 ```text
@@ -107,6 +109,7 @@ Change: <what to add or change, with the exact function names and semantics>.
 Must reject or preserve: <each edge case, e.g. a trailing blank line, CRLF, an unsafe path>.
 On a conflict or failure: <e.g. check every destination before writing; if any check fails, write nothing and report which>.
 Tests: <test file> using <framework>, importing the code as <exact specifier>, covering <cases>. Match named or default imports to the declared exports.
+Type checking: <e.g. TypeScript strict with noUncheckedIndexedAccess: regex groups and array elements may be undefined, so narrow them before use | none>.
 Before the final answer, check the source and tests for consistent export and import names and paths.
 You cannot run anything: there is no shell, network or test runner, and every attempt is refused. Reason from the source; do not plan to execute or verify by running.
 Final answer: what changed, then an inventory of changed and scratch files.
@@ -116,7 +119,7 @@ Match the limits to the template: a review of two or three files fits `max_turns
 
 ## Check the result
 
-For a review, check the final answer, stop reason, warnings, integrity result and `usage.tool_calls` (a review that read nothing answered from nothing); `vibe-supervisor runs sarif <run-id>` exports its findings as SARIF. For an edit, inspect the result, fresh exported patch, changed and residual files, and hashes while the worktree remains available. Request a transcript only if needed to resolve a specific uncertainty; keep it private and out of reports. Verify the exact candidate in a separate disposable copy; do not run commands or tests inside the worker worktree or original source checkout. Accept only the reviewed delta. Coordinator verification does not turn an unsuccessful Vibe run into a Vibe success.
+When a review or edit proposes a fix for a failure, accept it only after the failing command passes on the exported patch in a validation copy; a correct diagnosis is not a working fix. For a review, check the final answer, stop reason, warnings, integrity result and `usage.tool_calls` (a review that read nothing answered from nothing); `vibe-supervisor runs sarif <run-id>` exports its findings as SARIF. For an edit, inspect the result, fresh exported patch, changed and residual files, and hashes while the worktree remains available. Request a transcript only if needed to resolve a specific uncertainty; keep it private and out of reports. Verify the exact candidate in a separate disposable copy; do not run commands or tests inside the worker worktree or original source checkout. Accept only the reviewed delta. Coordinator verification does not turn an unsuccessful Vibe run into a Vibe success.
 
 Close the run after verification. Request cleanup only when the exported artifact is current. A pristine worktree can be removed after ownership checks; a dirty or uncertain one is retained with its path and reason for review. Keep the exported patch available and do not force-delete retained data. Report the server version, source/base, actual checks, stop reason, authentication outcome if observed, and any unresolved cleanup or acceptance gate. macOS Apple silicon is the supported platform; a clean-account installation is not yet verified. A run proves execution, not that the answer is correct.
 
@@ -125,6 +128,6 @@ Close the run after verification. Request cleanup only when the exported artifac
 - [Tool and configuration reference](../../../docs/reference.md)
 - [Behavior](../../../docs/functionality.md)
 - [Security](../../../docs/security.md)
-- [Compatibility and unverified gates](../../../docs/compatibility.md)
+- [Compatibility](../../../docs/compatibility.md)
 - [Errors](../../../docs/errors.md)
 - [Agent Skills specification](https://agentskills.io/specification)

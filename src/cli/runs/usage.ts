@@ -4,6 +4,7 @@ import type { DailyUsageReport, DailyUsageRow, DailyUsageSummary } from '../../c
 import { fail } from '../fail.js';
 import { resolveDataDir } from '../runs.js';
 import type { RunsInvocation } from '../runs.js';
+import { isCalendarDay } from './calendar-day.js';
 
 const USAGE = 'Usage: vibe-supervisor runs [--config <path>] usage [--since <YYYY-MM-DD>] [--root <path>] [--json]';
 
@@ -90,7 +91,7 @@ export function parseOptions(invocation: RunsInvocation): UsageCliOptions {
       json = true;
     } else if (flag === '--since' && since === null) {
       const value = invocation.positional[++index];
-      if (!value || !validDay(value)) {
+      if (!value || !isCalendarDay(value)) {
         fail('runs usage --since requires a calendar date as YYYY-MM-DD.', 2);
       }
       since = value;
@@ -106,13 +107,4 @@ export function parseOptions(invocation: RunsInvocation): UsageCliOptions {
   }
 
   return { since, root, json };
-}
-
-function validDay(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  try {
-    return new Date(`${value}T00:00:00.000Z`).toISOString().startsWith(value);
-  } catch {
-    return false;
-  }
 }

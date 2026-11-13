@@ -17,6 +17,8 @@
 - Fixed: a run that reaches its timeout no longer discards finished work. Cancelling at the deadline now waits for the final history audit; a turn that finished as the deadline cancelled it keeps its result with a warning, and an edit cut off after audited writes completes with stop reason `timeout` so its contract and checks decide. A run with no audited writes, or whose audit fails, still fails with `VSUP_TIMEOUT`. The run manager's own timeout no longer overrides a completion the backend reports.
 - Changed: a preparation receipt is bound to the Node major version instead of the exact version, so a patch or minor Node update keeps it. Existing receipts need one `prepare check` after upgrading.
 - Added: opt-in `app_server_wire_trace` diagnostics that record supervisor timeouts, cancellation requests, interrupts and completion frames.
+- Fixed: `runs usage --since` and `runs usefulness --since` share one calendar-date check that rejects impossible dates such as `2026-13-01` and a non-leap `02-29` with the usage error instead of throwing; regression tests cover both commands.
+- Changed: the skill and the `vibe-reviewer` agent ask an edit brief to name the project's type-checker settings (for example `noUncheckedIndexedAccess`), ask a review brief to include the failing command and its exact error, and accept a proposed fix only after the failing command passes on the exported patch.
 - Changed: `npm run package:rc` is reproducible. The SBOM and acceptance report date comes from `SOURCE_DATE_EPOCH`, else the HEAD commit time; the SBOM namespace is derived from the package name, version and lockfile hash. A clean rebuild at the same commit can be compared by `SHA256SUMS`.
 
 ## 2.2.0 — unreleased

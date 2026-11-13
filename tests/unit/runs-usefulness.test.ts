@@ -166,7 +166,7 @@ describe('runs usefulness', () => {
 
   it('rejects bad options with the usage exit code', async () => {
     const { config } = await dataRoot();
-    for (const flags of [['--since'], ['--since', '2026-02-30'], ['--json', '--json'], ['--bogus']]) {
+    for (const flags of [['--since'], ['--since', '2026-02-30'], ['--since', '2026-13-01'], ['--since', '2025-02-29'], ['--json', '--json'], ['--bogus']]) {
       process.exitCode = undefined;
       await expect(runsUsefulness(invocation(config, ...flags))).rejects.toThrow();
       expect(process.exitCode).toBe(2);

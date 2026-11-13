@@ -8,6 +8,7 @@ import { readOwnedFile } from '../../reporting/private-files.js';
 import { fail } from '../fail.js';
 import { enumerateRunDirectories, resolveDataDir } from '../runs.js';
 import type { RunsInvocation } from '../runs.js';
+import { isCalendarDay } from './calendar-day.js';
 
 export const MAX_RUNS_SCANNED = 10_000;
 const MAX_META_BYTES = 1024 * 1024;
@@ -171,18 +172,9 @@ function parseOptions(invocation: RunsInvocation): { since: string | null; json:
     if (flag === '--json' && !json) json = true;
     else if (flag === '--since' && since === null) {
       const value = invocation.positional[++index];
-      if (!value || !validDay(value)) fail('runs usefulness --since requires a calendar date as YYYY-MM-DD.', 2);
+      if (!value || !isCalendarDay(value)) fail('runs usefulness --since requires a calendar date as YYYY-MM-DD.', 2);
       since = value;
     } else fail(USAGE, 2);
   }
   return { since, json };
-}
-
-function validDay(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  try {
-    return new Date(`${value}T00:00:00.000Z`).toISOString().startsWith(value);
-  } catch {
-    return false;
-  }
 }
