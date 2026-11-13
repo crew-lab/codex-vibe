@@ -1,11 +1,11 @@
 # Current state — 2026-11-13
 
-**The goal:** Codex hands a task to Vibe, Vibe reviews or implements it, and it works well every time. This page holds only what works, what does not, and what is next; the order of work is in the [development strategy](planning/development-strategy.md).
+**The goal:** Codex hands a task to a worker (Vibe 3.1.2 or later; agy 1.5.8 or later, experimental), the worker reviews or implements it, and it works well every time: stable and efficient. This page holds only what works, what does not, and what is next; the order of work is in the [development strategy](planning/development-strategy.md).
 
 ## Where things are
 
 - **Released.** v2.2.0 (2026-10-27) is the latest release.
-- **On `main`, unreleased 2.2.1** ([changelog](CHANGELOG.md)): any stable Vibe at or above 3.0.2; the generated `task authorize` command and complete `start_request`; search-first `context_files`; the frozen contract delivered to the worker with the `node_test` check; edit briefs that name the project root, test imports, conflict behaviour and no execution; the export output fix; the Antigravity key from the launchd session; readiness `pinned_version` from the manifest; the [quality pack](docs/quality-pack.md); the opt-in `app_server_wire_trace`; a completion or audited edit at the deadline kept instead of discarded; preparation bound to the Node major version; support for the built-in `vibe:import` skill reported by Vibe 3.1.2.
+- **On `main`, unreleased 2.2.1** ([changelog](CHANGELOG.md)): any stable Vibe at or above 3.1.2 and any stable agy at or above 1.5.8; the supervisor's own [worker rules](docs/functionality.md#worker-rules) per tool (Vibe's session system prompt, the head of agy's prompt); no file listing in a review that names `context_files`; the generated `task authorize` command and complete `start_request`; search-first `context_files`; the frozen contract delivered to the worker with the `node_test` check; edit briefs that name the project root, test imports, conflict behaviour and no execution; the export output fix; the Antigravity key from the launchd session; readiness `pinned_version` from the manifest; the [quality pack](docs/quality-pack.md); the opt-in `app_server_wire_trace`; a completion or audited edit at the deadline kept instead of discarded; preparation bound to the Node major version; support for the built-in `vibe:import` skill reported by Vibe 3.1.2.
 - **Target machine:** the main-based 2.2.1 candidate `1002bace…` passed no-inference preparation against Vibe 3.1.2 on Node 24.22.1. Release verification passed with 1,738 tests and one skipped. The `vibe:import` skill describes migration from Claude Code, Codex and OpenCode. The supervisor accepts its built-in plugin metadata and applies the run’s existing file-tool policy.
 - **The Ollama comparison is dropped** (owner, 2026-11-13). Its notes stay in [research](research/evidence/paired-comparison-protocol-20261108/README.md).
 
@@ -16,6 +16,15 @@
 - **Boundary.** Reviews stay read-only, edits stay in their worktrees, nothing reaches shell or network, and runs clean up after themselves.
 - **Task-first experiment.** On Vibe 3.1.2, the historical dangling-symlink fix completed in 44.6 seconds and passed independent checks on `exp/task-first-prompt`. That result belongs to the experiment build.
 - **Edits.** On Vibe 3.1.0, `edit-shipping` fixed the threshold, touched only the two allowed files and passed all 14 tests on the exported patch.
+
+## Changed on 2026-11-13, not yet run on a worker
+
+None of this has met a real Vibe or agy: it is proven against the fakes and against the tagged Vibe source and the agy changelog. The first real `prepare check` and quality-pack run decide whether each stays.
+
+- **Vibe worked under its interactive product prompt.** A session without its own prompt gets the text Vibe writes for a person at a terminal: keep a todo list, search before calling an API, and count the work as done only when tests pass and the code runs. The worker can do none of it. Sessions now send the supervisor's worker rules as `systemPrompt` (Vibe 3.1.0 and later; older versions reject the field, so the floor is 3.1.2). That the old prompt caused the stalled turns and the turn-limit failure below is a hypothesis.
+- **Two Vibe settings are switched off:** pull-request monitoring (which looks for pull requests at session load and reports them as events the validator does not know) and commit-signature guidance.
+- **A review with `context_files` carries no file listing.** The listing was up to 1,000 paths and 32 KiB in every such prompt.
+- **agy 1.5.8.** A version floor replaces the list that ended at 1.4.9; built-in skills are accepted by agy's own flag; reviews keep the pre-1.5.7 default agent mode through `"agentMode": ""`, which `prepare check` writes but cannot confirm agy honours; a print timeout is a timeout. agy 1.5.7 also made `toolPermission: "strict"` take precedence over accept-edits, so edits may be denied until a machine with agy shows otherwise.
 
 ## Fixed on 2026-11-13
 
@@ -32,14 +41,17 @@
 - **Small slips reject good edits.** Patches were rejected for a new code comment and for a wrong prefix in a regression test, while the source itself was right.
 - **Default-order replay on Vibe 3.1.2.** The same historical dangling-symlink task reached its 300-second deadline. The completion frame arrived 16 ms after the deadline was recorded, and the supervisor exported the audited patch with stop reason `timeout`. The reproduction, link-safety controls, validation suite, lint, typecheck and build passed. The patch was rejected for trailing whitespace and the run was closed.
 - **Turns that stall.** Two task-first runs stalled until the deadline after their patches were ready; with the deadline fix they now complete with stop reason `timeout`, but why Vibe kept the turn open is unexplained. Run with `app_server_wire_trace` when it recurs.
+- **agy 1.5.8 is unqualified.** No 1.5.x release has passed `prepare check` on a machine with agy.
 - **Antigravity probes.** With `antigravity_skip_permissions` on, the probes exercise the hook on a read only, not a review-mode write or a shell tool; that needs agy's real tool schemas.
 
 ## Next
 
-1. **On the Vibe machine:** run a new small real bug fix through Codex using the prepared `main` build and Vibe 3.1.2. Verify the worker input at the app-server boundary and check the exported patch against the reproduction, regression tests and hygiene rules. Keep task-first experimental.
-2. **Review quality:** include the failing command and its error in a review brief, and accept a proposed fix only after its reproduction passes.
-3. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
-4. **Release 2.2.1** once real runs work.
+1. **On the Vibe machine,** build `main`, install it, then run `vibe-supervisor pin-manifest --force` and `vibe-supervisor prepare check --kit <kit> --config "$CONFIG"`. A failure here that names `systemPrompt`, `enable_pr_monitoring` or `include_commit_signature` means Vibe refused what the source says it accepts: report the exact error. A configuration that sets `vibe_version` below 3.1.2 must raise it.
+2. **Then run the four quality-pack tasks** (`node scripts/quality-pack.mjs list`, [quality pack](docs/quality-pack.md)) and record for each: accepted or rejected, turns, tokens, duration and stop reason. Compare with the earlier runs of the same tasks. Then repeat the calendar-date fix on the original buggy revision, the one that reached the turn limit.
+3. **On a machine with agy 1.5.8 or later,** with `backend = "antigravity"`: `prepare check`, then the same four tasks. Report whether edits are denied under `toolPermission: "strict"`.
+4. **Next levers, one at a time:** Vibe thinking for reviews (it is switched off today; Vibe's default is high), then agy `--json-schema` for findings.
+5. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
+6. **Release 2.2.1** once real runs work.
 
 ## Build, install and prepare
 

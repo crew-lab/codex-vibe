@@ -6,9 +6,9 @@ license: MIT
 
 # Vibe Supervisor
 
-The supervisor exposes exactly five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. It accepts stable Vibe releases at or above the configured minimum (default 3.0.2), without a per-release allowlist. The installed version is discovered automatically; the server version and installed files must match the installation manifest exactly. After upgrading Vibe, review and regenerate the manifest and rerun candidate preparation. Incompatible runtime behavior and file drift still fail closed. Check the selected candidate’s hosted qualification against its recorded target-gate evidence; preparation alone does not establish it. Each review or edit start requires a short-lived local dispatch grant created with `vibe-supervisor task authorize` and the grant's unique `attempt_id`; the grant authorizes one exact request and one start. This is not an interactive Vibe permission or continuation protocol. Each owning server/storage instance accepts one active run; a competing start is rejected immediately. A run is one-shot: there are no follow-up prompts or restart recovery. If the supervisor restarts during work, the run is marked failed and its task is never replayed. Completed means execution ended; the coordinator still owns acceptance and cleanup. The Antigravity backend is experimental and opt-in (`experimental.antigravity = true`); use it only when the configuration selects it, and see [security](../../../docs/security.md#antigravity-backend-experimental).
+The supervisor exposes exactly five tools: `vibe_review_start`, `vibe_edit_start`, `vibe_status`, `vibe_result`, and `vibe_close`. It accepts stable Vibe releases at or above the configured minimum (default 3.1.2), without a per-release allowlist. The installed version is discovered automatically; the server version and installed files must match the installation manifest exactly. After upgrading Vibe, review and regenerate the manifest and rerun candidate preparation. Incompatible runtime behavior and file drift still fail closed. Check the selected candidate’s hosted qualification against its recorded target-gate evidence; preparation alone does not establish it. Each review or edit start requires a short-lived local dispatch grant created with `vibe-supervisor task authorize` and the grant's unique `attempt_id`; the grant authorizes one exact request and one start. This is not an interactive Vibe permission or continuation protocol. Each owning server/storage instance accepts one active run; a competing start is rejected immediately. A run is one-shot: there are no follow-up prompts or restart recovery. If the supervisor restarts during work, the run is marked failed and its task is never replayed. Completed means execution ended; the coordinator still owns acceptance and cleanup. The Antigravity backend is experimental and opt-in (`experimental.antigravity = true`); use it only when the configuration selects it, and see [security](../../../docs/security.md#antigravity-backend-experimental).
 
-Vibe's packaged plugin skills are accepted only when the runtime reports their required plugin provenance; user/project/registry skill entries are refused. Skill instructions never grant extra tool or path permissions. Shell and network tools are disabled. The supervisor's policy is not an OS sandbox. Reviews are read-only (`read_file`) over an allowlisted workspace, with a bounded workspace file listing in the prompt and no search tool; edits can read, write and edit inside the worktree, need a Git repository root and explicit `base_ref`, and run in a detached supervisor-owned worktree. The worker's patch is exported for review and is never applied, committed, merged, or pushed automatically.
+Vibe's packaged plugin skills are accepted only when the runtime reports their required plugin provenance; user/project/registry skill entries are refused. Skill instructions never grant extra tool or path permissions. Shell and network tools are disabled. The supervisor's policy is not an OS sandbox. Reviews are read-only (`read_file`) over an allowlisted workspace, with no search tool; a review that passes no `context_files` gets a bounded workspace file listing in its prompt; edits can read, write and edit inside the worktree, need a Git repository root and explicit `base_ref`, and run in a detached supervisor-owned worktree. The worker's patch is exported for review and is never applied, committed, merged, or pushed automatically.
 
 
 Codex may have two of these servers: `vibe-supervisor` runs Vibe and a second one, usually `vibe-supervisor-agy`, runs the experimental agy worker. Use the Vibe server unless the task asks for agy. Call readiness, `task authorize` and the start on the same server; the readiness reply names its `backend` (`app-server` or `antigravity`).
@@ -66,7 +66,7 @@ Start one review or edit with bounded turns, deadline, output limits, wait, and 
 
 ## Choose the review context
 
-The worker cannot search: it has `read_file` and a bounded file listing, nothing else. You can search, so do it before the grant is registered and hand the worker the result as `context_files`.
+The Vibe worker cannot search: it has `read_file`, which also lists a directory, and nothing else. You can search, so do it before the grant is registered and hand the worker the result as `context_files`. A review with `context_files` carries no workspace listing, so the files you choose are what the worker starts from; a review without them gets a bounded listing instead.
 
 1. Search the repository yourself (`rg`, or your own tools) for the symbols the question names, their call sites and the tests that cover them. Open what you find; a file that only mentions the symbol in a comment or an import is not context.
 2. Choose at most 8 files: the definitions, the callers whose behaviour the question depends on, and the tests that pin the current contract. Fewer is better. The schema takes 50, but each file is one `read_file` turn before the worker can answer, so 8 files fit `max_turns` 30 with room for the answer, and a longer list is a sign the question is too wide for one review; split it instead.
@@ -82,6 +82,8 @@ For each real review, log beside its usefulness entry how many context files wer
 
 A completed run is not a useful answer. The tasks that produced accepted answers on the target were narrow and checkable; the one real-project review ran safely but its answer was not accepted. Fill one in: replace each `<...>` and keep every line.
 
+The supervisor already gives every worker a fixed rule text: what its tools are and their limits, that nothing can be run, how to report a finding, edit hygiene (exact `old_string`, smallest diff, no new comments, no trailing whitespace, no scratch files), and to stop once it has answered. Vibe receives it as its system prompt and agy at the head of its prompt. Do not repeat those rules; spend the task text on what only you know about this task.
+
 Review:
 
 ```text
@@ -89,9 +91,7 @@ Read only <file>, <file>[, <file>]. Do not open other files.
 Question: <one question, e.g. whether parseLimit(value) rejects negative input as CONTRACT.md requires>.
 Failing evidence: <the command you ran and its exact error or wrong output, e.g. `node --test tests/` exits 1 with MODULE_NOT_FOUND | none>.
 Evaluate these inputs or paths: <input>, <input>, <input>.
-For each finding give the file, the function or line, the input that triggers it, and the wrong behaviour against the stated requirement.
-"No defect found in the inspected scope" is a valid answer; do not invent a finding.
-No style advice, refactors or recommendations outside the question. No scratch files.
+No style advice, refactors or recommendations outside the question.
 Final answer: the conclusion first, then the findings, under <n> lines.
 ```
 
@@ -101,7 +101,6 @@ Edit. Before filling it in, settle four facts from the repository yourself; each
 - **Test imports.** The test framework and the exact import specifier from the test file to the code under test (for example `../src/link.mjs`), copied from an existing test where one exists.
 - **Conflicts and partial writes.** What the change must do when a destination exists, a parent is a symlink, or the second of several writes fails: usually check everything first and write nothing on failure. Put each case in the template and, where bytes can show it, in the acceptance contract; otherwise make it a coordinator validation.
 - **Type checking.** If the project is checked by TypeScript or another checker, name the settings that bite, for example `strict` and `noUncheckedIndexedAccess`. The worker cannot run the compiler, so it must know that regex groups, array elements and `split` results may be `undefined` and must be narrowed before use.
-- **No execution.** The worker has no shell, network or test runner, and every call to one is refused. It must reason from source and must not plan to run or try anything.
 
 ```text
 Read <file>, <file> first.
@@ -112,9 +111,7 @@ Must reject or preserve: <each edge case, e.g. a trailing blank line, CRLF, an u
 On a conflict or failure: <e.g. check every destination before writing; if any check fails, write nothing and report which>.
 Tests: <test file> using <framework>, importing the code as <exact specifier>, covering <cases>. Match named or default imports to the declared exports.
 Type checking: <e.g. TypeScript strict with noUncheckedIndexedAccess: regex groups and array elements may be undefined, so narrow them before use | none>.
-Before the final answer, check the source and tests for consistent export and import names and paths.
-You cannot run anything: there is no shell, network or test runner, and every attempt is refused. Reason from the source; do not plan to execute or verify by running.
-Final answer: what changed, then an inventory of changed and scratch files.
+Final answer: what changed, then the files changed.
 ```
 
 Match the limits to the template: a review of two or three files fits `max_turns` 12; raise turns only with the number of files to read. Record whether the answer was accepted, so the template can be improved; `vibe-supervisor runs usefulness` summarizes the recorded assessments of edits and counts reviews without assessing them.

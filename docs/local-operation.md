@@ -21,7 +21,7 @@ The first registers as `vibe-supervisor` (Vibe, the default backend). In the sec
 
 ### Vibe CLI upgrade and manifest refresh
 
-When the underlying `mistral-vibe` CLI is upgraded to another supported stable version ($\ge 3.0.2$), review and regenerate the installed file manifest and refresh candidate preparation before dispatch:
+When the underlying `mistral-vibe` CLI is upgraded to another supported stable version (3.1.2 or later), review and regenerate the installed file manifest and refresh candidate preparation before dispatch:
 
 ```bash
 vibe-supervisor pin-manifest --config "$CONFIG" --force

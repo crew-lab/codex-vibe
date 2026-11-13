@@ -1,6 +1,6 @@
 # Vibe 3.0.2 compatibility assessment
 
-Current policy, owner decision 2026-11-01: **stable Vibe versions at or above 3.0.2 are eligible**, without a per-release allowlist. The optional `vibe_version` sets a minimum, defaulting to 3.0.2; installed package metadata supplies the actual version. Its manifest, startup handshake and preparation must bind that exact installation. Eligibility does not qualify hosted behavior: the current candidate needs its own target evidence. This document preserves the earlier tagged-source review and prior candidate trial as historical evidence. Neither qualifies a changed candidate or transfers to another archive or installation. See [the development strategy](../AGENTS.md#product-boundaries).
+Current policy, 2026-11-13: **stable Vibe versions at or above 3.1.2 are eligible**, without a per-release allowlist (the floor was 3.0.2 from 2026-11-01; it rose because the session system prompt needs 3.1.0 and 3.1.2 is the tested release). The optional `vibe_version` sets a minimum, defaulting to 3.1.2; installed package metadata supplies the actual version. Its manifest, startup handshake and preparation must bind that exact installation. Eligibility does not qualify hosted behavior: the current candidate needs its own target evidence. This document preserves the earlier tagged-source review and prior candidate trial as historical evidence. Neither qualifies a changed candidate or transfers to another archive or installation. See [the development strategy](../AGENTS.md#product-boundaries).
 
 ## Source basis
 

@@ -1,6 +1,6 @@
 # Dispatch authorization and one-shot stability
 
-The current implementation uses exactly Vibe 3.0.2 and five one-shot MCP tools. Each start requires a locally registered, single-use dispatch authorization and attempt. See [ADR 0010](adr/0010-dispatch-attempt-authorization.md). Continuation is deferred. The previous six-tool archive and its evidence remain historical; they do not qualify this changed source. Hosted inference remains paused.
+The current implementation accepts stable Vibe at or above 3.1.2 and exposes five one-shot MCP tools. Each start requires a locally registered, single-use dispatch authorization and attempt. See [ADR 0010](adr/0010-dispatch-attempt-authorization.md). Continuation is deferred. The previous six-tool archive and its evidence remain historical; they do not qualify this changed source. Hosted inference remains paused.
 
 # Patch acceptance and reporting
 
