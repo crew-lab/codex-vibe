@@ -39,6 +39,10 @@ describe('worker rules', () => {
       expect(edit).toContain('narrowed before use');
       expect(workerRules(worker, 'review')).not.toContain('trailing whitespace');
       expect(workerRules(worker, 'review')).toContain('"No defect found in the inspected scope" is a valid answer');
+      expect(workerRules(worker, 'review')).toContain('state the value or error the code produces and the line that decides it, whether or not it is a defect');
+      expect(workerRules(worker, 'review')).toContain('check the code at exactly that value and on either side of it');
+      expect(workerRules(worker, 'review')).toContain('Follow the output format the task gives exactly');
+      expect(edit).not.toContain('threshold');
     }
   });
 });
