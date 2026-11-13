@@ -1945,6 +1945,8 @@ console.log(JSON.stringify({ type: 'result', status: 'SUCCESS', response: 'done'
     await execSync('git init -b main', { cwd: workspace });
 
     let finalState: string | undefined;
+    let finalDetail: unknown;
+    const observed: unknown[] = [];
     const { handle, process: childProcess } = await backend.start(
       {
         runId: 'google-key-run',
@@ -1957,14 +1959,16 @@ console.log(JSON.stringify({ type: 'result', status: 'SUCCESS', response: 'done'
         limits: { timeoutSeconds: 30, maxTurns: 1, maxEventBytes: 1024, maxTranscriptBytes: 1024 }
       },
       {
-        onEvent: async () => {},
-        onState: async (state) => { finalState = state; }
+        onEvent: async (event) => { observed.push(event); },
+        onState: async (state, detail) => { finalState = state; finalDetail = detail; }
       }
     );
-    await childProcess.done;
+    const exit = await childProcess.done;
     await backend.close(handle);
 
-    const captured = JSON.parse(await readFile(path.join(workspace, 'captured.json'), 'utf8'));
+    const capturedText = await readFile(path.join(workspace, 'captured.json'), 'utf8').catch(() => null);
+    expect(capturedText, JSON.stringify({ exit, finalState, finalDetail, observed }).slice(0, 4000)).not.toBeNull();
+    const captured = JSON.parse(capturedText!);
     expect(captured.modelProvider).toBe('gemini');
     expect(captured.pathHasNeutralizer).toBe(true);
     expect(captured.browserVar).toBe('false');
