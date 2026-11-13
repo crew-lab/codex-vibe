@@ -211,8 +211,8 @@ describe('session thinking', () => {
   const workspace = '/srv/work/space';
   const plan = (mode: 'review' | 'edit', reviewThinking?: 'off' | 'high') => buildSessionConfig({ mode, workspace, runDirectory, maxTurns: 5, ...(reviewThinking === undefined ? {} : { reviewThinking }) });
 
-  it('keeps thinking off in a review by default, takes high only when configured, and never thinks in an edit', () => {
-    expect(plan('review').expectation.thinking).toBe('off');
+  it('thinks high in a review by default, takes off when configured, and never thinks in an edit', () => {
+    expect(plan('review').expectation.thinking).toBe('high');
     expect(plan('review', 'off').expectation.thinking).toBe('off');
     expect(plan('review', 'high').expectation.thinking).toBe('high');
     expect(plan('edit').expectation.thinking).toBe('off');
@@ -220,8 +220,8 @@ describe('session thinking', () => {
   });
 
   it('writes the plan level as a config/model/write that only sets the reasoning effort', () => {
-    expect(buildThinkingWrite('session-1', plan('review'))).toEqual({ method: 'config/model/write', params: { sessionId: 'session-1', reasoningEffort: 'off' } });
-    expect(buildThinkingWrite('session-1', plan('review', 'high'))).toEqual({ method: 'config/model/write', params: { sessionId: 'session-1', reasoningEffort: 'high' } });
+    expect(buildThinkingWrite('session-1', plan('review'))).toEqual({ method: 'config/model/write', params: { sessionId: 'session-1', reasoningEffort: 'high' } });
+    expect(buildThinkingWrite('session-1', plan('review', 'off'))).toEqual({ method: 'config/model/write', params: { sessionId: 'session-1', reasoningEffort: 'off' } });
     expect(buildThinkingWrite('session-1', plan('edit', 'high'))).toEqual({ method: 'config/model/write', params: { sessionId: 'session-1', reasoningEffort: 'off' } });
     expect(() => buildThinkingWrite('', plan('review'))).toThrow(TypeError);
   });

@@ -138,7 +138,7 @@ describe('v2 conformance check against the scripted fake app-server', () => {
       expect(at(run, 'session_start.cwd_ok')).toBe(true);
       expect(at(run, 'readback.before_thinking.total')).toBe(0);
       expect(at(run, 'readback.after_thinking.total')).toBe(0);
-      const level = 'off';
+      const level = run.mode === 'review' ? 'high' : 'off';
       expect(at(run, 'thinking.requested')).toBe(level);
       expect(at(run, 'thinking.after')).toBe(level);
       expect(at(run, 'thinking.effective_models_thinking')).toBe(level);
@@ -160,7 +160,7 @@ describe('v2 conformance check against the scripted fake app-server', () => {
     const frames = log.filter((entry) => entry.kind === 'frame').map((entry) => at(entry, 'frame.method'));
     expect(frames).toContain('session/start');
     expect(frames).toContain('config/model/write');
-    expect(log.filter((entry) => entry.kind === 'frame' && at(entry, 'frame.method') === 'config/model/write').map((entry) => at(entry, 'frame.params.reasoningEffort'))).toEqual(['off', 'off']);
+    expect(log.filter((entry) => entry.kind === 'frame' && at(entry, 'frame.method') === 'config/model/write').map((entry) => at(entry, 'frame.params.reasoningEffort'))).toEqual(['high', 'off']);
     expect(frames).not.toContain('turn/start');
     expect(log.filter((entry) => entry.kind === 'event' && entry.name === 'sessionStart').map((entry) => at(entry, 'agentConfig.systemPrompt'))).toEqual([workerRules('vibe', 'review'), workerRules('vibe', 'edit')]);
     expect(log.filter((entry) => entry.kind === 'start').map((entry) => entry.hasMistralApiKey)).toEqual([false, false]);
@@ -241,17 +241,17 @@ describe('v2 conformance check against the scripted fake app-server', () => {
     expect((result.report.runs as Json[]).length).toBe(1);
   }, 60_000);
 
-  it('requests and reads back high thinking for a review when the selected configuration opts in', async () => {
-    const fake = await makeLaunchableFakeVibe(path.join(scratch, 'fake'), { scenario: { name: 'review-thinking-high' } });
+  it('requests and reads back thinking off for a review when the selected configuration names it', async () => {
+    const fake = await makeLaunchableFakeVibe(path.join(scratch, 'fake'), { scenario: { name: 'review-thinking-off' } });
     const config = path.join(scratch, 'config.toml');
-    await writeFile(config, `version = 1\nvibe_review_thinking = "high"\n\n[paths]\napp_server = ${JSON.stringify(fake.appServer)}\nvibe_pin_manifest = ${JSON.stringify(fake.manifest)}\n`, { mode: 0o600 });
+    await writeFile(config, `version = 1\nvibe_review_thinking = "off"\n\n[paths]\napp_server = ${JSON.stringify(fake.appServer)}\nvibe_pin_manifest = ${JSON.stringify(fake.manifest)}\n`, { mode: 0o600 });
     const result = await runCheck(['--config', config, '--mode', 'review']);
 
     expect(result.code, result.stderr).toBe(0);
     const run = (result.report.runs as Json[])[0]!;
-    expect(at(run, 'thinking.requested')).toBe('high');
-    expect(at(run, 'thinking.after')).toBe('high');
-    expect(at(run, 'thinking.effective_models_thinking')).toBe('high');
+    expect(at(run, 'thinking.requested')).toBe('off');
+    expect(at(run, 'thinking.after')).toBe('off');
+    expect(at(run, 'thinking.effective_models_thinking')).toBe('off');
     expect(at(run, 'readback.after_thinking.total')).toBe(0);
     expect(at(result.report, 'gates.thinking-effect.setting_read_back')).toBe(true);
   }, 60_000);

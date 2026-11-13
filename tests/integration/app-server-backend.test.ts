@@ -248,7 +248,7 @@ describe('app-server backend: clean runs', () => {
     expect(toolCall).toHaveLength(1);
     expect(toolCall[0]?.data).toMatchObject({ name: 'read_file', tool: 'file_system.read_file', kind: 'read', outcome: 'executed' });
 
-    expect(harness.states.flatMap(item => item.update?.modelObservations ?? [])).toEqual(expect.arrayContaining([expect.objectContaining({ source: 'runtime/read', thinking: 'off', requested_thinking: 'off', requested_thinking_source: 'supervisor-session-config' })]));
+    expect(harness.states.flatMap(item => item.update?.modelObservations ?? [])).toEqual(expect.arrayContaining([expect.objectContaining({ source: 'runtime/read', thinking: 'high', requested_thinking: 'high', requested_thinking_source: 'supervisor-session-config' })]));
     expect(terminal.update?.usage?.tokensUsed).toBe(1500);
     expect(terminal.update?.usage?.cost?.authoritative).toBe(false);
     expect(terminal.update?.usage?.cost?.amount).toBeCloseTo(0.00108, 8);
@@ -261,7 +261,7 @@ describe('app-server backend: clean runs', () => {
       'config/model/write', 'runtime/read', 'config/effective/read', 'turn/start', 'runtime/read', 'session/history/list'
     ]);
     expect(harness.frames('initialize')[0]?.params).toMatchObject({ clientInfo: { name: 'vibe-supervisor', entrypoint: CLIENT_ENTRYPOINT }, capabilities: { callbackKinds: ['approval'] } });
-    expect(harness.frames('config/model/write')[0]?.params).toEqual({ sessionId: 'fake-session-0001', reasoningEffort: 'off' });
+    expect(harness.frames('config/model/write')[0]?.params).toEqual({ sessionId: 'fake-session-0001', reasoningEffort: 'high' });
     const turn = harness.frames('turn/start')[0]?.params as Json;
     expect(turn.message).toEqual([{ type: 'text', text: 'Review the repository.' }]);
 
@@ -316,12 +316,12 @@ describe('app-server backend: clean runs', () => {
     expect(session.initializedNotificationSeen).toBe(true);
   });
 
-  it('runs a review at high thinking only when configured, an edit always with thinking off, and reports the level it requested', async () => {
+  it('runs a review with thinking off when configured, an edit always with thinking off, and reports the level it requested', async () => {
     const observed = (harness: Harness) => harness.states.flatMap((item) => item.update?.modelObservations ?? []);
-    const highReview = new Harness('allowed-call', { config: { vibeReviewThinking: 'high' } });
-    expect((await highReview.run()).state).toBe('completed');
-    expect(highReview.frames('config/model/write').map((frame) => (frame.params as Json).reasoningEffort)).toEqual(['high']);
-    expect(observed(highReview)).toEqual(expect.arrayContaining([expect.objectContaining({ thinking: 'high', requested_thinking: 'high' })]));
+    const offReview = new Harness('allowed-call', { config: { vibeReviewThinking: 'off' } });
+    expect((await offReview.run()).state).toBe('completed');
+    expect(offReview.frames('config/model/write').map((frame) => (frame.params as Json).reasoningEffort)).toEqual(['off']);
+    expect(observed(offReview)).toEqual(expect.arrayContaining([expect.objectContaining({ thinking: 'off', requested_thinking: 'off' })]));
 
     const edit = new Harness('edit-call', { mode: 'edit', config: { vibeReviewThinking: 'high' } });
     expect((await edit.run()).state).toBe('completed');
@@ -831,7 +831,7 @@ describe('app-server backend: startup failures', () => {
   });
 
   it('fails the run when the thinking write is ignored (second read-back)', async () => {
-    const harness = new Harness({ name: 'thinking-ignored', modelWrite: { ignore: true }, steps: [{ op: 'say', text: 'must never run' }] });
+    const harness = new Harness({ name: 'thinking-ignored', modelWrite: { ignore: true }, steps: [{ op: 'say', text: 'must never run' }] }, { config: { vibeReviewThinking: 'off' } });
     const failure = await rejection(harness.start());
 
     expect(failure.details?.reason).toBe('readback_mismatch');

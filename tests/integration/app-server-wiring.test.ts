@@ -437,10 +437,10 @@ describe('end to end through the MCP surface with the fake app-server', () => {
     expect(readFileSync(stack.logFile, 'utf8')).toContain('"method":"turn/start"');
   }, 60_000);
 
-  it('leaves no reasoning in the supervisor data directory when a review opts into high thinking with the wire trace on (Vibe private store not covered)', async () => {
+  it('leaves no reasoning in the supervisor data directory when a review thinks high by default with the wire trace on (Vibe private store not covered)', async () => {
     const sentinel = 'REASONING-SENTINEL-7f3a9c';
     vi.stubEnv('VSUP_TRACE_VIBE_WIRE', '1');
-    const stack = await buildStack('reasoning-sentinel', { config: { vibeReviewThinking: 'high' } });
+    const stack = await buildStack('reasoning-sentinel');
     const filesUnder = (directory: string): string[] => readdirSync(directory, { withFileTypes: true, recursive: true })
       .filter((entry) => entry.isFile())
       .map((entry) => path.join(entry.parentPath, entry.name));

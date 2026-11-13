@@ -9,7 +9,7 @@
     "version": { "const": 1 },
     "backend": { "type": "string", "enum": ["app-server", "antigravity"], "default": "app-server" },
     "vibe_version": { "type": "string", "maxLength": 64 },
-    "vibe_review_thinking": { "type": "string", "enum": ["off", "high"], "default": "off" },
+    "vibe_review_thinking": { "type": "string", "enum": ["off", "high"], "default": "high" },
     "allowed_workspace_roots": {
       "type": "array",
       "maxItems": 100,

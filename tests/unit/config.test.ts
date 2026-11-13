@@ -247,8 +247,8 @@ describe("app-server keys", () => {
     const high = validateConfig({ ...appServer, vibe_review_thinking: "high" });
     expect(configFingerprint(off)).not.toBe(configFingerprint(high));
     expect(bootBoundDrift(off, high)).toEqual(["vibe_review_thinking"]);
-    expect(bootBoundDrift(validateConfig(appServer), off)).toEqual([]);
-    expect(bootBoundDrift(validateConfig(appServer), high)).toEqual(["vibe_review_thinking"]);
+    expect(bootBoundDrift(validateConfig(appServer), off)).toEqual(["vibe_review_thinking"]);
+    expect(bootBoundDrift(validateConfig(appServer), high)).toEqual([]);
   });
 
   it("loads the new keys from TOML and reports a missing manifest as a stable configuration error", async () => {
@@ -299,8 +299,8 @@ describe("app-server keys", () => {
       ["backend", "experimental.antigravity"],
       ["paths.antigravity"],
       [],
-      [],
-      ["vibe_review_thinking"]
+      ["vibe_review_thinking"],
+      []
     ]);
     expect(bootBoundDrift(base, validateConfig(appServer))).toEqual([]);
   });

@@ -231,13 +231,13 @@ describe('compareReadback on unit inputs', () => {
 
   it('judges review expectations against a review-only catalogue', () => {
     const review = buildSessionConfig({ mode: 'review', workspace, runDirectory: '/srv/runs/run-0002', maxTurns: 5 });
-    expect(compareReadback(review.expectation, observe(cleanWire(review.expectation, 'off')), { checkThinking: true })).toEqual([]);
-    expect(paths(compareReadback(review.expectation, observe(cleanWire(plan.expectation, 'off')), { checkThinking: true }))).toEqual(['runtime.tools', 'runtime.activeAgent.name', 'config.enabled_tools', 'config.default_agent', 'config.enabled_agents']);
+    expect(compareReadback(review.expectation, observe(cleanWire(review.expectation, 'high')), { checkThinking: true })).toEqual([]);
+    expect(paths(compareReadback(review.expectation, observe(cleanWire(plan.expectation, 'high')), { checkThinking: true }))).toEqual(['runtime.tools', 'runtime.activeAgent.name', 'config.enabled_tools', 'config.default_agent', 'config.enabled_agents']);
   });
 
   it('expects the thinking level the plan carries in both the runtime and the effective model entry', () => {
-    const high = buildSessionConfig({ mode: 'review', workspace, runDirectory: '/srv/runs/run-0003', maxTurns: 5, reviewThinking: 'high' });
-    const off = buildSessionConfig({ mode: 'review', workspace, runDirectory: '/srv/runs/run-0003', maxTurns: 5 });
+    const high = buildSessionConfig({ mode: 'review', workspace, runDirectory: '/srv/runs/run-0003', maxTurns: 5 });
+    const off = buildSessionConfig({ mode: 'review', workspace, runDirectory: '/srv/runs/run-0003', maxTurns: 5, reviewThinking: 'off' });
     const thinkingPaths = ['runtime.config.activeModel.thinking', `config.models["${alias}"].thinking`];
     expect(paths(compareReadback(high.expectation, observe(cleanWire(high.expectation, 'off')), { checkThinking: true }))).toEqual(thinkingPaths);
     expect(compareReadback(off.expectation, observe(cleanWire(off.expectation, 'off')), { checkThinking: true })).toEqual([]);
