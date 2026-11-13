@@ -109,5 +109,10 @@ export function parseOptions(invocation: RunsInvocation): UsageCliOptions {
 }
 
 function validDay(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && new Date(`${value}T00:00:00.000Z`).toISOString().startsWith(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  try {
+    return new Date(`${value}T00:00:00.000Z`).toISOString().startsWith(value);
+  } catch {
+    return false;
+  }
 }

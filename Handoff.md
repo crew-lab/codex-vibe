@@ -11,6 +11,8 @@
 
 ## What works
 
+- **Live Vibe 3.1.2 edit.** The default-order build completed the invalid calendar-date fix for `runs usage` and `runs usefulness` with `end_turn`. Independent CLI checks rejected invalid months, days and non-leap February 29 and accepted a valid leap day. The patch passed lint, typecheck, build and whitespace checks. A separate integration test checked the outgoing edit task and frozen contract using a fake app-server.
+
 - **Boundary.** Reviews stay read-only, edits stay in their worktrees, nothing reaches shell or network, and runs clean up after themselves.
 - **Task-first experiment.** On Vibe 3.1.2, the historical dangling-symlink fix completed in 44.6 seconds and passed independent checks on `exp/task-first-prompt`. That result belongs to the experiment build.
 - **Edits.** On Vibe 3.1.0, `edit-shipping` fixed the threshold, touched only the two allowed files and passed all 14 tests on the exported patch.
