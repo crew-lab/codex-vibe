@@ -44,15 +44,27 @@ None of this has met a real Vibe or agy: it is proven against the fakes and agai
 - **agy 1.5.8 is unqualified.** No 1.5.x release has passed `prepare check` on a machine with agy.
 - **Antigravity probes.** With `antigravity_skip_permissions` on, the probes exercise the hook on a read only, not a review-mode write or a shell tool; that needs agy's real tool schemas.
 
+## Quality-pack results
+
+Vibe 3.1.2 ran identical requests on the prepared baseline (`f963acd`) and the new build (`ff4e23b`). All eight runs ended with `end_turn`. Durations are coordinator wall time.
+
+| Task | Baseline verdict / seconds / model calls / tokens | New build verdict / seconds / model calls / tokens |
+| --- | --- | --- |
+| edit-shipping | Pass / 17.2 / 4 / 38,011 | Pass / 13.4 / 5 / 38,241 |
+| edit-reserve-all | Pass / 22.7 / 7 / 74,132 | Pass / 20.8 / 6 / 53,272 |
+| review-total | Fail / 5.6 / 2 / 15,310 | Fail / 7.1 / 2 / 11,619 |
+| review-stock | Fail / 4.9 / 2 / 14,951 | Fail / 5.2 / 2 / 11,052 |
+
+- **Total review.** The new build found the tax defect and quoted the strict shipping comparison, but called the shipping behavior correct and failed all three expected-versus-actual checks. A rerun at listing commit `021e468` found the tax defect and missed the shipping boundary. One run per build cannot attribute the difference to the system prompt.
+- **Stock review.** Both builds correctly concluded there was no defect but omitted the required error behavior and source citation.
+- **Calendar-date replay.** The new build passed preparation and the live replay ended normally. Its patch still failed TypeScript compilation because parsed month and day values could be undefined. The run was closed and the patch left out of main.
+- **Antigravity 1.5.8.** Strict-mode preparation failed the hook invocation and denial, hook failure denial, and tool-event parsing probes. The allowed-read control ended without a function response. Hosted tasks could not start, leaving strict-mode edit behavior and review mode unverified.
+
 ## Next
 
-1. **Baseline first, on the Vibe machine.** Before updating, run the four quality-pack tasks (`node scripts/quality-pack.mjs list`, [quality pack](docs/quality-pack.md)) on the build that is already prepared there, and record for each: accepted or rejected, turns, tokens, duration and stop reason. Only `review-total` and `edit-shipping` have earlier runs, and not on this Vibe release.
-2. **Then build `main`,** install it, and run `vibe-supervisor pin-manifest --force` and `vibe-supervisor prepare check --kit <kit> --config "$CONFIG"`. A failure that names `systemPrompt`, `enable_pr_monitoring` or `include_commit_signature` means Vibe refused what its source says it accepts: report the exact error. A configuration that sets `vibe_version` below 3.1.2 must raise it.
-3. **Run the same four tasks again** and compare with the baseline. Then repeat the calendar-date fix on the original buggy revision, the one that reached the turn limit. If a review result changed, rerun it at the listing commit (`feat(prompt): leave the workspace listing out…`) to tell the listing from the system prompt.
-4. **On a machine with agy 1.5.8 or later,** with `backend = "antigravity"`: `prepare check`, then the same four tasks. Report whether edits are denied under `toolPermission: "strict"` and which agent mode a review ran in.
-5. **Next levers, one at a time:** Vibe thinking for reviews (it is switched off today; Vibe's default is high), then agy `--json-schema` for findings.
-6. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
-7. **Release 2.2.1** once real runs work.
+1. Check the review inputs at the app-server boundary and compare requested context files with the actual read events. For total, verify the written rules and all three numeric cases. For stock, require the specific error behavior and source citation.
+2. On the next calendar replay, include the strict TypeScript diagnostic in the brief and compile the exported patch before checking behavior.
+3. Diagnose why Antigravity's allowed-read control ends without a function response. Rerun strict-mode preparation before attempting the hosted quality pack.
 
 ## Build, install and prepare
 
