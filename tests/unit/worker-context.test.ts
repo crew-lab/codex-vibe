@@ -20,6 +20,8 @@ describe('worker rules', () => {
   it('names Vibe tools and their limits, and leaves agy tool names to agy', () => {
     expect(workerRules('vibe', 'review')).toContain('Tools: read_file only.');
     expect(workerRules('vibe', 'review')).toContain('2,000 lines or 64,000 bytes');
+    expect(workerRules('vibe', 'review')).toContain('given a directory below the workspace root it lists the entries, but the root itself cannot be listed');
+    expect(workerRules('vibe', 'review')).toContain('A path may be absolute or relative to the workspace root.');
     expect(workerRules('vibe', 'review')).not.toContain('write_file');
     expect(workerRules('vibe', 'edit')).toContain('Tools: read_file, write_file and edit.');
     expect(workerRules('vibe', 'edit')).toContain('old_string, which must be copied exactly');

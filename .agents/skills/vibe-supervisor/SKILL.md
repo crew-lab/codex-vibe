@@ -66,7 +66,7 @@ Start one review or edit with bounded turns, deadline, output limits, wait, and 
 
 ## Choose the review context
 
-The Vibe worker cannot search: it has `read_file`, which also lists a directory, and nothing else. You can search, so do it before the grant is registered and hand the worker the result as `context_files`. A review with `context_files` carries no workspace listing, so the files you choose are what the worker starts from; a review without them gets a bounded listing instead.
+The Vibe worker cannot search: it has `read_file`, which also lists a directory below the workspace root (not the root itself), and nothing else. You can search, so do it before the grant is registered and hand the worker the result as `context_files`. A review with `context_files` carries no workspace listing, so the files you choose are what the worker starts from; a review without them gets a bounded listing instead.
 
 1. Search the repository yourself (`rg`, or your own tools) for the symbols the question names, their call sites and the tests that cover them. Open what you find; a file that only mentions the symbol in a comment or an import is not context.
 2. Choose at most 8 files: the definitions, the callers whose behaviour the question depends on, and the tests that pin the current contract. Fewer is better. The schema takes 50, but each file is one `read_file` turn before the worker can answer, so 8 files fit `max_turns` 30 with room for the answer, and a longer list is a sign the question is too wide for one review; split it instead.

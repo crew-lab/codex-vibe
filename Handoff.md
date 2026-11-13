@@ -46,12 +46,13 @@ None of this has met a real Vibe or agy: it is proven against the fakes and agai
 
 ## Next
 
-1. **On the Vibe machine,** build `main`, install it, then run `vibe-supervisor pin-manifest --force` and `vibe-supervisor prepare check --kit <kit> --config "$CONFIG"`. A failure here that names `systemPrompt`, `enable_pr_monitoring` or `include_commit_signature` means Vibe refused what the source says it accepts: report the exact error. A configuration that sets `vibe_version` below 3.1.2 must raise it.
-2. **Then run the four quality-pack tasks** (`node scripts/quality-pack.mjs list`, [quality pack](docs/quality-pack.md)) and record for each: accepted or rejected, turns, tokens, duration and stop reason. Compare with the earlier runs of the same tasks. Then repeat the calendar-date fix on the original buggy revision, the one that reached the turn limit.
-3. **On a machine with agy 1.5.8 or later,** with `backend = "antigravity"`: `prepare check`, then the same four tasks. Report whether edits are denied under `toolPermission: "strict"`.
-4. **Next levers, one at a time:** Vibe thinking for reviews (it is switched off today; Vibe's default is high), then agy `--json-schema` for findings.
-5. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
-6. **Release 2.2.1** once real runs work.
+1. **Baseline first, on the Vibe machine.** Before updating, run the four quality-pack tasks (`node scripts/quality-pack.mjs list`, [quality pack](docs/quality-pack.md)) on the build that is already prepared there, and record for each: accepted or rejected, turns, tokens, duration and stop reason. Only `review-total` and `edit-shipping` have earlier runs, and not on this Vibe release.
+2. **Then build `main`,** install it, and run `vibe-supervisor pin-manifest --force` and `vibe-supervisor prepare check --kit <kit> --config "$CONFIG"`. A failure that names `systemPrompt`, `enable_pr_monitoring` or `include_commit_signature` means Vibe refused what its source says it accepts: report the exact error. A configuration that sets `vibe_version` below 3.1.2 must raise it.
+3. **Run the same four tasks again** and compare with the baseline. Then repeat the calendar-date fix on the original buggy revision, the one that reached the turn limit. If a review result changed, rerun it at the listing commit (`feat(prompt): leave the workspace listing out…`) to tell the listing from the system prompt.
+4. **On a machine with agy 1.5.8 or later,** with `backend = "antigravity"`: `prepare check`, then the same four tasks. Report whether edits are denied under `toolPermission: "strict"` and which agent mode a review ran in.
+5. **Next levers, one at a time:** Vibe thinking for reviews (it is switched off today; Vibe's default is high), then agy `--json-schema` for findings.
+6. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
+7. **Release 2.2.1** once real runs work.
 
 ## Build, install and prepare
 

@@ -84,6 +84,13 @@ describe('judgeWorkspacePath', () => {
     expect(await judgeWorkspacePath(workspace, 'inside-link.ts')).toMatchObject({ allowed: true, relative: path.join('src', 'index.ts') });
   });
 
+  it('allows a directory below the workspace root, which read_file lists, and refuses the root itself', async () => {
+    expect(await judgeWorkspacePath(workspace, 'src')).toMatchObject({ allowed: true, relative: 'src' });
+    expect(await judgeWorkspacePath(workspace, path.join(workspace, 'src'))).toMatchObject({ allowed: true, relative: 'src' });
+    expect(await judgeWorkspacePath(workspace, '.')).toEqual({ allowed: false, reason: 'path_invalid' });
+    expect(await judgeWorkspacePath(workspace, workspace)).toEqual({ allowed: false, reason: 'path_invalid' });
+  });
+
   it('judges a missing file by the nearest existing ancestor', async () => {
     expect(await judgeWorkspacePath(workspace, 'src/new.ts')).toMatchObject({ allowed: true, resolved: path.join(workspace, 'src', 'new.ts') });
     expect(await judgeWorkspacePath(workspace, 'fresh/dir/new.ts')).toMatchObject({ allowed: true, resolved: path.join(workspace, 'fresh', 'dir', 'new.ts') });

@@ -12,10 +12,10 @@ Read from the tagged Vibe source (`v3.0.2`, `v3.1.2`; `main` equals 3.1.2) and t
 
 - **Vibe ran our tasks under its own product prompt.** A session without a prompt of its own gets Vibe's interactive prompt. It tells the model to keep a todo list, grep before calling an API, never edit a file in the turn it first read it, and to count the work as done only when tests pass and the code runs. Our worker has no shell, search or test runner, so each of those costs turns or keeps a turn open. Vibe 3.1.0 added a `systemPrompt` session option that replaces that text; the wire rejects it on older versions. That this prompt caused the stalled turns and the turn-limit failure is a hypothesis until real runs show it.
 - **Vibe 3.1 looks for pull requests at session load** (`enable_pr_monitoring`, on by default) and reports them as `artifacts/*` events, which our validator does not know.
-- **`read_file` limits.** One call returns at most 2,000 lines or 64,000 bytes and takes `offset` and `limit`; a directory path returns its entries. There is no search tool.
+- **`read_file` limits.** One call returns at most 2,000 lines or 64,000 bytes and takes `offset` and `limit`; a directory path below the workspace root returns its entries (our approval handler refuses the root itself). There is no search tool.
 - **Thinking.** Vibe's default is high; the supervisor switches it off. This is the next lever for review quality and is not changed in this pass.
 - **agy 1.5.7 changed the headless default mode to Auto**; `"agentMode": ""` in settings keeps the earlier default. The same release made `toolPermission: "strict"` take precedence over accept-edits, which only a run on a machine with agy can judge.
-- **agy reports why a turn ended early** (`finished_reason`: `print_timeout`, `interrupted`, `error`; exit code 3 on a print timeout), and can return schema-checked output (`--json-schema`).
+- **agy reports why a turn ended early** (`finished_reason`: `print_timeout`, `interrupted`, `error`). Exit code 3 marks both a print timeout and a model or agent error, so the code alone decides nothing, and can return schema-checked output (`--json-schema`).
 - **Both workers got the same task text**, with a file listing of up to 1,000 paths even when Codex had already named the files to read.
 
 ## What we work on
@@ -23,7 +23,7 @@ Read from the tagged Vibe source (`v3.0.2`, `v3.1.2`; `main` equals 3.1.2) and t
 In order; each step is one commit, so a change in real results can be traced to it.
 
 1. **Version floors.** Vibe 3.1.2 and agy 1.5.8, each bound to its installed files and proven by `prepare check`. No per-release list for either.
-2. **agy 1.5.8 compatibility.** Keep the default agent mode for reviews, accept built-in skills by their `builtin` flag, read `finished_reason` and exit code 3.
+2. **agy 1.5.8 compatibility.** Keep the default agent mode for reviews, accept built-in skills by their `builtin` flag, read `finished_reason`.
 3. **No listing when Codex named the files.** A review with `context_files` gets no workspace listing.
 4. **Worker rules per tool.** One short rule text per worker and mode: what the tools are and their limits, that nothing can be run, the edit hygiene that rejected good patches (exact `old_string`, minimal diff, no new comments, no trailing whitespace), and to stop once the answer is given. Vibe receives it as `systemPrompt`; agy, which has no such flag, as the head of its prompt. The Codex task templates lose the lines the rules now carry.
 5. **Real runs on the worker machine**, measured as below. Keep what helps, revert what does not.
@@ -36,10 +36,10 @@ Locally, with no worker installed (these prove the client against its own fakes,
 
 - The fake app-server receives `systemPrompt` and the new settings on `session/start`, the read-back passes, and the conformance run sends them too.
 - Version checks accept the floor and anything stable above it, and refuse anything below or pre-release.
-- Prompt size: a review with `context_files` in a 500-file repository carries no listing; the rule text stays under 2,000 bytes per worker and mode; no rule sentence is repeated in the task templates.
+- Prompt size: a review with `context_files` in a 500-file repository carries no listing; the rule text stays under 2,000 bytes per worker and mode; no rule sentence is repeated in the skill's task templates (the quality-pack tasks keep their text, so results compare like for like).
 - `npm run verify:release` passes on Node 20 and 24 in CI.
 
-On the worker machine, per commit from step 2 on: `prepare check`, then the four [quality pack](../docs/quality-pack.md) tasks. Record accepted or rejected, turns, tokens, duration and stop reason. A step stays when no task gets worse and turns or tokens go down, or an earlier failure passes. agy 1.5.8 counts as working only after `prepare check` passes there.
+On the worker machine, per commit from step 2 on: `prepare check`, then the four [quality pack](../docs/quality-pack.md) tasks. Record accepted or rejected, turns, tokens, duration and stop reason, first on the build the machine already has prepared, as the baseline. A step stays when no task gets worse and turns or tokens go down, or an earlier failure passes. When a review result changes, rerun it at the listing commit alone to tell the listing from the system prompt. agy 1.5.8 counts as working only after `prepare check` passes there.
 
 ## Architecture and enforcement points
 

@@ -7,7 +7,7 @@ const ROLE: Readonly<Record<RunMode, string>> = {
   edit: 'You implement one bounded change for a supervising engineer, in a Git worktree made for this task. Your file changes are exported as a patch and checked after you finish.'
 };
 
-const VIBE_READ = 'read_file returns at most 2,000 lines or 64,000 bytes per call, so pass offset and limit to read further into a long file; given a directory it lists the entries. Use paths relative to the workspace root. There is no search tool.';
+const VIBE_READ = 'read_file returns at most 2,000 lines or 64,000 bytes per call, so pass offset and limit to read further into a long file; given a directory below the workspace root it lists the entries, but the root itself cannot be listed. A path may be absolute or relative to the workspace root. There is no search tool.';
 
 const TOOLS: Readonly<Record<WorkerKind, Readonly<Record<RunMode, string>>>> = {
   vibe: {
