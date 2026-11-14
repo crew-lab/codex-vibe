@@ -10,6 +10,7 @@ import { acceptanceContractSchema, contractDigest, digest, safeRelativePath, sha
 const snapshotSchema = z.object({ schema_version: z.literal(1), contract_sha256: sha256, patch_sha256: sha256, base_commit: z.string().regex(/^[a-f0-9]{40,64}$/), execution_state: z.enum(['completed', 'failed', 'cancelled', 'not_started']), stop_reason: z.string().nullable(), changed_files: z.array(safeRelativePath).max(1000), files: z.array(z.object({ path: safeRelativePath, mode: z.string().nullable(), sha256: sha256.nullable(), bytes: z.number().int().min(0).max(4 * 1024 * 1024) }).strict()).max(100) }).strict();
 type Snapshot = z.infer<typeof snapshotSchema>;
 const MAX_INPUTS = 16 * 1024 * 1024;
+const ASSESSABLE_STOP_REASONS = new Set(['end_turn', 'timeout']);
 
 export async function captureVerification(options: { directory: string; source: string; base: string; patch: Buffer; contract: AcceptanceContract; executionState: 'completed' | 'failed' | 'cancelled' | 'not_started'; stopReason?: string; maxBytes: number }): Promise<Verification> {
   const { directory, source, base, patch, contract } = options;
@@ -73,7 +74,7 @@ export async function verifySaved(directory: string, rawContract: AcceptanceCont
       }
       checks.push({ id: check.id, path: check.path, status: passed ? 'passed' : 'failed', reason });
     }
-    const status = snapshot.execution_state !== 'completed' || snapshot.stop_reason !== 'end_turn' ? 'incomplete' : checks.every((check) => check.status === 'passed') ? 'passed' : 'failed';
+    const status = snapshot.execution_state !== 'completed' || snapshot.stop_reason === null || !ASSESSABLE_STOP_REASONS.has(snapshot.stop_reason) ? 'incomplete' : checks.every((check) => check.status === 'passed') ? 'passed' : 'failed';
     return { ...binding, patch_sha256: snapshot.patch_sha256, base_commit: snapshot.base_commit, execution_state: snapshot.execution_state, status, checks };
   } catch {
     return { ...binding, status: 'incomplete', checks: [{ id: '$artifacts', status: 'incomplete', reason: 'missing-unsafe-or-changed-verification-inputs' }] };
