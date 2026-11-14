@@ -1,0 +1,13 @@
+No defect found in the inspected scope
+
+Input 1: one line of 1000 cents x 1 with a 10% discount
+Expected: tax 180, shipping 499, total 1479
+Actual: tax 180, shipping 499, total 1479
+Input 2: one line of 2500 cents x 2 with no discount
+Expected: tax 1000, shipping 0, total 6000
+Actual: tax 1000, shipping 0, total 6000
+Input 3: one line of 3000 cents x 2 with a 50% discount
+Expected: tax 600, shipping 0, total 6600
+Actual: tax 1200, shipping 0, total 7200
+
+Finding: src/cart.mjs orderTotal line 14 uses `percentOf(gross, TAX_PERCENT)` instead of `percentOf(discounted, TAX_PERCENT)`. Input 3 triggers it: tax computed on 6000 cents instead of 3000 cents.

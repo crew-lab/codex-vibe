@@ -1,0 +1,88 @@
+{
+  "task": "review-total",
+  "task_hash_matched": true,
+  "passed": true,
+  "checks": [
+    {
+      "id": "tax-on-undiscounted",
+      "passed": true,
+      "detail": "found: tax = percentOf(gross, TAX_PERCENT);` - Taxes the undiscounted gross"
+    },
+    {
+      "id": "threshold-at-5000",
+      "passed": true,
+      "detail": "found: subtotalCents > FREE_SHIPPING_FROM_CENTS"
+    },
+    {
+      "id": "cites-file",
+      "passed": true,
+      "detail": "cited: src/cart.mjs"
+    },
+    {
+      "id": "input-1-expected",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 180, 499, 1579; verified 180, 499, 1579"
+    },
+    {
+      "id": "input-1-actual",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 200, 499, 1599; verified 200, 499, 1599"
+    },
+    {
+      "id": "input-2-expected",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 1000, 0, 6000; verified 1000, 0, 6000"
+    },
+    {
+      "id": "input-2-actual",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 1000, 499, 6499; verified 1000, 499, 6499"
+    },
+    {
+      "id": "input-3-expected",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 600, 0, 3600; verified 600, 0, 3600"
+    },
+    {
+      "id": "input-3-actual",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 1200, 0, 4200; verified 1200, 0, 4200"
+    }
+  ],
+  "answer": "No\n\n## Working\n\n**Input 1: one line of 1000 cents x 1 with a 10% discount**\n\nREADME: subtotal 1000, discount 100, discounted subtotal 900, tax = round(900×20/100) = 180, shipping = 499 (1000 < 5000), total = 900+180+499 = 1579  \nCode: gross = 1000, discounted = 1000−percentOf(1000,10) = 900, tax = percentOf(1000,20) = 200, shipping = shippingFor(1000) = 499, total = 900+200+499 = 1599\n\n**Input 2: one line of 2500 cents x 2 with no discount**\n\nREADME: subtotal 5000, discount 0, discounted subtotal 5000, tax = round(5000×20/100) = 1000, shipping = 0 (5000 ≥ 5000), total = 5000+1000+0 = 6000  \nCode: gross = 5000, discounted = 5000−percentOf(5000,0) = 5000, tax = percentOf(5000,20) = 1000, shipping = shippingFor(5000) = 499 (5000 > 5000 is false), total = 5000+1000+499 = 6499\n\n**Input 3: one line of 3000 cents x 2 with a 50% discount**\n\nREADME: subtotal 6000, discount 3000, discounted subtotal 3000, tax = round(3000×20/100) = 600, shipping = 0 (6000 ≥ 5000), total = 3000+600+0 = 3600  \nCode: gross = 6000, discounted = 6000−percentOf(6000,50) = 3000, tax = percentOf(6000,20) = 1200, shipping = shippingFor(6000) = 0 (6000 > 5000 is true), total = 3000+1200+0 = 4200\n\nInput 1: 1000 cents x 1 with a 10% discount\nExpected: tax 180, shipping 499, total 1579\nActual: tax 200, shipping 499, total 1599\nInput 2: 2500 cents x 2 with no discount\nExpected: tax 1000, shipping 0, total 6000\nActual: tax 1000, shipping 499, total 6499\nInput 3: 3000 cents x 2 with a 50% discount\nExpected: tax 600, shipping 0, total 3600\nActual: tax 1200, shipping 0, total 4200\nFinding: src/cart.mjs, orderTotal, rule 3: `const tax = percentOf(gross, TAX_PERCENT);` - Taxes the undiscounted gross instead of the discounted subtotal; Input 1 tax is 200 vs 180 and Input 3 tax is 1200 vs 600\nFinding: src/cart.mjs, shippingFor, rule 4: `return subtotalCents > FREE_SHIPPING_FROM_CENTS ? 0 : SHIPPING_CENTS;` - Uses > so shipping is not free at exactly 5000 cents; Input 2 shipping is 499 vs 0",
+  "stop_reason": "end_turn",
+  "execution_state": "completed",
+  "answer_present": true,
+  "usage": {
+    "prompt_tokens": 11840,
+    "completion_tokens": 6489,
+    "model_calls": 2,
+    "tool_calls": {
+      "executed": 3,
+      "deniedByHandler": 0,
+      "deniedByPolicy": 0
+    }
+  },
+  "thinking": {
+    "requested": "high",
+    "status": "matched",
+    "observed": [
+      "high"
+    ]
+  },
+  "supervisor_version": "2.2.1",
+  "worker": {
+    "backend": "app-server",
+    "version": "3.1.2"
+  },
+  "context_reads": {
+    "named": 3,
+    "read": [
+      "README.md",
+      "src/cart.mjs",
+      "src/money.mjs"
+    ],
+    "unread": [],
+    "extra": []
+  }
+}

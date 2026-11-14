@@ -1,0 +1,17 @@
+Conclusion: **No, `orderTotal` does not compute the total exactly as required.**
+
+**Input 1: one line of 1000 cents x 1 with a 10% discount**
+Expected: tax 180, shipping 499, total 1479
+Actual: tax 200, shipping 499, total 1599
+
+**Input 2: one line of 2500 cents x 2 with no discount**
+Expected: tax 1000, shipping 0, total 6000
+Actual: tax 1000, shipping 0, total 6000
+
+**Input 3: one line of 3000 cents x 2 with a 50% discount**
+Expected: tax 600, shipping 0, total 6600
+Actual: tax 1200, shipping 0, total 9600
+
+**Findings:**
+- `src/cart.mjs`, `orderTotal` (line 14): applies tax to the **gross** subtotal instead of the **discounted** subtotal, violating rule 3. All inputs are affected.
+- `src/cart.mjs`, `shippingFor` (line 7): uses `>` instead of `>=` for the free-shipping threshold, violating rule 4. This does not affect the provided inputs, as none have a subtotal of exactly 5000 cents.

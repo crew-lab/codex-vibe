@@ -1,0 +1,37 @@
+{
+  "task": "review-total",
+  "passed": false,
+  "checks": [
+    {
+      "id": "tax-on-undiscounted",
+      "passed": true,
+      "detail": "found: tax on the **undiscounted** subtotal (`gross"
+    },
+    {
+      "id": "threshold-at-5000",
+      "passed": false,
+      "detail": "missing: the strict comparison inside shippingFor excludes equality at the 5000-cent threshold (rule 4)"
+    },
+    {
+      "id": "cites-file",
+      "passed": true,
+      "detail": "cited: src/cart.mjs"
+    },
+    {
+      "id": "input-1",
+      "passed": false,
+      "detail": "Expected exactly one input section with Expected and Actual lines, found 0"
+    },
+    {
+      "id": "input-2",
+      "passed": false,
+      "detail": "Expected exactly one input section with Expected and Actual lines, found 0"
+    },
+    {
+      "id": "input-3",
+      "passed": false,
+      "detail": "Expected exactly one input section with Expected and Actual lines, found 0"
+    }
+  ],
+  "note": "Pattern checks are a first pass; read the answer before accepting it."
+}

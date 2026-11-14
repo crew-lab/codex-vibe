@@ -1,0 +1,47 @@
+{
+  "task": "edit-shipping",
+  "task_hash_matched": true,
+  "passed": true,
+  "checks": [
+    {
+      "id": "only-allowed-paths",
+      "passed": true,
+      "detail": "src/cart.mjs, tests/shipping.test.mjs"
+    },
+    {
+      "id": "required-paths-changed",
+      "passed": true,
+      "detail": "all changed"
+    },
+    {
+      "id": "all-tests-pass",
+      "passed": true,
+      "detail": "14 passed, 0 failed"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "execution_state": "completed",
+  "answer_present": true,
+  "usage": {
+    "prompt_tokens": 36987,
+    "completion_tokens": 1073,
+    "model_calls": 5,
+    "tool_calls": {
+      "executed": 7,
+      "deniedByHandler": 0,
+      "deniedByPolicy": 0
+    }
+  },
+  "thinking": {
+    "requested": "off",
+    "status": "matched",
+    "observed": [
+      "off"
+    ]
+  },
+  "supervisor_version": "2.2.1",
+  "worker": {
+    "backend": "app-server",
+    "version": "3.1.2"
+  }
+}

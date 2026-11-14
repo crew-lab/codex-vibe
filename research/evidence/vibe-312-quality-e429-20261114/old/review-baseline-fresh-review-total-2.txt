@@ -1,0 +1,15 @@
+Conclusion: `orderTotal` does **not** compute the total as required.
+
+Input 1: one line of 1000 cents x 1 with a 10% discount
+Expected: tax 180, shipping 499, total 1479
+Actual: tax 200, shipping 499, total 1499
+
+Input 2: one line of 2500 cents x 2 with no discount
+Expected: tax 1000, shipping 0, total 6000
+Actual: tax 1000, shipping 0, total 6000
+
+Input 3: one line of 3000 cents x 2 with a 50% discount
+Expected: tax 540, shipping 0, total 5400
+Actual: tax 1200, shipping 0, total 7200
+
+Finding: src/cart.mjs line 15 in `orderTotal` — tax is computed from `gross` instead of the discounted subtotal; all inputs with discount expose it. Rule 3 requires tax to be 20% of the discounted subtotal.

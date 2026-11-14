@@ -1,0 +1,63 @@
+{
+  "task": "review-stock",
+  "task_hash_matched": true,
+  "passed": true,
+  "checks": [
+    {
+      "id": "no-defect",
+      "passed": true,
+      "detail": "found: No defect"
+    },
+    {
+      "id": "range-error",
+      "passed": true,
+      "detail": "found: RangeError"
+    },
+    {
+      "id": "unknown-sku",
+      "passed": true,
+      "detail": "found: UnknownSkuError"
+    },
+    {
+      "id": "cites-file",
+      "passed": true,
+      "detail": "cited: src/inventory.mjs"
+    }
+  ],
+  "answer": "No defect found in the inspected scope\nInput 1: reserving 6 of a SKU with 5 available -> throws RangeError at src/inventory.mjs, reserve:  if (quantity > entry.available) throw new RangeError(`only ${entry.available} of ${sku} available`); stock changed before the throw: no\nInput 2: releasing 2 of a SKU with 1 reserved -> throws RangeError at src/inventory.mjs, release:  if (quantity > entry.reserved) throw new RangeError(`only ${entry.reserved} of ${sku} reserved`); stock changed before the throw: no\nInput 3: reserving 1 of an unknown SKU -> throws UnknownSkuError at src/inventory.mjs, entryFor:  if (!entry) throw new UnknownSkuError(sku); stock changed before the throw: no",
+  "stop_reason": "end_turn",
+  "execution_state": "completed",
+  "answer_present": true,
+  "usage": {
+    "prompt_tokens": 11295,
+    "completion_tokens": 6070,
+    "model_calls": 2,
+    "tool_calls": {
+      "executed": 3,
+      "deniedByHandler": 0,
+      "deniedByPolicy": 0
+    }
+  },
+  "thinking": {
+    "requested": "high",
+    "status": "matched",
+    "observed": [
+      "high"
+    ]
+  },
+  "supervisor_version": "2.2.1",
+  "worker": {
+    "backend": "app-server",
+    "version": "3.1.2"
+  },
+  "context_reads": {
+    "named": 3,
+    "read": [
+      "README.md",
+      "src/inventory.mjs",
+      "src/errors.mjs"
+    ],
+    "unread": [],
+    "extra": []
+  }
+}

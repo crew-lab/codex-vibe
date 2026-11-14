@@ -1,0 +1,27 @@
+{
+  "task": "review-stock",
+  "passed": false,
+  "checks": [
+    {
+      "id": "no-defect",
+      "passed": true,
+      "detail": "found: No defect"
+    },
+    {
+      "id": "range-error",
+      "passed": false,
+      "detail": "missing: shortage and over-release throw RangeError"
+    },
+    {
+      "id": "unknown-sku",
+      "passed": false,
+      "detail": "missing: unknown SKU throws UnknownSkuError"
+    },
+    {
+      "id": "cites-file",
+      "passed": false,
+      "detail": "src/inventory.mjs was not found in the answer"
+    }
+  ],
+  "note": "Pattern checks are a first pass; read the answer before accepting it."
+}

@@ -1,0 +1,71 @@
+### Analysis
+
+#### README.md Rules:
+1. **Subtotal**: Sum of `unitCents * quantity` over all lines.
+2. **Discount**: Applied to the subtotal **before tax**.
+3. **Tax**: 20% of the **discounted subtotal**, rounded to the nearest cent.
+4. **Shipping**: Free if subtotal (before discount and tax) ≥ 5000 cents; otherwise, 499 cents.
+5. **Total**: Discounted subtotal + tax + shipping.
+
+#### `orderTotal` in `src/cart.mjs`:
+- Computes `gross` (subtotal).
+- Computes `discounted` as `gross - percentOf(gross, discountPercent)`.
+- Computes **tax as `percentOf(gross, TAX_PERCENT)`** (incorrect: should be on `discounted`).
+- Computes shipping based on `gross` (correct).
+- Returns `discounted + tax + shipping`.
+
+**Defect**: Tax is calculated on the **gross subtotal** instead of the **discounted subtotal**.
+
+---
+
+### Input Evaluations
+
+#### Input 1: 1000 cents x 1, 10% discount
+- **Subtotal**: 1000 * 1 = 1000 cents
+- **Discounted**: 1000 - (10% of 1000) = 900 cents
+- **Tax (Expected)**: 20% of 900 = 180 cents
+- **Shipping**: 1000 < 5000 → 499 cents
+- **Total (Expected)**: 900 + 180 + 499 = **1579 cents**
+
+- **Tax (Actual)**: 20% of 1000 = 200 cents
+- **Total (Actual)**: 900 + 200 + 499 = **1599 cents**
+
+#### Input 2: 2500 cents x 2, 0% discount
+- **Subtotal**: 2500 * 2 = 5000 cents
+- **Discounted**: 5000 - 0 = 5000 cents
+- **Tax (Expected)**: 20% of 5000 = 1000 cents
+- **Shipping**: 5000 ≥ 5000 → 0 cents
+- **Total (Expected)**: 5000 + 1000 + 0 = **6000 cents**
+
+- **Tax (Actual)**: 20% of 5000 = 1000 cents
+- **Total (Actual)**: 5000 + 1000 + 0 = **6000 cents**
+
+#### Input 3: 3000 cents x 2, 50% discount
+- **Subtotal**: 3000 * 2 = 6000 cents
+- **Discounted**: 6000 - (50% of 6000) = 3000 cents
+- **Tax (Expected)**: 20% of 3000 = 600 cents
+- **Shipping**: 6000 ≥ 5000 → 0 cents
+- **Total (Expected)**: 3000 + 600 + 0 = **3600 cents**
+
+- **Tax (Actual)**: 20% of 6000 = 1200 cents
+- **Total (Actual)**: 3000 + 1200 + 0 = **4200 cents**
+
+---
+### Conclusion
+**No.**
+Defect in `src/cart.mjs`, `orderTotal` function, line 14: Tax is calculated on `gross` instead of `discounted`.
+
+---
+### Results
+
+Input 1: one line of 1000 cents x 1 with a 10% discount
+Expected: tax 180, shipping 499, total 1579
+Actual: tax 200, shipping 499, total 1599
+
+Input 2: one line of 2500 cents x 2 with no discount
+Expected: tax 1000, shipping 0, total 6000
+Actual: tax 1000, shipping 0, total 6000
+
+Input 3: one line of 3000 cents x 2 with a 50% discount
+Expected: tax 600, shipping 0, total 3600
+Actual: tax 1200, shipping 0, total 4200

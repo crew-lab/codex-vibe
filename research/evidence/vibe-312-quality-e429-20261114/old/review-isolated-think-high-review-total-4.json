@@ -1,0 +1,52 @@
+{
+  "task": "review-total",
+  "passed": false,
+  "checks": [
+    {
+      "id": "tax-on-undiscounted",
+      "passed": true,
+      "detail": "found: tax is computed from gross"
+    },
+    {
+      "id": "threshold-at-5000",
+      "passed": false,
+      "detail": "missing: the strict comparison inside shippingFor excludes equality at the 5000-cent threshold (rule 4)"
+    },
+    {
+      "id": "cites-file",
+      "passed": true,
+      "detail": "cited: src/cart.mjs"
+    },
+    {
+      "id": "input-1-expected",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 180, 499, 1579; verified 180, 499, 1579"
+    },
+    {
+      "id": "input-1-actual",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 200, 499, 1599; verified 200, 499, 1599"
+    },
+    {
+      "id": "input-2-expected",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 1000, 0, 6000; verified 1000, 0, 6000"
+    },
+    {
+      "id": "input-2-actual",
+      "passed": false,
+      "detail": "tax, shipping, total: reported 1000, 0, 6000; verified 1000, 499, 6499"
+    },
+    {
+      "id": "input-3-expected",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 600, 0, 3600; verified 600, 0, 3600"
+    },
+    {
+      "id": "input-3-actual",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 1200, 0, 4200; verified 1200, 0, 4200"
+    }
+  ],
+  "note": "Pattern checks are a first pass; read the answer before accepting it."
+}

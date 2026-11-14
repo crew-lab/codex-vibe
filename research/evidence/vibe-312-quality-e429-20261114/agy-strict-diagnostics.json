@@ -1,0 +1,345 @@
+{
+  "candidate_sha256": "c3f0ea7ba7ce4fec4d6601365c799777e9e07d273f547a52fee90ef443411ffc",
+  "report_sha256": "745c651a2c18bd98d2e7b4bccc27c7ce83e6050746680ec191412d3849d24b58",
+  "checked_at": "2026-11-14T07:25:00.759Z",
+  "executable_version": "1.5.8",
+  "findings": [
+    {
+      "level": "info",
+      "code": "executable_verified",
+      "message": "Antigravity CLI 1.5.8 verified (sha256: b127126993e1c5b7e0b1ef80fa9bbe6955ddb85a5d76a3310b6096acc7eb000a)."
+    },
+    {
+      "level": "fail",
+      "code": "probe_control_not_executed",
+      "message": "The allow-policy control probe did not execute the read through agy (denied: turn_ended_without_function_response), so a denial cannot be attributed to the hook."
+    },
+    {
+      "level": "fail",
+      "code": "agy_strict_permissions_blocked_control_read",
+      "message": "Headless agy did not run the allowed read under its own strict permissions. Either set [experimental] antigravity_skip_permissions = true, which makes the supervisor hook the only tool gate, or use the Vibe backend."
+    },
+    {
+      "level": "fail",
+      "code": "hook_failure_control_missing",
+      "message": "Hook failure probes cannot be attributed without an executed control probe."
+    },
+    {
+      "level": "fail",
+      "code": "stream_shape_unattributed",
+      "message": "The stream tool-event shape needs one executed and one denied probe through agy."
+    },
+    {
+      "level": "info",
+      "code": "background_telemetry_refused",
+      "message": "Antigravity CLI background telemetry/updater requests were intercepted and refused by proxy (play.googleapis.com, antigravity-cli-auto-updater-974169037036.us-central1.run.app). No provider inference occurred."
+    }
+  ],
+  "diagnostics": {
+    "hook_invoked_and_deny_honoured": {
+      "control": {
+        "agy_version": "1.5.8",
+        "dangerously_skip_permissions": false,
+        "init": {
+          "seen": true,
+          "tool_names": [
+            "ask_custom_permission",
+            "ask_permission",
+            "ask_question",
+            "browser_click_element",
+            "browser_drag_pixel_to_pixel",
+            "browser_get_dom",
+            "browser_get_network_request",
+            "browser_input",
+            "browser_list_network_requests",
+            "browser_mouse_down",
+            "browser_mouse_up",
+            "browser_move_mouse",
+            "browser_press_key",
+            "browser_refresh_page",
+            "browser_resize_window",
+            "browser_scroll",
+            "browser_scroll_dom",
+            "browser_select_option",
+            "browser_subagent",
+            "call_mcp_tool",
+            "capture_browser_console_logs",
+            "capture_browser_screenshot",
+            "click_browser_pixel",
+            "command_status",
+            "define_subagent",
+            "delete_knowledge",
+            "execute_browser_javascript",
+            "find_by_name",
+            "finish",
+            "generate_image",
+            "grep_search",
+            "invoke_subagent"
+          ],
+          "permission_mode": "strict",
+          "keys": [
+            "cwd",
+            "tools",
+            "permission_mode"
+          ]
+        },
+        "events_total": 6,
+        "events": [
+          {
+            "event": "init",
+            "step_type": null,
+            "tool": null
+          },
+          {
+            "event": "step_update",
+            "step_type": "user_input",
+            "tool": null
+          },
+          {
+            "event": "step_update",
+            "step_type": "agent_response",
+            "tool": null
+          },
+          {
+            "event": "step_update",
+            "step_type": "tool",
+            "tool": "read_file"
+          },
+          {
+            "event": "step_update",
+            "step_type": "tool",
+            "tool": "read_file"
+          },
+          {
+            "event": "result",
+            "step_type": null,
+            "tool": null
+          }
+        ],
+        "unparsed_lines": 0,
+        "result": {
+          "arrived": true,
+          "status": "SUCCESS",
+          "finished_reason": null
+        },
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "hook_ledger": {
+          "entries": 1,
+          "records": [
+            {
+              "tool": "read_file",
+              "decision": "approve"
+            }
+          ]
+        },
+        "stderr_tail": "jetski: no output produced — a tool required the \"read_file\" permission that headless mode cannot prompt for, so it was auto-denied. Add an allow-rule under permissions.allow in settings.json (e.g. read_file(<target>)). Alternatively, re-ru"
+      },
+      "deny_all": {
+        "agy_version": "1.5.8",
+        "dangerously_skip_permissions": false,
+        "init": {
+          "seen": true,
+          "tool_names": [
+            "ask_custom_permission",
+            "ask_permission",
+            "ask_question",
+            "browser_click_element",
+            "browser_drag_pixel_to_pixel",
+            "browser_get_dom",
+            "browser_get_network_request",
+            "browser_input",
+            "browser_list_network_requests",
+            "browser_mouse_down",
+            "browser_mouse_up",
+            "browser_move_mouse",
+            "browser_press_key",
+            "browser_refresh_page",
+            "browser_resize_window",
+            "browser_scroll",
+            "browser_scroll_dom",
+            "browser_select_option",
+            "browser_subagent",
+            "call_mcp_tool",
+            "capture_browser_console_logs",
+            "capture_browser_screenshot",
+            "click_browser_pixel",
+            "command_status",
+            "define_subagent",
+            "delete_knowledge",
+            "execute_browser_javascript",
+            "find_by_name",
+            "finish",
+            "generate_image",
+            "grep_search",
+            "invoke_subagent"
+          ],
+          "permission_mode": "strict",
+          "keys": [
+            "cwd",
+            "tools",
+            "permission_mode"
+          ]
+        },
+        "events_total": 7,
+        "events": [
+          {
+            "event": "init",
+            "step_type": null,
+            "tool": null
+          },
+          {
+            "event": "step_update",
+            "step_type": "user_input",
+            "tool": null
+          },
+          {
+            "event": "step_update",
+            "step_type": "agent_response",
+            "tool": null
+          },
+          {
+            "event": "step_update",
+            "step_type": "tool",
+            "tool": "read_file"
+          },
+          {
+            "event": "step_update",
+            "step_type": "tool",
+            "tool": "read_file"
+          },
+          {
+            "event": "step_update",
+            "step_type": "agent_response",
+            "tool": null
+          },
+          {
+            "event": "result",
+            "step_type": null,
+            "tool": null
+          }
+        ],
+        "unparsed_lines": 0,
+        "result": {
+          "arrived": true,
+          "status": "SUCCESS",
+          "finished_reason": null
+        },
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "hook_ledger": {
+          "entries": 0,
+          "records": []
+        },
+        "stderr_tail": ""
+      }
+    },
+    "hook_failure_denies": {},
+    "stream_tool_shape": {
+      "executed": null,
+      "denied": null
+    },
+    "proxy_honoured": null,
+    "project_config_not_loaded": {
+      "agy_version": "1.5.8",
+      "dangerously_skip_permissions": false,
+      "init": {
+        "seen": true,
+        "tool_names": [
+          "ask_custom_permission",
+          "ask_permission",
+          "ask_question",
+          "browser_click_element",
+          "browser_drag_pixel_to_pixel",
+          "browser_get_dom",
+          "browser_get_network_request",
+          "browser_input",
+          "browser_list_network_requests",
+          "browser_mouse_down",
+          "browser_mouse_up",
+          "browser_move_mouse",
+          "browser_press_key",
+          "browser_refresh_page",
+          "browser_resize_window",
+          "browser_scroll",
+          "browser_scroll_dom",
+          "browser_select_option",
+          "browser_subagent",
+          "call_mcp_tool",
+          "capture_browser_console_logs",
+          "capture_browser_screenshot",
+          "click_browser_pixel",
+          "command_status",
+          "define_subagent",
+          "delete_knowledge",
+          "execute_browser_javascript",
+          "find_by_name",
+          "finish",
+          "generate_image",
+          "grep_search",
+          "invoke_subagent"
+        ],
+        "permission_mode": "strict",
+        "keys": [
+          "cwd",
+          "tools",
+          "permission_mode"
+        ]
+      },
+      "events_total": 6,
+      "events": [
+        {
+          "event": "init",
+          "step_type": null,
+          "tool": null
+        },
+        {
+          "event": "step_update",
+          "step_type": "user_input",
+          "tool": null
+        },
+        {
+          "event": "step_update",
+          "step_type": "agent_response",
+          "tool": null
+        },
+        {
+          "event": "step_update",
+          "step_type": "tool",
+          "tool": "read_file"
+        },
+        {
+          "event": "step_update",
+          "step_type": "tool",
+          "tool": "read_file"
+        },
+        {
+          "event": "result",
+          "step_type": null,
+          "tool": null
+        }
+      ],
+      "unparsed_lines": 0,
+      "result": {
+        "arrived": true,
+        "status": "SUCCESS",
+        "finished_reason": null
+      },
+      "exit_code": 0,
+      "signal": null,
+      "timed_out": false,
+      "hook_ledger": {
+        "entries": 1,
+        "records": [
+          {
+            "tool": "read_file",
+            "decision": "approve"
+          }
+        ]
+      },
+      "stderr_tail": "jetski: no output produced — a tool required the \"read_file\" permission that headless mode cannot prompt for, so it was auto-denied. Add an allow-rule under permissions.allow in settings.json (e.g. read_file(<target>)). Alternatively, re-ru"
+    }
+  }
+}

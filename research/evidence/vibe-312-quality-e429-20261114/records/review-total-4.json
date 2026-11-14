@@ -1,0 +1,88 @@
+{
+  "task": "review-total",
+  "task_hash_matched": true,
+  "passed": true,
+  "checks": [
+    {
+      "id": "tax-on-undiscounted",
+      "passed": true,
+      "detail": "found: tax = percentOf(gross"
+    },
+    {
+      "id": "threshold-at-5000",
+      "passed": true,
+      "detail": "found: subtotalCents > FREE_SHIPPING_FROM_CENTS"
+    },
+    {
+      "id": "cites-file",
+      "passed": true,
+      "detail": "cited: src/cart.mjs"
+    },
+    {
+      "id": "input-1-expected",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 180, 499, 1579; verified 180, 499, 1579"
+    },
+    {
+      "id": "input-1-actual",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 200, 499, 1599; verified 200, 499, 1599"
+    },
+    {
+      "id": "input-2-expected",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 1000, 0, 6000; verified 1000, 0, 6000"
+    },
+    {
+      "id": "input-2-actual",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 1000, 499, 6499; verified 1000, 499, 6499"
+    },
+    {
+      "id": "input-3-expected",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 600, 0, 3600; verified 600, 0, 3600"
+    },
+    {
+      "id": "input-3-actual",
+      "passed": true,
+      "detail": "tax, shipping, total: reported 1200, 0, 4200; verified 1200, 0, 4200"
+    }
+  ],
+  "answer": "orderTotal does not compute the total as the README rules require.\n\nWorking\n\nInput 1: 1000 cents × 1, 10 % discount  \n- README rules  \n  subtotal = 1000 × 1 = 1000  \n  discount = 10 % of 1000 = 100 → discounted subtotal = 1000 – 100 = 900  \n  tax = 20 % of 900 = 180  \n  shipping = 499 (subtotal < 5000)  \n  total = 900 + 180 + 499 = 1579  \n- Code as written  \n  gross = subtotal = 1000  \n  discounted = gross – percentOf(gross, 10) = 1000 – 100 = 900  \n  tax = percentOf(gross, 20) = 200  \n  shippingFor: gross > 5000 ? 0 : 499 → 499  \n  total = 900 + 200 + 499 = 1599  \n\nInput 2: 2500 cents × 2, 0 % discount  \n- README rules  \n  subtotal = 2500 × 2 = 5000  \n  discount = 0 → discounted subtotal = 5000  \n  tax = 20 % of 5000 = 1000  \n  shipping = 0 (subtotal ≥ 5000)  \n  total = 5000 + 1000 + 0 = 6000  \n- Code as written  \n  gross = 5000  \n  discounted = 5000 – percentOf(5000, 0) = 5000  \n  tax = percentOf(5000, 20) = 1000  \n  shippingFor: gross > 5000 ? 0 : 499 → 499  \n  total = 5000 + 1000 + 499 = 6499  \n\nInput 3: 3000 cents × 2, 50 % discount  \n- README rules  \n  subtotal = 3000 × 2 = 6000  \n  discount = 50 % of 6000 = 3000 → discounted subtotal = 6000 – 3000 = 3000  \n  tax = 20 % of 3000 = 600  \n  shipping = 0 (subtotal ≥ 5000)  \n  total = 3000 + 600 + 0 = 3600  \n- Code as written  \n  gross = 6000  \n  discounted = 6000 – percentOf(6000, 50) = 6000 – 3000 = 3000  \n  tax = percentOf(6000, 20) = 1200  \n  shippingFor: gross > 5000 ? 0 : 499 → 0  \n  total = 3000 + 1200 + 0 = 4200  \n\nInput 1: 1000 cents x 1 with a 10% discount\nExpected: tax 180, shipping 499, total 1579\nActual: tax 200, shipping 499, total 1599\nInput 2: 2500 cents x 2 with no discount\nExpected: tax 1000, shipping 0, total 6000\nActual: tax 1000, shipping 499, total 6499\nInput 3: 3000 cents x 2 with a 50% discount\nExpected: tax 600, shipping 0, total 3600\nActual: tax 1200, shipping 0, total 4200\n\nFinding: src/cart.mjs, orderTotal, rule 3: const tax = percentOf(gross, TAX_PERCENT); - computes tax on the gross subtotal instead of the discounted subtotal; Input 1 shows tax 200 vs 180, Input 3 shows tax 1200 vs 600\nFinding: src/cart.mjs, shippingFor, rule 4: return subtotalCents > FREE_SHIPPING_FROM_CENTS ? 0 : SHIPPING_CENTS; - uses > instead of >=, so shipping is charged when subtotal equals 5000 cents; Input 2 shows shipping 499 vs 0",
+  "stop_reason": "end_turn",
+  "execution_state": "completed",
+  "answer_present": true,
+  "usage": {
+    "prompt_tokens": 24385,
+    "completion_tokens": 12274,
+    "model_calls": 4,
+    "tool_calls": {
+      "executed": 3,
+      "deniedByHandler": 0,
+      "deniedByPolicy": 0
+    }
+  },
+  "thinking": {
+    "requested": "high",
+    "status": "matched",
+    "observed": [
+      "high"
+    ]
+  },
+  "supervisor_version": "2.2.1",
+  "worker": {
+    "backend": "app-server",
+    "version": "3.1.2"
+  },
+  "context_reads": {
+    "named": 3,
+    "read": [
+      "README.md",
+      "src/cart.mjs",
+      "src/money.mjs"
+    ],
+    "unread": [],
+    "extra": []
+  }
+}

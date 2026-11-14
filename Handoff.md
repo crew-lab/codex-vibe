@@ -1,4 +1,4 @@
-# Current state — 2026-11-13
+# Current state — 2026-11-14
 
 **The goal:** Codex hands a task to a worker (Vibe 3.1.2 or later; agy 1.5.8 or later, experimental), the worker reviews or implements it, and it works well every time: stable and efficient. This page holds only what works, what does not, and what is next; the order of work is in the [development strategy](planning/development-strategy.md).
 
@@ -15,7 +15,8 @@
 
 - **Boundary.** Reviews stay read-only, edits stay in their worktrees, nothing reaches shell or network, and runs clean up after themselves.
 - **Task-first experiment.** On Vibe 3.1.2, the historical dangling-symlink fix completed in 44.6 seconds and passed independent checks on `exp/task-first-prompt`. That result belongs to the experiment build.
-- **Edits.** On Vibe 3.1.0, `edit-shipping` fixed the threshold, touched only the two allowed files and passed all 14 tests on the exported patch.
+- **Edits.** On Vibe 3.1.2, `edit-shipping` and `edit-reserve-all` passed all independent checks with `end_turn` and untouched baselines.
+- **Quality pack on `e429a9b` (Vibe 3.1.2).** Candidate `c3f0ea7b…` passed all 12 quality-pack trials: `review-total` 5/5, `review-stock` 5/5, `edit-shipping` 1/1, and `edit-reserve-all` 1/1. Every review read exactly the three requested `context_files`, recorded `thinking: "high"`, and ended with `end_turn` ([evidence](research/evidence/vibe-312-quality-e429-20261114/README.md)).
 
 ## Changed on 2026-11-13 and run on Vibe 3.1.2
 
@@ -93,27 +94,19 @@ Both checks used candidate `6717dfd56b15580217e875f80423b5373a48ac966ae4c137a383
 - **Preparation explains itself:** `prepare check` prints the report path and failing findings; a stale receipt names what changed; agy's strict-mode failure names its remedy.
 - **One command for evidence:** `runs export --include answer`, then `quality-pack.mjs record`.
 
+## Runs on `e429a9b` (2026-11-14)
+
+- **Quality pack & thinking verification.** Candidate `c3f0ea7b…` passed all 12 trials (`records/` in [evidence](research/evidence/vibe-312-quality-e429-20261114/README.md)). Re-scoring the 30 pre-`e429a9b` review summaries confirmed 0/30 passed (`old/`). Exporting earlier thinking-high run `4acc9415-0ccf-46a2-991f-7ee3ed0961dc` confirmed `requested_thinking: "high"`, `thinking: "high"`, and `reasoning_observation` (`streamed_entries: 2`, `history_entries: 2`, `history_audited: true`).
+- **Calendar-date replay & correction.** Replay `6af4334a…` failed `tsc` (`TS18048`/`TS2769`) because the brief did not warn about `noUncheckedIndexedAccess`. Single correction `7f1b4533…` passed `build`, `lint`, `typecheck`, `cli-dates`, and `hygiene` (`dates=0 hygiene=0`), but its request capped `max_turns` at `12` instead of the default `20`; after twice attempting denied `file_system.bash`, it hit `turn_limit` and was closed `rejected`.
+- **Verification `timeout` fix on `main`.** `src/acceptance/verify.ts` now judges patches completed with `stop_reason: "timeout"` (edits cut off after audited writes with a clean history audit), matching [behavior docs](docs/functionality.md#settlement-and-close), while keeping `turn_limit` `incomplete`.
+- **Antigravity 1.5.8.** Strict-mode preparation (`745c651a…`) failed `probe_control_not_executed` (`read_file` auto-denied under `toolPermission: "strict"`, diagnostics committed in [evidence](research/evidence/vibe-312-quality-e429-20261114/agy-strict-diagnostics.json)). Preparation passed with `antigravity_skip_permissions = true`, and live `review-stock` run `9067c914…` failed with `VSUP_ANTIGRAVITY_EXEC_FAILED` because `generativelanguage.googleapis.com` returned HTTP 400 `API_KEY_INVALID` for the configured key.
+
 ## Next
 
-1. **Re-score what already exists, if the earlier answers can still be read.** For each of the 30 earlier review runs, print the run with `vibe-supervisor runs show <run-id>`, save its `result.summary` to a text file, and run `node scripts/quality-pack.mjs check review-total --answer <file>` or `check review-stock --answer <file>` on `main`. Commit the answer files and the check outputs; they quote only the pack's fixture. `runs export --include answer` cannot be used for these older runs, because they predate the record of whether the summary is the worker's own answer. This costs no inference and shows how many failures were layout and how many were wrong values. If the runs are gone, say so and skip this step.
-2. **Confirm thinking really ran.** For one earlier thinking-high review, report the recorded thinking level and the `reasoning_observation` counts from its export. An identical 0 of 5 with thinking off and high is worth explaining.
-3. **Build `main`,** install it and run `prepare check`. Its output now names the report path and any failing finding.
-4. **Reviews, five runs each on the new briefs,** with the default configuration. Build each request with `node scripts/quality-pack.mjs request <task-id> --cwd <fixture-directory>` and send its task text unchanged: `record` accepts a run only when its task text is byte-identical to the pack's. After each run:
-
-   ```bash
-   vibe-supervisor runs export <run-id> --out <new-directory> --include answer
-   ```
-
-   ```bash
-   node scripts/quality-pack.mjs record <task-id> --export <that-directory> --out <record-file>.json
-   ```
-
-   Commit every record file, passed or failed. Each holds the verdict, every check's detail, the answer, usage, the thinking level and which named files were read.
-5. **Edits once each,** exported with `--include patch` and recorded the same way.
-6. **Calendar-date replay,** compiler first; on a failure close the run as rejected and start one correction with the exact compiler output ([skill](.agents/skills/vibe-supervisor/SKILL.md)).
-7. **agy 1.5.8.** Make a Google key available to the supervisor (`GEMINI_API_KEY`, `GOOGLE_API_KEY` or `ANTIGRAVITY_API_KEY` in its environment or the launchd session); readiness now lists a missing key as a blocker before any grant is spent. With `antigravity_skip_permissions = true`, run `review-stock` and record it. Commit the `diagnostics` objects from the strict-mode preparation report.
-8. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
-9. **Release 2.2.1** once the reviews pass on Vibe.
+1. **Calendar-date replay (clean defaults):** Run once against the original buggy revision with `noUncheckedIndexedAccess` noted in the brief (per the skill template) and default `max_turns` (`20`, not capped at `12`).
+2. **agy 1.5.8 live review:** Configure a valid Google AI Studio `GEMINI_API_KEY` (replacing the rejected key) and run `review-stock` with `antigravity_skip_permissions = true`, then record the result.
+3. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
+4. **Release 2.2.1** once the calendar-date replay passes on Vibe.
 
 ## Build, install and prepare
 

@@ -1,0 +1,18 @@
+### Conclusion
+Defect found: `orderTotal` computes tax on the gross subtotal instead of the discounted subtotal (README rule 3).
+
+### Input results
+Input 1: one line of 1000 cents x 1 with a 10% discount
+Expected: tax 180, shipping 499, total 1479
+Actual: tax 200, shipping 499, total 1599
+
+Input 2: one line of 2500 cents x 2 with no discount
+Expected: tax 1000, shipping 0, total 6000
+Actual: tax 1000, shipping 0, total 6000
+
+Input 3: one line of 3000 cents x 2 with a 50% discount
+Expected: tax 600, shipping 0, total 5100
+Actual: tax 1200, shipping 0, total 6600
+
+### Finding
+File: src/cart.mjs, function `orderTotal`, line 14. Input: any line with `discountPercent > 0`. Wrong behaviour: tax is calculated as 20% of `gross` instead of 20% of the discounted subtotal.
