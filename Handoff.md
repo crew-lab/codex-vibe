@@ -35,11 +35,11 @@
 
 - **Calendar-date repeat on Vibe 3.1.2.** Replaying the same task on the original buggy revision reached the turn limit. Vibe read and edited both expected files. The exported patch failed TypeScript compilation because the parsed date components could be undefined. The run was closed and the patch was left out of main.
 
-- **Review quality.** `review-total` found the tax defect and missed the shipping defect at exactly 5000 cents in three runs with different briefs, including one given the observed values. [Review evidence](research/evidence/paired-comparison-protocol-20261108/README.md#vibe-review-follow-up)
+- **Reviews fail on Vibe.** Both review tasks failed 0 of 5 on the earlier build, with thinking off and with thinking high ([below](#review-repair-handoff)). The briefs and the checker were reworked on 2026-11-14 and have not been run on Vibe yet.
 - **Small slips reject good edits.** Patches were rejected for a new code comment and for a wrong prefix in a regression test, while the source itself was right.
 - **Default-order replay on Vibe 3.1.2.** The same historical dangling-symlink task reached its 300-second deadline. The completion frame arrived 16 ms after the deadline was recorded, and the supervisor exported the audited patch with stop reason `timeout`. The reproduction, link-safety controls, validation suite, lint, typecheck and build passed. The patch was rejected for trailing whitespace and the run was closed.
 - **Turns that stall.** Two task-first runs stalled until the deadline after their patches were ready; with the deadline fix they now complete with stop reason `timeout`, but why Vibe kept the turn open is unexplained. Run with `app_server_wire_trace` when it recurs.
-- **agy 1.5.8 fails preparation.** In strict mode the allowed-read control ended without a function response, so the hook, denial and parsing probes failed and no hosted task could start. The cause is unknown; the same symptom appeared on 1.4.9 whenever `antigravity_skip_permissions` was off.
+- **agy 1.5.8 has not run a task.** Preparation passes only with `antigravity_skip_permissions = true`; in strict mode the allowed read never executes. The one hosted attempt failed before inference because no Google key was available to the supervisor.
 - **Antigravity probes.** With `antigravity_skip_permissions` on, the probes exercise the hook on a read only, not a review-mode write or a shell tool; that needs agy's real tool schemas.
 
 ## Quality-pack results
@@ -58,7 +58,7 @@ Vibe 3.1.2 ran identical requests on the prepared baseline (`f963acd`) and the n
 - **Calendar-date replay.** The new build passed preparation and the live replay ended normally. Its patch still failed TypeScript compilation because parsed month and day values could be undefined. The run was closed and the patch left out of main.
 - **Antigravity 1.5.8.** Strict-mode preparation failed the hook invocation and denial, hook failure denial, and tool-event parsing probes. The allowed-read control ended without a function response. Hosted tasks could not start, leaving strict-mode edit behavior and review mode unverified.
 
-## Changed after those results, not yet run on a worker
+## Changed after the first results; run on Vibe 3.1.2 with no effect on reviews
 
 - **Reviews think.** Vibe review sessions ask for thinking `high` by default (owner decision, 2026-11-13); `vibe_review_thinking = "off"` switches it off, and edit sessions are always off. The supervisor's own files never hold reasoning (a test with a sentinel in reasoning text, summaries and streamed updates finds nothing in its data directory). Vibe's own private session store can hold it while a review lasts and is deleted at close.
 - **Review rules ask for evidence:** the code's result and deciding line for every input the task names, the threshold value itself and either side of it, and the task's exact output format.
@@ -82,15 +82,36 @@ Both checks used candidate `6717dfd56b15580217e875f80423b5373a48ac966ae4c137a383
 - Strict preparation still fails the hook invocation and denial, hook failure denial, and stream tool shape probes.
 - Preparation passes with `antigravity_skip_permissions = true`, where the supervisor hook enforces tool policy. A live read-only `review-stock` attempt was admitted and then failed before inference with `VSUP_BACKEND_ERROR` (`missing_gemini_api_key`). Run `9b5b92e9-e1e8-4d55-8fec-6c81746ac84e` failed after about one second and was closed. Headless execution requires one of `GEMINI_API_KEY`, `GOOGLE_API_KEY` or `ANTIGRAVITY_API_KEY` in the supervisor environment or macOS user launchd session. Once a key is available to the supervisor, rerun the read-only review with the prepared policy. Hosted review quality and edit behavior remain unverified.
 
+## Changed on 2026-11-14, not yet run on a worker
+
+**Why the reviews failed, as far as it can be seen from here.** The exact worker input was given to small stand-in models and scored by the pack's checker. On the old `review-total` brief only 1 of 3 passed although all three found both defects with every number right: the answer layout and the checker's wording patterns failed them. One stand-in also slipped on a single addition. The brief asked a worker that cannot run code for nine exact numbers and scored the layout. This is a floor test of the brief, not proof for Vibe: the stand-ins passed `review-stock` on the old brief where Vibe did not.
+
+- **Review briefs.** `review-total` now gives the totals observed by running the code, asks for the working first and returns a fill-in form; `review-stock` asks for one evidence line per input. Both ask for the wrong source line quoted exactly. With the stand-ins: 5 of 5 on `review-total`, 2 of 2 on `review-stock`.
+- **Checker.** `review-total` reads only the filled-in form and no longer counts the same headings in the working. Its details quote the nearest line when a value line is malformed. Scores from before this change are not comparable.
+- **Checks before the grant.** Readiness reports the credential's status, the pin manifest and preparation as blockers. Every start checks the credential, verifies the installed files and rechecks preparation before the grant is spent; a refused start leaves the grant usable. A launch that fails before the task is sent is `not_started`.
+- **Review results show what was read:** `context_reads`, tool-call counts, and warnings for unread named files, an empty answer or a missing findings block.
+- **Preparation explains itself:** `prepare check` prints the report path and failing findings; a stale receipt names what changed; agy's strict-mode failure names its remedy.
+- **One command for evidence:** `runs export --include answer`, then `quality-pack.mjs record`.
+
 ## Next
 
-1. **Review baseline first, on the build already installed (`ff4e23b`).** Run `review-total` and `review-stock` five times each before updating. For each run record the verdict, seconds, model calls and tokens, and commit the full `node scripts/quality-pack.mjs check` output of every failed run: its detail lines tell a wrong value from a wrong format.
-2. **Then build `main`,** install it and run `prepare check` (the policy changed, so the earlier receipt is stale).
-3. **Reviews on the new build with thinking off, five runs each.** Set `vibe_review_thinking = "off"`, restart the server and run `prepare check`. Record and commit the same things. This measures the new review rules alone.
-4. **Reviews on the new build with the default (thinking `high`), five runs each.** Remove the key, restart, run `prepare check`, and repeat.
-5. **Edits.** Run `edit-shipping` and `edit-reserve-all` once each, to confirm nothing regressed.
-6. **Calendar-date replay.** In a validation copy compile the exported patch before anything else. If it fails, close the run as rejected, then start one correction as the skill's "After a failed check" section describes, with the exact compiler output in the task.
-7. **agy 1.5.8.** Run `prepare check` twice, with `[experimental] antigravity_skip_permissions = true` and with it `false`, and commit the `diagnostics` objects under `agy_probes` from each saved report (tool names, event types, statuses, a redacted stderr tail; no prompt or model text). Say which of the two the earlier failure was.
+1. **Re-score what already exists.** With `main` checked out, run `node scripts/quality-pack.mjs check review-total --answer <file>` and `check review-stock --answer <file>` on the answers saved from the 30 earlier runs, and commit the outputs. This costs no inference and shows how many failures were layout and how many were wrong values.
+2. **Confirm thinking really ran.** For one earlier thinking-high review, report the recorded thinking level and the `reasoning_observation` counts from its export. An identical 0 of 5 with thinking off and high is worth explaining.
+3. **Build `main`,** install it and run `prepare check`. Its output now names the report path and any failing finding.
+4. **Reviews, five runs each on the new briefs,** with the default configuration. After each run:
+
+   ```bash
+   vibe-supervisor runs export <run-id> --out <new-directory> --include answer
+   ```
+
+   ```bash
+   node scripts/quality-pack.mjs record <task-id> --export <that-directory> --out <record-file>.json
+   ```
+
+   Commit every record file, passed or failed. Each holds the verdict, every check's detail, the answer, usage, the thinking level and which named files were read.
+5. **Edits once each,** exported with `--include patch` and recorded the same way.
+6. **Calendar-date replay,** compiler first; on a failure close the run as rejected and start one correction with the exact compiler output ([skill](.agents/skills/vibe-supervisor/SKILL.md)).
+7. **agy 1.5.8.** Make a Google key available to the supervisor (`GEMINI_API_KEY`, `GOOGLE_API_KEY` or `ANTIGRAVITY_API_KEY` in its environment or the launchd session); readiness now lists a missing key as a blocker before any grant is spent. With `antigravity_skip_permissions = true`, run `review-stock` and record it. Commit the `diagnostics` objects from the strict-mode preparation report.
 8. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
 9. **Release 2.2.1** once the reviews pass on Vibe.
 
