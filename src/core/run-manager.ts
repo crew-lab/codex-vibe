@@ -398,6 +398,7 @@ export class RunManager {
       if (options.preparedInputs) await this.assertPreparedInputAdmission(options.preparedInputs, options.acceptanceContract, admitted, baseCommit, policy, preparationDeadline);
       const binding = await withDeadline(dispatchBinding({ config: policy.config, policyRevision: policy.revision, mode, workspace: source, task, ...(baseCommit ? { baseCommit } : {}), contextFiles: options.contextFiles ?? [], ...(options.output ? { output: options.output } : {}), ...(options.acceptanceContract ? { acceptanceContract: options.acceptanceContract } : {}), ...(options.preparedInputs ? { preparedManifestSha256: options.preparedInputs.manifestSha256 } : {}), ...(options.allowedWritePaths ? { allowedWritePaths: options.allowedWritePaths } : {}), limits }), preparationDeadline - Date.now(), "Dispatch binding exceeded its preparation deadline.");
       await this.assertBackendAdmission();
+      if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.", { attempt_consumed: false });
       await new DispatchGrants(path.join(this.usageDataDir, "dispatch-grants")).consume({ authorizationId: options.authorizationId, attemptId: options.attemptId, requestSha256: binding.requestSha256, binding: binding.fields, runId: id });
       if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor stopped after consuming this attempt; it will not be replayed.");
       const record: RunRecord = {
@@ -420,7 +421,8 @@ export class RunManager {
       this.runs.set(id, runtime);
       await createPrivateDir(runtime.directory);
       await this.persist(runtime);
-      runtime.starting = this.launch(runtime);
+      const admittedBackend = this.backends.get(this.activeBackendKind);
+      runtime.starting = this.launch(runtime).finally(() => admittedBackend?.releaseAdmission?.());
       runtime.starting.catch((error: unknown) => this.reportBackground(runtime, "launch", error));
       return {
         supervisor_version: runtime.record.supervisorVersion ?? null, run_id: id, policy_revision: policy.revision,
@@ -430,6 +432,7 @@ export class RunManager {
         ...(mode === "edit" ? { base_ref: options.baseRef ?? "HEAD", ...(checkedBase ? { base_commit: checkedBase } : {}) } : {})
       };
     } catch (error) {
+      this.backends.get(this.activeBackendKind)?.releaseAdmission?.();
       if (runtime) { this.runs.delete(runtime.record.runId); this.releaseSlot(runtime); await rm(runtime.directory, { recursive: true, force: true }).catch(() => undefined); }
       else this.activeSlots = Math.max(0, this.activeSlots - 1);
       throw error instanceof Error && "code" in error ? error : asStorageError(error, runtime?.directory ?? this.dataDir);

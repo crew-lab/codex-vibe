@@ -510,6 +510,17 @@ describe('end to end through the MCP surface with the fake app-server', () => {
     expect(await start()).toMatchObject({ isError: false, body: { state: 'completed' } });
   }, 60_000);
 
+  it('refuses a start without spending the grant when the supervisor begins shutting down during the admission check', async () => {
+    let armed = false;
+    let shutdown: Promise<unknown> | undefined;
+    const stack = await buildStack('allowed-call', { backend: { pin: { verify: async () => { if (armed && !shutdown) shutdown = stack.manager.shutdown(); } } } });
+    const start = await sameGrantStarts(stack, { task: 'Review.', cwd: stack.source, wait_seconds: 30 });
+    armed = true;
+    expect(await start()).toMatchObject({ isError: true, body: { error: { code: 'VSUP_INVALID_STATE', details: { attempt_consumed: false } } } });
+    expect(existsSync(stack.logFile)).toBe(false);
+    await shutdown;
+  }, 60_000);
+
   it('refuses a start without a Mistral credential without spending the grant, keeps the secret out of every reply, and the same grant starts once it is set', async () => {
     const stored: { credential?: ResolvedCredential } = {};
     let lookups = 0;
