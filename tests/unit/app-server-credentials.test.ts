@@ -9,6 +9,7 @@ import {
   ResolvedCredential,
   checkOriginalHome,
   decodeKeychainOutput,
+  environmentCredentialPresence,
   resolveCredential,
   spawnKeychainRunner,
   type KeychainRequest,
@@ -239,5 +240,15 @@ describe('real runner against a fake security executable', () => {
     const result = await resolveCredential({ environment: { HOME: home }, platform: 'darwin', executable: path.join(scratch, 'absent-security') });
     expect(result.status).toBe('error');
     expect(await spawnKeychainRunner({ executable: path.join(scratch, 'absent-security'), args: [], env: { HOME: home, PATH: KEYCHAIN_PATH }, timeoutMs: 1000, maxOutputBytes: 10 })).toEqual({ kind: 'failed' });
+  });
+});
+
+describe('readiness credential presence', () => {
+  it('looks only at the environment: present there, unknown on macOS without it, absent elsewhere', () => {
+    expect(environmentCredentialPresence({ MISTRAL_API_KEY: SECRET }, 'darwin')).toEqual({ status: 'present', source: 'environment' });
+    expect(environmentCredentialPresence({ MISTRAL_API_KEY: SECRET }, 'linux')).toEqual({ status: 'present', source: 'environment' });
+    expect(environmentCredentialPresence({}, 'darwin')).toEqual({ status: 'unknown', source: 'keychain-not-checked' });
+    expect(environmentCredentialPresence({}, 'linux')).toEqual({ status: 'absent', source: 'skipped-platform' });
+    expect(JSON.stringify(environmentCredentialPresence({ MISTRAL_API_KEY: SECRET }, 'darwin'))).not.toContain(SECRET);
   });
 });

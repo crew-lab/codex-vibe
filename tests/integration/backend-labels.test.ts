@@ -59,21 +59,21 @@ describe('app-server start errors identify missing runtime components', () => {
     } finally { await manager.shutdown(); }
   });
 
-  it('reports a configured app-server executable that does not exist', async () => {
+  it('refuses a start whose configured app-server executable does not exist before spending the grant', async () => {
     const { root, source, data } = await makeRoot();
     const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [source], paths: { ...TEST_CONFIG.paths, appServer: path.join(root, 'no-such-vibe-app-server') } };
     const manager = new RunManager(config, data, [new AppServerBackend(config)]);
-    try { expect((await failedRun(manager, source)).error).toMatchObject({ code: 'VSUP_VIBE_NOT_FOUND' }); }
+    try { await expect(authorizedReviewStart(manager, { task: 'review', cwd: source, wait_seconds: 0 })).rejects.toMatchObject({ code: 'VSUP_VIBE_NOT_FOUND', details: { attempt_consumed: false } }); }
     finally { await manager.shutdown(); }
   });
 
-  it('reports a bare vibe name that is not on PATH', async () => {
+  it('refuses a start whose bare vibe name is not on PATH before spending the grant', async () => {
     const { root, source, data } = await makeRoot();
     const empty = path.join(root, 'empty-path'); await mkdir(empty);
     process.env.PATH = empty;
     const config = { ...TEST_CONFIG, allowedWorkspaceRoots: [source], paths: { ...TEST_CONFIG.paths, vibe: 'vibe' } };
     const manager = new RunManager(config, data, [new AppServerBackend(config)]);
-    try { expect((await failedRun(manager, source)).error).toMatchObject({ code: 'VSUP_VIBE_NOT_FOUND' }); }
+    try { await expect(authorizedReviewStart(manager, { task: 'review', cwd: source, wait_seconds: 0 })).rejects.toMatchObject({ code: 'VSUP_VIBE_NOT_FOUND', details: { attempt_consumed: false } }); }
     finally { await manager.shutdown(); }
   });
 });

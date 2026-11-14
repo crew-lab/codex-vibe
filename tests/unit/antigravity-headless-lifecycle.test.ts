@@ -121,6 +121,55 @@ describe('Antigravity headless admission and lifecycle regressions', () => {
     await expect(lstat(f.input.runDirectory!)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('lists a missing key in readiness, refuses the start without spending the grant, and starts with the same grant once the key is set', async () => {
+    const f = await fixture();
+    await writeFile(f.executable, f.prefix + "process.exit(0);\n", { mode: 0o700 });
+    vi.stubEnv('GEMINI_API_KEY', '');
+    const manager = new RunManager(f.config, path.join(f.root, 'data'), [f.backend]);
+    try {
+      await manager.initialize();
+      const missing = await manager.status({ workspace: f.workspace, operation: 'review' });
+      expect(missing).toMatchObject({ eligible: false, admission: { credential: { status: 'absent' }, pin: 'not_applicable' } });
+      expect(missing.blockers).toContainEqual(expect.objectContaining({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'missing_gemini_api_key' } }));
+      const request = { task: 'Review the key handling.', cwd: f.workspace, wait_seconds: 0 };
+      const grant = await manager.authorizeDispatch('review', request, 'codex-vibe-test-owner', new Date(Date.now() + 3_600_000).toISOString());
+      const start = () => manager.reviewStart({ ...request, authorization_id: grant.authorization_id, attempt_id: grant.attempt_id });
+      await expect(start()).rejects.toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'missing_gemini_api_key', attempt_consumed: false } });
+      expect(await readFile(f.marker, 'utf8').catch(() => '')).not.toContain('worker');
+      vi.stubEnv('GEMINI_API_KEY', 'fixed-test-key');
+      const present = await manager.status({ workspace: f.workspace, operation: 'review' });
+      expect(present).toMatchObject({ admission: { credential: { status: 'present', source: 'environment' } } });
+      expect(JSON.stringify(present)).not.toContain('fixed-test-key');
+      const started = await start();
+      await vi.waitFor(async () => expect(await readFile(f.marker, 'utf8')).toContain('worker'), { timeout: 10_000 });
+      await vi.waitFor(async () => expect(['completed', 'failed']).toContain((await manager.status({ run_id: started.run_id })).state), { timeout: 15_000 });
+      const events = await readFile(path.join(f.root, 'data', 'runs', started.run_id, 'events.ndjson'), 'utf8');
+      expect(await manager.result({ run_id: started.run_id, detail: 'full' })).not.toHaveProperty('context_reads');
+      expect(events).not.toContain('fixed-test-key');
+    } finally { await manager.shutdown(); }
+  }, 30_000);
+
+  it('reports the prompt as sent before it spawns agy with it, and not when it refuses before spawning', async () => {
+    const f = await fixture();
+    await writeFile(f.executable, f.prefix + "process.exit(0);\n", { mode: 0o700 });
+    const order: string[] = [];
+    let settled!: () => void;
+    const done = new Promise<void>((resolve) => { settled = resolve; });
+    const started = await f.backend.start(f.input, {
+      onEvent() {},
+      onPromptSent() { order.push('prompt'); },
+      onSpawn() { order.push('spawn'); },
+      onState(state) { if (state === 'failed' || state === 'completed' || state === 'cancelled') settled(); }
+    });
+    await done;
+    await f.backend.close(started.handle);
+    expect(order).toEqual(['prompt', 'spawn']);
+    vi.stubEnv('GEMINI_API_KEY', '');
+    const refused: string[] = [];
+    await expect(f.backend.start({ ...f.input, runId: randomUUID(), runDirectory: path.join(f.root, 'run-2') }, { onEvent() {}, onPromptSent() { refused.push('prompt'); }, onState() {} })).rejects.toMatchObject({ details: { reason: 'missing_gemini_api_key' } });
+    expect(refused).toEqual([]);
+  });
+
   it.each([
     [false, 'enforced', false],
     [true, 'bypassed', true]

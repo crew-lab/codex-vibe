@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import path from 'node:path';
 import { digest } from '../acceptance/schema.js';
 import type {
-  BackendCapabilities, BackendRunHandle, BackendStartResult, PinIdentity,
+  AdmissionStage, BackendAdmission, BackendCapabilities, BackendRunHandle, BackendStartResult, PinIdentity,
   StartRunInput, SupervisorBackend, BackendCallbacks, RuntimeCheck, UsageState, SupervisorError
 } from '../contracts.js';
 import { supervisorError, type SupervisorConfig } from '../contracts.js';
@@ -92,6 +92,14 @@ async function launchdValue(name: string): Promise<string | undefined> {
   } catch {
     return undefined;
   }
+}
+
+function missingAntigravityKey(): SupervisorError {
+  return supervisorError(
+    'VSUP_BACKEND_ERROR',
+    'Antigravity backend requires GEMINI_API_KEY, GOOGLE_API_KEY or ANTIGRAVITY_API_KEY in the supervisor environment or, on macOS, the user launchd session (launchctl setenv) for headless execution.',
+    { reason: 'missing_gemini_api_key' }
+  );
 }
 
 export async function resolveAntigravityApiKey(source: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform, lookup: LaunchdLookup = launchdValue): Promise<string | undefined> {
@@ -746,15 +754,16 @@ export class AntigravityBackend implements SupervisorBackend {
     return (this.options.preparation?.check ?? checkPreparation)(this.config, this.options.dataDir);
   }
 
+  async admissionCheck(_stage: AdmissionStage): Promise<BackendAdmission> {
+    const apiKey = await resolveAntigravityApiKey(process.env, process.platform, this.options.launchdLookup).catch(() => null);
+    if (apiKey === null) return { credential: { status: 'unknown', source: 'error' }, pin: 'not_applicable', blockers: [] };
+    if (apiKey) return { credential: { status: 'present', source: selectAntigravityApiKey(process.env) ? 'environment' : 'launchd' }, pin: 'not_applicable', blockers: [] };
+    return { credential: { status: 'absent', source: 'not-found' }, pin: 'not_applicable', blockers: [missingAntigravityKey()] };
+  }
+
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
     const apiKey = await resolveAntigravityApiKey(process.env, process.platform, this.options.launchdLookup);
-    if (!apiKey) {
-      throw supervisorError(
-        'VSUP_BACKEND_ERROR',
-        'Antigravity backend requires GEMINI_API_KEY, GOOGLE_API_KEY or ANTIGRAVITY_API_KEY in the supervisor environment or, on macOS, the user launchd session (launchctl setenv) for headless execution.',
-        { reason: 'missing_gemini_api_key' }
-      );
-    }
+    if (!apiKey) throw missingAntigravityKey();
 
     const cmd = executable(this.config);
     const resolved = await resolveAntigravityExecutable(cmd);
@@ -982,6 +991,7 @@ export class AntigravityBackend implements SupervisorBackend {
       });
     }
 
+    callbacks.onPromptSent?.();
     const child = spawnManaged(executablePath, args, {
       cwd: input.workerWorkspace,
       exactEnv: childEnv,

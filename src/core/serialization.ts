@@ -4,7 +4,7 @@ import { modelObservationsSchema } from "../reporting/telemetry.js";
 import { MAX_ALLOWED_WRITE_PATHS } from "../mcp/schemas.js";
 import { acceptanceContractSchema, verificationSchema, parseAssessments } from "../acceptance/schema.js";
 import { MAX_APPROVAL_LEDGER_RECORDS, MAX_RUN_EXCLUDED_GLOBS, REMEDIATION, isBackendKind } from "../contracts.js";
-import type { ApprovalLedgerSnapshot, ExclusionScope, PinIdentity, RunLimits, RunRecord, SupervisorErrorCode, SupervisorEvent, ToolCallCounts, UsageState } from "../contracts.js";
+import type { ApprovalLedgerSnapshot, ContextReads, ExclusionScope, PinIdentity, RunLimits, RunRecord, SupervisorErrorCode, SupervisorEvent, ToolCallCounts, UsageState } from "../contracts.js";
 
 type JsonObject = Record<string, unknown>;
 
@@ -191,7 +191,7 @@ export function runFromWire(value: unknown): RunRecord {
     run.allowedWritePaths = value.allowed_write_paths as string[];
   }
   if (value.execution_state !== undefined) {
-    if (value.execution_state !== "completed" && value.execution_state !== "failed" && value.execution_state !== "cancelled") throw new TypeError("Invalid persisted execution state");
+    if (value.execution_state !== "completed" && value.execution_state !== "failed" && value.execution_state !== "cancelled" && value.execution_state !== "not_started") throw new TypeError("Invalid persisted execution state");
     run.executionState = value.execution_state;
   }
   if (value.acceptance_contract !== undefined) run.acceptanceContract = acceptanceContractSchema.parse(value.acceptance_contract);
@@ -318,7 +318,9 @@ function resultToWire(result: NonNullable<RunRecord["result"]>): JsonObject {
     ...(result.changedFiles ? { changed_files: result.changedFiles } : {}),
     ...(result.warnings ? { warnings: result.warnings } : {}),
     ...(result.integrity ? { integrity: integrityToWire(result.integrity) } : {}),
-    ...(result.findings ? { findings: result.findings } : {})
+    ...(result.findings ? { findings: result.findings } : {}),
+    ...(result.contextReads ? { context_reads: { named: result.contextReads.named, read: result.contextReads.read, unread: result.contextReads.unread, extra: result.contextReads.extra, ...(result.contextReads.truncated ? { truncated: true } : {}) } } : {}),
+    ...(result.answerPresent === undefined ? {} : { answer_present: result.answerPresent })
   };
 }
 
@@ -341,8 +343,16 @@ function resultFromWire(value: JsonObject): NonNullable<RunRecord["result"]> {
     ...(Array.isArray(value.warnings) ? { warnings: value.warnings.filter((item): item is string => typeof item === "string") } : {}),
     ...(Array.isArray(value.artifacts) ? { artifacts: value.artifacts.filter(isObject).map((item) => ({ name: stringValue(item.name), path: stringValue(item.path), sha256: stringValue(item.sha256), bytes: numberValue(item.bytes), mediaType: stringValue(item.media_type) })) } : {}),
     ...(isObject(value.integrity) ? { integrity: integrityFromWire(value.integrity) } : {}),
-    ...(isObject(value.findings) ? { findings: findingsSummaryFromWire(value.findings) } : {})
+    ...(isObject(value.findings) ? { findings: findingsSummaryFromWire(value.findings) } : {}),
+    ...contextReadsFromWire(value.context_reads),
+    ...(typeof value.answer_present === "boolean" ? { answerPresent: value.answer_present } : {})
   };
+}
+
+function contextReadsFromWire(value: unknown): { contextReads?: ContextReads } {
+  if (!isObject(value) || typeof value.named !== "number" || !Number.isSafeInteger(value.named) || value.named < 0) return {};
+  const paths = (list: unknown): string[] => (Array.isArray(list) ? list.filter((item): item is string => typeof item === "string") : []);
+  return { contextReads: { named: value.named, read: paths(value.read), unread: paths(value.unread), extra: paths(value.extra), ...(value.truncated === true ? { truncated: true as const } : {}) } };
 }
 
 export function integrityToWire(integrity: NonNullable<NonNullable<RunRecord["result"]>["integrity"]>): JsonObject {

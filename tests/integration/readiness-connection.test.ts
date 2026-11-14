@@ -37,7 +37,7 @@ describe('workspace readiness over a real --isolated stdio connection', () => {
     }
     const configPath = path.join(data, 'config.toml');
     await writeFile(configPath, `version = 1\nallowed_workspace_roots = [${JSON.stringify(first)}]\n[paths]\nvibe = ${JSON.stringify(vibe)}\nvibe_pin_manifest = ${JSON.stringify(path.join(parent, 'vibe-pin-manifest.json'))}\n`, { mode: 0o600 });
-    const env = { ...(process.env as Record<string, string>), VIBE_SUPERVISOR_HOME: data };
+    const env = { ...(process.env as Record<string, string>), VIBE_SUPERVISOR_HOME: data, MISTRAL_API_KEY: 'readiness-placeholder-credential' };
 
     const transport = new StdioClientTransport({ command: process.execPath, args: [cli, 'serve', '--stdio', '--isolated'], env, stderr: 'pipe' });
     const client = new Client({ name: 'readiness-test', version: '0.0.1' }); clients.push(client);
@@ -47,7 +47,7 @@ describe('workspace readiness over a real --isolated stdio connection', () => {
     const before = await check(second);
     expect(before.supervisor_runtime).toEqual({ node: process.version, executable: await realpath(process.execPath), platform: process.platform, arch: process.arch });
     expect(before).toMatchObject({ eligible: false, policy_path: configPath, server_version: expect.any(String), session_id: expect.stringMatching(/^session-/) });
-    expect(before.blockers.map((blocker) => blocker.code)).toEqual(['VSUP_WORKSPACE_INVALID', 'VSUP_INVALID_STATE']);
+    expect(before.blockers.map((blocker) => blocker.code)).toEqual(['VSUP_WORKSPACE_INVALID', 'VSUP_VIBE_VERSION_UNSUPPORTED', 'VSUP_INVALID_STATE']);
     const session = path.join(data, 'mcp-sessions', String(before.session_id));
     const snapshot = await readFile(path.join(session, 'config.toml'), 'utf8');
 
@@ -152,7 +152,7 @@ antigravity = ${JSON.stringify(mockAgy)}
     const transport = new StdioClientTransport({
       command: process.execPath,
       args: [cli, 'serve', '--stdio', '--config', configPath, '--isolated'],
-      env: process.env as Record<string, string>,
+      env: { ...(process.env as Record<string, string>), GEMINI_API_KEY: 'readiness-placeholder-key' },
       stderr: 'pipe'
     });
     const client = new Client({ name: 'isolated-prep-readiness-test', version: '0.0.1' });

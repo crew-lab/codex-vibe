@@ -7,11 +7,11 @@ import { inspectExport } from '../git/worktree.js';
 import { readOwnedFile, assertOwnedDirectory } from '../reporting/private-files.js';
 import { acceptanceContractSchema, contractDigest, digest, safeRelativePath, sha256, type AcceptanceContract, type CheckResult, type Verification } from './schema.js';
 
-const snapshotSchema = z.object({ schema_version: z.literal(1), contract_sha256: sha256, patch_sha256: sha256, base_commit: z.string().regex(/^[a-f0-9]{40,64}$/), execution_state: z.enum(['completed', 'failed', 'cancelled']), stop_reason: z.string().nullable(), changed_files: z.array(safeRelativePath).max(1000), files: z.array(z.object({ path: safeRelativePath, mode: z.string().nullable(), sha256: sha256.nullable(), bytes: z.number().int().min(0).max(4 * 1024 * 1024) }).strict()).max(100) }).strict();
+const snapshotSchema = z.object({ schema_version: z.literal(1), contract_sha256: sha256, patch_sha256: sha256, base_commit: z.string().regex(/^[a-f0-9]{40,64}$/), execution_state: z.enum(['completed', 'failed', 'cancelled', 'not_started']), stop_reason: z.string().nullable(), changed_files: z.array(safeRelativePath).max(1000), files: z.array(z.object({ path: safeRelativePath, mode: z.string().nullable(), sha256: sha256.nullable(), bytes: z.number().int().min(0).max(4 * 1024 * 1024) }).strict()).max(100) }).strict();
 type Snapshot = z.infer<typeof snapshotSchema>;
 const MAX_INPUTS = 16 * 1024 * 1024;
 
-export async function captureVerification(options: { directory: string; source: string; base: string; patch: Buffer; contract: AcceptanceContract; executionState: 'completed' | 'failed' | 'cancelled'; stopReason?: string; maxBytes: number }): Promise<Verification> {
+export async function captureVerification(options: { directory: string; source: string; base: string; patch: Buffer; contract: AcceptanceContract; executionState: 'completed' | 'failed' | 'cancelled' | 'not_started'; stopReason?: string; maxBytes: number }): Promise<Verification> {
   const { directory, source, base, patch, contract } = options;
   const inputs = path.join(directory, 'acceptance'); await createPrivateDir(inputs); await createPrivateDir(path.join(inputs, 'blobs'));
   const paths = [...new Set(contract.checks.map((check) => check.path))];

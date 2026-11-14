@@ -105,6 +105,17 @@ describe("run record fields added in 2.1", () => {
     expect(JSON.stringify(reorderLikeWriter(again))).toBe(JSON.stringify(again));
   });
 
+  it("round-trips what a review read, whether the answer is the worker's, and a never-started execution state, and drops a malformed read record", () => {
+    const contextReads = { named: 2, read: ["README.md"], unread: ["src/rules.ts"], extra: ["src/index.ts"], truncated: true };
+    const wire = { ...recordWrittenBy201(), execution_state: "not_started", result: { summary: "never ran", context_reads: contextReads, answer_present: false } };
+    const record = runFromWire(wire);
+    expect(record.executionState).toBe("not_started");
+    expect(record.result?.contextReads).toEqual(contextReads);
+    expect(record.result?.answerPresent).toBe(false);
+    expect(runToWire(record)).toMatchObject({ execution_state: "not_started", result: { context_reads: contextReads, answer_present: false } });
+    expect(runFromWire({ ...wire, result: { summary: "x", context_reads: { named: ["README.md"] } } }).result).not.toHaveProperty("contextReads");
+  });
+
   it("loads a decimal cost ceiling and validates each ceiling on its own terms", () => {
     const base = recordWrittenBy201();
     const withLimits = (extra: Record<string, unknown>) => ({ ...base, limits: { ...(base.limits as object), ...extra } });
@@ -213,7 +224,7 @@ describe("run manager records the 2.1 contract fields", () => {
     } finally { await manager.shutdown(); }
   });
 
-  it.each([[[]], [["notes.md"]]])("persists review context count across close and exports without context paths: %j", async (contextFiles) => {
+  it.each([[[]], [["notes.md"]]])("persists review context count across close and exports only the context reads as context paths: %j", async (contextFiles) => {
     const parent = await mkdtemp(join(await realpath(tmpdir()), "vsup-context-count-")); roots.push(parent);
     const source = join(parent, "source"); const data = join(parent, "data");
     await mkdir(source);
@@ -233,7 +244,9 @@ describe("run manager records the 2.1 contract fields", () => {
       await exportReport({ directory, output });
       const report = JSON.parse(await readFile(join(output, "report.json"), "utf8")) as Record<string, unknown>;
       expect(report.context_file_count).toBe(contextFiles.length);
-      expect(JSON.stringify(report)).not.toContain("notes.md");
+      expect(report.context_reads).toEqual({ named: contextFiles.length, read: [], unread: contextFiles, extra: [] });
+      const { context_reads: _reads, ...rest } = report;
+      expect(JSON.stringify(rest)).not.toContain("notes.md");
       delete meta.context_file_count;
       await writeFile(join(directory, "meta.json"), JSON.stringify(meta), { mode: 0o600 });
       const legacyOutput = join(parent, "legacy-export");

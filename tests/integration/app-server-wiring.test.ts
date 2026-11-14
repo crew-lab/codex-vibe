@@ -329,12 +329,12 @@ class StdioClientHarness implements Transport {
   async close(): Promise<void> { this.input.end(); this.output.end(); this.onclose?.(); }
 }
 
-async function buildStack(scenario: string, options: { config?: Partial<SupervisorConfig>; backend?: AppServerBackendOptions } = {}): Promise<Stack> {
+async function buildStack(scenario: string | Record<string, unknown>, options: { config?: Partial<SupervisorConfig>; backend?: AppServerBackendOptions } = {}): Promise<Stack> {
   const base = scratch();
   const source = makeWorkspace(base);
   const data = path.join(base, 'data');
   const logFile = path.join(base, 'fixture-log.jsonl');
-  const document = JSON.parse(readFileSync(path.join(scenarioDirectory, `${scenario}.json`), 'utf8')) as Record<string, unknown>;
+  const document = typeof scenario === 'string' ? JSON.parse(readFileSync(path.join(scenarioDirectory, `${scenario}.json`), 'utf8')) as Record<string, unknown> : scenario;
   const tools = Object.fromEntries(PROFILE_TOOLS.review.map((tool) => [tool, { permission: TOOL_PERMISSION, denylist: workspaceDenylist(source) }]));
   const scenarioFile = path.join(base, 'scenario.json');
   writeFileSync(scenarioFile, JSON.stringify({ ...document, effectiveConfig: { ...(document.effectiveConfig as object | undefined), tools } }));
@@ -346,6 +346,7 @@ async function buildStack(scenario: string, options: { config?: Partial<Supervis
     executable: wrapper,
     preparation: { check: async () => ({ status: "passed" as const, candidate_sha256: null, version: "fixture", reason: "Fake ACP fixture evidence only" }) }, pin: { verify: async () => undefined },
     resolveCredential: async (): Promise<CredentialResolution> => ({ status: 'environment', detail: '', credential: new ResolvedCredential(SECRET) }),
+    credentialEnvironment: { environment: { MISTRAL_API_KEY: 'readiness-placeholder' }, platform: process.platform },
     reaper: { pollMs: 50, graceMs: 200 },
     timing: TIMING,
     ...options.backend
@@ -495,12 +496,215 @@ describe('end to end through the MCP surface with the fake app-server', () => {
     expect(result.warnings.join(' ')).toMatch(/limit/);
   }, 60_000);
 
-  it('refuses to start when the pin check fails, before any server is launched', async () => {
-    const stack = await buildStack('allowed-call', { backend: { preparation: { check: async () => ({ status: "passed" as const, candidate_sha256: null, version: "fixture", reason: "Fake ACP fixture evidence only" }) }, pin: { verify: async () => { throw new PinCheckError('file-mismatch', 'Installed files differ from the pinned digests.'); } } } });
-    const finished = await call(stack.client, 'vibe_review_start', { task: 'Review.', cwd: stack.source, wait_seconds: 30 }, stack.manager);
-    expect(finished).toMatchObject({ state: 'failed', error: { code: 'VSUP_VIBE_VERSION_UNSUPPORTED' } });
+  it('refuses a start whose pin check fails without spending the grant, and the same grant starts once the pin verifies', async () => {
+    let pinBroken = true;
+    const stack = await buildStack('allowed-call', { backend: { pin: { verify: async () => { if (pinBroken) throw new PinCheckError('file-mismatch', 'Installed files differ from the pinned digests.'); } } } });
+    const ready = await call(stack.client, 'vibe_status', { workspace: stack.source, operation: 'review' });
+    expect(ready).toMatchObject({ eligible: false, admission: { pin: 'failed', credential: { status: 'present' } } });
+    expect((ready.blockers as { code: string }[]).map((blocker) => blocker.code)).toContain('VSUP_VIBE_VERSION_UNSUPPORTED');
+    const start = await sameGrantStarts(stack, { task: 'Review.', cwd: stack.source, wait_seconds: 30 });
+    const refused = await start();
+    expect(refused).toMatchObject({ isError: true, body: { error: { code: 'VSUP_VIBE_VERSION_UNSUPPORTED', details: { reason: 'file-mismatch', attempt_consumed: false } } } });
     expect(existsSync(stack.logFile)).toBe(false);
+    pinBroken = false;
+    expect(await start()).toMatchObject({ isError: false, body: { state: 'completed' } });
   }, 60_000);
+
+  it('refuses a start without a Mistral credential without spending the grant, keeps the secret out of every reply, and the same grant starts once it is set', async () => {
+    const stored: { credential?: ResolvedCredential } = {};
+    let lookups = 0;
+    const environment: NodeJS.ProcessEnv = {};
+    const stack = await buildStack('allowed-call', { backend: {
+      credentialEnvironment: { environment, platform: 'linux' },
+      resolveCredential: async (): Promise<CredentialResolution> => { lookups += 1; return stored.credential ? { status: 'environment', detail: '', credential: stored.credential } : { status: 'not-found', detail: 'ai.mistral.vibe=not-found,vibe=not-found', credential: undefined }; }
+    } });
+    const ready = await call(stack.client, 'vibe_status', { workspace: stack.source, operation: 'review' });
+    expect(ready).toMatchObject({ eligible: false, admission: { pin: 'verified', credential: { status: 'absent', source: 'skipped-platform' } } });
+    expect(ready.blockers).toContainEqual(expect.objectContaining({ code: 'VSUP_AUTH_REQUIRED' }));
+    expect(lookups).toBe(0);
+    const start = await sameGrantStarts(stack, { task: 'Review.', cwd: stack.source, wait_seconds: 30 });
+    expect(await start()).toMatchObject({ isError: true, body: { error: { code: 'VSUP_AUTH_REQUIRED', details: { credential_status: 'not-found', attempt_consumed: false } } } });
+    expect(existsSync(stack.logFile)).toBe(false);
+    stored.credential = new ResolvedCredential(SECRET);
+    environment.MISTRAL_API_KEY = SECRET;
+    const present = await call(stack.client, 'vibe_status', { workspace: stack.source, operation: 'review' });
+    expect(present).toMatchObject({ eligible: true, admission: { credential: { status: 'present', source: 'environment' } } });
+    const started = await start();
+    expect(started).toMatchObject({ isError: false, body: { state: 'completed' } });
+    expect(lookups).toBe(2);
+    const runId = String(started.body.run_id);
+    const result = await call(stack.client, 'vibe_result', { run_id: runId, detail: 'full' });
+    const events = readFileSync(path.join(stack.data, 'runs', runId, 'events.ndjson'), 'utf8');
+    for (const text of [JSON.stringify(ready), JSON.stringify(present), JSON.stringify(started), JSON.stringify(result), events, readFileSync(path.join(stack.data, 'runs', runId, 'meta.json'), 'utf8')]) expect(text).not.toContain(SECRET);
+  }, 60_000);
+
+  it('does not look in the keychain at readiness on macOS and leaves an unchecked credential unknown, not blocking', async () => {
+    let lookups = 0;
+    const stack = await buildStack('allowed-call', { backend: {
+      credentialEnvironment: { environment: {}, platform: 'darwin' },
+      resolveCredential: async (): Promise<CredentialResolution> => { lookups += 1; return { status: 'environment', detail: '', credential: new ResolvedCredential(SECRET) }; }
+    } });
+    const ready = await call(stack.client, 'vibe_status', { workspace: stack.source, operation: 'review' });
+    expect(ready).toMatchObject({ eligible: true, admission: { credential: { status: 'unknown', source: 'keychain-not-checked' } } });
+    expect(lookups).toBe(0);
+  }, 60_000);
+
+  it('refuses a start whose preparation went stale after readiness without spending the grant, and the same grant starts once it is current again', async () => {
+    let status: 'passed' | 'stale' = 'passed';
+    const stack = await buildStack('allowed-call', { backend: { preparation: { check: async () => ({ status, candidate_sha256: null, version: 'fixture', reason: 'Fake ACP fixture evidence only' }) } } });
+    const ready = await call(stack.client, 'vibe_status', { workspace: stack.source, operation: 'review' });
+    expect(ready).toMatchObject({ eligible: true });
+    status = 'stale';
+    const start = await sameGrantStarts(stack, { task: 'Review.', cwd: stack.source, readiness_receipt: ready.readiness_receipt, wait_seconds: 30 });
+    expect(await start()).toMatchObject({ isError: true, body: { error: { code: 'VSUP_INVALID_STATE', details: { preparation: { status: 'stale' }, attempt_consumed: false } } } });
+    expect(existsSync(stack.logFile)).toBe(false);
+    status = 'passed';
+    expect(await start()).toMatchObject({ isError: false, body: { state: 'completed' } });
+  }, 60_000);
+
+  it('marks a launch that fails after the grant is spent as never started', async () => {
+    const stack = await buildStack('startup-failure');
+    const finished = await call(stack.client, 'vibe_review_start', { task: 'Review.', cwd: stack.source, wait_seconds: 30 }, stack.manager);
+    expect(finished).toMatchObject({ state: 'failed', error: { details: { launch_failed: true } }, result: { execution_state: 'not_started', answer_present: false, summary: expect.stringContaining('never reached inference') } });
+    expect((finished.error as { details: Record<string, unknown> }).details).not.toHaveProperty('cause_reason');
+    expect((finished.error as { details: Record<string, unknown> }).details.reason).not.toBe('launch_failed');
+    expect(String((finished.error as { message: string }).message)).toContain('never reached inference');
+    const result = await call(stack.client, 'vibe_result', { run_id: String(finished.run_id), detail: 'full' });
+    expect(result).toMatchObject({ execution_state: 'not_started', answer_present: false, error: { details: { launch_failed: true } } });
+    const meta = JSON.parse(readFileSync(path.join(stack.data, 'runs', String(finished.run_id), 'meta.json'), 'utf8')) as Record<string, unknown>;
+    expect(meta).toMatchObject({ execution_state: 'not_started' });
+    await stack.manager.shutdown();
+    const restarted = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [stack.source] }), stack.data, [new FakeBackend()]));
+    await restarted.initialize();
+    expect(await restarted.result({ run_id: String(finished.run_id) })).toMatchObject({ execution_state: 'not_started' });
+  }, 60_000);
+
+  it('records a failure after turn/start was sent as an ordinary failed run, not as never started', async () => {
+    const stack = await buildStack({ name: 'turn-start-rejected', errors: { 'turn/start': { code: 'internal_error', message: 'turn rejected after receipt' } }, steps: [] });
+    const finished = await call(stack.client, 'vibe_review_start', { task: 'Review.', cwd: stack.source, wait_seconds: 30 }, stack.manager);
+    expect(finished).toMatchObject({ state: 'failed', result: { execution_state: 'failed', answer_present: false } });
+    const error = finished.error as { message: string; details?: Record<string, unknown> };
+    expect(error.details ?? {}).not.toHaveProperty('launch_failed');
+    expect(error.message).not.toContain('never reached inference');
+    const frames = readFileSync(stack.logFile, 'utf8');
+    expect(frames).toContain('turn/start');
+  }, 60_000);
+});
+
+async function sameGrantStarts(stack: Stack, args: Record<string, unknown>): Promise<() => Promise<{ isError: boolean; body: Record<string, unknown> }>> {
+  const grant = await stack.manager.authorizeDispatch('review', args as never, 'wiring-test-owner', new Date(Date.now() + 60 * 60 * 1000).toISOString());
+  return async () => {
+    const result = await stack.client.callTool({ name: 'vibe_review_start', arguments: { ...args, authorization_id: grant.authorization_id, attempt_id: grant.attempt_id } });
+    const text = (result.content as { text: string }[])[0]!.text;
+    return { isError: result.isError === true, body: JSON.parse(text) as Record<string, unknown> };
+  };
+}
+
+describe('what a review read', () => {
+  const read = (filePath: string) => ({ op: 'call', tool: 'file_system.read_file', mode: 'approval', input: { filePath, offset: null, limit: 2000 } });
+  const say = (text: string) => ({ op: 'say', text, stream: true });
+
+  async function review(steps: Record<string, unknown>[], args: Record<string, unknown> = {}) {
+    const stack = await buildStack({ name: 'context-reads', steps });
+    writeFileSync(path.join(stack.source, 'README.md'), 'Fixture rule.\n');
+    writeFileSync(path.join(stack.source, 'src', 'rules.ts'), 'export const threshold = 5000;\n');
+    const finished = await call(stack.client, 'vibe_review_start', { task: 'Review.', cwd: stack.source, wait_seconds: 30, ...args }, stack.manager);
+    expect(finished).toMatchObject({ state: 'completed' });
+    const runId = String(finished.run_id);
+    const compact = await call(stack.client, 'vibe_result', { run_id: runId });
+    const meta = JSON.parse(readFileSync(path.join(stack.data, 'runs', runId, 'meta.json'), 'utf8')) as { result: Record<string, unknown> };
+    const saved = JSON.parse(readFileSync(path.join(stack.data, 'runs', runId, 'result.json'), 'utf8')) as Record<string, unknown>;
+    return { finished, compact, meta, saved, warnings: compact.warnings as string[] };
+  }
+
+  it('records every named file as read whether the worker used an absolute, relative or ./ path, and lists other files and no directories as extra', async () => {
+    const { finished, compact, meta, saved, warnings } = await review([read('${cwd}/README.md'), read('src/rules.ts'), read('./src/index.ts'), read('src'), say('No issues.')], { context_files: ['./README.md', 'src/rules.ts'] });
+    const expected = { named: 2, read: ['README.md', 'src/rules.ts'], unread: [], extra: ['src/index.ts'] };
+    expect(finished.result).toMatchObject({ context_reads: expected, usage: { tool_calls: { executed: 4, denied_by_handler: 0, denied_by_policy: 0 } } });
+    expect(compact).toMatchObject({ context_reads: expected, usage: { tool_calls: { executed: 4 } } });
+    expect(meta.result.context_reads).toEqual(expected);
+    expect(saved.context_reads).toEqual(expected);
+    expect(compact.answer_present).toBe(true);
+    expect(meta.result.answer_present).toBe(true);
+    expect(saved.answer_present).toBe(true);
+    expect(warnings.filter((warning) => warning.includes('named context files'))).toEqual([]);
+  }, 60_000);
+
+  it('warns when a review read none of its named files', async () => {
+    const { compact, warnings } = await review([say('No issues.')], { context_files: ['README.md', 'src/rules.ts'] });
+    expect(compact.context_reads).toEqual({ named: 2, read: [], unread: ['README.md', 'src/rules.ts'], extra: [] });
+    expect(warnings).toContain('The review read none of the 2 named context files; its answer is not grounded in them.');
+  }, 60_000);
+
+  it('names the unread files when a review read a different file instead', async () => {
+    const { compact, warnings } = await review([read('${cwd}/src/rules.ts'), read('${cwd}/src/index.ts'), say('No issues.')], { context_files: ['README.md', 'src/rules.ts'] });
+    expect(compact.context_reads).toEqual({ named: 2, read: ['src/rules.ts'], unread: ['README.md'], extra: ['src/index.ts'] });
+    expect(warnings).toContain('The review did not read 1 of the 2 named context files: README.md.');
+  }, 60_000);
+
+  it('says so in the summary and a warning when a review ends without a final answer', async () => {
+    const { compact, warnings } = await review([read('${cwd}/src/index.ts')]);
+    expect(compact.summary).toMatch(/^The review ended without a final answer/);
+    expect(warnings).toContain('The review returned no final answer text, so there is no review to use.');
+    expect(warnings).not.toContain('The turn finished without a final assistant message.');
+    expect(compact.answer_present).toBe(false);
+  }, 60_000);
+
+  it('warns when findings output was requested and the answer has no findings block', async () => {
+    const { compact, warnings } = await review([say('The code looks fine to me.')], { output: 'findings' });
+    expect(compact.summary).toBe('The code looks fine to me.');
+    expect(warnings).toContain('Findings output was requested, but the answer has no findings JSON block, so findings.json lists no findings.');
+  }, 60_000);
+});
+
+describe('context reads the supervisor cannot know or must bound', () => {
+  const readEvent = (filePath: string) => ({ source: 'vibe' as const, type: 'tool_call', severity: 'info' as const, data: { name: 'read_file', tool: 'file_system.read_file', kind: 'read', outcome: 'executed', path: filePath } });
+  const UNDETERMINED = /could not be determined/;
+
+  async function fakeReview(config: Partial<SupervisorConfig>, contextFiles: string[], prepare?: (source: string) => void) {
+    const base = scratch();
+    const source = makeWorkspace(base);
+    writeFileSync(path.join(source, 'README.md'), 'Fixture rule.\n');
+    prepare?.(source);
+    const backend = new FakeBackend();
+    const manager = track(new RunManager(appServerConfig({ allowedWorkspaceRoots: [source], ...config }), path.join(base, 'data'), [backend]));
+    const started = await authorizedReviewStart(manager, { task: 'Review.', cwd: source, context_files: contextFiles, wait_seconds: 0 });
+    await waitFor(() => backend.starts, (value) => value === 1);
+    await waitFor(async () => (await manager.status({ run_id: started.run_id })).state, (state) => state === 'running');
+    return { source, manager, callbacks: backend.callbacks.get(started.run_id)!, runId: started.run_id, data: path.join(base, 'data') };
+  }
+
+  it('leaves context_reads out with one warning when a named file no longer resolves at settle', async () => {
+    const run = await fakeReview({}, ['README.md']);
+    rmSync(path.join(run.source, 'README.md'));
+    await run.callbacks.onState('completed', { result: { stopReason: 'end_turn', summary: 'Done.' } });
+    const full = await run.manager.result({ run_id: run.runId, detail: 'full' });
+    expect(full).not.toHaveProperty('context_reads');
+    expect((full.warnings as string[]).filter((warning) => UNDETERMINED.test(warning))).toHaveLength(1);
+    expect((full.warnings as string[]).some((warning) => warning.includes('named context files'))).toBe(false);
+  });
+
+  it('leaves context_reads out with one warning when the event log refused an event', async () => {
+    const run = await fakeReview({ limits: { ...DEFAULT_CONFIG.limits, maxEventBytes: 4096 } }, ['README.md']);
+    for (let index = 0; index < 40; index += 1) await run.callbacks.onEvent(readEvent(`src/missing-${index}-${'x'.repeat(100)}.ts`));
+    await waitFor(async () => (await run.manager.status({ run_id: run.runId })).state, (state) => state === 'failed');
+    const full = await run.manager.result({ run_id: run.runId, detail: 'full' });
+    expect(full).toMatchObject({ error: { code: 'VSUP_OUTPUT_LIMIT' } });
+    expect(full).not.toHaveProperty('context_reads');
+    expect((full.warnings as string[]).filter((warning) => UNDETERMINED.test(warning))).toHaveLength(1);
+  });
+
+  it('bounds the stored lists and the compact lists and says they were cut', async () => {
+    const run = await fakeReview({}, [], (source) => { for (let index = 0; index < 230; index += 1) writeFileSync(path.join(source, 'src', `file-${String(index).padStart(3, '0')}.ts`), 'x\n'); });
+    for (let index = 0; index < 230; index += 1) await run.callbacks.onEvent(readEvent(`src/file-${String(index).padStart(3, '0')}.ts`));
+    await run.callbacks.onState('completed', { result: { stopReason: 'end_turn', summary: 'Done.' } });
+    const meta = JSON.parse(readFileSync(path.join(run.data, 'runs', run.runId, 'meta.json'), 'utf8')) as { result: { context_reads: { extra: string[]; truncated?: boolean } } };
+    expect(meta.result.context_reads.extra).toHaveLength(200);
+    expect(meta.result.context_reads.truncated).toBe(true);
+    const compact = await run.manager.result({ run_id: run.runId });
+    expect(compact.context_reads).toMatchObject({ named: 0, truncated: true });
+    expect((compact.context_reads as { extra: string[] }).extra).toHaveLength(50);
+  });
 });
 
 describe('doctor with the app-server backend', () => {

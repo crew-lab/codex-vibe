@@ -2,14 +2,14 @@ import { captureVerification, verifySaved } from "../acceptance/verify.js";
 import { canonical, contractDigest, digest, verificationSummary, type AcceptanceContract, type AssessmentInput } from "../acceptance/schema.js";
 import { readOwnedFile } from "../reporting/private-files.js";
 import { createHash, randomUUID } from "node:crypto";
-import { open, readFile, readdir, realpath, rename, rm, lstat, unlink } from "node:fs/promises";
+import { open, readFile, readdir, realpath, rename, rm, lstat, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import type {
-  ApprovalLedgerSnapshot, BackendCallbacks, BackendKind, ExclusionScope, BackendRunHandle, BackendStateUpdate,
+  AdmissionStage, ApprovalLedgerSnapshot, BackendAdmission, BackendCallbacks, BackendKind, ExclusionScope, BackendRunHandle, BackendStateUpdate,
   ReviewStartToolInput, EditStartToolInput, StatusToolInput,
   ResultToolInput, WaitOptions, CloseToolInput, StartRunInput, RunLimits, RunMode, RunRecord, RunState, SupervisorBackend,
   ReviewIntegrity, RuntimeCheck, SupervisorConfig, SupervisorError, SupervisorErrorCode, SupervisorEvent,
-  FindingsArtifact
+  FindingsArtifact, ContextReads
 } from "../contracts.js";
 import { APP_VERSION } from "../version.js";
 import { SCHEMA_VERSION, supervisorError } from "../contracts.js";
@@ -31,6 +31,7 @@ import type { OpenedReceipt } from "./readiness-receipt.js";
 import { assertNoProjectAntigravityExtensions, assertNoProjectVibeExtensions, assertSimpleGlobRoot } from "../security/workspace-guard.js";
 import { PRIVATE_DIRECTORY_NAMES } from "../backends/app-server/session-config.js";
 import { turnBackstop } from "../backends/app-server/usage.js";
+import { NO_FINAL_MESSAGE_WARNING } from "../backends/app-server/outcome.js";
 import { approvalsToWire, eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire, usageToWire } from "./serialization.js";
 import { assertTransition, isTerminal } from "./run-state.js";
 import { canonicalBudgets, checkBudgetAdmission } from "./usage-ledger.js";
@@ -43,6 +44,7 @@ import type { OwnerLock } from "./owner-lock.js";
 import { DispatchGrants, registrationStorageError } from "./dispatch-grants.js";
 import { bindingMismatchError, dispatchBinding, type DispatchBinding } from "./dispatch-binding.js";
 import { taskAuthorizeCommand } from "./dispatch-command.js";
+import type { PreparationStatus } from "../preparation/evidence.js";
 import { verifyTaskInputs, taskInputManifestSchema, type TaskInputManifest } from "../preparation/task-inputs.js";
 
 function assertPreparedManifestScope(manifest: TaskInputManifest, contract: AcceptanceContract | undefined): void {
@@ -71,6 +73,8 @@ interface Runtime {
   slot: boolean;
   cancelRequested: boolean;
   started: boolean;
+  promptSent?: boolean;
+  eventsDropped?: boolean;
   sourceSnapshot?: string;
   sourceManifest?: Map<string, ManifestEntry>;
   snapshotFailed?: boolean;
@@ -393,6 +397,7 @@ export class RunManager {
       const baseCommit = mode === "edit" ? checkedBase ?? await this.editBaseCommit(source, options.baseRef ?? "HEAD", preparationDeadline) : undefined;
       if (options.preparedInputs) await this.assertPreparedInputAdmission(options.preparedInputs, options.acceptanceContract, admitted, baseCommit, policy, preparationDeadline);
       const binding = await withDeadline(dispatchBinding({ config: policy.config, policyRevision: policy.revision, mode, workspace: source, task, ...(baseCommit ? { baseCommit } : {}), contextFiles: options.contextFiles ?? [], ...(options.output ? { output: options.output } : {}), ...(options.acceptanceContract ? { acceptanceContract: options.acceptanceContract } : {}), ...(options.preparedInputs ? { preparedManifestSha256: options.preparedInputs.manifestSha256 } : {}), ...(options.allowedWritePaths ? { allowedWritePaths: options.allowedWritePaths } : {}), limits }), preparationDeadline - Date.now(), "Dispatch binding exceeded its preparation deadline.");
+      await this.assertBackendAdmission();
       await new DispatchGrants(path.join(this.usageDataDir, "dispatch-grants")).consume({ authorizationId: options.authorizationId, attemptId: options.attemptId, requestSha256: binding.requestSha256, binding: binding.fields, runId: id });
       if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor stopped after consuming this attempt; it will not be replayed.");
       const record: RunRecord = {
@@ -547,6 +552,23 @@ export class RunManager {
     return backend.runtimeCheck();
   }
 
+  private async backendAdmission(stage: AdmissionStage, deadline?: number): Promise<BackendAdmission | undefined> {
+    const backend = this.backends.get(this.activeBackendKind);
+    if (!backend?.admissionCheck) return undefined;
+    const admission = backend.admissionCheck(stage);
+    return deadline === undefined ? admission : withDeadline(admission, deadline - Date.now(), "The backend admission check exceeded its preparation deadline.");
+  }
+
+  private async assertBackendAdmission(): Promise<void> {
+    const backend = this.backends.get(this.activeBackendKind);
+    const admission = await this.backendAdmission("start");
+    const preparation = await backend?.preparationCheck?.();
+    const blocker = admission?.blockers[0] ?? preparationBlocker(preparation);
+    if (!blocker) return;
+    backend?.releaseAdmission?.();
+    throw codedError(blocker.code, blocker.message, { ...blocker.details, attempt_consumed: false });
+  }
+
   private async readiness(input: { workspace: string; operation: RunMode; base_ref?: string | undefined; expected_candidate?: string | undefined }): Promise<Record<string, unknown>> {
     await this.ready();
     const deadline = Date.now() + START_PREPARATION_DEADLINE_MS;
@@ -576,9 +598,13 @@ export class RunManager {
       blockers.push(supervisorError(isAntigravity ? "VSUP_ANTIGRAVITY_NOT_FOUND" : "VSUP_VIBE_NOT_FOUND", `The configured ${isAntigravity ? "Antigravity" : "Vibe"} executable ${runtime.executable} was not found.`));
     }
     const workspaceEligible = blockers.length === 0 && policy !== undefined && workspace !== null;
+    const executableFound = !("executable_found" in runtime) || runtime.executable_found;
+    const admission = executableFound ? await this.backendAdmission("readiness", deadline).catch((error: unknown) => { block(error); return undefined; }) : undefined;
+    if (admission) blockers.push(...admission.blockers);
     const preparation = await this.backends.get(this.activeBackendKind)?.preparationCheck?.();
     if (input.expected_candidate && preparation?.candidate_sha256 !== input.expected_candidate) blockers.push(supervisorError("VSUP_INVALID_STATE", "Connected candidate differs from expected_candidate."));
-    if (preparation && preparation.status !== "passed") blockers.push(supervisorError("VSUP_INVALID_STATE", "Matching candidate conformance is required before dispatch.", { preparation }));
+    const unprepared = preparationBlocker(preparation);
+    if (unprepared) blockers.push(unprepared);
     const eligible = blockers.length === 0 && policy !== undefined && workspace !== null;
     const issued = eligible ? this.receipts.issue({ revision: policy!.revision, operation: input.operation, workspace: workspace!, baseRef: baseRef ?? null, baseCommit }) : undefined;
     const taskAuthorize = this.policy.configPath ? await taskAuthorizeCommand({ configPath: this.policy.configPath, operation: input.operation, workspace: workspace ?? input.workspace, baseRef }) : null;
@@ -603,6 +629,7 @@ export class RunManager {
       workspace_eligible: workspaceEligible,
       candidate: { version: APP_VERSION, sha256: preparation?.candidate_sha256 ?? null },
       preparation: preparation ?? { status: "not_reported" },
+      admission: admission ? { credential: admission.credential, pin: admission.pin } : { status: "not_reported" },
       blockers: blockers.map((error) => ({ code: error.code, message: error.message, remediation: error.remediation, retryable: error.retryable, ...(error.details ? { details: error.details } : {}) })),
       active_slot: { busy },
       runtime,
@@ -662,7 +689,7 @@ export class RunManager {
       assessments: record.assessments ?? [],
       workspace: { source: record.sourceWorkspace, worker: record.workerWorkspace },
       artifacts: (result.artifacts ?? []).map(artifactToWire),
-      changed_files: result.changedFiles ?? [], ...(record.usage ? { usage: usageToWire(record.usage) } : {}), warnings: result.warnings ?? [], ...(result.integrity ? { integrity: integrityToWire(result.integrity) } : {}), ...(record.error ? { error: record.error } : {}),
+      changed_files: result.changedFiles ?? [], ...(record.usage ? { usage: usageToWire(record.usage) } : {}), warnings: result.warnings ?? [], ...(result.integrity ? { integrity: integrityToWire(result.integrity) } : {}), ...(result.contextReads ? { context_reads: contextReadsToWire(result.contextReads) } : {}), answer_present: result.answerPresent === true, ...(record.error ? { error: record.error } : {}),
       next_action
     };
     if (input.include_transcript) {
@@ -701,9 +728,16 @@ export class RunManager {
     const artifacts = result.artifacts ?? []; const files = result.changedFiles ?? [];
     if (result.stopReason) output.stop_reason = result.stopReason;
     output.summary = result.summary ?? "";
+    output.answer_present = result.answerPresent === true;
     output.warnings = result.warnings ?? [];
     output.next_action = this.nextAction(record, record.state);
     if (result.integrity) output.integrity = integrityToWire(result.integrity);
+    if (result.contextReads) {
+      const reads = result.contextReads;
+      output.context_reads = contextReadsToWire(boundedContextReads(reads, COMPACT_CHANGED_FILES));
+    }
+    const toolCalls = record.usage?.toolCalls;
+    if (toolCalls) output.usage = { tool_calls: { executed: toolCalls.executed, denied_by_handler: toolCalls.deniedByHandler, denied_by_policy: toolCalls.deniedByPolicy } };
     if (record.error) output.error = record.error;
     if (record.mode === "edit") output.worker = record.workerWorkspace;
     output.changed_files = files.slice(0, COMPACT_CHANGED_FILES);
@@ -1176,7 +1210,10 @@ export class RunManager {
     } catch (error) {
       await snapshotTask;
       if (runtime.cancelRequested || runtime.record.state === "cancelled") return;
-      const outcome: SettleOutcome = { state: "failed", error: normalizeError(error) };
+      const failure = normalizeError(error);
+      const neverStarted = !runtime.started && runtime.promptSent !== true;
+      if (neverStarted) runtime.record.executionState = "not_started";
+      const outcome: SettleOutcome = { state: "failed", error: neverStarted ? launchFailure(failure) : failure };
       await this.serial(runtime, async () => {
         await this.appendEvent(runtime, { source: "supervisor", type: "diagnostic", severity: "error", data: { reason: "launch_failed", message: describeFailure(error) } }).catch(() => undefined);
         await this.settle(runtime, outcome);
@@ -1204,6 +1241,7 @@ export class RunManager {
         return this.serial(runtime, async () => this.appendEvent(runtime, event)).catch((error: unknown) => this.noteEventFailure(runtime, error));
       },
       onActivity: (kind) => { this.noteActivity(runtime, kind); },
+      onPromptSent: () => { runtime.promptSent = true; },
       onSpawn: (handle) => {
         if (runtime.cancelRequested || isTerminal(runtime.record.state) || runtime.record.state === "closing" || SETTLED_RESULT_STATES.has(runtime.record.state)) {
           // Keep the live handle attached. launch() owns cancellation after start() resolves.
@@ -1230,7 +1268,7 @@ export class RunManager {
   private async appendEvent(runtime: Runtime, event: Parameters<BackendCallbacks["onEvent"]>[0], allowTerminal = false): Promise<void> {
     if (isTerminal(runtime.record.state) && !allowTerminal) return;
     await this.ensureLoaded(runtime);
-    if (runtime.logUnavailable || (isTerminal(runtime.record.state) && !allowTerminal)) return;
+    if (runtime.logUnavailable || (isTerminal(runtime.record.state) && !allowTerminal)) { if (runtime.logUnavailable) runtime.eventsDropped = true; return; }
     const type = redactSecrets(String(event.type).slice(0, 128));
     let data = event.data ?? {};
     if (/reasoning|thought/i.test(type)) {
@@ -1257,8 +1295,9 @@ export class RunManager {
       severity: event.severity,
       data
     };
-    try { if (!this.logFor(runtime).append(eventToWire(full))) return; }
+    try { if (!this.logFor(runtime).append(eventToWire(full))) { runtime.eventsDropped = true; return; } }
     catch (error) {
+      runtime.eventsDropped = true;
       if (error instanceof RangeError) {
         runtime.cancelRequested = true;
         queueMicrotask(() => { this.fail(runtime, supervisorError("VSUP_OUTPUT_LIMIT", "The event log reached its configured byte limit.")).catch((failure: unknown) => this.reportBackground(runtime, "output-limit", failure)); });
@@ -1295,6 +1334,7 @@ export class RunManager {
     if (recordUpdate.preparation) runtime.record.preparation = recordUpdate.preparation;
     if (recordUpdate.modelObservations) runtime.record.modelObservations = recordUpdate.modelObservations;
     if (recordUpdate.usage) runtime.record.usage = recordUpdate.usage;
+    if (recordUpdate.result) recordUpdate.result = { ...recordUpdate.result, answerPresent: hasText(recordUpdate.result.summary) };
     if (recordUpdate.result) runtime.record.result = recordUpdate.result;
     if (recordUpdate.process) runtime.record.process = recordUpdate.process;
     if (recordUpdate.pin) runtime.record.pin = recordUpdate.pin;
@@ -1452,11 +1492,13 @@ export class RunManager {
     const warnings = withoutStopReasonWarnings(previous?.warnings ?? []);
     runtime.record.result = {
       ...(previous?.stopReason ? { stopReason: previous.stopReason } : {}),
-      summary: hasText(previous?.summary) ? previous.summary : "Vibe run ended before normal completion.",
+      summary: hasText(previous?.summary) ? previous.summary : runtime.record.executionState === "not_started" ? NOT_STARTED_SUMMARY : "Vibe run ended before normal completion.",
       artifacts: previous?.artifacts ?? [],
       changedFiles: previous?.changedFiles ?? [],
       warnings: warnings.includes(warning) ? warnings : [...warnings, warning],
-      ...(previous?.integrity ? { integrity: previous.integrity } : {})
+      ...(previous?.integrity ? { integrity: previous.integrity } : {}),
+      ...(previous?.contextReads ? { contextReads: previous.contextReads } : {}),
+      answerPresent: previous?.answerPresent === true
     };
     await atomicWriteJson(path.join(runtime.directory, "result.json"), this.resultWire(runtime, resultState)).catch((error: unknown) => this.degrade(runtime, asStorageError(error, runtime.directory)));
   }
@@ -1476,7 +1518,9 @@ export class RunManager {
       ...(record.error ? { error: record.error } : {}),
       ...(record.usage ? { usage: usageToWire(record.usage) } : {}), warnings: result?.warnings ?? [],
       ...(result?.integrity ? { integrity: integrityToWire(result.integrity) } : {}),
-      ...(result?.findings ? { findings: result.findings } : {})
+      ...(result?.findings ? { findings: result.findings } : {}),
+      ...(result?.contextReads ? { context_reads: contextReadsToWire(result.contextReads) } : {}),
+      answer_present: result?.answerPresent === true
     };
   }
 
@@ -1512,6 +1556,7 @@ export class RunManager {
       artifacts.push(await describeArtifact(APPROVALS_FILE, approvalsPath, "application/json"));
     }
     let findingsSummary: FindingsArtifact["summary"] | undefined;
+    let findingsMissing = false;
     if (runtime.record.mode === "review" && runtime.record.output === "findings") {
       if (runtime.sourceSnapshot && !runtime.sourceManifest) await this.loadLaunchManifest(runtime);
       const snapshot: WorkspaceSnapshot | undefined = runtime.sourceSnapshot && runtime.sourceManifest
@@ -1536,29 +1581,41 @@ export class RunManager {
       await this.atomicWriteText(findingsPath, JSON.stringify(sanitizeForPersistence(findingsArtifact), null, 2) + "\n");
       artifacts.push(await describeArtifact("findings.json", findingsPath, "application/json"));
       findingsSummary = findingsArtifact.summary;
+      findingsMissing = extracted === null;
     }
     const artifactBytes = artifacts.reduce((sum, artifact) => sum + artifact.bytes, 0);
     if (artifactBytes > runtime.record.limits.maxArtifactBytes) throw codedError("VSUP_OUTPUT_LIMIT", "Run artifacts exceeded the configured byte limit.");
     const stopReason = runtime.record.result?.stopReason;
     const recordedSummary = runtime.record.result?.summary;
-    const summary = hasText(recordedSummary) ? recordedSummary : resultState === "completed" ? completedSummary(stopReason, runtime.record.backend) : "Vibe run ended before normal completion.";
+    const reviewWithoutAnswer = runtime.record.mode === "review" && resultState === "completed" && !hasText(recordedSummary) && (stopReason === undefined || stopReason === "end_turn");
+    const summary = hasText(recordedSummary) ? recordedSummary : runtime.record.executionState === "not_started" ? NOT_STARTED_SUMMARY : reviewWithoutAnswer ? NO_ANSWER_SUMMARY : resultState === "completed" ? completedSummary(stopReason, runtime.record.backend) : "Vibe run ended before normal completion.";
     const stopWarning = resultState === "completed" ? stopReasonWarning(stopReason) : undefined;
-    const carriedWarnings = withoutStopReasonWarnings(runtime.record.result?.warnings ?? []);
+    const carriedWarnings = withoutStopReasonWarnings(runtime.record.result?.warnings ?? []).filter((warning) => !(reviewWithoutAnswer && warning === NO_FINAL_MESSAGE_WARNING));
     if (runtime.logUnavailable) carriedWarnings.push(`${UNREADABLE_LOG_WARNING} (${runtime.logUnavailable.reason})`);
+    const computedReads = runtime.record.result?.contextReads ?? await this.contextReads(runtime);
+    const contextReads = computedReads === "undetermined" ? undefined : computedReads;
+    const warnings = stopWarning ? [...carriedWarnings, stopWarning] : carriedWarnings;
+    const addWarning = (warning: string | undefined): void => { if (warning && !warnings.includes(warning)) warnings.push(warning); };
+    if (reviewWithoutAnswer) addWarning(NO_ANSWER_WARNING);
+    if (findingsMissing) addWarning(FINDINGS_MISSING_WARNING);
+    if (contextReads) addWarning(contextReadsWarning(contextReads));
+    if (computedReads === "undetermined") addWarning(READS_UNDETERMINED_WARNING);
     runtime.record.result = {
       ...(stopReason ? { stopReason } : {}),
       summary,
       artifacts,
       changedFiles: patchInfo?.changedFiles ?? [],
-      warnings: stopWarning ? [...carriedWarnings, stopWarning] : carriedWarnings,
+      warnings,
       ...(runtime.record.result?.integrity ? { integrity: runtime.record.result.integrity } : {}),
-      ...(findingsSummary ? { findings: findingsSummary } : {})
+      ...(findingsSummary ? { findings: findingsSummary } : {}),
+      ...(contextReads ? { contextReads } : {}),
+      answerPresent: runtime.record.result?.answerPresent === true
     };
     if (runtime.record.acceptanceContract && !patchInfo) runtime.record.verification = { status: "incomplete", checks: [{ id: "$artifacts", status: "incomplete", reason: "patch-unavailable" }] };
     if (runtime.record.acceptanceContract && patchInfo && runtime.record.worktree) {
       try {
         const patch = await readOwnedFile(patchInfo.patchPath, runtime.record.limits.maxArtifactBytes);
-        runtime.record.verification = await captureVerification({ directory: runtime.directory, source: runtime.record.sourceWorkspace, base: runtime.record.worktree.baseRef, patch, contract: runtime.record.acceptanceContract, executionState: resultState === "completed" ? "completed" : resultState === "cancelled" ? "cancelled" : "failed", ...(stopReason ? { stopReason } : {}), maxBytes: runtime.record.limits.maxArtifactBytes - artifactBytes });
+        runtime.record.verification = await captureVerification({ directory: runtime.directory, source: runtime.record.sourceWorkspace, base: runtime.record.worktree.baseRef, patch, contract: runtime.record.acceptanceContract, executionState: runtime.record.executionState === "not_started" ? "not_started" : resultState === "completed" ? "completed" : resultState === "cancelled" ? "cancelled" : "failed", ...(stopReason ? { stopReason } : {}), maxBytes: runtime.record.limits.maxArtifactBytes - artifactBytes });
       } catch {
         runtime.record.verification = { status: "incomplete", contract_sha256: contractDigest(runtime.record.acceptanceContract), checks: [{ id: "$artifacts", status: "incomplete", reason: "verification-inputs-unavailable" }] };
       }
@@ -1685,7 +1742,7 @@ export class RunManager {
   private async setState(runtime: Runtime, state: RunState, update?: Partial<Pick<RunRecord, "usage" | "result" | "error" | "process" | "modelObservations" | "preparation" | "executionState" | "candidateRevision" | "candidatePatchSha256"> & { startedAt?: string; finishedAt?: string }>): Promise<void> {
     if (isTerminal(runtime.record.state) && state !== "closing" && state !== "closed") return;
     assertTransition(runtime.record.state, state);
-    if (state === "completed" || state === "failed" || state === "cancelled") runtime.record.executionState = state;
+    if ((state === "completed" || state === "failed" || state === "cancelled") && runtime.record.executionState !== "not_started") runtime.record.executionState = state;
     if (update?.executionState) runtime.record.executionState = update.executionState;
     else if ((state === "closing" || state === "closed") && !runtime.record.executionState && (runtime.record.state === "completed" || runtime.record.state === "failed" || runtime.record.state === "cancelled")) runtime.record.executionState = runtime.record.state;
     runtime.record.state = state;
@@ -1794,6 +1851,31 @@ export class RunManager {
     }
   }
 
+  private async contextReads(runtime: Runtime): Promise<ContextReads | "undetermined" | undefined> {
+    const record = runtime.record;
+    if (record.mode !== "review" || record.backend !== "app-server" || !runtime.started) return undefined;
+    if (runtime.eventsDropped || runtime.logUnavailable || runtime.contextFiles.length !== (record.contextFileCount ?? 0)) return "undetermined";
+    const root = await realpath(record.workerWorkspace).catch(() => record.workerWorkspace);
+    const fileIn = async (base: string, file: string): Promise<string | undefined> => {
+      const absolute = path.resolve(base, file);
+      const real = await realpath(absolute).catch(() => absolute);
+      if (!isPathWithinRoot(root, real) || real === root) return undefined;
+      const info = await stat(real).catch(() => undefined);
+      return info?.isFile() ? path.relative(root, real).split(path.sep).join("/") : undefined;
+    };
+    const resolvedNamed = await Promise.all(runtime.contextFiles.map((file) => fileIn(record.sourceWorkspace, file)));
+    if (resolvedNamed.some((file) => file === undefined)) return "undetermined";
+    const named = [...new Set(resolvedNamed as string[])];
+    const readPaths = runtime.events.filter(isExecutedRead).map((event) => event.data.path as string);
+    const read = new Set((await Promise.all([...new Set(readPaths)].map((file) => fileIn(record.workerWorkspace, file)))).filter((file): file is string => file !== undefined));
+    return boundedContextReads({
+      named: named.length,
+      read: named.filter((file) => read.has(file)),
+      unread: named.filter((file) => !read.has(file)),
+      extra: [...read].filter((file) => !named.includes(file)).sort()
+    }, MAX_CONTEXT_READ_PATHS);
+  }
+
   private async fail(runtime: Runtime, error: SupervisorError): Promise<void> {
     if (isTerminal(runtime.record.state) || runtime.record.state === "completed" || runtime.record.state === "closing") return;
     const outcome = this.requestOutcome(runtime, { state: "failed", error });
@@ -1821,6 +1903,16 @@ export class RunManager {
     if (!runtime) throw codedError("VSUP_NOT_FOUND", "Run was not found.");
     return runtime;
   }
+}
+
+const NOT_STARTED_SUMMARY = "The worker never started, so the run never reached inference; read error for the launch failure.";
+
+function launchFailure(error: SupervisorError): SupervisorError {
+  return { ...error, message: `${error.message} The worker never started, so the run never reached inference.`, details: { ...error.details, launch_failed: true } };
+}
+
+function preparationBlocker(preparation: PreparationStatus | undefined): SupervisorError | undefined {
+  return preparation && preparation.status !== "passed" ? supervisorError("VSUP_INVALID_STATE", "Matching candidate conformance is required before dispatch.", { preparation }) : undefined;
 }
 
 function hasText(value: string | undefined): value is string {
@@ -1975,6 +2067,35 @@ function withoutStopReasonWarnings(warnings: string[]): string[] {
 const CHANGED_WARNING = "The source workspace changed during this read-only review. The changes may be your own edits or a read-only boundary violation; inspect the changed paths before trusting the review.";
 const UNVERIFIED_WARNING = "The source workspace could not be snapshotted (too large or unreadable); review integrity was NOT checked, so a read-only boundary violation would go undetected.";
 const MAX_INTEGRITY_PATHS = 50;
+
+const NO_ANSWER_SUMMARY = "The review ended without a final answer: Vibe finished its turn but returned no review text. Treat this review as not done; read the transcript and events, then start a fresh review if needed.";
+const NO_ANSWER_WARNING = "The review returned no final answer text, so there is no review to use.";
+const FINDINGS_MISSING_WARNING = "Findings output was requested, but the answer has no findings JSON block, so findings.json lists no findings.";
+const MAX_WARNING_PATHS = 20;
+
+function contextReadsWarning(reads: ContextReads): string | undefined {
+  if (reads.named === 0 || reads.unread.length === 0) return undefined;
+  if (reads.read.length === 0) return `The review read none of the ${reads.named} named context files; its answer is not grounded in them.`;
+  const listed = reads.unread.slice(0, MAX_WARNING_PATHS).join(", ");
+  const more = reads.unread.length > MAX_WARNING_PATHS ? ` and ${reads.unread.length - MAX_WARNING_PATHS} more` : "";
+  return `The review did not read ${reads.unread.length} of the ${reads.named} named context files: ${listed}${more}.`;
+}
+
+const MAX_CONTEXT_READ_PATHS = 200;
+const READS_UNDETERMINED_WARNING = "Which files the review read could not be determined (an event was not recorded or a named context file no longer resolves), so context_reads is left out.";
+
+function boundedContextReads(reads: ContextReads, limit: number): ContextReads {
+  const cut = [reads.read, reads.unread, reads.extra].some((paths) => paths.length > limit);
+  return { named: reads.named, read: reads.read.slice(0, limit), unread: reads.unread.slice(0, limit), extra: reads.extra.slice(0, limit), ...(cut || reads.truncated ? { truncated: true as const } : {}) };
+}
+
+function contextReadsToWire(reads: ContextReads): Record<string, unknown> {
+  return { named: reads.named, read: reads.read, unread: reads.unread, extra: reads.extra, ...(reads.truncated ? { truncated: true } : {}) };
+}
+
+function isExecutedRead(event: SupervisorEvent): boolean {
+  return event.type === "tool_call" && event.data.outcome === "executed" && event.data.kind === "read" && typeof event.data.path === "string" && event.data.path.length > 0;
+}
 
 function isWriteEvidence(event: SupervisorEvent): boolean {
   if (event.type !== "tool_call" && event.type !== "tool_call_update") return false;

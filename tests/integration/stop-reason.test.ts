@@ -148,14 +148,26 @@ describe("stop reason reporting", () => {
     } finally { await manager.shutdown(); }
   });
 
-  it("leaves an end_turn completion unchanged", async () => {
+  it("leaves an end_turn review answer unchanged", async () => {
+    const { source, manager, backend } = await setup();
+    try {
+      const runId = await runningReview(manager, source);
+      await backend.callbacks?.onState("completed", { result: { stopReason: "end_turn", summary: "No issues found." } });
+      const compact = await manager.result({ run_id: runId });
+      expect(compact.summary).toBe("No issues found.");
+      expect(compact.warnings).toEqual([]);
+    } finally { await manager.shutdown(); }
+  });
+
+  it("says that an end_turn review without answer text has no answer instead of the generic completion sentence", async () => {
     const { source, manager, backend } = await setup();
     try {
       const runId = await runningReview(manager, source);
       await backend.callbacks?.onState("completed", { result: { stopReason: "end_turn" } });
       const compact = await manager.result({ run_id: runId });
-      expect(compact.summary).toBe(COMPLETED);
-      expect(compact.warnings).toEqual([]);
+      expect(compact.summary).not.toBe(COMPLETED);
+      expect(compact.summary).toMatch(/^The review ended without a final answer/);
+      expect(compact.warnings).toEqual(["The review returned no final answer text, so there is no review to use."]);
     } finally { await manager.shutdown(); }
   });
 

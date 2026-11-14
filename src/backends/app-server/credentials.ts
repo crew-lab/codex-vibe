@@ -153,3 +153,13 @@ export async function resolveCredential(options: ResolveCredentialOptions = {}):
     maxOutputBytes: options.maxOutputBytes ?? MAX_KEYCHAIN_OUTPUT_BYTES,
   });
 }
+
+export interface CredentialPresence {
+  status: 'present' | 'absent' | 'unknown';
+  source: string;
+}
+
+export function environmentCredentialPresence(environment: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): CredentialPresence {
+  if (environment[CREDENTIAL_ENV]) return { status: 'present', source: 'environment' };
+  return platform === 'darwin' ? { status: 'unknown', source: 'keychain-not-checked' } : { status: 'absent', source: 'skipped-platform' };
+}

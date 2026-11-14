@@ -15,7 +15,7 @@ export type RunMode = "review" | "edit";
 export type RunState =
   | "starting" | "running" | "awaiting_validation" | "completed" | "failed"
   | "cancelled" | "closing" | "closed";
-export type RunExecutionState = Extract<RunState, "completed" | "failed" | "cancelled">;
+export type RunExecutionState = Extract<RunState, "completed" | "failed" | "cancelled"> | "not_started";
 export type EventSeverity = "debug" | "info" | "warning" | "error";
 export type EventSource = "supervisor" | "vibe" | "antigravity";
 
@@ -141,6 +141,14 @@ export interface FindingsArtifact {
   };
 }
 
+export interface ContextReads {
+  named: number;
+  read: string[];
+  unread: string[];
+  extra: string[];
+  truncated?: true;
+}
+
 export interface ResultSummary {
   stopReason?: string;
   summary?: string;
@@ -149,6 +157,8 @@ export interface ResultSummary {
   warnings?: string[];
   integrity?: ReviewIntegrity;
   findings?: FindingsArtifact["summary"];
+  contextReads?: ContextReads;
+  answerPresent?: boolean;
 }
 
 export interface SupervisorError {
@@ -309,6 +319,7 @@ export interface BackendCallbacks {
   onEvent(event: Omit<SupervisorEvent, "schemaVersion" | "seq" | "timestamp" | "runId" | "backend">): void | Promise<void>;
   onActivity?(kind: string): void;
   onSpawn?(handle: BackendRunHandle): void;
+  onPromptSent?(): void;
   onState(state: RunState, update?: BackendStateUpdate): void | Promise<void>;
 }
 
@@ -318,7 +329,19 @@ export interface BackendStartResult {
   process?: ProcessRecord;
 }
 
+export type CredentialAvailability = "present" | "absent" | "unknown";
+
+export type AdmissionStage = "readiness" | "start";
+
+export interface BackendAdmission {
+  credential: { status: CredentialAvailability; source: string };
+  pin: "verified" | "version_matches" | "failed" | "not_applicable";
+  blockers: SupervisorError[];
+}
+
 export interface SupervisorBackend {
+  admissionCheck?(stage: AdmissionStage): Promise<BackendAdmission>;
+  releaseAdmission?(): void;
   preparationCheck?(): Promise<import("./preparation/evidence.js").PreparationStatus>;
   readonly kind: BackendKind;
   probe(): Promise<BackendCapabilities>;

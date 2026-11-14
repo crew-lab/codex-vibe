@@ -5,7 +5,7 @@ import { constants as fsConstants } from 'node:fs';
 import { access, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type {
-  ApprovalLedgerEntry, ApprovalLedgerSnapshot, BackendCallbacks, BackendCapabilities, BackendKind, BackendRunHandle, BackendStartResult, EventSeverity,
+  AdmissionStage, ApprovalLedgerEntry, ApprovalLedgerSnapshot, BackendAdmission, BackendCallbacks, BackendCapabilities, BackendKind, BackendRunHandle, BackendStartResult, EventSeverity,
   PinIdentity, ProcessRecord, ResultSummary, RuntimeCheck, StartRunInput, SupervisorBackend, SupervisorConfig, SupervisorError, SupervisorErrorCode, ToolCallCounts
 } from '../contracts.js';
 import { MAX_APPROVAL_LEDGER_RECORDS, supervisorError } from '../contracts.js';
@@ -21,7 +21,7 @@ import { redactSecrets, StreamingRedactor } from '../security/redaction.js';
 import { APP_VERSION } from '../version.js';
 import { buildTaskPrompt, promptTakesListing } from '../core/task-prompt.js';
 import { ApprovalHandler, isWriteTool, type ApprovalHandlerOptions, type ApprovalRecord, type PendingApproval } from './app-server/approvals.js';
-import { resolveCredential, type CredentialResolution, type ResolvedCredential } from './app-server/credentials.js';
+import { environmentCredentialPresence, resolveCredential, type CredentialResolution, type ResolvedCredential } from './app-server/credentials.js';
 import { EventProcessor, auditSessionHistory, unfinishedEffectFatal, type EffectRecord, type EventFatal, type EventSignal, type HistoryAudit } from './app-server/events.js';
 import {
   JsonRpcClient, JsonRpcClosedError, JsonRpcFatalError, JsonRpcServerError, JsonRpcTimeoutError,
@@ -106,6 +106,7 @@ export interface AppServerBackendOptions {
   expectedServerVersion?: string;
   pin?: { manifestPath?: string; verify?: (executable: string) => Promise<unknown> };
   resolveCredential?: () => Promise<CredentialResolution>;
+  credentialEnvironment?: { environment: NodeJS.ProcessEnv; platform: NodeJS.Platform };
   approvals?: { deadlineMs?: number; evaluate?: ApprovalHandlerOptions['evaluate'] };
   budgets?: BudgetCeilings;
   listing?: Partial<ListingLimits>;
@@ -540,6 +541,7 @@ class AppServerRun {
 
   private async beginTurn(): Promise<void> {
     this.turnStarting = true;
+    this.callbacks.onPromptSent?.();
     if (this.wireTrace) this.traceWire('turn_start_requested');
     const started = await this.rpc(buildTurnStart(this.sessionId, buildTaskPrompt(this.input, this.listing.text)), parseTurnStartResult, this.startupTimeout());
     if (this.startAbort) throw this.startAbort;
@@ -1056,6 +1058,10 @@ class AppServerRun {
   }
 }
 
+function missingMistralCredential(status: string, detail?: string): SupervisorError {
+  return supervisorError('VSUP_AUTH_REQUIRED', 'No Mistral credential was found for the Vibe app-server.', { credential_status: status, ...(detail ? { detail } : {}) });
+}
+
 export async function resolveAppServerExecutable(config: SupervisorConfig, override?: string): Promise<string> {
   const configured = override ?? config.paths?.appServer;
   if (configured) return path.isAbsolute(configured) ? configured : resolveCommand(configured, process.env);
@@ -1074,6 +1080,7 @@ export class AppServerBackend implements SupervisorBackend {
   readonly kind: BackendKind = BACKEND_KIND;
   private readonly timing: AppServerTiming;
   private readonly runOptions: AppServerBackendOptions;
+  private admittedCredential: ResolvedCredential | undefined;
 
   constructor(private readonly config: SupervisorConfig, private readonly options: AppServerBackendOptions = {}) {
     this.timing = { ...DEFAULT_APP_SERVER_TIMING, ...options.timing };
@@ -1109,6 +1116,55 @@ export class AppServerBackend implements SupervisorBackend {
     throw new PinCheckError('manifest-unreadable', 'No pin manifest is configured, so the installed Vibe cannot be verified. Set paths.vibe_pin_manifest in the selected config to an absolute path, write the manifest there with `vibe-supervisor pin-manifest`, and restart the server.');
   }
 
+  private async verifiedLaunchTarget(): Promise<VerifiedPin> {
+    let executable: string;
+    try { executable = await this.appServerExecutable(); }
+    catch { throw supervisorError('VSUP_VIBE_NOT_FOUND', 'The vibe-app-server executable could not be located next to the configured Vibe.'); }
+    try { return await this.verifyPin(executable); }
+    catch (error) { throw toSupervisorError(error, []); }
+  }
+
+  private async manifestMatchesInstall(): Promise<void> {
+    let executable: string;
+    try { executable = await this.appServerExecutable(); }
+    catch { throw supervisorError('VSUP_VIBE_NOT_FOUND', 'The vibe-app-server executable could not be located next to the configured Vibe.'); }
+    try {
+      if (this.options.pin?.verify) { await this.verifyPin(executable); return; }
+      const manifestPath = this.options.pin?.manifestPath ?? this.config.paths?.vibePinManifest;
+      if (!manifestPath) throw new PinCheckError('manifest-unreadable', 'No pin manifest is configured, so the installed Vibe cannot be verified. Set paths.vibe_pin_manifest in the selected config to an absolute path, write the manifest there with `vibe-supervisor pin-manifest`, and restart the server.');
+      const located = await locateEnvironment(executable, this.expectedVersion());
+      const manifest = parsePinManifest((await readPinManifestBytes(manifestPath, DEFAULT_PIN_LIMITS)).toString('utf8'));
+      if (manifest.version !== located.version) throw new PinCheckError('manifest-version-mismatch', `The pin manifest is for ${manifest.version}, not the installed ${located.version}.`, { manifest: manifest.version, expected: located.version });
+    } catch (error) { throw toSupervisorError(error, []); }
+  }
+
+  private async startCredential(): Promise<CredentialResolution> {
+    const resolution = await (this.options.resolveCredential ?? resolveCredential)();
+    this.admittedCredential = resolution.credential;
+    return resolution;
+  }
+
+  async admissionCheck(stage: AdmissionStage): Promise<BackendAdmission> {
+    const blockers: SupervisorError[] = [];
+    let pin: BackendAdmission['pin'] = stage === 'start' || this.options.pin?.verify ? 'verified' : 'version_matches';
+    try { await (stage === 'start' ? this.verifiedLaunchTarget() : this.manifestMatchesInstall()); }
+    catch (error) { pin = 'failed'; blockers.push(toSupervisorError(error, [])); }
+    if (stage === 'readiness') {
+      const { environment, platform } = this.options.credentialEnvironment ?? { environment: process.env, platform: process.platform };
+      const credential = environmentCredentialPresence(environment, platform);
+      if (credential.status === 'absent') blockers.push(missingMistralCredential(credential.source));
+      return { credential, pin, blockers };
+    }
+    if (blockers.length > 0) return { credential: { status: 'unknown', source: 'not-checked' }, pin, blockers };
+    const resolution = await this.startCredential();
+    if (!resolution.credential) blockers.push(missingMistralCredential(resolution.status, resolution.detail));
+    return { credential: { status: resolution.credential ? 'present' : 'absent', source: resolution.status }, pin, blockers };
+  }
+
+  releaseAdmission(): void {
+    this.admittedCredential = undefined;
+  }
+
   async probe(): Promise<BackendCapabilities> {
     let executable: string | undefined;
     try {
@@ -1134,7 +1190,7 @@ export class AppServerBackend implements SupervisorBackend {
     const command = this.options.executable ?? this.config.paths?.vibe ?? 'vibe';
     const minimumVersion = this.expectedVersion();
     const pinnedVersion = await this.manifestVersion();
-    const note = `Vibe was not launched. The app-server executable is resolved only; pinned_version is the version the pin manifest records${pinnedVersion === null ? ', and no readable manifest is configured' : ''}. The minimum version ${minimumVersion}, actual installed version and installed files are verified when a run starts and drift fails that run closed.`;
+    const note = `Vibe was not launched. The app-server executable is resolved only; pinned_version is the version the pin manifest records${pinnedVersion === null ? ', and no readable manifest is configured' : ''}. Readiness compares the pin manifest's version with the installed package metadata (admission.pin is version_matches); the minimum version ${minimumVersion} and the installed files are hashed and verified only when a run starts, before its attempt is consumed, and drift refuses that start.`;
     const versions = { pinned_version: pinnedVersion, minimum_version: minimumVersion, version_verified: false as const, note };
     try {
       const resolved = await this.appServerExecutable();
@@ -1146,18 +1202,13 @@ export class AppServerBackend implements SupervisorBackend {
   }
 
   async start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult> {
-    let executable: string;
-    try { executable = await this.appServerExecutable(); }
-    catch { throw supervisorError('VSUP_VIBE_NOT_FOUND', 'The vibe-app-server executable could not be located next to the configured Vibe.'); }
-    let verified: VerifiedPin;
-    try { verified = await this.verifyPin(executable); }
-    catch (error) { throw toSupervisorError(error, []); }
+    const verified = await this.verifiedLaunchTarget();
     const preparation = await this.preparationCheck();
     if (preparation.status !== 'passed') throw supervisorError('VSUP_INVALID_STATE', 'Matching candidate conformance is required before dispatch. Run prepare check with the version-matched kit.', { preparation });
-    const resolution = await (this.options.resolveCredential ?? resolveCredential)();
-    if (!resolution.credential) {
-      throw supervisorError('VSUP_AUTH_REQUIRED', 'No Mistral credential was found for the Vibe app-server.', { credential_status: resolution.status, ...(resolution.detail ? { detail: resolution.detail } : {}) });
-    }
+    const admitted = this.admittedCredential;
+    this.admittedCredential = undefined;
+    const resolution: CredentialResolution = admitted ? { status: 'environment', detail: '', credential: admitted } : await (this.options.resolveCredential ?? resolveCredential)();
+    if (!resolution.credential) throw missingMistralCredential(resolution.status, resolution.detail);
     let plan: SessionConfigPlan;
     let anchors: ReturnType<typeof workspaceAnchors>;
     try {
