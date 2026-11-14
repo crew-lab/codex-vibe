@@ -1,0 +1,19 @@
+No. orderTotal does not compute the total exactly as README.md "Order total" rules 1 to 5 require. Two defects: tax is taken on the undiscounted subtotal (rule 3), and free shipping uses a strict > instead of >= 5000 (rule 4).
+
+Input 1: one line 1000 cents x 1, discount 10%
+Expected: tax 180, shipping 499, total 1579
+Actual: tax 200, shipping 499, total 1599
+
+Input 2: one line 2500 cents x 2, no discount
+Expected: tax 1000, shipping 0, total 6000
+Actual: tax 1000, shipping 499, total 6499
+
+Input 3: one line 3000 cents x 2, discount 50%
+Expected: tax 600, shipping 0, total 3600
+Actual: tax 1200, shipping 0, total 4200
+
+Finding 1: src/cart.mjs, orderTotal, line 69 (`const tax = percentOf(gross, TAX_PERCENT);`). Triggered by inputs 1 and 3, where a discount is applied. Tax must be 20% of the discounted subtotal (rule 3), but the code uses the gross subtotal. Tax is overstated by 20 cents on input 1 and by 600 cents on input 3, so the total is too high by the same amounts.
+
+Finding 2: src/cart.mjs, shippingFor, line 63 (`subtotalCents > FREE_SHIPPING_FROM_CENTS`). Triggered by input 2, where the subtotal is exactly 5000. Rule 4 makes shipping free when the subtotal is at least 5000, but the strict comparison charges 499 at exactly 5000. Shipping is overcharged by 499 cents and the total is 6499 instead of 6000.
+
+Inputs 1 to 3 otherwise follow the code as written: the discount is percentOf(gross, discountPercent) with round-to-nearest, and shipping uses gross, which matches rule 4.

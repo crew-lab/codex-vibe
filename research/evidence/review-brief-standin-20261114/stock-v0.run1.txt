@@ -1,0 +1,9 @@
+Conclusion: no defect found in the inspected scope. reserve and release in src/inventory.mjs meet the README "Stock" section for all three inputs, and each throws before any change to the stock.
+
+Inputs:
+
+1. reserve, 6 of a SKU with 5 available. entryFor (line 64) finds the entry. Line 65: 6 > 5 is true, so it throws RangeError "only 5 of <sku> available". Lines 66-67 are not reached, so available stays 5 and reserved is unchanged. README requires RangeError for fewer available and no change on throw. Met.
+
+2. release, 2 of a SKU with 1 reserved. entryFor (line 71) finds the entry. Line 72: 2 > 1 is true, so it throws RangeError "only 1 of <sku> reserved". Lines 73-74 are not reached, so reserved and available are unchanged. README requires RangeError when more than reserved is released and no change on throw. Met.
+
+3. reserve, 1 of an unknown SKU. entryFor (line 59) finds no entry in the Map and throws UnknownSkuError(sku) from src/errors.mjs. Nothing is changed. README requires UnknownSkuError for an unknown SKU and no change on throw. Met.

@@ -1,0 +1,16 @@
+Conclusion: orderTotal does not match README "Order total" rules 1 to 5. It has two defects: tax is taken on the undiscounted subtotal (rule 3), and free shipping starts only above 5000 cents instead of at 5000 (rule 4). Input 2 hits the boundary; inputs 1 and 3 hit the tax defect.
+
+Input 1: 1000 cents x 1 with a 10% discount
+Expected: tax 180, shipping 499, total 1579
+Actual: tax 200, shipping 499, total 1599
+Finding: src/cart.mjs, orderTotal, line 69. tax = percentOf(gross, TAX_PERCENT) uses the gross subtotal (1000) instead of the discounted subtotal (900). Rule 3 requires 20% of the discounted subtotal, so tax is 200 where 180 is required, and the total is 20 cents too high.
+
+Input 2: 2500 cents x 2 with no discount (subtotal exactly 5000)
+Expected: tax 1000, shipping 0, total 6000
+Actual: tax 1000, shipping 499, total 6499
+Finding: src/cart.mjs, shippingFor, line 63. The test is subtotalCents > 5000, so 5000 returns SHIPPING_CENTS (499). Rule 4 says free when the subtotal is at least 5000, so the boundary value must return 0. Shipping is charged 499 where 0 is required.
+
+Input 3: 3000 cents x 2 with a 50% discount
+Expected: tax 600, shipping 0, total 3600
+Actual: tax 1200, shipping 0, total 4200
+Finding: src/cart.mjs, orderTotal, line 69, same cause as Input 1. Tax is 20% of the gross 6000 (1200) instead of the discounted 3000 (600), so the total is 600 too high. Shipping is correct: 6000 is above the threshold.

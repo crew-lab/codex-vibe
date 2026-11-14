@@ -1,0 +1,18 @@
+No defect found in the inspected scope. `reserve` and `release` in src/inventory.mjs meet the README.md "Stock" rules for all three inputs.
+
+Inputs traced:
+
+1. reserve, quantity 6, SKU with 5 available
+   - src/inventory.mjs `reserve`: entryFor returns the entry (line 64). Line 65 `6 > 5` is true, so it throws RangeError("only 5 of <sku> available").
+   - Lines 66-67 never run, so available stays 5 and reserved is unchanged.
+   - Matches README: RangeError for too few available, no change when it throws.
+
+2. release, quantity 2, SKU with 1 reserved
+   - src/inventory.mjs `release`: entryFor returns the entry (line 71). Line 72 `2 > 1` is true, so it throws RangeError("only 1 of <sku> reserved").
+   - Lines 73-74 never run, so reserved stays 1 and available is unchanged.
+   - Matches README: RangeError when more than the reserved quantity is released, no change when it throws.
+
+3. reserve, quantity 1, unknown SKU
+   - src/inventory.mjs `entryFor` (line 59): stock.get returns undefined, so it throws UnknownSkuError(sku), defined in src/errors.mjs.
+   - The throw happens before any mutation in `reserve`, so the stock is unchanged.
+   - Matches README: UnknownSkuError for an unknown SKU, no change when it throws.

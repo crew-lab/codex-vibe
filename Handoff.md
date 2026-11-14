@@ -86,7 +86,7 @@ Both checks used candidate `6717dfd56b15580217e875f80423b5373a48ac966ae4c137a383
 
 **Why the reviews failed, as far as it can be seen from here.** The exact worker input was given to small stand-in models and scored by the pack's checker. On the old `review-total` brief only 1 of 3 passed although all three found both defects with every number right: the answer layout and the checker's wording patterns failed them. One stand-in also slipped on a single addition. The brief asked a worker that cannot run code for nine exact numbers and scored the layout. This is a floor test of the brief, not proof for Vibe: the stand-ins passed `review-stock` on the old brief where Vibe did not.
 
-- **Review briefs.** `review-total` now gives the totals observed by running the code, asks for the working first and returns a fill-in form; `review-stock` asks for one evidence line per input. Both ask for the wrong source line quoted exactly. With the stand-ins: 5 of 5 on `review-total`, 2 of 2 on `review-stock`.
+- **Review briefs.** `review-total` now gives the totals observed by running the code, asks for the working first and returns a fill-in form; `review-stock` asks for one evidence line per input. Both ask for the wrong source line quoted exactly. With the stand-ins: 5 of 5 on `review-total`, 4 of 4 on `review-stock` ([answers and scores](research/evidence/review-brief-standin-20261114/README.md)).
 - **Checker.** `review-total` reads only the filled-in form and no longer counts the same headings in the working. Its details quote the nearest line when a value line is malformed. Scores from before this change are not comparable.
 - **Checks before the grant.** Readiness reports the credential's status, the pin manifest and preparation as blockers. Every start checks the credential, verifies the installed files and rechecks preparation before the grant is spent; a refused start leaves the grant usable. A launch that fails before the task is sent is `not_started`.
 - **Review results show what was read:** `context_reads`, tool-call counts, and warnings for unread named files, an empty answer or a missing findings block.
@@ -95,10 +95,10 @@ Both checks used candidate `6717dfd56b15580217e875f80423b5373a48ac966ae4c137a383
 
 ## Next
 
-1. **Re-score what already exists.** With `main` checked out, run `node scripts/quality-pack.mjs check review-total --answer <file>` and `check review-stock --answer <file>` on the answers saved from the 30 earlier runs, and commit the outputs. This costs no inference and shows how many failures were layout and how many were wrong values.
+1. **Re-score what already exists, if the earlier answers can still be read.** For each of the 30 earlier review runs, print the run with `vibe-supervisor runs show <run-id>`, save its `result.summary` to a text file, and run `node scripts/quality-pack.mjs check review-total --answer <file>` or `check review-stock --answer <file>` on `main`. Commit the answer files and the check outputs; they quote only the pack's fixture. `runs export --include answer` cannot be used for these older runs, because they predate the record of whether the summary is the worker's own answer. This costs no inference and shows how many failures were layout and how many were wrong values. If the runs are gone, say so and skip this step.
 2. **Confirm thinking really ran.** For one earlier thinking-high review, report the recorded thinking level and the `reasoning_observation` counts from its export. An identical 0 of 5 with thinking off and high is worth explaining.
 3. **Build `main`,** install it and run `prepare check`. Its output now names the report path and any failing finding.
-4. **Reviews, five runs each on the new briefs,** with the default configuration. After each run:
+4. **Reviews, five runs each on the new briefs,** with the default configuration. Build each request with `node scripts/quality-pack.mjs request <task-id> --cwd <fixture-directory>` and send its task text unchanged: `record` accepts a run only when its task text is byte-identical to the pack's. After each run:
 
    ```bash
    vibe-supervisor runs export <run-id> --out <new-directory> --include answer

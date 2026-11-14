@@ -1,0 +1,22 @@
+Conclusion: No. orderTotal does not follow README "Order total" rules 3 and 4. Tax is computed on the gross subtotal instead of the discounted subtotal, and free shipping uses a strict comparison, so a subtotal of exactly 5000 is charged shipping.
+
+Input 1: one line 1000 cents x 1, discount 10%
+Expected: tax 180, shipping 499, total 1579
+Actual: tax 200, shipping 499, total 1599
+Decided by src/cart.mjs line 69 (tax = percentOf(gross, 20)), which ignores the discount.
+
+Input 2: one line 2500 cents x 2 (subtotal 5000), no discount
+Expected: tax 1000, shipping 0, total 6000
+Actual: tax 1000, shipping 499, total 6499
+Decided by src/cart.mjs line 63 (subtotal > 5000), where rule 4 requires at least 5000.
+
+Input 3: one line 3000 cents x 2 (subtotal 6000), discount 50%
+Expected: tax 600, shipping 0, total 3600
+Actual: tax 1200, shipping 0, total 4200
+Decided by src/cart.mjs line 69 again; the discounted subtotal is 3000 and tax should be 20% of it.
+
+Findings:
+1. src/cart.mjs, orderTotal, line 69: tax uses gross, not the discounted subtotal. Violates README rule 3. Triggered by inputs 1 and 3.
+2. src/cart.mjs, shippingFor, line 63: uses ">" where README rule 4 requires "at least" (">="). Triggered by input 2.
+
+Not defects: the discount on line 68 (gross minus percentOf(gross, discount)) matches rule 2, and the subtotal on line 59 matches rule 1. The total on line 70 matches rule 5 once tax and shipping are correct.

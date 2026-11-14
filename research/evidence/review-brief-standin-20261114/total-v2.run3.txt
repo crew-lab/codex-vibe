@@ -1,0 +1,31 @@
+No: orderTotal does not follow README "Order total" rules 3 and 4. It returns 1599, 6499 and 4200, but the rules give 1579, 6000 and 3600.
+
+Working
+
+Input 1: 1000 cents x 1, 10% discount
+- Code: gross = 1000. discounted = 1000 - round(1000*10/100) = 1000 - 100 = 900. tax = round(1000*20/100) = 200 (line 80, taxes gross). shippingFor(1000): 1000 > 5000 is false, so 499. total = 900 + 200 + 499 = 1599. Matches the observed value.
+- README: gross = 1000. discounted = 900. tax = round(900*20/100) = 180. shipping: 1000 >= 5000 is false, so 499. total = 900 + 180 + 499 = 1579.
+
+Input 2: 2500 cents x 2, no discount
+- Code: gross = 5000. discounted = 5000. tax = 1000. shippingFor(5000): 5000 > 5000 is false, so 499. total = 5000 + 1000 + 499 = 6499. Matches the observed value.
+- README: gross = 5000. discounted = 5000. tax = 1000. shipping: 5000 >= 5000 is true, so 0. total = 5000 + 1000 + 0 = 6000.
+- Threshold check: 4999 gives 499 in both; 5000 gives 499 in the code and 0 in the README; 5001 gives 0 in both.
+
+Input 3: 3000 cents x 2, 50% discount
+- Code: gross = 6000. discount = round(6000*50/100) = 3000, discounted = 3000. tax = round(6000*20/100) = 1200. shippingFor(6000): 6000 > 5000 is true, so 0. total = 3000 + 1200 + 0 = 4200. Matches the observed value.
+- README: gross = 6000. discounted = 3000. tax = round(3000*20/100) = 600. shipping: 6000 >= 5000 is true, so 0. total = 3000 + 600 + 0 = 3600.
+
+Check: discounted + code tax + code shipping equals the observed totals for all three inputs (900+200+499, 5000+1000+499, 3000+1200+0).
+
+Input 1: 1000 cents x 1 with a 10% discount
+Expected: tax 180, shipping 499, total 1579
+Actual: tax 200, shipping 499, total 1599
+Input 2: 2500 cents x 2 with no discount
+Expected: tax 1000, shipping 0, total 6000
+Actual: tax 1000, shipping 499, total 6499
+Input 3: 3000 cents x 2 with a 50% discount
+Expected: tax 600, shipping 0, total 3600
+Actual: tax 1200, shipping 0, total 4200
+
+Finding: src/cart.mjs, orderTotal, rule 3: `  const tax = percentOf(gross, TAX_PERCENT);` - taxes the undiscounted subtotal instead of the discounted one. Input 1 gives tax 200 instead of 180; input 3 gives tax 1200 instead of 600.
+Finding: src/cart.mjs, shippingFor, rule 4: `  return subtotalCents > FREE_SHIPPING_FROM_CENTS ? 0 : SHIPPING_CENTS;` - uses a strict comparison, so a subtotal of exactly 5000 cents pays 499 shipping instead of being free. Input 2 gives shipping 499 instead of 0, total 6499 instead of 6000.

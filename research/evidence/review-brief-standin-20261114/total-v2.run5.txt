@@ -1,0 +1,38 @@
+Conclusion: no, `orderTotal` does not follow README "Order total" rules 1 to 5. It taxes the undiscounted subtotal (rule 3) and uses a strict `>` in `shippingFor` where rule 4 needs `>=`; the observed totals 1599, 6499 and 4200 match the code, not the README.
+
+Working
+
+Input 1: 1000 cents x 1, 10% discount
+- Subtotal: README 1000; code 1000 x 1 = 1000.
+- Discount: README 10% of 1000 = 100, discounted 900; code percentOf(1000, 10) = Math.round(10000 / 100) = 100, discounted 900.
+- Tax: README 20% of discounted 900 = 180; code percentOf(gross 1000, 20) = Math.round(20000 / 100) = 200 (line 80 uses gross, not discounted).
+- Shipping: README 1000 >= 5000 is false, so 499; code 1000 > 5000 is false, so 499.
+- Sum: README 900 + 180 + 499 = 1579; code 900 + 200 + 499 = 1599, which matches the observed 1599.
+
+Input 2: 2500 cents x 2, no discount
+- Subtotal: README 5000; code 2500 x 2 = 5000.
+- Discount: 0 in both, discounted 5000.
+- Tax: README 20% of 5000 = 1000; code percentOf(5000, 20) = 1000.
+- Shipping: README 5000 >= 5000 is true, so 0; code 5000 > 5000 is false, so 499 (line 74).
+- Sum: README 5000 + 1000 + 0 = 6000; code 5000 + 1000 + 499 = 6499, which matches the observed 6499.
+
+Input 3: 3000 cents x 2, 50% discount
+- Subtotal: README 6000; code 3000 x 2 = 6000.
+- Discount: README 50% of 6000 = 3000, discounted 3000; code percentOf(6000, 50) = 3000, discounted 3000.
+- Tax: README 20% of discounted 3000 = 600; code percentOf(gross 6000, 20) = 1200.
+- Shipping: README 6000 >= 5000 is true, so 0; code 6000 > 5000 is true, so 0.
+- Sum: README 3000 + 600 + 0 = 3600; code 3000 + 1200 + 0 = 4200, which matches the observed 4200.
+
+Input 1: 1000 cents x 1 with a 10% discount
+Expected: tax 180, shipping 499, total 1579
+Actual: tax 200, shipping 499, total 1599
+Input 2: 2500 cents x 2 with no discount
+Expected: tax 1000, shipping 0, total 6000
+Actual: tax 1000, shipping 499, total 6499
+Input 3: 3000 cents x 2 with a 50% discount
+Expected: tax 600, shipping 0, total 3600
+Actual: tax 1200, shipping 0, total 4200
+
+Finding: src/cart.mjs, orderTotal, rule 3: `const tax = percentOf(gross, TAX_PERCENT);` - taxes the undiscounted subtotal instead of the discounted one; input 1 gives tax 200 instead of 180 (total 1599 instead of 1579), and input 3 gives tax 1200 instead of 600 (total 4200 instead of 3600).
+
+Finding: src/cart.mjs, shippingFor, rule 4: `return subtotalCents > FREE_SHIPPING_FROM_CENTS ? 0 : SHIPPING_CENTS;` - the strict `>` charges 499 when the subtotal is exactly 5000, where rule 4 says "at least 5000" and shipping is free; input 2 (gross 5000) gives shipping 499 and total 6499 instead of 0 and 6000.

@@ -1,0 +1,5 @@
+No defect found in the inspected scope: reserve and release throw the error README.md "Stock" names for each failure and leave stock unchanged.
+Input 1: reserve(stock, sku, 6) with 5 available -> throws RangeError at src/inventory.mjs, reserve: if (quantity > entry.available) throw new RangeError(`only ${entry.available} of ${sku} available`); stock changed before the throw: no
+Input 2: release(stock, sku, 2) with 1 reserved -> throws RangeError at src/inventory.mjs, release: if (quantity > entry.reserved) throw new RangeError(`only ${entry.reserved} of ${sku} reserved`); stock changed before the throw: no
+Input 3: reserve(stock, unknown SKU, 1) -> throws UnknownSkuError at src/inventory.mjs, entryFor (called from reserve): if (!entry) throw new UnknownSkuError(sku); stock changed before the throw: no
+No defect found in the inspected scope.

@@ -1,0 +1,29 @@
+No: orderTotal does not follow README rules 3 and 4. It taxes the gross subtotal instead of the discounted one, and shippingFor uses a strict > where rule 4 requires >=.
+
+Working
+
+Rules as written (README):
+- Case 1: subtotal 1000; discount 10% of 1000 = 100; discounted 900; tax 20% of 900 = 180; shipping basis 1000 (before discount and tax) is below 5000, so 499; total 900 + 180 + 499 = 1579.
+- Case 2: subtotal 2500 x 2 = 5000; discount 0; discounted 5000; tax 20% of 5000 = 1000; shipping basis 5000 is at least 5000, so 0; total 5000 + 1000 + 0 = 6000.
+- Case 3: subtotal 3000 x 2 = 6000; discount 50% of 6000 = 3000; discounted 3000; tax 20% of 3000 = 600; shipping basis 6000 is at least 5000, so 0; total 3000 + 600 + 0 = 3600.
+
+Code as written (src/cart.mjs):
+- Case 1: gross = 1000; percentOf(1000, 10) = 100; discounted = 1000 - 100 = 900; tax = percentOf(gross 1000, 20) = 200 (line 74 uses gross); shippingFor(1000): 1000 > 5000 is false, so 499; total 900 + 200 + 499 = 1599.
+- Case 2: gross = 5000; percentOf(5000, 0) = 0; discounted = 5000; tax = percentOf(5000, 20) = 1000; shippingFor(5000): 5000 > 5000 is false, so 499; total 5000 + 1000 + 499 = 6500.
+- Case 3: gross = 6000; percentOf(6000, 50) = 3000; discounted = 3000; tax = percentOf(6000, 20) = 1200 (line 74 uses gross); shippingFor(6000): 6000 > 5000 is true, so 0; total 3000 + 1200 + 0 = 4200.
+
+Input 1: 1000 cents x 1 with a 10% discount
+Expected: tax 180, shipping 499, total 1579
+Actual: tax 200, shipping 499, total 1599
+
+Input 2: 2500 cents x 2 with no discount
+Expected: tax 1000, shipping 0, total 6000
+Actual: tax 1000, shipping 499, total 6500
+
+Input 3: 3000 cents x 2 with a 50% discount
+Expected: tax 600, shipping 0, total 3600
+Actual: tax 1200, shipping 0, total 4200
+
+Finding: src/cart.mjs, orderTotal, rule 3: `const tax = percentOf(gross, TAX_PERCENT);` - taxes the undiscounted subtotal instead of the discounted one; overstates tax by 20 cents on input 1 and by 600 cents on input 3.
+
+Finding: src/cart.mjs, shippingFor, rule 4: `return subtotalCents > FREE_SHIPPING_FROM_CENTS ? 0 : SHIPPING_CENTS;` - uses a strict > so a subtotal of exactly 5000 cents is charged 499 shipping instead of being free; input 2 shows it (total 6500 instead of 6000).
