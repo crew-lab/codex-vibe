@@ -7,10 +7,28 @@ import { realpath } from 'node:fs/promises';
 import { z } from 'zod';
 import { loadResolvedConfig } from '../config/config.js';
 import { runAntigravityPreparationCheck } from '../preparation/antigravity-prepare.js';
-import { candidateIdentity, packageRoot, preparationIdentity, receiptPath } from '../preparation/evidence.js';
+import { candidateIdentity, packageRoot, preparationComponents, preparationIdentity, receiptPath } from '../preparation/evidence.js';
 import { digest } from '../acceptance/schema.js';
 import { readOwnedFile } from '../reporting/private-files.js';
 import { atomicWriteJson } from '../persistence/atomic.js';
+import { publicValue } from '../reporting/export.js';
+const MAX_REPORTED_FINDINGS = 20;
+const MAX_FINDING_MESSAGE = 600;
+export interface ReportedFinding { code: string; message: string }
+export function failingFindings(report: unknown): ReportedFinding[] {
+  const findings = (report as { findings?: unknown } | null)?.findings;
+  if (!Array.isArray(findings)) return [];
+  const failing: ReportedFinding[] = [];
+  for (const entry of findings) {
+    if (failing.length >= MAX_REPORTED_FINDINGS) break;
+    if (!entry || typeof entry !== 'object') continue;
+    const item = entry as { level?: unknown; severity?: unknown; code?: unknown; id?: unknown; message?: unknown };
+    const code = item.code ?? item.id;
+    if ((item.level ?? item.severity) !== 'fail' || typeof code !== 'string' || typeof item.message !== 'string') continue;
+    failing.push(publicValue({ code, message: item.message.slice(0, MAX_FINDING_MESSAGE) }) as ReportedFinding);
+  }
+  return failing;
+}
 const manifestSchema = z.object({schema_version:z.literal(1),version:z.string(),candidate_sha256:z.string().regex(/^[a-f0-9]{64}$/),script_sha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
 export async function prepareCommand(args: string[]): Promise<unknown> {
   if(args[0] !== 'check') throw new Error('Usage: prepare check --kit <directory> --config <file>');
@@ -30,10 +48,11 @@ export async function prepareCommand(args: string[]): Promise<unknown> {
     if (await preparationIdentity(current.config, candidate) !== await preparationIdentity(preliminary.config, candidate)) {
       throw new Error('Candidate or configuration changed during check');
     }
-    return { status: out.status, candidate_sha256: out.candidate_sha256, hosted_acceptance: out.hosted_acceptance, report_sha256: out.report_sha256 };
+    return { status: out.status, candidate_sha256: out.candidate_sha256, hosted_acceptance: out.hosted_acceptance, report_sha256: out.report_sha256, report_path: out.report_path, findings: failingFindings(out.report) };
   }
   const resolved=await loadResolvedConfig({configPath:values.get('--config')!,requirePinManifest:true});
   const identity=await preparationIdentity(resolved.config,candidate);
+  const components=await preparationComponents(resolved.config,candidate);
   const temporary=await realpath(await mkdtemp(path.join(tmpdir(),'vsup-preparation-')));
   const output=path.join(temporary,'conformance.json');
   try {
@@ -42,7 +61,7 @@ export async function prepareCommand(args: string[]): Promise<unknown> {
     await createPrivateDir(reports);
     const started = Buffer.from(JSON.stringify({ result: 'incomplete', stage: 'no-inference-check-started', checked_at: new Date().toISOString() })+'\n');
     await createPrivateFile(path.join(reports, `${digest(started)}.json`), started, 'wx');
-    await atomicWriteJson(receiptPath(resolved.config), {schema_version:1,result:'failed',identity,checked_at:new Date().toISOString(),report_sha256:digest(started)});
+    await atomicWriteJson(receiptPath(resolved.config), {schema_version:1,result:'failed',identity,checked_at:new Date().toISOString(),report_sha256:digest(started),components});
     const status=await new Promise<number>((resolve,reject)=>{const child=spawn(process.execPath,argv,{stdio:['ignore','ignore','inherit'],env:{PATH:process.env.PATH,HOME:temporary,TMPDIR:temporary},timeout:180_000});child.once('error',reject);child.once('close',code=>resolve(code??1));});
     const bytes=await readOwnedFile(output,4*1024*1024);
     const report=JSON.parse(bytes.toString('utf8')) as {result?:string;network_observation?:{verdict?:string}};
@@ -51,7 +70,7 @@ export async function prepareCommand(args: string[]): Promise<unknown> {
     const passed=status===0&&report.result==='pass'&&report.network_observation?.verdict==='none-observed-control-validated';
     const savedReport = path.join(reports, `${digest(bytes)}.json`);
     try { await createPrivateFile(savedReport, bytes, 'wx'); } catch(error) { if((error as NodeJS.ErrnoException).code !== 'EEXIST' || digest(await readOwnedFile(savedReport)) !== digest(bytes)) throw error; }
-    await atomicWriteJson(receiptPath(resolved.config),{schema_version:1,result:passed?'passed':'failed',identity,checked_at:new Date().toISOString(),report_sha256:digest(bytes)});
-    return {status:passed?'passed':'failed',candidate_sha256:candidate,hosted_acceptance:'unverified',report_sha256:digest(bytes)};
+    await atomicWriteJson(receiptPath(resolved.config),{schema_version:1,result:passed?'passed':'failed',identity,checked_at:new Date().toISOString(),report_sha256:digest(bytes),components});
+    return {status:passed?'passed':'failed',candidate_sha256:candidate,hosted_acceptance:'unverified',report_sha256:digest(bytes),report_path:savedReport,findings:failingFindings(report)};
   } finally { await rm(temporary,{recursive:true,force:true}); }
 }

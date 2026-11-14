@@ -12,7 +12,11 @@ import { APP_VERSION } from '../version.js';
 export const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export interface PreparationStatus { status: 'passed' | 'failed' | 'missing' | 'stale'; candidate_sha256: string | null; version: string; reason: string }
 export const preparationStatusSchema = z.object({status:z.enum(['passed','failed','missing','stale']),candidate_sha256:z.string().regex(/^[a-f0-9]{64}$/).nullable(),version:z.string().max(128),reason:z.string().max(1000)}).strict();
-const receiptSchema = z.object({ schema_version: z.literal(1), result: z.enum(['passed','failed']), identity: z.string().regex(/^[a-f0-9]{64}$/), checked_at: z.string().datetime(), report_sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
+const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
+const componentsSchema = z.object({ candidate: sha256Schema, pin: sha256Schema, node_major: sha256Schema, policy: sha256Schema }).strict();
+export type PreparationComponents = z.infer<typeof componentsSchema>;
+const componentLabels: Record<keyof PreparationComponents, string> = { candidate: 'candidate', pin: 'pin', node_major: 'Node major version', policy: 'policy' };
+const receiptSchema = z.object({ schema_version: z.literal(1), result: z.enum(['passed','failed']), identity: z.string().regex(/^[a-f0-9]{64}$/), checked_at: z.string().datetime(), report_sha256: z.string().regex(/^[a-f0-9]{64}$/), components: componentsSchema.optional() }).strict();
 export async function candidateIdentity(root = packageRoot): Promise<string> {
   const files: [string,string][] = [];
   const walk = async (directory: string): Promise<void> => {
@@ -58,6 +62,25 @@ export async function preparationIdentity(config: SupervisorConfig, candidate?: 
   if (!pin) throw new Error('Pin manifest required');
   return digest(canonical({ candidate, pin_sha256: digest(await readOwnedFile(await realpath(pin), 4*1024*1024)), policy, platform: process.platform, arch: process.arch, node_major: nodeMajor(nodeVersion) }));
 }
+export async function preparationComponents(config: SupervisorConfig, candidate?: string, nodeVersion: string = process.versions.node): Promise<PreparationComponents> {
+  candidate ??= await candidateIdentity();
+  const pinFile = config.backend === 'antigravity'
+    ? await readFile(await resolveExecutableFile(config.paths?.antigravity ?? 'agy'))
+    : await readOwnedFile(await realpath(requiredPin(config)), 4*1024*1024);
+  return { candidate, pin: digest(pinFile), node_major: digest(nodeMajor(nodeVersion)), policy: digest(canonical({ ...config, allowedWorkspaceRoots: [] })) };
+}
+function requiredPin(config: SupervisorConfig): string {
+  const pin = config.paths?.vibePinManifest;
+  if (!pin) throw new Error('Pin manifest required');
+  return pin;
+}
+function staleReason(receipt: z.infer<typeof receiptSchema>, current: PreparationComponents | null): string {
+  const had = `the stale receipt had ${receipt.result}`;
+  if (!receipt.components || !current) return `Candidate, pin, runtime or policy changed; ${had}`;
+  const changed = (Object.keys(componentLabels) as (keyof PreparationComponents)[]).filter((key) => receipt.components![key] !== current[key]).map((key) => componentLabels[key]);
+  if (changed.length === 0) return `Candidate, pin, runtime or policy changed; ${had}`;
+  return `${changed.join(', ')} changed since the last check; ${had}; run prepare check again`;
+}
 export async function checkPreparation(config: SupervisorConfig, dataDirOverride?: string): Promise<PreparationStatus> {
   let candidate: string | null = null;
   try {
@@ -68,7 +91,10 @@ export async function checkPreparation(config: SupervisorConfig, dataDirOverride
     const reportFile = path.join(path.dirname(targetReceiptPath), 'preparation-reports', `${receipt.report_sha256}.json`);
     const reportIntact = await readOwnedFile(reportFile, 4*1024*1024).then((bytes) => digest(bytes) === receipt.report_sha256, () => false);
     if (!reportIntact) return {status:'stale',candidate_sha256:candidate,version:APP_VERSION,reason:'The receipt exists but its saved preparation report is missing or changed; run prepare check again'};
-    if (receipt.identity !== identity) return {status:'stale',candidate_sha256:candidate,version:APP_VERSION,reason:'Candidate, pin, runtime or policy changed'};
+    if (receipt.identity !== identity) {
+      const current = receipt.components ? await preparationComponents(config, candidate).catch(() => null) : null;
+      return {status:'stale',candidate_sha256:candidate,version:APP_VERSION,reason:staleReason(receipt,current)};
+    }
     return {status:receipt.result,candidate_sha256:candidate,version:APP_VERSION,reason:'Version-matched no-inference evidence; hosted acceptance remains separate'};
   } catch(error) {
     const failure = error as NodeJS.ErrnoException & { details?: { reason?: string } };

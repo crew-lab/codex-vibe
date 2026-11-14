@@ -22,7 +22,7 @@ import { publicValue } from '../reporting/export.js';
 import { denylistAnchors, workspaceAnchors } from '../security/globs.js';
 import { pathWithPrefix, setupHeadlessBrowserNeutralizer } from '../security/environment.js';
 import { createPrivateDir, createPrivateFile } from '../security/paths.js';
-import { candidateIdentity, preparationIdentity, receiptPath } from './evidence.js';
+import { candidateIdentity, preparationComponents, preparationIdentity, receiptPath, type PreparationComponents } from './evidence.js';
 import {
   isInferenceHost,
   NO_INFERENCE_GOOGLE_API_KEY,
@@ -260,6 +260,7 @@ export async function runAntigravityPreparationCheck(
   candidate_sha256: string;
   hosted_acceptance: 'unverified';
   report_sha256: string;
+  report_path: string;
   report: AntigravityPreparationReport;
 }> {
   const candidate = await candidateIdentity();
@@ -268,10 +269,16 @@ export async function runAntigravityPreparationCheck(
   await createPrivateDir(reportsDir);
 
   let identity: string | null = null;
+  let components: PreparationComponents | undefined;
   try {
     identity = await preparationIdentity(config, candidate);
   } catch {
     identity = digest(`missing-pin:${candidate}:${new Date().toISOString()}`);
+  }
+  try {
+    components = await preparationComponents(config, candidate);
+  } catch {
+    components = undefined;
   }
 
   const startedPayload = Buffer.from(
@@ -292,7 +299,8 @@ export async function runAntigravityPreparationCheck(
     result: 'failed',
     identity,
     checked_at: new Date().toISOString(),
-    report_sha256: startedHash
+    report_sha256: startedHash,
+    components
   });
 
   const findings: Array<{ level: 'info' | 'fail'; code: string; message: string }> = [];
@@ -725,7 +733,8 @@ export async function runAntigravityPreparationCheck(
     result: passed ? 'passed' : 'failed',
     identity,
     checked_at: new Date().toISOString(),
-    report_sha256: reportSha256
+    report_sha256: reportSha256,
+    components
   });
 
   return {
@@ -733,6 +742,7 @@ export async function runAntigravityPreparationCheck(
     candidate_sha256: candidate,
     hosted_acceptance: 'unverified',
     report_sha256: reportSha256,
+    report_path: savedReportPath,
     report: sanitizedReport
   };
 }

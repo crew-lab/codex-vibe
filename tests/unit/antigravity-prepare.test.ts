@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { failingFindings } from '../../src/cli/prepare.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { antigravityPermissionsMatch, runAntigravityPreparationCheck } from '../../src/preparation/antigravity-prepare.js';
 import { WorkspacePathError } from '../../src/security/paths.js';
@@ -17,6 +18,7 @@ import {
   evaluateProjectConfig,
   evaluateProxyProbe,
   evaluateStreamShape,
+  evaluateStrictPermissionControl,
   isInferenceHost,
   plantedMarkersIn,
   scriptedGenerateResponse,
@@ -428,4 +430,53 @@ describe('Antigravity preparation probes through a fake agy', () => {
     expect(diagnostics?.result.arrived).toBe(true);
     expect(JSON.stringify(diagnostics).length).toBeLessThan(6000);
   }, 120_000);
+
+  it('names the strict-permission remedy only when the bypass is off and agy did not run the allowed read', async () => {
+    const strict = await prepareWith('no-function-response');
+    const strictCodes = strict.report.findings.map((f) => f.code);
+    expect(strictCodes).toContain('agy_strict_permissions_blocked_control_read');
+    expect(strict.report.findings.find((f) => f.code === 'agy_strict_permissions_blocked_control_read')?.message).toMatch(/antigravity_skip_permissions = true.*Vibe backend/);
+    const bypassed = await prepareWith('no-function-response', true);
+    expect(bypassed.report.findings.map((f) => f.code)).not.toContain('agy_strict_permissions_blocked_control_read');
+    expect(bypassed.status).toBe('failed');
+    expect(strictCodes).toEqual(expect.arrayContaining(['probe_control_not_executed']));
+  }, 120_000);
+
+  it('does not blame strict permissions when agy executed the read or the model was never reached', () => {
+    expect(evaluateStrictPermissionControl(evidence({ outcome: 'executed' }), false)).toEqual([]);
+    expect(evaluateStrictPermissionControl(evidence({ outcome: 'inconclusive', function_call_issued: false }), false)).toEqual([]);
+    expect(evaluateStrictPermissionControl(evidence({ outcome: 'inconclusive' }), true)).toEqual([]);
+    expect(evaluateStrictPermissionControl(evidence({ outcome: 'inconclusive' }), false)).toHaveLength(1);
+  });
+
+  it('returns the saved report path and the failing findings, and an empty list when the check passes', async () => {
+    const failed = await prepareWith('ignore-hooks');
+    expect(path.isAbsolute(failed.report_path)).toBe(true);
+    expect(failed.report_path.endsWith(`preparation-reports/${failed.report_sha256}.json`)).toBe(true);
+    expect(JSON.parse(await readFile(failed.report_path, 'utf8'))).toEqual(failed.report);
+    const findings = failingFindings(failed.report);
+    expect(findings.map((f) => f.code)).toEqual(expect.arrayContaining(['probe_control_hook_not_invoked', 'probe_deny_not_honoured']));
+    expect(findings.every((f) => Object.keys(f).sort().join() === 'code,message')).toBe(true);
+    const passed = await prepareWith('');
+    expect(passed.status).toBe('passed');
+    expect(path.isAbsolute(passed.report_path)).toBe(true);
+    expect(failingFindings(passed.report)).toEqual([]);
+  }, 120_000);
+
+  it('reads the failing findings of a Vibe conformance report, caps them and sanitizes paths', () => {
+    const report = {
+      result: 'fail',
+      findings: [
+        { id: 'config_mismatch', severity: 'fail', message: 'Read /Users/someone/project/secret.txt failed', run: 'a' },
+        { id: 'note', severity: 'warn', message: 'warning only' },
+        ...Array.from({ length: 40 }, (_, index) => ({ id: `extra_${index}`, severity: 'fail', message: 'x' }))
+      ]
+    };
+    const findings = failingFindings(report);
+    expect(findings).toHaveLength(20);
+    expect(findings[0]).toEqual({ code: 'config_mismatch', message: 'Read <private-path> failed' });
+    expect(findings.map((f) => f.code)).not.toContain('note');
+    expect(failingFindings({ result: 'pass', findings: [{ id: 'n', severity: 'info', message: 'm' }] })).toEqual([]);
+    expect(failingFindings({ result: 'pass' })).toEqual([]);
+  });
 });

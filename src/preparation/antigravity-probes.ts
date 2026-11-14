@@ -478,6 +478,11 @@ export function evaluateHookInvocation(control: ToolProbeEvidence, denyAll: Tool
   return findings;
 }
 
+export function evaluateStrictPermissionControl(control: ToolProbeEvidence, skipPermissions: boolean): ProbeFinding[] {
+  if (skipPermissions || control.outcome === 'executed' || !control.function_call_issued) return [];
+  return [{ level: 'fail', code: 'agy_strict_permissions_blocked_control_read', message: 'Headless agy did not run the allowed read under its own strict permissions. Either set [experimental] antigravity_skip_permissions = true, which makes the supervisor hook the only tool gate, or use the Vibe backend.' }];
+}
+
 export function evaluateHookFailureModes(variants: Record<HookFailureVariant, ToolProbeEvidence>): ProbeFinding[] {
   const findings: ProbeFinding[] = [];
   for (const variant of HOOK_FAILURE_VARIANTS) {
@@ -1024,7 +1029,7 @@ export async function runAgyProbes(options: {
     const control = await runToolProbe(context, 'control', path.join(root, 'ws-control'), { kind: 'policy' });
     const denyAll = await runToolProbe(context, 'deny_all', path.join(root, 'ws-deny_all'), { kind: 'variant', variant: 'deny_all' });
     const invocationFindings = evaluateHookInvocation(control.evidence, denyAll.evidence);
-    findings.push(...invocationFindings);
+    findings.push(...invocationFindings, ...evaluateStrictPermissionControl(control.evidence, context.skipPermissions));
     report.hook_invoked_and_deny_honoured = {
       result: invocationFindings.length === 0 ? 'pass' : 'fail',
       control: control.evidence,
