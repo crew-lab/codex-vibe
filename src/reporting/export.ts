@@ -124,9 +124,32 @@ async function diagnosticProjection(directory: string, record: RunRecord): Promi
   } catch { return { events: [], counts: {}, complete: false, gaps: 0 }; }
 }
 
-export async function exportReport(options: { directory: string; output: string; include?: readonly ('patch' | 'events')[]; validationFile?: string; verifyOnly?: boolean }): Promise<Record<string, unknown>> {
+function answerAsPatch(answer: string): string {
+  return ['diff --git a/answer b/answer', '--- a/answer', '+++ b/answer', '@@ -0,0 +1 @@', ...answer.split(/\r?\n/).map((line) => `+${line}`), ''].join('\n');
+}
+
+function recordedAnswerPresent(raw: unknown, record: RunRecord): boolean | undefined {
+  const wireResult = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>).result : undefined;
+  const wire = typeof wireResult === 'object' && wireResult !== null ? (wireResult as Record<string, unknown>).answer_present : undefined;
+  const typed = record.result as unknown as Record<string, unknown> | undefined;
+  const found = wire ?? typed?.answer_present ?? typed?.answerPresent;
+  return typeof found === 'boolean' ? found : undefined;
+}
+
+function recordedContextReads(raw: unknown, record: RunRecord): Record<string, unknown> | undefined {
+  const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+  const wireResult = isObject(raw) && isObject(raw.result) ? raw.result : undefined;
+  const typedResult = record.result as unknown as Record<string, unknown> | undefined;
+  const found = wireResult?.context_reads ?? typedResult?.context_reads ?? typedResult?.contextReads;
+  return isObject(found) ? found : undefined;
+}
+
+export async function exportReport(options: { directory: string; output: string; include?: readonly ('patch' | 'events' | 'answer')[]; validationFile?: string; verifyOnly?: boolean }): Promise<Record<string, unknown>> {
   await assertOwnedDirectory(options.directory);
-  const record = runFromWire(JSON.parse((await readOwnedFile(path.join(options.directory, 'meta.json'), 1024 * 1024)).toString('utf8')));
+  const rawRecord = JSON.parse((await readOwnedFile(path.join(options.directory, 'meta.json'), 1024 * 1024)).toString('utf8')) as unknown;
+  const record = runFromWire(rawRecord);
+  const contextReads = recordedContextReads(rawRecord, record);
+  const answerPresent = recordedAnswerPresent(rawRecord, record);
   if (!['awaiting_validation', 'completed', 'failed', 'cancelled', 'closed'].includes(record.state)) throw new Error('Only audited candidates and settled runs may be exported');
   const verification = await verifySaved(options.directory, record.acceptanceContract, record.limits.maxArtifactBytes);
   const patchArtifact = record.result?.artifacts?.find((item) => item.name === 'diff.patch');
@@ -149,7 +172,7 @@ export async function exportReport(options: { directory: string; output: string;
     ? assessments.find((item) => item.candidate_revision === record.candidateRevision && item.patch_sha256 === record.candidatePatchSha256)
     : assessments.at(-1);
   const report = publicValue({
-    schema_version: 1, report_version: 2, run_id: record.runId, supervisor_version: record.supervisorVersion ?? null, mode: record.mode,
+    schema_version: 1, report_version: 2, run_id: record.runId, supervisor_version: record.supervisorVersion ?? null, backend: record.backend, ...(answerPresent === undefined ? {} : { answer_present: answerPresent }), mode: record.mode,
     ...(record.mode === 'review' ? { context_file_count: record.contextFileCount ?? null } : {}),
     execution: { state: verification.execution_state ?? record.executionState ?? (record.state === 'closed' ? 'unknown' : record.state), stop_reason: record.result?.stopReason ?? null },
     verification: verificationSummary(verification), assessment: currentAssessment?.decision ?? 'unassessed', assessments,
@@ -168,7 +191,7 @@ export async function exportReport(options: { directory: string; output: string;
     durations_ms: { inference: null, finalization: null, preparation: elapsed(record.createdAt, record.launchedAt), startup: elapsed(record.launchedAt, record.startedAt), execution_and_finalization: elapsed(record.startedAt, record.finishedAt), total: elapsed(record.createdAt, record.finishedAt) },
     ...(record.pin ? { pin: pinToWire(record.pin) } : {}),
     ...(approvals && exportedApprovals ? { approvals: { file: 'approvals.json', source_sha256: approvals.sha256, exported_sha256: digest(exportedApprovals), records: approvals.ledger.records.length, truncated: approvals.ledger.truncated } } : {}),
-    usage: reportUsage(record.usage), limits: record.limits, warnings: record.result?.warnings ?? [], error: record.error ?? null,
+    usage: reportUsage(record.usage), ...(contextReads ? { context_reads: contextReads } : {}), limits: record.limits, warnings: record.result?.warnings ?? [], error: record.error ?? null,
     cleanup: record.cleanup ?? { worktree: 'unknown', reason: 'Cleanup evidence was not recorded or the run has not settled' }, external_validation: external
   }) as Record<string, unknown>;
   const files: Record<string, Buffer> = {
@@ -183,6 +206,12 @@ export async function exportReport(options: { directory: string; output: string;
     const patch = await readOwnedFile(patchArtifact.path, record.limits.maxArtifactBytes);
     if (digest(patch) !== patchArtifact.sha256 || patchContainsCredential(patch.toString('utf8'), environmentSecrets())) throw new Error('Patch inclusion refused; bytes are never redacted');
     files['changes.patch'] = patch;
+  }
+  if (options.include?.includes('answer')) {
+    const answer = record.result?.summary;
+    if (answerPresent !== true || typeof answer !== 'string' || answer === '') throw new Error('The run has no worker answer; its summary was written by the supervisor, so it is not exported as an answer');
+    if (patchContainsCredential(answerAsPatch(answer), environmentSecrets())) throw new Error('Answer inclusion refused; bytes are never redacted');
+    files['answer.txt'] = Buffer.from(String(publicValue(answer)));
   }
   if (options.include?.includes('events')) files['events.json'] = Buffer.from(JSON.stringify(publicValue(diagnostics.events), null, 2) + '\n');
   const sums = Object.entries(files).sort(([a], [b]) => a.localeCompare(b)).map(([name, bytes]) => `${digest(bytes)}  ${name}`).join('\n') + '\n';

@@ -17,7 +17,7 @@ export const SESSION_SCAN_LIMIT_MESSAGE = 'The isolated session namespace exceed
 const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_RUN_JSON_BYTES = 100 * 1024 * 1024;
 const RUNS_USAGE = 'Usage: vibe-supervisor runs [--config <path>] <list|show|tail|cleanup|usefulness|verify|export|sarif|usage> [run-id]';
-const REPORT_USAGE = 'Usage: runs verify|export <run-id> --out <directory> [--include patch,events] [--validation <file>]';
+const REPORT_USAGE = 'Usage: runs verify|export <run-id> --out <directory> [--include patch,events,answer] [--validation <file>]';
 
 export interface RunsServices {
   cleanup(configPath: string | undefined, runId: string | undefined): Promise<unknown>;
@@ -141,7 +141,7 @@ async function reportRun(invocation: RunsInvocation): Promise<void> {
   const { positional } = invocation;
   const id = positional[1];
   if (!id || !validRunId(id)) fail('runs verify/export requires a run UUID.', 2);
-  let output: string | undefined; let validationFile: string | undefined; let include: ('patch' | 'events')[] = [];
+  let output: string | undefined; let validationFile: string | undefined; let include: ('patch' | 'events' | 'answer')[] = [];
   const seen = new Set<string>();
   for (let index = 2; index < positional.length; index++) {
     const flag = positional[index]!; const value = positional[++index];
@@ -149,7 +149,7 @@ async function reportRun(invocation: RunsInvocation): Promise<void> {
     seen.add(flag);
     if (flag === '--out') output = path.resolve(value);
     else if (flag === '--validation') validationFile = path.resolve(value);
-    else if (flag === '--include' && invocation.subcommand === 'export' && value.split(',').every((item) => item === 'patch' || item === 'events')) include = [...new Set(value.split(',') as ('patch' | 'events')[])];
+    else if (flag === '--include' && invocation.subcommand === 'export' && value.split(',').every((item) => item === 'patch' || item === 'events' || item === 'answer')) include = [...new Set(value.split(',') as ('patch' | 'events' | 'answer')[])];
     else fail(REPORT_USAGE, 2);
   }
   if (!output) fail('--out is required.', 2);

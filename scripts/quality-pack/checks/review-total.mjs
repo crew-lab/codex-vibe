@@ -9,6 +9,12 @@ const CASES = [
   { unitCents: 3000, quantity: 2, discountPercent: 50, expected: [600, 0, 3600] }
 ];
 
+function nearestCandidate(values, section) {
+  const word = section.toLowerCase();
+  const line = values.split('\n').map((item) => item.trim()).find((item) => item.toLowerCase().includes(word));
+  return line === undefined ? 'no line mentions it' : `nearest line: ${line.slice(0, 120)}`;
+}
+
 function checkValues(id, section, values, reference) {
   const line = new RegExp(`^${section}: tax (\\d+), shipping (\\d+), total (\\d+)$`, 'gim');
   const matches = [...values.matchAll(line)];
@@ -17,7 +23,7 @@ function checkValues(id, section, values, reference) {
   return {
     id: `${id}-${section.toLowerCase()}`,
     passed: reported?.every((value, index) => value === reference[index]) ?? false,
-    detail: `tax, shipping, total: reported ${reported?.join(', ') ?? 'missing, malformed or duplicated'}; verified ${reference.join(', ')}`
+    detail: `tax, shipping, total: reported ${reported?.join(', ') ?? `missing, malformed or duplicated (${nearestCandidate(values, section)})`}; verified ${reference.join(', ')}`
   };
 }
 
@@ -29,7 +35,9 @@ export async function checkOrderTotalCases(project, answer) {
     const sections = answer.replaceAll('\r\n', '\n').split(/^Input (\d+):[^\n]*$/im);
     return CASES.flatMap(({ unitCents, quantity, discountPercent, expected }, index) => {
       const id = `input-${index + 1}`;
-      const rows = sections.filter((section, part) => part % 2 === 0 && part > 0 && sections[part - 1] === String(index + 1) && /^(Expected|Actual):/im.test(section));
+      const own = sections.filter((_, part) => part % 2 === 0 && part > 0 && sections[part - 1] === String(index + 1));
+      const filled = own.filter((section) => /^(Expected|Actual): tax \d+, shipping \d+, total \d+$/im.test(section));
+      const rows = filled.length > 0 ? filled : own.filter((section) => /^(Expected|Actual):/im.test(section));
       if (rows.length !== 1) return [{ id, passed: false, detail: `Expected exactly one input section with Expected and Actual lines, found ${rows.length}` }];
       const gross = unitCents * quantity;
       const discounted = gross - Math.round(gross * discountPercent / 100);
