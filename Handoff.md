@@ -17,6 +17,7 @@
 - **Task-first experiment.** On Vibe 3.1.2, the historical dangling-symlink fix completed in 44.6 seconds and passed independent checks on `exp/task-first-prompt`. That result belongs to the experiment build.
 - **Edits.** On Vibe 3.1.2, `edit-shipping` and `edit-reserve-all` passed all independent checks with `end_turn` and untouched baselines.
 - **Quality pack on `e429a9b` (Vibe 3.1.2).** Candidate `c3f0ea7b…` passed all 12 quality-pack trials: `review-total` 5/5, `review-stock` 5/5, `edit-shipping` 1/1, and `edit-reserve-all` 1/1. Every review read exactly the three requested `context_files`, recorded `thinking: "high"`, and ended with `end_turn` ([evidence](research/evidence/vibe-312-quality-e429-20261114/README.md)).
+- **Live Antigravity `1.5.9` review (`antigravity_skip_permissions = true`).** After updating `parseCallObj` in `src/backends/antigravity.ts` to extract `step_update.tool_info.parameters` (fixing the `VSUP_INTERNAL` audit mismatch seen when `agy` omitted top-level `args`/`call_id`), candidate `9468b08a…` passed preparation (`2431b21f…`) and passed live `review-stock` (`0f0cb3af-a48d-44e0-94fe-f0f3a7ad17d4`, `end_turn`, 3 reconciled `read_file` approvals, `records/agy-review-stock-1.json` in [evidence](research/evidence/vibe-312-quality-e429-20261114/README.md)).
 
 ## Changed on 2026-11-13 and run on Vibe 3.1.2
 
@@ -40,7 +41,7 @@
 - **Small slips reject good edits.** Patches were rejected for a new code comment and for a wrong prefix in a regression test, while the source itself was right.
 - **Default-order replay on Vibe 3.1.2.** The same historical dangling-symlink task reached its 300-second deadline. The completion frame arrived 16 ms after the deadline was recorded, and the supervisor exported the audited patch with stop reason `timeout`. The reproduction, link-safety controls, validation suite, lint, typecheck and build passed. The patch was rejected for trailing whitespace and the run was closed.
 - **Turns that stall.** Two task-first runs stalled until the deadline after their patches were ready; with the deadline fix they now complete with stop reason `timeout`, but why Vibe kept the turn open is unexplained. Run with `app_server_wire_trace` when it recurs.
-- **agy 1.5.8 has not run a task.** Preparation passes only with `antigravity_skip_permissions = true`; in strict mode the allowed read never executes. The one hosted attempt failed before inference because no Google key was available to the supervisor.
+- **agy strict mode and hosted edits unverified.** Preparation passes only with `antigravity_skip_permissions = true`; in strict mode headless `agy` still auto-denies the allowed `read_file` probe (`probe_control_not_executed`). Live `review-stock` passed on `agy` 1.5.9 with `antigravity_skip_permissions = true`; hosted `agy` `review-total` and edit runs remain untested.
 - **Antigravity probes.** With `antigravity_skip_permissions` on, the probes exercise the hook on a read only, not a review-mode write or a shell tool; that needs agy's real tool schemas.
 
 ## Quality-pack results
@@ -99,14 +100,13 @@ Both checks used candidate `6717dfd56b15580217e875f80423b5373a48ac966ae4c137a383
 - **Quality pack & thinking verification.** Candidate `c3f0ea7b…` passed all 12 trials (`records/` in [evidence](research/evidence/vibe-312-quality-e429-20261114/README.md)). Re-scoring the 30 pre-`e429a9b` review summaries confirmed 0/30 passed (`old/`). Exporting earlier thinking-high run `4acc9415-0ccf-46a2-991f-7ee3ed0961dc` confirmed `requested_thinking: "high"`, `thinking: "high"`, and `reasoning_observation` (`streamed_entries: 2`, `history_entries: 2`, `history_audited: true`).
 - **Calendar-date replay & correction.** Replay `6af4334a…` failed `tsc` (`TS18048`/`TS2769`) because the brief did not warn about `noUncheckedIndexedAccess`. Single correction `7f1b4533…` passed `build`, `lint`, `typecheck`, `cli-dates`, and `hygiene` (`dates=0 hygiene=0`), but its request capped `max_turns` at `12` instead of the default `20`; after twice attempting denied `file_system.bash`, it hit `turn_limit` and was closed `rejected`.
 - **Verification `timeout` fix on `main`.** `src/acceptance/verify.ts` now judges patches completed with `stop_reason: "timeout"` (edits cut off after audited writes with a clean history audit), matching [behavior docs](docs/functionality.md#settlement-and-close), while keeping `turn_limit` `incomplete`.
-- **Antigravity 1.5.8.** Strict-mode preparation (`745c651a…`) failed `probe_control_not_executed` (`read_file` auto-denied under `toolPermission: "strict"`, diagnostics committed in [evidence](research/evidence/vibe-312-quality-e429-20261114/agy-strict-diagnostics.json)). Preparation passed with `antigravity_skip_permissions = true`, and live `review-stock` run `9067c914…` failed with `VSUP_ANTIGRAVITY_EXEC_FAILED` because `generativelanguage.googleapis.com` returned HTTP 400 `API_KEY_INVALID` for the configured key.
+- **Antigravity 1.5.8 -> 1.5.9.** Strict-mode preparation (`745c651a…`) failed `probe_control_not_executed` (`read_file` auto-denied under `toolPermission: "strict"`, diagnostics committed in [evidence](research/evidence/vibe-312-quality-e429-20261114/agy-strict-diagnostics.json)). Earlier skip-permissions attempts failed with HTTP 400 `API_KEY_INVALID` (`9067c914…`) and then, with a valid `GEMINI_API_KEY` on `agy` 1.5.9, hit `VSUP_INTERNAL` hook-ledger reconciliation failure (`a128ce7c…` / `b69db930…`) because `agy` reported arguments in `step_update.tool_info.parameters`. Fixing `parseCallObj` resolved reconciliation and passed live `review-stock` (`0f0cb3af…`, candidate `9468b08a…`).
 
 ## Next
 
 1. **Calendar-date replay (clean defaults):** Run once against the original buggy revision with `noUncheckedIndexedAccess` noted in the brief (per the skill template) and default `max_turns` (`20`, not capped at `12`).
-2. **agy 1.5.8 live review:** Configure a valid Google AI Studio `GEMINI_API_KEY` (replacing the rejected key) and run `review-stock` with `antigravity_skip_permissions = true`, then record the result.
-3. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
-4. **Release 2.2.1** once the calendar-date replay passes on Vibe.
+2. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
+3. **Release 2.2.1** once the calendar-date replay passes on Vibe.
 
 ## Build, install and prepare
 

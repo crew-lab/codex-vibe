@@ -352,14 +352,16 @@ export function extractEnvelopeMeta(entry: unknown): ParsedEnvelopeMeta {
   const top = entry as Record<string, unknown>;
 
   const parseCallObj = (item: Record<string, unknown>, defaultTurnId: string | null): StreamExecutedCall | null => {
-    const rawTool = item.tool_name ?? item.name ?? item.tool;
+    const toolInfo = isRecord(item.tool_info) ? item.tool_info : undefined;
+    const rawTool = item.tool_name ?? item.name ?? item.tool ?? toolInfo?.name ?? toolInfo?.tool_name ?? toolInfo?.tool;
     if (typeof rawTool !== 'string' || !rawTool.trim()) return null;
     const tool = rawTool.trim();
-    const rawCallId = item.call_id ?? item.id ?? item.callId;
+    const rawCallId = item.call_id ?? item.id ?? item.callId ?? toolInfo?.call_id ?? toolInfo?.id ?? toolInfo?.callId;
     const callId = typeof rawCallId === 'string' && rawCallId.trim() ? rawCallId.trim() : null;
     const rawTurn = item.step_index ?? item.turnId ?? item.turn_id;
     const turnId = rawTurn !== undefined && rawTurn !== null ? String(rawTurn) : defaultTurnId;
-    const rawArgs = item.args ?? item.tool_input ?? item.input;
+    const rawArgs = item.args ?? item.tool_input ?? item.input ?? item.parameters
+      ?? toolInfo?.parameters ?? toolInfo?.args ?? toolInfo?.tool_input ?? toolInfo?.input;
     const args = rawArgs === undefined || rawArgs === null ? null : parseToolArguments(rawArgs);
     const fingerprint = args ? toolCallFingerprint(tool, args) : null;
     return { tool, callId, turnId, args, path: primaryToolPath(tool, args), fingerprint };

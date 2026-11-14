@@ -7,6 +7,7 @@ import { workerRules } from '../../src/core/worker-context.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AntigravityBackend,
+  extractEnvelopeMeta,
   MINIMUM_ANTIGRAVITY_VERSION,
   writeIsolatedSettings,
   type AntigravityBackendOptions,
@@ -2027,5 +2028,64 @@ console.log(JSON.stringify({ type: 'result', status: 'SUCCESS', response: 'done'
     expect(captured.pathHasNeutralizer).toBe(true);
     expect(captured.browserVar).toBe('false');
     expect(finalState, JSON.stringify(finalDetail).slice(0, 2000)).toBe('completed');
+  });
+
+  it('extracts tool_info.parameters from step_update and reconciles with PreToolUse hook ledger', async () => {
+    const root = await makeRoot();
+    const workspace = path.join(root, 'workspace');
+    const childHome = path.join(root, 'home');
+    await mkdir(workspace, { recursive: true });
+    await mkdir(childHome, { recursive: true });
+    await writeFile(path.join(workspace, 'sample.ts'), 'export const value = 1;\n', 'utf8');
+    const targetPath = path.join(workspace, 'sample.ts');
+
+    await writeAntigravityPreToolHook(childHome, {
+      mode: 'review',
+      workerWorkspace: workspace,
+      excludedAnchors: []
+    });
+    const hookScriptPath = path.join(childHome, '.gemini', 'antigravity-cli', 'pre-tool-hook.mjs');
+
+    execSync(`"${process.execPath}" "${hookScriptPath}"`, {
+      input: JSON.stringify({
+        toolCall: { name: 'read_file', args: { Path: targetPath } },
+        stepIdx: 2,
+        conversationId: 'conv-tool-info'
+      }),
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'inherit']
+    });
+
+    const meta = extractEnvelopeMeta({
+      event: 'step_update',
+      step_update: {
+        conversation_id: 'conv-tool-info',
+        step_index: 2,
+        state: 'DONE',
+        step_type: 'tool',
+        tool_name: 'read_file',
+        tool_info: {
+          name: 'read_file',
+          parameters: { Path: targetPath },
+          output: 'export const value = 1;\n'
+        }
+      }
+    });
+
+    expect(meta.type).toBe('tool_call');
+    expect(meta.executedCalls).toHaveLength(1);
+    expect(meta.executedCalls[0]?.tool).toBe('read_file');
+    expect(meta.executedCalls[0]?.turnId).toBe('2');
+    expect(meta.executedCalls[0]?.path).toBe(targetPath);
+    expect(meta.executedCalls[0]?.fingerprint).toBeTruthy();
+
+    const ledger = await readAntigravityHookLedger(childHome, [], 1, meta.executedCalls);
+    expect(ledger.toolCalls).toEqual({
+      executed: 1,
+      deniedByHandler: 0,
+      deniedByPolicy: 0
+    });
+    expect(ledger.hookEntries).toHaveLength(1);
+    expect(ledger.hookEntries[0]?.decision).toBe('approve');
   });
 });
