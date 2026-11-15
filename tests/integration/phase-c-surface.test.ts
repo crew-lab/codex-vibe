@@ -79,13 +79,25 @@ describe("limits defaults from the configuration", () => {
     } finally { await manager.shutdown(); }
   });
 
-  it("keeps the built-in defaults when the configuration is untouched", async () => {
-    const { source, backend, manager } = await setup();
+  it("uses 25 as the built-in default for omitted review and edit turn limits and keeps explicit overrides", async () => {
+    const { source, backend, manager } = await setup({ git: true });
     try {
       await authorizedReviewStart(manager, { task: "review", cwd: source });
       await waitFor(() => backend.inputs.length, (count) => count >= 1);
-      expect(backend.inputs[0]?.limits).toMatchObject({ maxTurns: 20, timeoutSeconds: 1800 });
+      expect(backend.inputs[0]?.limits).toMatchObject({ maxTurns: 25, timeoutSeconds: 1800 });
       await finish(backend, 0);
+      await authorizedReviewStart(manager, { task: "review", cwd: source, max_turns: 12 });
+      await waitFor(() => backend.inputs.length, (count) => count >= 2);
+      expect(backend.inputs[1]?.limits).toMatchObject({ maxTurns: 12, timeoutSeconds: 1800 });
+      await finish(backend, 1);
+      await authorizedEditStart(manager, { task: "edit", cwd: source });
+      await waitFor(() => backend.inputs.length, (count) => count >= 3);
+      expect(backend.inputs[2]?.limits).toMatchObject({ maxTurns: 25, timeoutSeconds: 2400 });
+      await finish(backend, 2);
+      await authorizedEditStart(manager, { task: "edit", cwd: source, max_turns: 16 });
+      await waitFor(() => backend.inputs.length, (count) => count >= 4);
+      expect(backend.inputs[3]?.limits).toMatchObject({ maxTurns: 16, timeoutSeconds: 2400 });
+      await finish(backend, 3);
     } finally { await manager.shutdown(); }
   });
 });

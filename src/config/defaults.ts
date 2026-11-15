@@ -7,8 +7,8 @@ export const DEFAULT_CONFIG: SupervisorConfig = {
   limits: {
     reviewTimeoutSeconds: 1800,
     editTimeoutSeconds: 2400,
-    maxTurnsReview: 20,
-    maxTurnsEdit: 20,
+    maxTurnsReview: 25,
+    maxTurnsEdit: 25,
     maxEventBytes: 52_428_800,
     maxTranscriptBytes: 10_485_760,
     maxArtifactBytes: 104_857_600,

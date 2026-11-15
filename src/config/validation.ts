@@ -49,8 +49,8 @@ const baseSchema = z.object({
   limits: z.object({
     review_timeout_seconds: z.number().int().min(30).max(7200).default(1800),
     edit_timeout_seconds: z.number().int().min(30).max(7200).default(2400),
-    max_turns_review: z.number().int().min(1).max(MAX_TURNS_LIMIT).default(20),
-    max_turns_edit: z.number().int().min(1).max(MAX_TURNS_LIMIT).default(20),
+    max_turns_review: z.number().int().min(1).max(MAX_TURNS_LIMIT).default(25),
+    max_turns_edit: z.number().int().min(1).max(MAX_TURNS_LIMIT).default(25),
     max_event_bytes: z.number().int().min(1024).max(1_073_741_824).default(52_428_800),
     max_transcript_bytes: z.number().int().min(1024).max(1_073_741_824).default(10_485_760),
     max_artifact_bytes: z.number().int().min(1024).max(2_147_483_648).default(104_857_600),

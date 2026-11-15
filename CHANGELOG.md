@@ -26,6 +26,7 @@ The aim of this release is that a task Codex hands to a worker comes back right 
 
 ### Changed
 
+- Default `limits.max_turns_review` and `limits.max_turns_edit` increased from `20` to `25`.
 - A run that reaches its timeout keeps finished work. Cancelling at the deadline waits for the final history audit: a turn that finished as the deadline cancelled it keeps its result with a warning, and an edit cut off after audited writes completes with stop reason `timeout`, so its contract and checks decide. A run with no audited writes, or whose audit fails, still fails with `VSUP_TIMEOUT`.
 - A Vibe edit that stops at its turn limit is judged by its acceptance contract and checks instead of being `incomplete`: the stop is only reported after a clean final history audit, so a finished patch is not lost when the worker wastes its last turns. Token and price limit stops, and turn-limit stops on the Antigravity backend, stay `incomplete`. Runs saved before this change keep their verdict.
 - A preparation receipt is bound to the Node major version instead of the exact version, so a patch or minor Node update keeps it. Existing receipts need one `prepare check` after upgrading.

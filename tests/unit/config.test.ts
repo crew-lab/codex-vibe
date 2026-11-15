@@ -41,6 +41,9 @@ describe("supervisor config", () => {
     expect(config.allowedWorkspaceRoots).toEqual([workspace]);
     expect(config.limits.maxTurnsReview).toBe(7);
     expect(config.limits.maxTurnsEdit).toBe(DEFAULT_CONFIG.limits.maxTurnsEdit);
+    expect(DEFAULT_CONFIG.limits.maxTurnsReview).toBe(25);
+    expect(DEFAULT_CONFIG.limits.maxTurnsEdit).toBe(25);
+    expect(validateConfig(base).limits).toMatchObject({ maxTurnsReview: 25, maxTurnsEdit: 25 });
   });
 
   it("rejects keys removed in earlier releases like any unknown key", async () => {
