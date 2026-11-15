@@ -4,8 +4,8 @@
 
 ## Where things are
 
-- **Released.** v2.2.0 (2026-10-27) is the latest release.
-- **On `main`, unreleased 2.2.1** ([changelog](CHANGELOG.md)): Vibe at or above 3.1.2 and agy at or above 1.5.8; the supervisor's worker rules as Vibe's system prompt and at the head of agy's prompt; no file listing in a review that names `context_files`; thinking `high` for Vibe reviews (`vibe_review_thinking`); default `max_turns` raised to `25` for reviews and edits (`4a0d0ed`); `allowed_write_paths` enforced in agy's `PreToolUse` hook (`75995d8`) with summarized write-tool ledger reconciliation (`0ed905e`); credential, pin and preparation checked before the grant is spent; review results that show which named files were read; `prepare check` that prints its report path, failing findings and what made a receipt stale; `runs export --include answer` and, in the source repository, `quality-pack.mjs record` and `prompt`; a finished or audited edit kept at the deadline; the correction rule after a failed check.
+- **Released.** v2.2.1 (2026-11-15) is the latest release ([changelog](CHANGELOG.md)); `agy` remains opt-in and experimental.
+- **Included in v2.2.1:** Vibe at or above 3.1.2 and agy at or above 1.5.8; the supervisor's worker rules as Vibe's system prompt and at the head of agy's prompt; no file listing in a review that names `context_files`; thinking `high` for Vibe reviews (`vibe_review_thinking`); default `max_turns` raised to `25` for reviews and edits (`4a0d0ed`); `allowed_write_paths` enforced in agy's `PreToolUse` hook (`75995d8`) with summarized write-tool ledger reconciliation (`0ed905e`); credential, pin and preparation checked before the grant is spent; review results that show which named files were read; `prepare check` that prints its report path, failing findings and what made a receipt stale; `runs export --include answer` and, in the source repository, `quality-pack.mjs record` and `prompt`; a finished or audited edit kept at the deadline; the correction rule after a failed check.
 - **Worker machine & verification:** `412d106` built the `2.2.1` RC archive cleanly (`127` test files, `1,830` passed, `1` skipped, checksums matched), passed `prepare check` from the installed archive for both Vibe `3.1.2` and `agy` `1.5.9` (`antigravity_skip_permissions = true`), passed the installed-RC Vibe calendar-date replay (`7ce9f997…`, `18.6s`, `end_turn`, default `25` turns confirmed), and passed both `agy` `1.5.9` quality-pack edits (`edit-shipping` `14/14`, `edit-reserve-all` `17/17`, both `end_turn`). Earlier `f783860` runs covered Vibe thinking-off sweeps and `agy` `review-total` (`9/9`).
 
 ## What works
@@ -50,8 +50,7 @@
 
 ### On the worker machine
 
-1. **Tag/ship `2.2.1` when ready.** `412d106` RC build, checksum verification, installed-archive `prepare check` (Vibe `3.1.2` and `agy` `1.5.9`), installed-RC 25-turn calendar replay, and `agy` `1.5.9` edit trials all passed cleanly. If re-packaging after docs-only handoff commit, re-run `package:rc` from the tagged commit.
-2. **After any Vibe or agy update:** `prepare check`, then the quality pack, recorded. That run is the regression test for the worker.
+1. **After any Vibe or agy update:** `prepare check`, then the quality pack, recorded. That run is the regression test for the worker.
 
 ### Development, in this order, each its own commit
 
@@ -62,7 +61,6 @@
 5. **agy strict mode:** try allow-rule target forms through the control probe on the worker machine until agy runs the allowed read without the bypass. The aim is two gates instead of one.
 6. **Candidates:** judging an agy edit that stopped at its turn limit (for explicit lower caps); fewer model calls for a review of small named files; `context_reads` and explicit model selection verification for agy; agy `--json-schema` for findings.
 7. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
-8. **Release 2.2.1.** Ready to tag/publish (`412d106` met all release criteria across Vibe `3.1.2` and experimental `agy` `1.5.9`).
 
 ## Build, install and prepare
 

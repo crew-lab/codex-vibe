@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.2.1 — unreleased
+## 2.2.1 — 2026-11-15
 
 The aim of this release is that a task Codex hands to a worker comes back right more often, costs fewer turns and tokens, and that a correct result is not lost to the supervisor's own friction.
 
@@ -38,7 +38,7 @@ The aim of this release is that a task Codex hands to a worker comes back right 
 - The Vibe floor rose from 3.0.2 to 3.1.2, because the session system prompt needs Vibe 3.1.0 and 3.1.2 is the tested release. A configuration that sets `vibe_version` below 3.1.2 no longer loads (`VSUP_CONFIG_INVALID`): raise the value or remove the key.
 - A review that passes `context_files` no longer carries the workspace file listing (up to 1,000 paths and 32 KiB) in its prompt; a review without them, and an edit, still do.
 - Vibe sessions switch off pull-request monitoring and the commit-signature guidance (`enable_pr_monitoring`, `include_commit_signature`).
-- Experimental Antigravity: any stable `agy` at or above 1.5.8 runs, bound to its binary hash, instead of an exact list ending at 1.4.9; built-in skills are accepted by agy's own `builtin` flag. Reviews keep agy's earlier default agent mode (`"agentMode": ""`; agy 1.5.7 made Auto the headless default). A run that agy ends with `finished_reason: "print_timeout"` is a timeout, and one it ends with `error` or `interrupted` is a failure whatever its `status` says. No 1.5.x release has passed `prepare check` on a machine with agy yet. Its key comes from `GEMINI_API_KEY`, `GOOGLE_API_KEY` or `ANTIGRAVITY_API_KEY` in the supervisor environment or, on macOS, the user launchd session, resolved at run start and never written into the supervisor's own environment. `[experimental] antigravity_skip_permissions` passes `--dangerously-skip-permissions` and logs it; the `PreToolUse` hook is then the only tool gate.
+- Experimental Antigravity: any stable `agy` at or above 1.5.8 runs, bound to its binary hash, instead of an exact list ending at 1.4.9; built-in skills are accepted by agy's own `builtin` flag. Reviews keep agy's earlier default agent mode (`"agentMode": ""`; agy 1.5.7 made Auto the headless default). A run that agy ends with `finished_reason: "print_timeout"` is a timeout, and one it ends with `error` or `interrupted` is a failure whatever its `status` says. agy 1.5.9 passed `prepare check` and hosted runs with `antigravity_skip_permissions = true` (strict-mode preparation still fails). Its key comes from `GEMINI_API_KEY`, `GOOGLE_API_KEY` or `ANTIGRAVITY_API_KEY` in the supervisor environment or, on macOS, the user launchd session, resolved at run start and never written into the supervisor's own environment. `[experimental] antigravity_skip_permissions` passes `--dangerously-skip-permissions` and logs it; the `PreToolUse` hook is then the only tool gate.
 - `npm run package:rc` is reproducible: the SBOM date comes from `SOURCE_DATE_EPOCH`, else the HEAD commit time, and its namespace from the package name, version and lockfile hash.
 
 ### Fixed
