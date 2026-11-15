@@ -15,6 +15,7 @@ import {
   createExcludedMatcher,
   judgeWorkspacePath,
   restrictedSegment,
+  withinAllowedWritePaths,
   type ExclusionSpec
 } from './app-server/approvals.js';
 
@@ -26,14 +27,18 @@ export const REVIEW_ALLOWED_TOOLS = [
   'grep_search'
 ] as const;
 
-export const EDIT_ALLOWED_TOOLS = [
-  ...REVIEW_ALLOWED_TOOLS,
+export const EDIT_WRITE_TOOLS = [
   'write_to_file',
   'write_file',
   'replace_file_content',
   'multi_replace_file_content',
   'edit_file',
   'edit'
+] as const;
+
+export const EDIT_ALLOWED_TOOLS = [
+  ...REVIEW_ALLOWED_TOOLS,
+  ...EDIT_WRITE_TOOLS
 ] as const;
 
 export const TOOL_PATH_KEYS: Readonly<Record<string, readonly string[]>> = {
@@ -266,6 +271,7 @@ export interface AntigravityPreToolHookOptions {
   mode: RunMode;
   workerWorkspace: string;
   excludedAnchors?: readonly ExclusionSpec[];
+  allowedWritePaths?: readonly string[];
   maxTurns?: number;
   maxModelCalls?: number;
 }
@@ -401,6 +407,14 @@ export async function evaluateAntigravityToolCall(
     if (relSegments.some((s) => s.toLowerCase() === '.gemini')) {
       return decide('path_reserved', candidatePath);
     }
+
+    if (
+      options.allowedWritePaths &&
+      (EDIT_WRITE_TOOLS as readonly string[]).includes(toolName) &&
+      !withinAllowedWritePaths(judgement.relative, options.allowedWritePaths)
+    ) {
+      return decide('outside_allowed_write_paths', candidatePath);
+    }
   }
 
   return decide(null, candidatePaths[0] ?? null);
@@ -416,6 +430,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const policyPath = path.join(__dirname, 'hook-policy.json');
 
 const REVIEW_ALLOWED_TOOLS = ${JSON.stringify(REVIEW_ALLOWED_TOOLS)};
+const EDIT_WRITE_TOOLS = ${JSON.stringify(EDIT_WRITE_TOOLS)};
 const EDIT_ALLOWED_TOOLS = ${JSON.stringify(EDIT_ALLOWED_TOOLS)};
 
 const RESERVED_DIRECTORIES = ['.git', '.vibe', '.agents', '.gemini'];
@@ -566,6 +581,11 @@ function restrictedSegment(segments) {
 function isPathWithinRoot(root, candidate) {
   const rel = path.relative(root, candidate);
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+function withinAllowedWritePaths(relative, allowed) {
+  const posix = relative.split(path.sep).join('/');
+  return allowed.some((entry) => (entry.endsWith('/') ? posix.startsWith(entry) : posix === entry));
 }
 
 async function locate(absolute) {
@@ -1051,6 +1071,20 @@ async function main() {
           reason: 'path_invalid'
         }, callId);
       }
+      if (
+        Array.isArray(policy.allowedWritePaths) &&
+        EDIT_WRITE_TOOLS.includes(toolName) &&
+        !withinAllowedWritePaths(relative, policy.allowedWritePaths)
+      ) {
+        return recordAndExit(policy, {
+          turnId,
+          tool: toolName,
+          path: rawPath,
+          fingerprint: computeFingerprint(toolName, args),
+          decision: 'deny',
+          reason: 'outside_allowed_write_paths'
+        }, callId);
+      }
     }
   }
 
@@ -1076,6 +1110,7 @@ export async function writeAntigravityPreToolHook(
     mode: RunMode;
     workerWorkspace: string;
     excludedAnchors: readonly ExclusionSpec[];
+    allowedWritePaths?: readonly string[];
     maxTurns?: number;
     maxModelCalls?: number;
   }
@@ -1092,6 +1127,7 @@ export async function writeAntigravityPreToolHook(
     mode: options.mode,
     workerWorkspace: options.workerWorkspace,
     excludedAnchors: options.excludedAnchors,
+    ...(options.allowedWritePaths ? { allowedWritePaths: options.allowedWritePaths } : {}),
     ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
     ...(options.maxModelCalls !== undefined ? { maxModelCalls: options.maxModelCalls } : {}),
     ledgerPath

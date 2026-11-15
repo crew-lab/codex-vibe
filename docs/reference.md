@@ -32,7 +32,7 @@ All schemas are strict. `run_id` is a UUID v4. Unless noted, required fields hav
 | | `readiness_receipt` | string, 1–2048 characters, from a workspace check on this connection | none |
 | `vibe_edit_start` | `acceptance_contract` | optional strict versioned path/text/hash contract and required validation IDs; see [acceptance](workflow-acceptance.md) | none |
 | `vibe_edit_start` | `authorization_id`, `attempt_id` | UUID v4 grant and unique dispatch attempt, as for review | required |
-| `vibe_edit_start` | `allowed_write_paths` | optional list of 1–100 unique repository-relative paths; an entry ending in `/` covers everything beneath that directory. Writes and edits anywhere else are denied with reason `outside_allowed_write_paths` and the run continues; reads are unaffected. Bound into the dispatch authorization; app-server backend only | none |
+| `vibe_edit_start` | `allowed_write_paths` | optional list of 1–100 unique repository-relative paths; an entry ending in `/` covers everything beneath that directory. Writes and edits anywhere else are denied with reason `outside_allowed_write_paths` and the run continues; reads are unaffected. Bound into the dispatch authorization | none |
 | `vibe_edit_start` | `prepared_inputs` | optional `{ directory, manifest_sha256 }` binding; requires an acceptance contract and is verified against the current policy, base, copied inventory and output paths before provider launch | none |
 | | `task`, `cwd` | as above; `cwd` must be the Git repository root | required |
 | | `base_ref` | existing Git ref, 1–512 characters | `HEAD` |

@@ -14,6 +14,7 @@ import {
   type AntigravityHandle
 } from '../../src/backends/antigravity.js';
 import {
+  EDIT_WRITE_TOOLS,
   evaluateAntigravityToolCall,
   readAntigravityHookLedger,
   writeAntigravityPreToolHook
@@ -2087,5 +2088,234 @@ console.log(JSON.stringify({ type: 'result', status: 'SUCCESS', response: 'done'
     });
     expect(ledger.hookEntries).toHaveLength(1);
     expect(ledger.hookEntries[0]?.decision).toBe('approve');
+  });
+
+  it('enforces allowedWritePaths across all Antigravity write tools in evaluateAntigravityToolCall and the emitted hook script', async () => {
+    const root = await makeRoot();
+    const workspace = path.join(root, 'workspace');
+    const childHome = path.join(root, 'home');
+    await mkdir(path.join(workspace, 'src'), { recursive: true });
+    await mkdir(path.join(workspace, 'docs', 'nested'), { recursive: true });
+    await mkdir(path.join(workspace, 'docs-extra'), { recursive: true });
+    await mkdir(childHome, { recursive: true });
+
+    const allowedExact = path.join(workspace, 'src', 'allowed.ts');
+    const allowedInDir = path.join(workspace, 'docs', 'nested', 'guide.md');
+    const newAllowedInDir = path.join(workspace, 'docs', 'new-page.md');
+    const siblingPrefixDir = path.join(workspace, 'docs-extra', 'file.md');
+    const outsideAllowed = path.join(workspace, 'src', 'other.ts');
+    const secretInAllowedDir = path.join(workspace, 'docs', '.env.local');
+    await writeFile(allowedExact, 'export const ok = 1;\n', 'utf8');
+    await writeFile(allowedInDir, '# guide\n', 'utf8');
+    await writeFile(siblingPrefixDir, 'sibling\n', 'utf8');
+    await writeFile(outsideAllowed, 'export const other = 1;\n', 'utf8');
+    await writeFile(secretInAllowedDir, 'SECRET=1\n', 'utf8');
+
+    const allowedWritePaths = ['src/allowed.ts', 'docs/'];
+    await writeAntigravityPreToolHook(childHome, {
+      mode: 'edit',
+      workerWorkspace: workspace,
+      excludedAnchors: [{ root: workspace, globs: ['docs/nested/**'] }],
+      allowedWritePaths
+    });
+    const hookScriptPath = path.join(childHome, '.gemini', 'antigravity-cli', 'pre-tool-hook.mjs');
+
+    const argForWriteTool = (tool: string, targetPath: string): Record<string, unknown> => {
+      if (tool === 'write_to_file' || tool === 'replace_file_content' || tool === 'multi_replace_file_content') {
+        return { TargetFile: targetPath };
+      }
+      return { Path: targetPath };
+    };
+
+    const runEmittedHook = (tool: string, args: Record<string, unknown>, stepIdx: number) => JSON.parse(
+      execSync(`"${process.execPath}" "${hookScriptPath}"`, {
+        input: JSON.stringify({ toolCall: { name: tool, args }, stepIdx, conversationId: 'conv-write-scope' }),
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'inherit']
+      })
+    ) as { decision: string; reason?: string };
+
+    let step = 1;
+    for (const tool of EDIT_WRITE_TOOLS) {
+      const directAllowed = await evaluateAntigravityToolCall(
+        { mode: 'edit', workerWorkspace: workspace, excludedAnchors: [{ root: workspace, globs: ['docs/nested/**'] }], allowedWritePaths },
+        { toolCall: { name: tool, args: argForWriteTool(tool, allowedExact) } }
+      );
+      expect(directAllowed.decision, tool).toBe('allow');
+
+      const directNew = await evaluateAntigravityToolCall(
+        { mode: 'edit', workerWorkspace: workspace, excludedAnchors: [], allowedWritePaths },
+        { toolCall: { name: tool, args: argForWriteTool(tool, newAllowedInDir) } }
+      );
+      expect(directNew.decision, tool).toBe('allow');
+
+      const directDenied = await evaluateAntigravityToolCall(
+        { mode: 'edit', workerWorkspace: workspace, excludedAnchors: [], allowedWritePaths },
+        { toolCall: { name: tool, args: argForWriteTool(tool, outsideAllowed) } }
+      );
+      expect(directDenied.decision, tool).toBe('deny');
+      expect(directDenied.reason, tool).toBe('outside_allowed_write_paths');
+
+      const directSibling = await evaluateAntigravityToolCall(
+        { mode: 'edit', workerWorkspace: workspace, excludedAnchors: [], allowedWritePaths },
+        { toolCall: { name: tool, args: argForWriteTool(tool, siblingPrefixDir) } }
+      );
+      expect(directSibling.decision, tool).toBe('deny');
+      expect(directSibling.reason, tool).toBe('outside_allowed_write_paths');
+
+      expect(runEmittedHook(tool, argForWriteTool(tool, allowedExact), step++).decision, tool).toBe('allow');
+      expect(runEmittedHook(tool, argForWriteTool(tool, newAllowedInDir), step++).decision, tool).toBe('allow');
+      expect(runEmittedHook(tool, argForWriteTool(tool, outsideAllowed), step++), tool).toEqual({
+        decision: 'deny',
+        reason: 'outside_allowed_write_paths'
+      });
+      expect(runEmittedHook(tool, argForWriteTool(tool, siblingPrefixDir), step++), tool).toEqual({
+        decision: 'deny',
+        reason: 'outside_allowed_write_paths'
+      });
+    }
+
+    expect(runEmittedHook('edit_file', { Path: allowedExact, target_file: outsideAllowed }, step++)).toEqual({
+      decision: 'deny',
+      reason: 'outside_allowed_write_paths'
+    });
+    expect(runEmittedHook('read_file', { Path: outsideAllowed }, step++).decision).toBe('allow');
+    expect(runEmittedHook('write_to_file', { TargetFile: secretInAllowedDir }, step++)).toEqual({
+      decision: 'deny',
+      reason: 'path_secret'
+    });
+    expect(runEmittedHook('write_to_file', { TargetFile: allowedInDir }, step++)).toEqual({
+      decision: 'deny',
+      reason: 'path_excluded'
+    });
+  });
+
+  it('denies an out-of-scope write through the emitted PreToolUse hook during an Antigravity run, keeps the file unchanged, and emits tool_denied', async () => {
+    const root = await makeRoot();
+    const fakeAgy = path.join(root, 'agy');
+    const runnerScript = path.join(root, 'write-scope-runner.mjs');
+    const workspace = path.join(root, 'workspace');
+    const runDir = path.join(root, 'run-write-scope');
+    await mkdir(path.join(workspace, 'src'), { recursive: true });
+    await mkdir(runDir, { recursive: true });
+
+    const allowedFile = path.join(workspace, 'src', 'allowed.ts');
+    const blockedFile = path.join(workspace, 'src', 'untouched.ts');
+    await writeFile(allowedFile, 'export const v = 1;\n', 'utf8');
+    await writeFile(blockedFile, 'export const untouched = true;\n', 'utf8');
+    execSync('git init -b main && git add . && git -c user.name=t -c user.email=t@e.invalid commit -q -m init', { cwd: workspace });
+
+    await writeFile(
+      runnerScript,
+      `import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const hookScript = path.join(process.env.HOME, '.gemini', 'antigravity-cli', 'pre-tool-hook.mjs');
+function callHook(callId, stepIdx, tool, args) {
+  const res = spawnSync(process.execPath, [hookScript], {
+    input: JSON.stringify({ toolCall: { id: callId, name: tool, args }, stepIdx, conversationId: 'conv-scope' }),
+    encoding: 'utf8'
+  });
+  return JSON.parse((res.stdout || '{}').trim());
+}
+
+const blockedArgs = { TargetFile: ${JSON.stringify(blockedFile)}, CodeContent: 'mutated' };
+const blockedReply = callHook('c-blocked', 1, 'write_to_file', blockedArgs);
+if (blockedReply.decision === 'allow') {
+  fs.writeFileSync(${JSON.stringify(blockedFile)}, 'mutated', 'utf8');
+}
+
+const allowedArgs = { TargetFile: ${JSON.stringify(allowedFile)}, CodeContent: 'export const v = 2;\\n' };
+const allowedReply = callHook('c-allowed', 2, 'write_to_file', allowedArgs);
+if (allowedReply.decision === 'allow') {
+  fs.writeFileSync(${JSON.stringify(allowedFile)}, 'export const v = 2;\\n', 'utf8');
+}
+
+console.log(JSON.stringify({
+  event: 'step_update',
+  step_update: {
+    conversation_id: 'conv-scope',
+    step_index: 2,
+    state: 'DONE',
+    step_type: 'tool',
+    tool_name: 'write_to_file',
+    tool_info: { id: 'c-allowed', name: 'write_to_file', parameters: allowedArgs, output: 'ok' }
+  }
+}));
+console.log(JSON.stringify({
+  event: 'result',
+  result: {
+    status: 'SUCCESS',
+    response: 'Updated src/allowed.ts',
+    num_turns: 2,
+    usage: { input_tokens: 100, output_tokens: 20 }
+  }
+}));
+`
+    );
+    await writeExecutable(fakeAgy, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "1.5.9"; exit 0; fi\nexec "${process.execPath}" "${runnerScript}" "$@"\n`);
+
+    process.env.GEMINI_API_KEY = 'mock-gemini-key-value';
+    const backend = new AntigravityBackend(
+      {
+        ...DEFAULT_CONFIG,
+        backend: 'antigravity',
+        experimental: { antigravity: true, antigravitySkipPermissions: true },
+        paths: { antigravity: fakeAgy }
+      },
+      passedPreparation
+    );
+
+    const observed: Array<{ type: string; data?: Record<string, unknown> }> = [];
+    let finalState: string | undefined;
+    let finalDetail: Record<string, unknown> | undefined;
+    let reportTerminal: () => void = () => undefined;
+    const terminal = new Promise<void>((resolve) => { reportTerminal = resolve; });
+
+    const { handle, process: childProcess } = await backend.start(
+      {
+        runId: 'agy-write-scope-run',
+        task: 'edit only src/allowed.ts',
+        mode: 'edit',
+        cwd: workspace,
+        workerWorkspace: workspace,
+        runDirectory: runDir,
+        output: 'summary',
+        allowedWritePaths: ['src/allowed.ts'],
+        limits: { timeoutSeconds: 30, maxTurns: 10, maxEventBytes: 1024 * 1024, maxTranscriptBytes: 1024 * 1024 }
+      },
+      {
+        onEvent: async (event) => { observed.push(event as { type: string; data?: Record<string, unknown> }); },
+        onState: async (state, detail) => {
+          finalState = state;
+          finalDetail = detail as Record<string, unknown> | undefined;
+          if (state === 'completed' || state === 'failed' || state === 'cancelled') reportTerminal();
+        }
+      }
+    );
+
+    await childProcess.done;
+    await terminal;
+
+    const ledgerLines = (await readFile(path.join(runDir, 'antigravity-home', '.gemini', 'antigravity-cli', 'hook-ledger.jsonl'), 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { tool: string; decision: string; reason: string | null });
+    await backend.close(handle);
+
+    expect(finalState, JSON.stringify(finalDetail)).toBe('completed');
+    expect(await readFile(blockedFile, 'utf8')).toBe('export const untouched = true;\n');
+    expect(await readFile(allowedFile, 'utf8')).toBe('export const v = 2;\n');
+    expect(ledgerLines).toEqual([
+      expect.objectContaining({ tool: 'write_to_file', decision: 'deny', reason: 'outside_allowed_write_paths' }),
+      expect.objectContaining({ tool: 'write_to_file', decision: 'approve', reason: null })
+    ]);
+    expect(observed.filter((event) => event.type === 'tool_denied').map((event) => event.data)).toEqual([
+      expect.objectContaining({ tool: 'write_to_file', reason: 'outside_allowed_write_paths' })
+    ]);
+    expect(finalDetail?.usage).toMatchObject({
+      toolCalls: { executed: 1, deniedByHandler: 1, deniedByPolicy: 0 }
+    });
   });
 });

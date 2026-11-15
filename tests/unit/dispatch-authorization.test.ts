@@ -364,6 +364,49 @@ describe('durable dispatch authorization', () => {
     expect(record.allowedWritePaths).toEqual(['note.txt']);
   });
 
+  it('admits and binds allowed_write_paths on the antigravity backend', async () => {
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), 'vsup-dispatch-agy-')));
+    roots.push(root);
+    const source = path.join(root, 'source');
+    await mkdir(source, { mode: 0o700 });
+    await writeFile(path.join(source, 'note.txt'), 'hello\n');
+    const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd: source, stdio: 'ignore' });
+    git('init', '-q');
+    git('add', '.');
+    git('commit', '-q', '-m', 'fixture');
+
+    class AntigravityFixtureBackend implements SupervisorBackend {
+      readonly kind = 'antigravity' as const;
+      starts = 0;
+      lastInput?: StartRunInput;
+      async probe() { return { available: true, backend: this.kind }; }
+      async start(input: StartRunInput) {
+        this.starts++;
+        this.lastInput = input;
+        return { handle: { runId: input.runId, backend: this.kind, opaque: {} }, initialState: 'running' as const };
+      }
+      async cancel() {}
+      async close() {}
+    }
+
+    const backend = new AntigravityFixtureBackend();
+    const config = {
+      ...TEST_CONFIG,
+      backend: 'antigravity' as const,
+      experimental: { antigravity: true, antigravitySkipPermissions: true },
+      allowedWorkspaceRoots: [source]
+    };
+    const data = path.join(root, 'data');
+    const manager = new RunManager(config, data, [backend], undefined, { usageDataDir: data });
+    managers.push(manager);
+    const expires = new Date(Date.now() + 60_000).toISOString();
+    const issued = await manager.authorizeDispatch('edit', { task: 'edit', cwd: source, allowed_write_paths: ['note.txt'] }, 'test-owner-message', expires);
+    const started = await manager.editStart({ task: 'edit', cwd: source, allowed_write_paths: ['note.txt'], authorization_id: issued.authorization_id, attempt_id: issued.attempt_id });
+    await state(manager, started.run_id, 'running');
+    expect(backend.starts).toBe(1);
+    expect(backend.lastInput?.allowedWritePaths).toEqual(['note.txt']);
+  });
+
   it('allows exactly one start across isolated session managers sharing grants', async () => {
     const { manager, root, source, config, shared, backend } = await fixture();
     const otherBackend = new Backend();

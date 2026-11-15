@@ -269,7 +269,6 @@ export class RunManager {
     const input = parseInput(editStartSchema, value);
     if (input.prepared_inputs && this.activeBackendKind !== "app-server") throw codedError("VSUP_INVALID_STATE", "Prepared task inputs are supported only by the app-server backend.");
     if (input.prepared_inputs && !input.acceptance_contract) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs require an acceptance_contract to bind their output scope before dispatch.");
-    if (input.allowed_write_paths && this.activeBackendKind !== "app-server") throw codedError("VSUP_INVALID_STATE", "allowed_write_paths is supported only by the app-server backend.");
     const started = await this.start("edit", input.task, input.cwd, {
       authorizationId: input.authorization_id, attemptId: input.attempt_id,
       maxTurns: input.max_turns ?? this.config.limits.maxTurnsEdit, timeoutSeconds: input.timeout_seconds ?? this.config.limits.editTimeoutSeconds,
@@ -293,7 +292,6 @@ export class RunManager {
     const acceptanceContract = "acceptance_contract" in parsed ? parsed.acceptance_contract : undefined;
     const preparedInputs = "prepared_inputs" in parsed ? parsed.prepared_inputs : undefined;
     const allowedWritePaths = "allowed_write_paths" in parsed ? parsed.allowed_write_paths : undefined;
-    if (allowedWritePaths && this.activeBackendKind !== "app-server") throw codedError("VSUP_INVALID_STATE", "allowed_write_paths is supported only by the app-server backend.");
     if (preparedInputs) {
       if (!acceptanceContract) throw codedError("VSUP_INVALID_ARGUMENT", "Prepared inputs require an acceptance contract.");
       await this.assertPreparedInputAdmission({ directory: preparedInputs.directory, manifestSha256: preparedInputs.manifest_sha256 }, acceptanceContract, admitted, baseCommit, policy, deadline);

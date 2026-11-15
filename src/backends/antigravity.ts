@@ -858,6 +858,7 @@ export class AntigravityBackend implements SupervisorBackend {
       mode: input.mode,
       workerWorkspace: input.workerWorkspace,
       excludedAnchors: anchors,
+      ...(input.allowedWritePaths ? { allowedWritePaths: input.allowedWritePaths } : {}),
       maxTurns,
       maxModelCalls
     });

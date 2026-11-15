@@ -23,6 +23,7 @@ The aim of this release is that a task Codex hands to a worker comes back right 
 - The [quality pack](docs/quality-pack.md) (`scripts/quality-pack.mjs`, source repository only): a generated project with two planted bugs and four tasks, each with an independent check that runs hidden tests on the exported patch or looks for the expected findings.
 - Opt-in `app_server_wire_trace` diagnostics that record supervisor timeouts, cancellation requests, interrupts and completion frames.
 - Review records and exports carry `context_file_count`.
+- Experimental Antigravity enforces `allowed_write_paths` in its `PreToolUse` hook with `outside_allowed_write_paths` denials, matching `app-server`.
 
 ### Changed
 
