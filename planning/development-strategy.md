@@ -57,17 +57,18 @@ These rules came from failures, each named under [What we know](#what-we-know).
 
 Done and proven on Vibe 3.1.2: version floors, worker rules per tool, no listing when files are named, review briefs by the delegation rules, checks before the grant, review results that show what was read, preparation that explains itself, one-command evidence.
 
+Done, decided by the owner on 2026-11-15 and not yet run on a worker: a Vibe edit that stops at its turn limit is judged by its contract and checks, as a timeout after audited writes already is. The stop is reported only after a clean final audit, so the checks decide and a finished patch is kept. agy turn-limit edits stay `incomplete`: the worker is ended at the limit and a write in flight cannot be confirmed.
+
 Now, each its own commit. Every step answers a failure in the third runs, or is marked a candidate.
 
 1. **Turn limits by mode.** The skill's 12-turn figure is for a review of two or three files; an edit, and a correction most of all, takes the configured default. *Failure:* the correction was capped at 12 and lost at the turn limit.
 2. **Stop after a refusal.** The worker rules say that a refused tool will be refused again: do not retry it or look for another way to run something, give the final answer. If the approval reply can carry a reason to the worker, it says the same. *Failure:* two shell attempts after the work was done.
-3. **Owner decision: an edit that stops at its turn limit after audited writes.** A timeout in the same state is now judged by its contract and checks; the turn limit is still `incomplete`, by the choice made on 2026-11-14. *Evidence:* the correction's patch passed every check and was closed rejected.
-4. **agy preparation runs the run's own audit.** The stream-shape probe must require what a live run requires: every executed call has a call ID or its arguments, and reconciles with the hook ledger. *Failure:* preparation passed and the hosted run failed after inference.
-5. **agy diagnostics.** Keep the whole remedy line and read the tool list from agy's real `init` shape. *Failure:* the two gaps above.
-6. **agy strict mode.** Find the allow-rule target form agy matches for a read inside the workspace, on the worker machine, by trying forms through the control probe. The aim is two gates, agy's permissions and our hook, instead of the hook alone.
-7. **Measurements on the worker machine,** recorded with `quality-pack.mjs record`: the two reviews five times with `vibe_review_thinking = "off"`; `review-total` and both edits on agy; the calendar-date replay with the type-check line in the brief and default turns.
-8. **Candidates, no failure behind them yet:** fewer model calls for a review of small named files (`review-total` takes four); `context_reads` for agy; agy `--json-schema` for findings; the [search sidecar](review-search-tool.md) only if reviews miss code they were not given.
-9. **Release 2.2.1** once the calendar-date replay passes on Vibe. agy ships experimental.
+3. **agy preparation runs the run's own audit.** The stream-shape probe must require what a live run requires: every executed call has a call ID or its arguments, and reconciles with the hook ledger. *Failure:* preparation passed and the hosted run failed after inference.
+4. **agy diagnostics.** Keep the whole remedy line and read the tool list from agy's real `init` shape. *Failure:* the two gaps above.
+5. **agy strict mode.** Find the allow-rule target form agy matches for a read inside the workspace, on the worker machine, by trying forms through the control probe. The aim is two gates, agy's permissions and our hook, instead of the hook alone.
+6. **Measurements on the worker machine,** recorded with `quality-pack.mjs record`: the two reviews five times with `vibe_review_thinking = "off"`; `review-total` and both edits on agy; the calendar-date replay with the type-check line in the brief and default turns.
+7. **Candidates, no failure behind them yet:** fewer model calls for a review of small named files (`review-total` takes four); `context_reads` for agy; agy `--json-schema` for findings; judging an agy edit that stopped at its turn limit, once agy edits have run and a write in flight at the stop can be told apart; the [search sidecar](review-search-tool.md) only if reviews miss code they were not given.
+8. **Release 2.2.1** once the calendar-date replay passes on Vibe. agy ships experimental.
 
 After every Vibe or agy release: `prepare check`, then the quality pack, recorded. That run is the regression test for the worker.
 

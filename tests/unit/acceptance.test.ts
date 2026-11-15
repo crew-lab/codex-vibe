@@ -26,17 +26,23 @@ describe('artifact acceptance', () => {
       expect(contractDigest(contract)).toMatch(/^[a-f0-9]{64}$/);
       const result = await captureVerification({ directory, source: root, base, patch, contract, executionState: 'completed', stopReason: 'end_turn', maxBytes: 1024 * 1024 });
       expect(result.status).toBe('passed');
-      for (const [name, raw, state, stopReason, expected] of [
+      for (const [name, raw, state, stopReason, expected, backend] of [
         ['missing-disclosure', {...contract, checks:[{id:'required',kind:'text_contains',path:'page.txt',value:'MISSING DISCLOSURE'}]}, 'completed', 'end_turn', 'failed'],
         ['scope', {...contract, allowed_changed_paths:['other.txt'], required_changed_paths:[]}, 'completed', 'end_turn', 'failed'],
         ['execution', contract, 'failed', 'end_turn', 'incomplete'],
         ['timeout-pass', contract, 'completed', 'timeout', 'passed'],
         ['timeout-fail', {...contract, checks:[{id:'required',kind:'text_contains',path:'page.txt',value:'MISSING DISCLOSURE'}]}, 'completed', 'timeout', 'failed'],
-        ['turn-limit', contract, 'completed', 'turn_limit', 'incomplete']
+        ['turn-limit-pass', contract, 'completed', 'turn_limit', 'passed', 'app-server'],
+        ['turn-limit-fail', {...contract, checks:[{id:'required',kind:'text_contains',path:'page.txt',value:'MISSING DISCLOSURE'}]}, 'completed', 'turn_limit', 'failed', 'app-server'],
+        ['turn-limit-agy', contract, 'completed', 'turn_limit', 'incomplete', 'antigravity'],
+        ['turn-limit-unrecorded-engine', contract, 'completed', 'turn_limit', 'incomplete'],
+        ['token-limit', contract, 'completed', 'token_limit', 'incomplete', 'app-server'],
+        ['price-limit', contract, 'completed', 'price_limit', 'incomplete', 'app-server'],
+        ['refusal', contract, 'completed', 'refusal', 'incomplete', 'app-server']
       ] as const) {
         const separate = path.join(root,name); await mkdir(separate,{mode:0o700}); await mkdir(path.join(separate,'artifacts'),{mode:0o700});
         await writeFile(path.join(separate,'artifacts','diff.patch'),patch,{mode:0o600});
-        expect((await captureVerification({directory:separate,source:root,base,patch,contract:acceptanceContractSchema.parse(raw),executionState:state,stopReason,maxBytes:1024*1024})).status).toBe(expected);
+        expect((await captureVerification({directory:separate,source:root,base,patch,contract:acceptanceContractSchema.parse(raw),executionState:state,stopReason,...(backend ? { backend } : {}),maxBytes:1024*1024})).status, name).toBe(expected);
       }
       await writeFile(path.join(root, 'page.txt'), 'Worker directory subsequently changed');
       expect((await verifySaved(directory, contract, 1024 * 1024)).status).toBe('passed');

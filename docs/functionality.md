@@ -62,7 +62,7 @@ Outcomes come from the turn status, its stop reason and error code, and the limi
 | Observed | State | `stop_reason` or error |
 |---|---|---|
 | Turn ended normally | `completed` | `end_turn`; a warning if no final message exists |
-| Vibe's iteration limit, or the supervisor's model-call backstop | `completed` | `turn_limit`, with an incomplete-result warning |
+| Vibe's iteration limit, or the supervisor's model-call backstop | `completed` | `turn_limit`, with an incomplete-result warning; for a Vibe edit the contract and checks judge the patch |
 | `limits.max_tokens` crossed | `completed` | `token_limit`, with the warning |
 | `limits.max_cost_usd` crossed | `completed` | `price_limit`, with the warning |
 | The model declined (error code `refusal`) | `completed` | `refusal`, with a warning that the result is not a review or an edit |
@@ -82,7 +82,7 @@ A protocol failure recorded earlier (a malformed or unrecognized message, an eve
 
 The settled outcome is kept as the record's `execution_state` when close moves `state` to `closed`, so a closed run still shows whether it completed, failed or was cancelled; a record written without that field reports `unknown` in exports. The record's `started_at` is the first time the run was observed running. See [workflow acceptance](workflow-acceptance.md#execution-lifecycle-and-reasoning-observations).
 
-A limit stop means execution ended at its budget, not that the task succeeded. The supervisor does not retry, continue, or raise the budget. A stop reason Vibe reports that the supervisor does not know is recorded as `completed` with that text and the incomplete-result warning; read it before trusting the answer.
+A limit stop means execution ended at its budget, not that the task succeeded. The supervisor does not retry, continue, or raise the budget. A Vibe edit that stops at its turn limit is still judged by its acceptance contract and checks, because a `completed` turn-limit stop means the final history audit ran and every effect was approved and finished; a patch that was already right is not lost to turns the worker wasted afterwards. A token or price limit stop stays `incomplete`, and so does a turn-limit stop on the Antigravity backend, where the worker is ended at the limit and a write in flight cannot be confirmed. A stop reason Vibe reports that the supervisor does not know is recorded as `completed` with that text and the incomplete-result warning; read it before trusting the answer.
 
 Closing a live run cancels its process group and accounts for worktree creation that is already in flight. Worktree deletion requires the expected canonical run-owned path, validated Git registration, a fresh export matching the saved artifact, and an inventory showing the worktree is pristine. Dirty or uncertain worktrees are retained with an explicit path and reason so the coordinator can review the exported patch. Cleanup is admitted by the root recorded when the run started, not by the current allowlist. Removing a root does not stop a run already admitted there: it runs to its normal end, stays readable and closable, and its verified pristine worktree can still be removed; a dirty or uncertain one is retained exactly as before. Saved PIDs alone never authorize termination, and saved mutable worktree metadata alone never authorizes deletion.
 

@@ -274,6 +274,31 @@ describe("frozen patch assessment", () => {
   });
 });
 
+describe("an edit that stopped at its turn limit", () => {
+  it.each([
+    ["passes when the patch meets the contract", "Developing BMS practice.\n", "passed"],
+    ["fails when the patch misses a check", "Something else.\n", "failed"]
+  ] as const)("%s", async (_name, content, expected) => {
+    const context = await setup();
+    try {
+      const contract = acceptanceContractSchema.parse({ schema_version: 1, allowed_changed_paths: ["tracked.txt"], required_changed_paths: ["tracked.txt"], checks: [{ id: "disclosure", kind: "text_contains", path: "tracked.txt", value: "Developing BMS practice." }], required_validations: ["build"] });
+      const started = await authorizedEditStart(context.manager, { task: "edit", cwd: context.source, acceptance_contract: contract });
+      await waitFor(() => stateOf(context.manager, started.run_id), value => value === "running");
+      await writeFile(path.join(context.data, "worktrees", started.run_id, "tracked.txt"), content);
+      await context.backend.callbacks.get(started.run_id)?.onState("completed", { result: { summary: "", stopReason: "turn_limit" } });
+      await waitFor(() => stateOf(context.manager, started.run_id), value => value === "completed");
+      const result = await context.manager.result({ run_id: started.run_id });
+      expect(result.stop_reason).toBe("turn_limit");
+      expect(result.verification).toMatchObject({ status: expected });
+      const meta = JSON.parse(await readFile(path.join(runDir(context.data, started.run_id), "meta.json"), "utf8"));
+      const patchHash = meta.result.artifacts.find((a: {name: string}) => a.name === "diff.patch").sha256;
+      const accepted = { patch_sha256: patchHash, contract_sha256: contractDigest(contract), reason: "Checks run by the coordinator", decision: "accepted" as const, validations: [{ id: "build", status: "passed" as const }] };
+      if (expected === "passed") await context.manager.close({ run_id: started.run_id, assessment: accepted });
+      else await expect(context.manager.close({ run_id: started.run_id, assessment: accepted })).rejects.toThrow(/automated PASS/);
+    } finally { await context.manager.shutdown(); }
+  });
+});
+
 describe("run report execution lifecycle", () => {
   it.each(["completed", "failed", "cancelled"] as const)("preserves a %s review outcome and observed start time after close", async (outcome) => {
     const backend = new CloseBackend();

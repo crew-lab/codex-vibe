@@ -1,18 +1,26 @@
 import path from 'node:path';
 import { inspectNodeTests } from './node-test.js';
 import { z } from 'zod';
+import { BACKEND_KINDS } from '../contracts.js';
 import { atomicWriteJson } from '../persistence/atomic.js';
 import { createPrivateDir, createPrivateFile } from '../security/paths.js';
 import { inspectExport } from '../git/worktree.js';
 import { readOwnedFile, assertOwnedDirectory } from '../reporting/private-files.js';
 import { acceptanceContractSchema, contractDigest, digest, safeRelativePath, sha256, type AcceptanceContract, type CheckResult, type Verification } from './schema.js';
 
-const snapshotSchema = z.object({ schema_version: z.literal(1), contract_sha256: sha256, patch_sha256: sha256, base_commit: z.string().regex(/^[a-f0-9]{40,64}$/), execution_state: z.enum(['completed', 'failed', 'cancelled', 'not_started']), stop_reason: z.string().nullable(), changed_files: z.array(safeRelativePath).max(1000), files: z.array(z.object({ path: safeRelativePath, mode: z.string().nullable(), sha256: sha256.nullable(), bytes: z.number().int().min(0).max(4 * 1024 * 1024) }).strict()).max(100) }).strict();
+const snapshotSchema = z.object({ schema_version: z.literal(1), contract_sha256: sha256, patch_sha256: sha256, base_commit: z.string().regex(/^[a-f0-9]{40,64}$/), execution_state: z.enum(['completed', 'failed', 'cancelled', 'not_started']), stop_reason: z.string().nullable(), backend: z.enum(BACKEND_KINDS).optional(), changed_files: z.array(safeRelativePath).max(1000), files: z.array(z.object({ path: safeRelativePath, mode: z.string().nullable(), sha256: sha256.nullable(), bytes: z.number().int().min(0).max(4 * 1024 * 1024) }).strict()).max(100) }).strict();
 type Snapshot = z.infer<typeof snapshotSchema>;
 const MAX_INPUTS = 16 * 1024 * 1024;
 const ASSESSABLE_STOP_REASONS = new Set(['end_turn', 'timeout']);
+const AUDITED_LIMIT_STOP = { backend: 'app-server', stopReason: 'turn_limit' } as const;
 
-export async function captureVerification(options: { directory: string; source: string; base: string; patch: Buffer; contract: AcceptanceContract; executionState: 'completed' | 'failed' | 'cancelled' | 'not_started'; stopReason?: string; maxBytes: number }): Promise<Verification> {
+function stopIsAssessable(snapshot: Snapshot): boolean {
+  if (snapshot.execution_state !== 'completed' || snapshot.stop_reason === null) return false;
+  if (ASSESSABLE_STOP_REASONS.has(snapshot.stop_reason)) return true;
+  return snapshot.stop_reason === AUDITED_LIMIT_STOP.stopReason && snapshot.backend === AUDITED_LIMIT_STOP.backend;
+}
+
+export async function captureVerification(options: { directory: string; source: string; base: string; patch: Buffer; contract: AcceptanceContract; executionState: 'completed' | 'failed' | 'cancelled' | 'not_started'; stopReason?: string; backend?: Snapshot['backend']; maxBytes: number }): Promise<Verification> {
   const { directory, source, base, patch, contract } = options;
   const inputs = path.join(directory, 'acceptance'); await createPrivateDir(inputs); await createPrivateDir(path.join(inputs, 'blobs'));
   const paths = [...new Set(contract.checks.map((check) => check.path))];
@@ -29,7 +37,7 @@ export async function captureVerification(options: { directory: string; source: 
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; if (digest(await readOwnedFile(path.join(inputs, 'blobs', hash))) !== hash) throw new Error('Verification blob mismatch'); }
     files.push({ path: file, mode: entry.mode, sha256: hash, bytes: entry.bytes.length });
   }
-  const snapshot: Snapshot = { schema_version: 1, contract_sha256: contractDigest(contract), patch_sha256: digest(patch), base_commit: base, execution_state: options.executionState, stop_reason: options.stopReason ?? null, changed_files: candidate.changedFiles, files };
+  const snapshot: Snapshot = { schema_version: 1, contract_sha256: contractDigest(contract), patch_sha256: digest(patch), base_commit: base, execution_state: options.executionState, stop_reason: options.stopReason ?? null, ...(options.backend ? { backend: options.backend } : {}), changed_files: candidate.changedFiles, files };
   await atomicWriteJson(path.join(inputs, 'snapshot.json'), snapshotSchema.parse(snapshot));
   return verifySaved(directory, contract, Math.max(options.maxBytes, patch.length));
 }
@@ -74,7 +82,7 @@ export async function verifySaved(directory: string, rawContract: AcceptanceCont
       }
       checks.push({ id: check.id, path: check.path, status: passed ? 'passed' : 'failed', reason });
     }
-    const status = snapshot.execution_state !== 'completed' || snapshot.stop_reason === null || !ASSESSABLE_STOP_REASONS.has(snapshot.stop_reason) ? 'incomplete' : checks.every((check) => check.status === 'passed') ? 'passed' : 'failed';
+    const status = !stopIsAssessable(snapshot) ? 'incomplete' : checks.every((check) => check.status === 'passed') ? 'passed' : 'failed';
     return { ...binding, patch_sha256: snapshot.patch_sha256, base_commit: snapshot.base_commit, execution_state: snapshot.execution_state, status, checks };
   } catch {
     return { ...binding, status: 'incomplete', checks: [{ id: '$artifacts', status: 'incomplete', reason: 'missing-unsafe-or-changed-verification-inputs' }] };

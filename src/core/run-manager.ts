@@ -1618,7 +1618,7 @@ export class RunManager {
     if (runtime.record.acceptanceContract && patchInfo && runtime.record.worktree) {
       try {
         const patch = await readOwnedFile(patchInfo.patchPath, runtime.record.limits.maxArtifactBytes);
-        runtime.record.verification = await captureVerification({ directory: runtime.directory, source: runtime.record.sourceWorkspace, base: runtime.record.worktree.baseRef, patch, contract: runtime.record.acceptanceContract, executionState: runtime.record.executionState === "not_started" ? "not_started" : resultState === "completed" ? "completed" : resultState === "cancelled" ? "cancelled" : "failed", ...(stopReason ? { stopReason } : {}), maxBytes: runtime.record.limits.maxArtifactBytes - artifactBytes });
+        runtime.record.verification = await captureVerification({ directory: runtime.directory, source: runtime.record.sourceWorkspace, base: runtime.record.worktree.baseRef, patch, contract: runtime.record.acceptanceContract, executionState: runtime.record.executionState === "not_started" ? "not_started" : resultState === "completed" ? "completed" : resultState === "cancelled" ? "cancelled" : "failed", ...(stopReason ? { stopReason } : {}), backend: runtime.record.backend, maxBytes: runtime.record.limits.maxArtifactBytes - artifactBytes });
       } catch {
         runtime.record.verification = { status: "incomplete", contract_sha256: contractDigest(runtime.record.acceptanceContract), checks: [{ id: "$artifacts", status: "incomplete", reason: "verification-inputs-unavailable" }] };
       }

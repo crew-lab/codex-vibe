@@ -16,10 +16,11 @@
 - **Evidence comes back.** Twelve record files, the 30 old answers and agy's strict-mode diagnostics were committed from the worker machine.
 - **Boundary.** Reviews stay read-only, edits stay in their worktrees, nothing reaches shell or network, and runs clean up after themselves.
 - **At the deadline.** A turn that finishes as the timeout cancels it keeps its result, and an edit cut off after audited writes is judged by its contract and checks.
+- **At the turn limit** (owner decision, 2026-11-15; unit and integration tests only, not yet seen on a worker). A Vibe edit that stops at its turn limit is judged by its contract and checks: the stop is reported only after a clean final history audit. Token and price limit stops stay `incomplete`, as do agy turn-limit edits, where a write in flight at the stop cannot be confirmed.
 
 ## What does not work well yet
 
-- **A correct patch was closed rejected at the turn limit.** The calendar-date correction passed build, lint, typecheck and both checks. Its request capped the turns at 12, the figure the skill gives for reviews; after finishing, Vibe twice tried a shell tool it does not have and ran out of turns. An edit that stops at its turn limit is `incomplete` and cannot be accepted.
+- **A correct patch was closed rejected at the turn limit.** The calendar-date correction passed build, lint, typecheck and both checks. Its request capped the turns at 12, the figure the skill gives for reviews; after finishing, Vibe twice tried a shell tool it does not have and ran out of turns. Since then a Vibe edit that stops at its turn limit is judged by its contract and checks (see What works); that run keeps its verdict, so the replay below still stands.
 - **The worker does not always stop when told.** Under the supervisor's rules it still tried to run something after the work was done.
 - **The first brief of the calendar-date replay left out the type-check line** the skill asks for, and its patch failed TypeScript under `noUncheckedIndexedAccess`.
 - **Reviews cost more than before:** `review-total` takes 4 model calls and about 29,000 to 33,000 tokens (it was 2 calls and about 11,600); `review-stock` about 17,300 (it was about 11,000). Whether thinking is needed for the passes is not measured: the new briefs have not been run with it off.
@@ -50,13 +51,12 @@
 
 1. **Turn limits by mode** in the skill and the Codex agent: the 12-turn figure is for a review of two or three files; an edit or a correction takes the configured default.
 2. **Stop after a refusal.** Worker rules: a refused tool will be refused again; do not retry it or look for another way to run something; give the final answer. If the approval reply can carry a reason to the worker, say it there too. Check with `quality-pack.mjs prompt` and stand-in workers, then on Vibe.
-3. **Owner decision:** whether an edit that stops at its turn limit after audited writes is judged by its contract and checks, as a timeout in the same state now is. The correction above is the evidence.
-4. **agy preparation runs the run's own audit:** the stream-shape probe requires a call ID or arguments for every executed call and reconciles it with the hook ledger, so a changed stream shape fails at `prepare check`, before any inference.
-5. **agy diagnostics:** keep the whole remedy line from stderr and read the tool list from agy's real `init` shape.
-6. **agy strict mode:** try allow-rule target forms through the control probe on the worker machine until agy runs the allowed read without the bypass. The aim is two gates instead of one.
-7. **Candidates, no failure behind them yet:** fewer model calls for a review of small named files; `context_reads` for agy; agy `--json-schema` for findings.
-8. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
-9. **Release 2.2.1** once the calendar-date replay passes on Vibe. agy ships experimental.
+3. **agy preparation runs the run's own audit:** the stream-shape probe requires a call ID or arguments for every executed call and reconciles it with the hook ledger, so a changed stream shape fails at `prepare check`, before any inference.
+4. **agy diagnostics:** keep the whole remedy line from stderr and read the tool list from agy's real `init` shape.
+5. **agy strict mode:** try allow-rule target forms through the control probe on the worker machine until agy runs the allowed read without the bypass. The aim is two gates instead of one.
+6. **Candidates, no failure behind them yet:** fewer model calls for a review of small named files; `context_reads` for agy; agy `--json-schema` for findings; judging an agy edit that stopped at its turn limit.
+7. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
+8. **Release 2.2.1** once the calendar-date replay passes on Vibe. agy ships experimental.
 
 ## Build, install and prepare
 
