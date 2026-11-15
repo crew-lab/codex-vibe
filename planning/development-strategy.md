@@ -2,11 +2,13 @@
 
 ## The goal
 
-Codex hands a task to a worker, the worker reviews or implements it, and it works well every time. Three things decide every choice:
+Codex hands a task to a worker, the worker reviews or implements it, and it works well every time. Five things decide every choice; each has a check that can be run.
 
-- **Stable.** A correct result is never lost and a wrong one is never accepted.
-- **Fault tolerant.** Anything that can go wrong is caught as early as it can be known, costs as little as possible, and says what happened and what to do, where the person who can act sees it.
-- **Efficient.** No start, turn, token or minute is spent on something the worker cannot use or the coordinator could have done itself.
+- **Stable.** A correct result is never lost and a wrong one is never accepted. *Check:* the quality pack passes every trial, and no run whose patch passes its checks is closed as rejected.
+- **Fault tolerant.** Anything that can go wrong is caught as early as it can be known, costs as little as possible, and says what happened and what to do, where the person who can act sees it. *Check:* nothing fails after the grant that was knowable before it, and nothing fails after inference that preparation could have caught.
+- **Resilient.** A new worker release, or a worker that does something it was told not to, ends in a named, cheap failure or a result that can still be used, never in a lost run. *Check:* after each Vibe or agy release, `prepare check` and the quality pack are rerun and recorded; a refused tool or a spent turn budget does not discard finished work.
+- **Flexible.** The same delegation works with both workers and across projects and task shapes, and its choices are configuration that has been measured. *Check:* the quality pack passes on Vibe and on agy; thinking, limits and the permission mode can each be changed without code and have a recorded result for each setting.
+- **Efficient.** No start, turn, token or minute is spent on something the worker cannot use or the coordinator could have done itself. *Check:* model calls and tokens per task are recorded and do not rise without a pass that needed them.
 
 The implementation stays simple: one prompt builder, one rule text per worker, version floors instead of lists. No process, gates or decision records.
 
@@ -24,12 +26,14 @@ These rules came from failures, each named under [What we know](#what-we-know).
 6. **Every failure names its cause and remedy where the operator sees it.** A hash, "stale" or "failed" on its own is a defect.
 7. **Evidence comes back as one command.** If reporting a failed run takes copying from four places, it will not be reported.
 8. **Measure before shipping.** A change to what a worker sees is run through stand-in workers and the unchanged checker here first, then on the real worker five times per configuration. One run attributes nothing, and several changes at once attribute nothing.
+9. **Prepare with the run's own checks.** Whatever a live run will require of the worker's output, preparation requires first. A probe that is easier to pass than the run it stands for moves the failure to after inference.
+10. **Set limits for the task in hand.** A turn or time figure measured on one kind of task is not carried to another; when in doubt, the configured default.
 
 ## What we know
 
 **Source review (2026-11-13).** Vibe ran our tasks under its own interactive prompt (todo lists, searches, "done when tests pass"); Vibe 3.1.0 added a `systemPrompt` session option that replaces it. `read_file` returns at most 2,000 lines or 64,000 bytes and lists a directory below the workspace root; there is no search tool. agy 1.5.7 made Auto the headless default; exit code 3 marks both a print timeout and a model error.
 
-**First real runs, Vibe 3.1.2.** The supervisor's worker rules and settings were accepted and every run since has ended normally. Both edits pass (`edit-reserve-all` fell from 74,132 to 53,272 tokens). Review prompts cost about a quarter less. A general rule did not fix a compile error: the calendar-date patch failed TypeScript for a reason the rules already named.
+**First real runs, Vibe 3.1.2.** The supervisor's worker rules and settings were accepted. Both edits pass (`edit-reserve-all` fell from 74,132 to 53,272 tokens). Review prompts cost about a quarter less. A general rule did not fix a compile error: the calendar-date patch failed TypeScript for a reason the rules already named.
 
 **Second real runs.** Both reviews failed 0 of 5 on the earlier build, on the new build with thinking off and with thinking high: 30 runs, all ending normally. The evidence rules and thinking changed nothing. Two rounds of fixes had been shipped without a way to measure them here, and only hashes came back from the worker machine.
 
@@ -37,22 +41,35 @@ These rules came from failures, each named under [What we know](#what-we-know).
 
 **Audit of the delegation chain.** Credentials and the pin were checked only after the grant was spent (an agy review burned a start on a missing key). A start did not recheck preparation. `prepare check` printed a hash and nothing to act on. The coordinator could not see which named files a review read, and an empty answer read as success. A stale receipt did not say what changed.
 
-**agy 1.5.8.** Preparation passes only with `antigravity_skip_permissions = true`; in strict mode the allowed read never executes. No hosted agy run has happened yet.
+**Third real runs, on `e429a9b`** ([evidence](../research/evidence/vibe-312-quality-e429-20261114/README.md)).
+
+- **Vibe passed the whole quality pack, 12 of 12:** `review-total` 5 of 5, `review-stock` 5 of 5, both edits. Every review read exactly its three named files and ended normally.
+- **The briefs did it, not the checker.** The 30 earlier answers were re-scored with the new checker and all 30 still fail. Every old `review-stock` answer lacked the evidence (no error class, no file). Every old `review-total` answer missed the strict comparison, and most of its failed value checks were wrong numbers, not layout.
+- **Thinking is not attributed.** Old briefs with thinking high passed 0 of 5; new briefs with thinking high passed 5 of 5; new briefs with thinking off have not been run.
+- **Reviews cost more.** `review-total` went from 2 model calls and about 11,600 tokens to 4 calls and about 29,000 to 33,000; `review-stock` from about 11,000 to about 17,300. Edits did not change.
+- **The evidence loop works.** Twelve record files and the 30 old answers came back committed, and agy's own diagnostics named why strict mode fails.
+- **A correct patch was still lost.** The calendar-date correction fixed the compile error from the exact diagnostic (one run). Its request capped the turns at 12, the figure our skill gives for reviews. After finishing, the worker twice tried a shell tool it had been told it does not have, ran out of turns, and the run was closed rejected although build, lint, typecheck and both checks passed.
+- **agy 1.5.9 passed one live review** (`review-stock`) with `antigravity_skip_permissions = true`. Before that, preparation had passed and the live run then failed after inference: agy 1.5.9 reports a tool call's arguments under `tool_info.parameters`, the preparation probe counted the call by name, and the run's audit needed a call ID or the arguments. agy `review-total` and edits are unrun.
+- **agy strict mode has a named cause.** The hook approved the read, and agy then refused it because headless mode cannot prompt and no allow rule matched. Our rule names the workspace path and `/**`; the probe reads an absolute path. Which target form agy matches is not known.
+- **Two gaps in the diagnostics:** agy's remedy text was cut at 240 characters, and the tool names from its `init` event came back empty.
 
 ## What we work on
 
-Done: version floors, worker rules per tool, no listing when files are named, opt-out thinking for reviews, the correction rule after a failed check, agy probe diagnostics.
+Done and proven on Vibe 3.1.2: version floors, worker rules per tool, no listing when files are named, review briefs by the delegation rules, checks before the grant, review results that show what was read, preparation that explains itself, one-command evidence.
 
-Now, each its own commit:
+Now, each its own commit. Every step answers a failure in the third runs, or is marked a candidate.
 
-1. **Review briefs by the rules above.** Observed values in, working first, a form out, quoted source lines; the checker reads the form.
-2. **Checks before the grant.** Credential, pin and preparation at readiness and before the consume; a launch that never started is marked as such.
-3. **Signals the coordinator can use.** Which named files a review read, tool-call counts in the default result, a warning for an empty answer or a missing findings block.
-4. **Preparation that explains itself.** The report path and failing findings in the command's output, the remedy for agy's strict mode, and the component that made a receipt stale.
-5. **One command for evidence.** `runs export --include answer`, then `quality-pack.mjs record`, gives one small file to commit; `quality-pack.mjs prompt` shows what a worker receives.
-6. **Real runs again**, five per configuration, with the records committed.
-7. **Later, one at a time:** the first hosted agy review once a key is available; agy `--json-schema` for findings; the [search sidecar](review-search-tool.md) only if reviews still miss code they were not given.
-8. **Release 2.2.1** once the reviews pass on Vibe. agy ships experimental and unqualified until a hosted run passes.
+1. **Turn limits by mode.** The skill's 12-turn figure is for a review of two or three files; an edit, and a correction most of all, takes the configured default. *Failure:* the correction was capped at 12 and lost at the turn limit.
+2. **Stop after a refusal.** The worker rules say that a refused tool will be refused again: do not retry it or look for another way to run something, give the final answer. If the approval reply can carry a reason to the worker, it says the same. *Failure:* two shell attempts after the work was done.
+3. **Owner decision: an edit that stops at its turn limit after audited writes.** A timeout in the same state is now judged by its contract and checks; the turn limit is still `incomplete`, by the choice made on 2026-11-14. *Evidence:* the correction's patch passed every check and was closed rejected.
+4. **agy preparation runs the run's own audit.** The stream-shape probe must require what a live run requires: every executed call has a call ID or its arguments, and reconciles with the hook ledger. *Failure:* preparation passed and the hosted run failed after inference.
+5. **agy diagnostics.** Keep the whole remedy line and read the tool list from agy's real `init` shape. *Failure:* the two gaps above.
+6. **agy strict mode.** Find the allow-rule target form agy matches for a read inside the workspace, on the worker machine, by trying forms through the control probe. The aim is two gates, agy's permissions and our hook, instead of the hook alone.
+7. **Measurements on the worker machine,** recorded with `quality-pack.mjs record`: the two reviews five times with `vibe_review_thinking = "off"`; `review-total` and both edits on agy; the calendar-date replay with the type-check line in the brief and default turns.
+8. **Candidates, no failure behind them yet:** fewer model calls for a review of small named files (`review-total` takes four); `context_reads` for agy; agy `--json-schema` for findings; the [search sidecar](review-search-tool.md) only if reviews miss code they were not given.
+9. **Release 2.2.1** once the calendar-date replay passes on Vibe. agy ships experimental.
+
+After every Vibe or agy release: `prepare check`, then the quality pack, recorded. That run is the regression test for the worker.
 
 ## How we judge it
 
@@ -60,9 +77,9 @@ Here, with no worker installed (this proves the client against its fakes, and br
 
 - `npm run verify:release` passes on Node 20 and 24 in CI.
 - A start refused for a missing credential, a stale preparation or a pin mismatch leaves its grant unspent, and the same grant starts once the cause is fixed.
-- A changed brief or worker rule is printed with `quality-pack.mjs prompt`, answered by at least four stand-in workers, and scored by the unchanged checker. A brief that fails any of them is fragile; fix it before it reaches a worker.
+- A changed brief or worker rule is printed with `quality-pack.mjs prompt`, answered by at least four stand-in workers, and scored by the unchanged checker. A brief that fails any of them is fragile; fix it before it reaches a worker. The stand-ins are a floor: they passed an old brief that Vibe failed 15 times.
 
-On the worker machine: `prepare check`, then each review task five times per configuration and each edit once, exported and recorded with the two commands above, and the record files committed. A change stays when no task gets worse and an earlier failure passes, or turns and tokens go down.
+On the worker machine: `prepare check`, then each review task five times per configuration and each edit once, exported and recorded, and the record files committed. A change stays when no task gets worse and an earlier failure passes, or model calls and tokens go down. One run attributes nothing.
 
 ## Architecture and enforcement points
 
@@ -99,7 +116,7 @@ Around this sit the run controls: strict schemas and exactly five tools; a singl
 | Vibe's own remote configuration | The pinned server refreshes an organization-managed configuration whenever a provider key is present, and a remote layer could override the private settings | The owned loopback endpoint serves a disabled policy and is read back (ADR 0005); there is no remote fallback, so deployments that need organization policy cannot use this profile |
 | Codex and Antigravity churn | Codex's tool search and managed worktrees change how the five tools appear; Antigravity ships weekly, has moved its config paths three times and lazy-loads MCP tools | Readiness proves the catalogue on the live connection, and `expected_candidate` proves the build; every claim names the client/CLI version; agy is bound by a version floor (1.5.8) and its binary hash |
 | Antigravity consumer terms | Running agy headless under a consumer Google sign-in may be outside Antigravity's consumer terms, and forum users report account suspensions, a risk that falls on the account holder | The backend is opt-in and experimental; documentation says to prefer an API key or enterprise authentication and never to use a consumer sign-in from anything that ships; the two-provider data flow is stated |
-| Antigravity behaviour unproven | The Antigravity gate is a hook that agy must load, run and obey; if agy skips it, denies nothing on a failed hook, bypasses the proxy or loads project configuration above the workspace, the tool limits are not enforced | Off by default; `prepare check` probes each behaviour through agy and fails the receipt unless it passes; with `antigravity_skip_permissions` on, the probes do not yet cover a review-mode write or a shell tool |
+| Antigravity behaviour unproven | The Antigravity gate is a hook that agy must load, run and obey; if agy skips it, denies nothing on a failed hook, bypasses the proxy or loads project configuration above the workspace, the tool limits are not enforced | Off by default; `prepare check` probes each behaviour through agy and fails the receipt unless it passes; with `antigravity_skip_permissions` on, the probes do not yet cover a review-mode write or a shell tool; on agy 1.5.9 one live review has passed with the bypass on, and strict mode still refuses the allowed read |
 | Single platform | macOS Apple silicon only; Linux and Windows code paths exist without evidence | Said in the first paragraph of everything; other platforms are contribution areas, not roadmap |
 | Costs barely measured | One hosted review on this build: 14,442 tokens, three model calls, about USD 0.022 by the runtime price estimate; turn count and the underlying model unreported; cost is an estimate | One figure, not a rate; optional ceilings; model and price observations recorded per run; the usefulness log reports rejected runs beside accepted ones |
 | Answer quality | Real-project and fixture runs are mixed: the 2.0.1 review reversed two of five cases and its edit missed its contract, while the 2.1.0 fixture edit and both 2.2.0 trials were accepted. A pattern, not a rate; one correct patch was once rejected from an abbreviated summary | Narrow task templates; contracts checked on exported bytes; every answer verified independently; the quality pack measures edit and review quality on the same four tasks after each change |
