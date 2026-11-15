@@ -6,7 +6,7 @@
 
 - **Released.** v2.2.0 (2026-10-27) is the latest release.
 - **On `main`, unreleased 2.2.1** ([changelog](CHANGELOG.md)): Vibe at or above 3.1.2 and agy at or above 1.5.8; the supervisor's worker rules as Vibe's system prompt and at the head of agy's prompt; no file listing in a review that names `context_files`; thinking `high` for Vibe reviews (`vibe_review_thinking`); default `max_turns` raised to `25` for reviews and edits (`4a0d0ed`); `allowed_write_paths` enforced in agy's `PreToolUse` hook (`75995d8`) with summarized write-tool ledger reconciliation (`0ed905e`); credential, pin and preparation checked before the grant is spent; review results that show which named files were read; `prepare check` that prints its report path, failing findings and what made a receipt stale; `runs export --include answer` and, in the source repository, `quality-pack.mjs record` and `prompt`; a finished or audited edit kept at the deadline; the correction rule after a failed check.
-- **Worker machine:** `f783860` passed Vibe 3.1.2 preparation (`1,826` tests passed, `1` skipped), calendar-date replay, thinking-off trials, and agy 1.5.9 `review-total` (`antigravity_skip_permissions = true`). Candidate `06ead0a3…` (built from `0ed905e`) passed agy 1.5.9 preparation and both hosted agy quality-pack edits with `antigravity_skip_permissions = true`.
+- **Worker machine & verification:** `f783860` passed Vibe 3.1.2 preparation (`1,826` tests passed, `1` skipped), calendar-date replay, thinking-off trials, and agy 1.5.9 `review-total` (`antigravity_skip_permissions = true`). Candidate `06ead0a3…` (built from `0ed905e`) passed agy 1.5.9 preparation and both hosted agy quality-pack edits with `antigravity_skip_permissions = true`, and clean-clone `npm run verify:release` on `5a06b26` passed `127` test files (`1,830` passed, `1` skipped).
 
 ## What works
 
@@ -41,7 +41,7 @@
 
 ## Latest runs (2026-11-15)
 
-- **Clean release verification (`f783860`).** Passed Vibe 3.1.2 preparation and the full release suite (`1,826` tests passed, `1` skipped).
+- **Clean release verification.** `f783860` passed Vibe 3.1.2 preparation and `npm run verify:release` (`1,826` tests passed, `1` skipped). On `5a06b26` (after landing the 25-turn defaults, agy `allowed_write_paths`, and handoff update), clean-clone `npm run verify:release` passed `lint`, `typecheck`, `build`, `127` test files (`1,830` passed, `1` skipped), `release-checks`, `secret-scan`, and `sbom`.
 - **Vibe calendar-date replay (`f783860`) and local 25-turn check.** Replay `b87be6bb-42e6-4ec3-becd-00b60d15f6af` ran with the default `20` turns, hit the 120s deadline after 8 model calls (`timeout`), passed build/lint/typecheck/CLI checks, and was accepted. A separate local candidate from `370f1c9` with omitted `max_turns` confirmed a limit of `25` (`1aeb5d44-fb31-4f67-be80-6b1aa917365b`), ended normally (`end_turn`, 5 model calls), passed all checks, and closed accepted; both defaults are now landed on `main` (`4a0d0ed`).
 - **Vibe thinking-off sweep (`f783860`).** Passed `8/10` (`4/5` `review-stock`, `4/5` `review-total`), 2 model calls each (`11.6k–12.3k` and `13.1k–13.4k` tokens). Two failures missed a source citation (`review-stock-3` path redaction) or strict `>` comparison (`review-total-3`). Thinking `high` stays the default.
 - **Antigravity 1.5.9 reviews & `allowed_write_paths` edits (`antigravity_skip_permissions = true`).** `review-stock` repeat on `a2f3cba` (`a825aa60-38c0-4504-ba96-e15d34daaf14`, `4/4` checks, 41.3s) and `review-total` on `f783860` (`9/9` checks, `end_turn`) passed. Initial `edit-shipping` on `75995d8` (`32b28d5e-0ad3-4687-a2ed-58c8c17cba75`) produced a valid patch but failed settlement (`VSUP_INTERNAL`) because `stream-json` `step_update.tool_info.parameters` strips `Target`/`Replacement`/`Content` to `{ Path }`. Reconciling `isPathOnlyWriteCall` against `PreToolUse` (`0ed905e`, candidate `06ead0a3…`) passed live `edit-shipping` (`9edc6ee2-8460-4ea3-a4dd-86316128467d`: `end_turn`, `verification: "passed"`, `5` executed calls, `29,953` tokens, `14/14` hidden tests) and `edit-reserve-all` (`6d9c9601-e63c-46b1-8fe9-c8751b413d5b`, `max_turns: 20`: `turn_limit` -> `verification: "incomplete"`, `9` executed calls, `58,258` tokens, exported patch `17/17` hidden tests).
@@ -50,7 +50,7 @@
 
 ### On the worker machine
 
-1. **Final RC build and checks.** Run `npm run verify:release` cleanly, package the 2.2.1 RC, run `prepare check` against Vibe 3.1.2 and agy 1.5.9, and confirm a 25-turn hosted run if tagging 2.2.1.
+1. **Package and prepare the 2.2.1 RC.** Clean `verify:release` is already green on `5a06b26`; package the 2.2.1 RC tarball (`package:rc`), run `prepare check` against Vibe 3.1.2 and agy 1.5.9 on those packaged bytes, and confirm a 25-turn hosted run on Vibe before tagging `2.2.1`.
 2. **After any Vibe or agy update:** `prepare check`, then the quality pack, recorded. That run is the regression test for the worker.
 
 ### Development, in this order, each its own commit
