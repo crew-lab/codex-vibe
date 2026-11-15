@@ -2318,4 +2318,95 @@ console.log(JSON.stringify({
       toolCalls: { executed: 1, deniedByHandler: 1, deniedByPolicy: 0 }
     });
   });
+
+  it('reconciles summarized write tool calls whose step_update retains only path parameters against full PreToolUse approvals', async () => {
+    const root = await makeRoot();
+    const workspace = path.join(root, 'workspace');
+    const childHome = path.join(root, 'home');
+    await mkdir(workspace, { recursive: true });
+    await mkdir(childHome, { recursive: true });
+    const targetPath = path.join(workspace, 'cart.mjs');
+    const newFilePath = path.join(workspace, 'shipping.test.mjs');
+    await writeFile(targetPath, 'export const a = 1;\n', 'utf8');
+
+    await writeAntigravityPreToolHook(childHome, {
+      mode: 'edit',
+      workerWorkspace: workspace,
+      excludedAnchors: [],
+      allowedWritePaths: ['cart.mjs', 'shipping.test.mjs']
+    });
+    const hookScriptPath = path.join(childHome, '.gemini', 'antigravity-cli', 'pre-tool-hook.mjs');
+
+    execSync(`"${process.execPath}" "${hookScriptPath}"`, {
+      input: JSON.stringify({
+        toolCall: {
+          id: 'call_edit_1',
+          name: 'edit_file',
+          args: { Path: targetPath, Target: 'export const a = 1;', Replacement: 'export const a = 2;' }
+        },
+        stepIdx: 4,
+        conversationId: 'conv-edit'
+      }),
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'inherit']
+    });
+    execSync(`"${process.execPath}" "${hookScriptPath}"`, {
+      input: JSON.stringify({
+        toolCall: {
+          id: 'call_write_1',
+          name: 'write_file',
+          args: { Path: newFilePath, Content: 'import test from "node:test";\n' }
+        },
+        stepIdx: 6,
+        conversationId: 'conv-edit'
+      }),
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'inherit']
+    });
+
+    const editMeta = extractEnvelopeMeta({
+      event: 'step_update',
+      step_update: {
+        conversation_id: 'conv-edit',
+        step_index: 4,
+        state: 'DONE',
+        step_type: 'tool',
+        tool_name: 'edit_file',
+        tool_info: { name: 'edit_file', parameters: { Path: targetPath } }
+      }
+    });
+    const writeMeta = extractEnvelopeMeta({
+      event: 'step_update',
+      step_update: {
+        conversation_id: 'conv-edit',
+        step_index: 6,
+        state: 'DONE',
+        step_type: 'tool',
+        tool_name: 'write_file',
+        tool_info: { name: 'write_file', parameters: { Path: newFilePath } }
+      }
+    });
+
+    const reconciled = await readAntigravityHookLedger(childHome, [], 2, [
+      ...editMeta.executedCalls,
+      ...writeMeta.executedCalls
+    ]);
+    expect(reconciled.toolCalls).toEqual({ executed: 2, deniedByHandler: 0, deniedByPolicy: 0 });
+    expect(reconciled.hookEntries).toHaveLength(2);
+
+    const wrongTurnMeta = extractEnvelopeMeta({
+      event: 'step_update',
+      step_update: {
+        conversation_id: 'conv-edit',
+        step_index: 99,
+        state: 'DONE',
+        step_type: 'tool',
+        tool_name: 'edit_file',
+        tool_info: { name: 'edit_file', parameters: { Path: targetPath } }
+      }
+    });
+    await expect(
+      readAntigravityHookLedger(childHome, [], 1, wrongTurnMeta.executedCalls)
+    ).rejects.toMatchObject({ code: 'VSUP_INTERNAL', message: expect.stringContaining('Audit mismatch') });
+  });
 });

@@ -1159,6 +1159,15 @@ export async function writeAntigravityPreToolHook(
   await writeFile(path.join(cliDir, 'hooks.json'), hooksJsonContent, { mode: 0o600 });
 }
 
+function isPathOnlyWriteCall(call: StreamExecutedCall): boolean {
+  if (!(EDIT_WRITE_TOOLS as readonly string[]).includes(call.tool)) return false;
+  if (!call.args || !call.path) return false;
+  const keys = Object.keys(call.args);
+  if (keys.length === 0) return false;
+  const known = pathKeysOf(call.tool);
+  return keys.every((key) => known.includes(key));
+}
+
 export async function readAntigravityHookLedger(
   childHome: string,
   envelopeDeniedActions: ReadonlyArray<{ tool: string; reason: string; path?: string }>,
@@ -1272,6 +1281,23 @@ export async function readAntigravityHookLedger(
         }
         if (approval.tool === call.tool && approval.fingerprint === call.fingerprint) {
           if (call.path && approval.path && approval.path !== call.path) {
+            continue;
+          }
+          matchedIdx = idx;
+          break;
+        }
+      }
+
+      if (matchedIdx === null && isPathOnlyWriteCall(call)) {
+        for (const idx of unusedApprovalIndices) {
+          const approval = approvedHookEntries[idx]!;
+          if (approval.relatedEntryId && executedCalls.some((c) => c.callId === approval.relatedEntryId)) {
+            continue;
+          }
+          if (approval.tool !== call.tool || approval.path !== call.path) {
+            continue;
+          }
+          if (call.turnId && approval.turnId && approval.turnId !== call.turnId) {
             continue;
           }
           matchedIdx = idx;
