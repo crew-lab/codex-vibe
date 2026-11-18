@@ -1,4 +1,4 @@
-# Current state — 2026-11-15
+# Current state — 2026-11-18
 
 **The goal:** Codex hands a task to a worker (Vibe 3.1.2 or later; agy 1.5.8 or later, experimental), the worker reviews or implements it, and it works well every time: stable, fault tolerant, resilient, flexible and efficient. This page holds only what works, what does not, and what is next; the reasons and the order of work are in the [development strategy](planning/development-strategy.md).
 
@@ -47,6 +47,10 @@
 - **Earlier Antigravity 1.5.9 progression.** `review-stock` repeat on `a2f3cba` (`a825aa60-38c0-4504-ba96-e15d34daaf14`, `4/4` checks, 41.3s) and `review-total` on `f783860` (`9/9` checks, `end_turn`) passed. Initial `edit-shipping` on `75995d8` (`32b28d5e-0ad3-4687-a2ed-58c8c17cba75`) hit `VSUP_INTERNAL` until `0ed905e` reconciled `isPathOnlyWriteCall` against `PreToolUse`, passing `edit-shipping` (`9edc6ee2-8460-4ea3-a4dd-86316128467d`, `14/14`) and `edit-reserve-all` (`6d9c9601-e63c-46b1-8fe9-c8751b413d5b` with `max_turns: 20`: `turn_limit` -> `incomplete`, `17/17` on patch) before `412d106` cleared `end_turn` under `25` turns.
 
 ## Next
+
+- **Support Vibe 3.1.3 and newer stable releases.** Keep the minimum-version policy without a per-release allowlist. Each installed runtime still needs a matching manifest, a verified startup handshake, and preparation for the selected supervisor candidate. The deployed build's compatibility with 3.1.3 and later needs qualification on the worker machine.
+- **Copy-rules CI trial deferred before inference.** The connected candidate accepted workspace readiness with an unverified runtime pin for Vibe 3.1.0, then stopped at startup because Vibe 3.1.3 was installed. The request omitted `max_turns` and the run recorded 20 turns and a separate 25-model-call cap. No worker files were read or changed. The verified export held an empty patch and the worktree was removed.
+- **Resume the trial on the current candidate.** Select the build with the 25-turn default, refresh the Vibe manifest using that build's CLI and config, run its matching preparation kit, and verify the candidate digest and pin on the connected server before issuing a fresh grant. Preserve the frozen request, observed file reads, and independent patch checks in the local trial record. Improve readiness so a stale manifest surfaces before dispatch.
 
 ### On the worker machine
 
