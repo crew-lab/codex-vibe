@@ -39,12 +39,14 @@ import { changedSinceSnapshot, parseManifest, serializeManifest, snapshotWorkspa
 import type { ManifestEntry, WorkspaceSnapshot } from "./workspace-snapshot.js";
 import { extractFindingsJsonBlock, validateFindings } from "./findings.js";
 import { workspaceAnchors } from "../security/globs.js";
-import { acquireOwnerLock } from "./owner-lock.js";
+import { acquireOwnerLock, isOwnerLockContention } from "./owner-lock.js";
 import type { OwnerLock } from "./owner-lock.js";
 import { DispatchGrants, registrationStorageError } from "./dispatch-grants.js";
 import { bindingMismatchError, dispatchBinding, type DispatchBinding } from "./dispatch-binding.js";
-import { taskAuthorizeCommand } from "./dispatch-command.js";
-import type { PreparationStatus } from "../preparation/evidence.js";
+import { candidateEntrypoint, taskAuthorizeCommand } from "./dispatch-command.js";
+import { candidateIdentity, type PreparationFacts, type PreparationStatus } from "../preparation/evidence.js";
+import { inspectPreparationLock } from "../preparation/lock.js";
+import { decideRefresh, defaultWorkerRefreshDependencies, installIdentity, refreshHold, refreshSummary, refreshWarning, runWorkerRefresh, workerDisplayName, type RefreshAction, type RefreshHold, type RefreshOutcome, type RefreshStage, type WorkerRefreshDependencies } from "../preparation/worker-refresh.js";
 import { verifyTaskInputs, taskInputManifestSchema, type TaskInputManifest } from "../preparation/task-inputs.js";
 
 function assertPreparedManifestScope(manifest: TaskInputManifest, contract: AcceptanceContract | undefined): void {
@@ -96,6 +98,7 @@ interface Runtime {
   preparedInputDirectory?: string;
   dispatchBinding?: DispatchBinding;
   waiters: Set<() => void>;
+  refreshWarning?: string;
 }
 
 type SettleOutcome = { state: "completed" | "failed" | "cancelled"; error?: SupervisorError };
@@ -146,6 +149,13 @@ const STATUS_TEXT_EVENT_TYPES: ReadonlySet<string> = new Set(["diagnostic", "rev
 const STATUS_TEXT_CHARS = 400;
 const MAX_RETAINED_REASON_CHARS = 400;
 const DEFAULT_REMEDIATION = "Inspect the run status and supervisor diagnostics, then retry if safe.";
+const REFRESH_RETRY_SECONDS = 30;
+const UNSETTLED_RETRY_SECONDS = 15;
+const LOCK_POLL_MS = 500;
+const PREPARE_KIT_PLACEHOLDER = "<kit directory>";
+const MAX_BLOCKER_FINDINGS = 5;
+const PIN_RECHECK_NOTE = "Kept until the installed version or its RECORD changes or the server restarts; after fixing the files without a reinstall, restart the server to re-check.";
+const START_REFRESH_HINT = "A readiness check (vibe_status with workspace and operation) refreshes the worker pin and preparation after a worker update; check readiness, then start again.";
 
 export interface RunManagerOptions {
   policy?: PolicySource;
@@ -153,6 +163,23 @@ export interface RunManagerOptions {
   recoveryWorkerWindowMs?: number;
   preparationDataDir?: string;
   usageDataDir?: string;
+  buildIdentity?: () => Promise<string>;
+  workerRefresh?: Partial<WorkerRefreshDependencies>;
+}
+
+interface ActiveRefresh {
+  backend: BackendKind;
+  stage: "pinning" | "preparing";
+  from?: string | undefined;
+  to?: string | undefined;
+  startedAt: string;
+  controller: AbortController;
+  done: Promise<void>;
+}
+
+interface ReadinessEvaluation {
+  body: Record<string, unknown>;
+  waitFor?: "refresh" | "lock";
 }
 
 type StartOptions = {
@@ -193,6 +220,12 @@ export class RunManager {
   private readonly recoveryWorkerWindowMs: number;
   private workerWindowEndsAt: number | undefined;
   private readonly receipts = new ReadinessReceipts();
+  private readonly buildIdentity: () => Promise<string>;
+  private bootBuild: string | undefined;
+  private readonly refreshDependencies: WorkerRefreshDependencies;
+  private workerRefresh: ActiveRefresh | undefined;
+  private lastRefresh: { outcome: RefreshOutcome; reported: boolean } | undefined;
+  private pinFailure: { identity: string; error: SupervisorError } | undefined;
 
   constructor(private readonly config: SupervisorConfig, private readonly dataDir: string, backends: readonly SupervisorBackend[] = [], preAcquiredLock?: OwnerLock, options: RunManagerOptions = {}) {
     this.ownerLock = preAcquiredLock;
@@ -201,6 +234,8 @@ export class RunManager {
     this.usageDataDir = path.resolve(options.usageDataDir ?? dataDir);
     this.sessionId = options.sessionId;
     this.recoveryWorkerWindowMs = options.recoveryWorkerWindowMs ?? RECOVERY_WORKER_WINDOW_MS;
+    this.buildIdentity = options.buildIdentity ?? (() => candidateIdentity());
+    this.refreshDependencies = { ...defaultWorkerRefreshDependencies, ...options.workerRefresh };
     this.runRoot = path.join(path.resolve(dataDir), "runs");
     for (const backend of backends) this.backends.set(backend.kind, backend);
   }
@@ -223,6 +258,7 @@ export class RunManager {
     await createPrivateDir(this.dataDir);
     await createPrivateDir(this.runRoot);
     this.ownerLock ??= await acquireOwnerLock(this.dataDir);
+    this.bootBuild = await this.buildIdentity().catch(() => undefined);
     if (this.backends.size === 0) await this.loadDefaultBackends();
     const entries = await readdir(this.runRoot, { withFileTypes: true });
     for (const entry of entries) {
@@ -375,6 +411,7 @@ export class RunManager {
     if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.");
     const receipt = options.readinessReceipt === undefined ? undefined : this.receipts.open(options.readinessReceipt);
     if (this.activeSlots >= 1) throw codedError("VSUP_LIMIT_EXCEEDED", "One run is already active for this supervisor.");
+    if (this.workerRefresh) throw this.refreshingError(this.workerRefresh, { attempt_consumed: false });
     this.activeSlots += 1;
     let finishPreparation!: () => void;
     const preparation = new Promise<void>((resolve) => { finishPreparation = resolve; });
@@ -395,7 +432,7 @@ export class RunManager {
       const baseCommit = mode === "edit" ? checkedBase ?? await this.editBaseCommit(source, options.baseRef ?? "HEAD", preparationDeadline) : undefined;
       if (options.preparedInputs) await this.assertPreparedInputAdmission(options.preparedInputs, options.acceptanceContract, admitted, baseCommit, policy, preparationDeadline);
       const binding = await withDeadline(dispatchBinding({ config: policy.config, policyRevision: policy.revision, mode, workspace: source, task, ...(baseCommit ? { baseCommit } : {}), contextFiles: options.contextFiles ?? [], ...(options.output ? { output: options.output } : {}), ...(options.acceptanceContract ? { acceptanceContract: options.acceptanceContract } : {}), ...(options.preparedInputs ? { preparedManifestSha256: options.preparedInputs.manifestSha256 } : {}), ...(options.allowedWritePaths ? { allowedWritePaths: options.allowedWritePaths } : {}), limits }), preparationDeadline - Date.now(), "Dispatch binding exceeded its preparation deadline.");
-      await this.assertBackendAdmission();
+      const refreshNote = await this.assertBackendAdmission();
       if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor is shutting down.", { attempt_consumed: false });
       await new DispatchGrants(path.join(this.usageDataDir, "dispatch-grants")).consume({ authorizationId: options.authorizationId, attemptId: options.attemptId, requestSha256: binding.requestSha256, binding: binding.fields, runId: id });
       if (this.stopping) throw codedError("VSUP_INVALID_STATE", "The supervisor stopped after consuming this attempt; it will not be replayed.");
@@ -413,6 +450,7 @@ export class RunManager {
       if (options.acceptanceContract) { record.acceptanceContract = options.acceptanceContract; record.verification = { status: "pending", contract_sha256: contractDigest(options.acceptanceContract), checks: [] }; }
       runtime = this.makeRuntime(record, path.join(this.runRoot, id), task, options.contextFiles ?? []);
       runtime.dispatchBinding = binding;
+      if (refreshNote) runtime.refreshWarning = refreshNote;
       if (options.preparedInputs) runtime.preparedInputDirectory = options.preparedInputs.directory;
       runtime.slot = true;
       if (mode === "edit") runtime.baseRef = baseCommit!;
@@ -441,11 +479,15 @@ export class RunManager {
   }
 
   private async currentPolicy(): Promise<CurrentPolicy> {
-    try { return await readCurrentPolicy(this.policy, this.config); }
+    let policy: CurrentPolicy;
+    try { policy = await readCurrentPolicy(this.policy, this.config); }
     catch (error) {
       const detail = supervisorErrorOf(error)?.message ?? (error instanceof Error ? error.message : String(error));
       throw codedError("VSUP_CONFIG_INVALID", `The selected configuration ${this.policy.configPath ?? "(in-memory)"} could not be reread and validated; no earlier snapshot or default is used. ${detail}`.slice(0, 2000), { configPath: this.policy.configPath });
     }
+    if (this.bootBuild === undefined) return policy;
+    const current = await this.buildIdentity().catch(() => undefined);
+    return current === this.bootBuild ? policy : { ...policy, bootDrift: [...policy.bootDrift, "build"] };
   }
 
   private async admissionPolicy(): Promise<CurrentPolicy> {
@@ -560,17 +602,146 @@ export class RunManager {
     return deadline === undefined ? admission : withDeadline(admission, deadline - Date.now(), "The backend admission check exceeded its preparation deadline.");
   }
 
-  private async assertBackendAdmission(): Promise<void> {
+  private async preparationFacts(): Promise<{ status: PreparationStatus | undefined; facts: PreparationFacts | undefined }> {
     const backend = this.backends.get(this.activeBackendKind);
-    const admission = await this.backendAdmission("start");
-    const preparation = await backend?.preparationCheck?.();
-    const blocker = admission?.blockers[0] ?? preparationBlocker(preparation);
-    if (!blocker) return;
-    backend?.releaseAdmission?.();
-    throw codedError(blocker.code, blocker.message, { ...blocker.details, attempt_consumed: false });
+    if (backend?.preparationFacts) {
+      const facts = await backend.preparationFacts();
+      return { status: facts.status, facts };
+    }
+    return { status: await backend?.preparationCheck?.(), facts: undefined };
   }
 
-  private async readiness(input: { workspace: string; operation: RunMode; base_ref?: string | undefined; expected_candidate?: string | undefined }): Promise<Record<string, unknown>> {
+  private async assertBackendAdmission(): Promise<string | undefined> {
+    const backend = this.backends.get(this.activeBackendKind);
+    const admission = await this.backendAdmission("start");
+    const { status, facts } = await this.preparationFacts();
+    const pinBlocker = pinBlockerOf(admission);
+    const unprepared = admission?.blockers.length ? undefined : preparationBlocker(status);
+    const blocker = admission?.blockers[0] ?? unprepared;
+    if (!blocker) return this.refreshWarningFor(facts);
+    backend?.releaseAdmission?.();
+    const action = decideRefresh({ backend: this.activeBackendKind, pinReason: pinReasonOf(pinBlocker), facts: facts ?? null });
+    const repairable = (action === "repin" && blocker === pinBlocker) || (action === "prepare" && blocker === unprepared);
+    throw codedError(blocker.code, blocker.message, { ...blocker.details, ...(repairable ? { worker_refresh: START_REFRESH_HINT } : {}), attempt_consumed: false });
+  }
+
+  private async refreshWarningFor(facts: PreparationFacts | undefined): Promise<string | undefined> {
+    const refreshed = refreshedFacts(facts);
+    if (!refreshed) return undefined;
+    const version = await this.backends.get(this.activeBackendKind)?.workerVersion?.().catch(() => null) ?? null;
+    return refreshWarning(this.activeBackendKind, refreshed.from, version);
+  }
+
+  private refreshingError(refresh: Pick<ActiveRefresh, "stage" | "from" | "to">, extra: Record<string, unknown> = {}): Error {
+    const name = workerDisplayName(this.activeBackendKind);
+    const span = refresh.from || refresh.to ? ` ${refresh.from ?? "unknown"} -> ${refresh.to ?? "unknown"}` : "";
+    const doing = refresh.stage === "pinning" ? "re-pinning the worker manifest" : "re-running the no-inference preparation";
+    return this.preparingError(refresh.stage, `${name}${span} changed; the supervisor is ${doing}. Check readiness again.`, { ...(refresh.from ? { from: refresh.from } : {}), ...(refresh.to ? { to: refresh.to } : {}), ...extra }, REFRESH_RETRY_SECONDS);
+  }
+
+  private preparingError(stage: RefreshStage, message: string, details: Record<string, unknown>, retryAfterSeconds: number): Error {
+    return codedError("VSUP_PREPARING", message, { backend: this.activeBackendKind, stage, ...details, retry_after_seconds: retryAfterSeconds }, true);
+  }
+
+  private prepareCheckCommand(): string {
+    return [process.execPath, candidateEntrypoint, "prepare", "check", "--kit", PREPARE_KIT_PLACEHOLDER, "--config", this.policy.configPath ?? "<config path>"].map((word) => word.startsWith("<") || /^[A-Za-z0-9_.,:=+@%/-]+$/.test(word) ? word : shellQuote(word)).join(" ");
+  }
+
+  private async beginRefresh(action: RefreshAction, pinTarget: import("../contracts.js").WorkerPinTarget | undefined): Promise<{ stage: RefreshStage; from?: string | undefined; to?: string | undefined; ownerPid?: number; error?: SupervisorError } | undefined> {
+    if (this.workerRefresh) return this.workerRefresh;
+    if (this.stopping || this.activeSlots > 0 || this.startPreparations.size > 0 || !this.policy.configPath) return undefined;
+    const configPath = this.policy.configPath;
+    const kind = this.activeBackendKind;
+    const backend = this.backends.get(kind);
+    if (!backend) return undefined;
+    let finish!: () => void;
+    const state: ActiveRefresh = { backend: kind, stage: action === "repin" ? "pinning" : "preparing", startedAt: new Date().toISOString(), controller: new AbortController(), done: new Promise<void>((resolve) => { finish = resolve; }) };
+    this.workerRefresh = state;
+    let lock: OwnerLock;
+    try { lock = await this.refreshDependencies.acquireLock(this.config, this.preparationDataDir ?? path.resolve(this.dataDir)); }
+    catch (error) {
+      if (this.workerRefresh === state) this.workerRefresh = undefined;
+      finish();
+      if (isOwnerLockContention(error)) {
+        const ownerPid = (error as { details?: { owner_pid?: unknown } }).details?.owner_pid;
+        return { stage: "locked", ...(typeof ownerPid === "number" ? { ownerPid } : {}) };
+      }
+      this.finishRefresh(state, { kind: "failed", error: supervisorErrorOf(error) ?? supervisorError("VSUP_INTERNAL", "The preparation lock could not be taken for the worker refresh.") });
+      return undefined;
+    }
+    if (this.stopping) {
+      await lock.release().catch(() => undefined);
+      if (this.workerRefresh === state) this.workerRefresh = undefined;
+      finish();
+      return undefined;
+    }
+    void runWorkerRefresh({
+      backend: kind, config: this.config, configPath, dataDir: this.preparationDataDir ?? path.resolve(this.dataDir), signal: state.controller.signal, pinTarget,
+      workerVersion: async () => await backend.workerVersion?.().catch(() => null) ?? null,
+      assess: async () => {
+        const admission = backend.admissionCheck ? await backend.admissionCheck("readiness") : undefined;
+        const facts = backend.preparationFacts ? await backend.preparationFacts() : null;
+        return { action: decideRefresh({ backend: kind, pinReason: pinReasonOf(pinBlockerOf(admission)), facts }), facts };
+      },
+      onStage: (stage, from, to) => { state.stage = stage; state.from = from; state.to = to; }
+    }, lock, this.refreshDependencies).then((outcome) => { this.finishRefresh(state, outcome); }, (error: unknown) => {
+      this.finishRefresh(state, { kind: "failed", error: supervisorError("VSUP_INTERNAL", `The worker refresh failed: ${describeFailure(error)}`) });
+    }).finally(finish);
+    return state;
+  }
+
+  private finishRefresh(state: ActiveRefresh, outcome: RefreshOutcome): void {
+    if (this.workerRefresh === state) this.workerRefresh = undefined;
+    if (outcome.kind === "not_needed") return;
+    this.lastRefresh = { outcome, reported: false };
+    if (outcome.kind === "pin_failed" && outcome.identity) this.pinFailure = { identity: outcome.identity, error: { ...outcome.error, details: { ...outcome.error.details, rechecked_when: PIN_RECHECK_NOTE } } };
+    if (outcome.kind === "prepared") this.pinFailure = undefined;
+    const line = refreshSummary(state.backend, outcome);
+    if (line) writeDiagnostic(line);
+  }
+
+  private async waitForRefresh(kind: "refresh" | "lock", seconds: number, signal?: AbortSignal): Promise<void> {
+    const deadline = Date.now() + seconds * 1000;
+    const remaining = (): number => deadline - Date.now();
+    const pause = (milliseconds: number): Promise<void> => new Promise<void>((resolve) => {
+      if (signal?.aborted) { resolve(); return; }
+      const done = (): void => { clearTimeout(timer); signal?.removeEventListener("abort", done); resolve(); };
+      const timer = setTimeout(done, Math.max(0, milliseconds));
+      signal?.addEventListener("abort", done, { once: true });
+    });
+    if (kind === "refresh") {
+      const running = this.workerRefresh;
+      if (!running) return;
+      let timer: NodeJS.Timeout | undefined;
+      let onAbort: (() => void) | undefined;
+      try {
+        await Promise.race([
+          running.done,
+          new Promise<void>((resolve) => { timer = setTimeout(resolve, Math.max(0, remaining())); }),
+          new Promise<void>((resolve) => { if (signal?.aborted) { resolve(); return; } onAbort = resolve; signal?.addEventListener("abort", onAbort, { once: true }); })
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+        if (onAbort) signal?.removeEventListener("abort", onAbort);
+      }
+      return;
+    }
+    while (remaining() > 0 && !signal?.aborted && !this.stopping) {
+      const status = await inspectPreparationLock(this.config, this.preparationDataDir ?? path.resolve(this.dataDir)).catch(() => undefined);
+      if (!status || !status.held || status.owner !== "alive") return;
+      await pause(Math.min(LOCK_POLL_MS, remaining()));
+    }
+  }
+
+  private async readiness(input: { workspace: string; operation: RunMode; base_ref?: string | undefined; expected_candidate?: string | undefined }, waitSeconds = 0, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    const earlier = this.lastRefresh;
+    const first = await this.readinessOnce(input, earlier);
+    if (waitSeconds <= 0 || !first.waitFor || this.stopping || signal?.aborted) return first.body;
+    await this.waitForRefresh(first.waitFor, waitSeconds, signal);
+    return (await this.readinessOnce(input, earlier, false)).body;
+  }
+
+  private async readinessOnce(input: { workspace: string; operation: RunMode; base_ref?: string | undefined; expected_candidate?: string | undefined }, earlier: RunManager["lastRefresh"], firstPass = true): Promise<ReadinessEvaluation> {
     await this.ready();
     const deadline = Date.now() + START_PREPARATION_DEADLINE_MS;
     const blockers: SupervisorError[] = [];
@@ -602,14 +773,21 @@ export class RunManager {
     const executableFound = !("executable_found" in runtime) || runtime.executable_found;
     const admission = executableFound ? await this.backendAdmission("readiness", deadline).catch((error: unknown) => { block(error); return undefined; }) : undefined;
     if (admission) blockers.push(...admission.blockers);
-    const preparation = await this.backends.get(this.activeBackendKind)?.preparationCheck?.();
-    if (input.expected_candidate && preparation?.candidate_sha256 !== input.expected_candidate) blockers.push(supervisorError("VSUP_INVALID_STATE", "Connected candidate differs from expected_candidate."));
+    const { status: preparation, facts } = await this.preparationFacts();
+    const servingCandidate = this.bootBuild ?? preparation?.candidate_sha256 ?? null;
+    if (input.expected_candidate && servingCandidate !== input.expected_candidate) blockers.push(supervisorError("VSUP_INVALID_STATE", "Connected candidate differs from expected_candidate."));
     const unprepared = preparationBlocker(preparation);
     if (unprepared) blockers.push(unprepared);
+    const refresh = await this.readinessRefresh({ firstPass, earlier, policy, executableFound, admission, facts, unprepared, blockers });
     const eligible = blockers.length === 0 && policy !== undefined && workspace !== null;
     const issued = eligible ? this.receipts.issue({ revision: policy!.revision, operation: input.operation, workspace: workspace!, baseRef: baseRef ?? null, baseCommit }) : undefined;
     const taskAuthorize = this.policy.configPath ? await taskAuthorizeCommand({ configPath: this.policy.configPath, operation: input.operation, workspace: workspace ?? input.workspace, baseRef }) : null;
-    return {
+    const limits = this.dispatchLimits(input.operation);
+    const backend = this.backends.get(this.activeBackendKind);
+    const workerVersion = await backend?.workerVersion?.().catch(() => null) ?? null;
+    const refreshed = refreshedFacts(facts);
+    const warnings = refreshed ? [refreshWarning(this.activeBackendKind, refreshed.from, workerVersion)] : [];
+    const body = {
       server_version: APP_VERSION,
       supervisor_runtime: { node: process.version, executable: await realpath(process.execPath), platform: process.platform, arch: process.arch },
       server_instance_id: this.receipts.instanceId,
@@ -628,23 +806,108 @@ export class RunManager {
       ...(baseRef === undefined ? {} : { base_ref: baseRef, base_commit: baseCommit }),
       eligible,
       workspace_eligible: workspaceEligible,
-      candidate: { version: APP_VERSION, sha256: preparation?.candidate_sha256 ?? null },
+      candidate: { version: APP_VERSION, sha256: servingCandidate },
       preparation: preparation ?? { status: "not_reported" },
       admission: admission ? { credential: admission.credential, pin: admission.pin } : { status: "not_reported" },
+      worker: { backend: this.activeBackendKind, version: workerVersion, ...(refreshed ? { refreshed: { at: refreshed.at, from: refreshed.from } } : {}) },
+      ...(refresh.field ? { worker_refresh: refresh.field } : {}),
+      effective_limits: { max_turns: limits.maxTurns, timeout_seconds: limits.timeoutSeconds },
       blockers: blockers.map((error) => ({ code: error.code, message: error.message, remediation: error.remediation, retryable: error.retryable, ...(error.details ? { details: error.details } : {}) })),
+      ...(warnings.length ? { warnings } : {}),
       active_slot: { busy },
       runtime,
       ...(issued ? { readiness_receipt: issued.receipt, receipt_expires_at: issued.expiresAt } : {}),
       task_authorize: taskAuthorize,
       next_action: eligible
         ? `Write the exact ${input.operation} request from task_authorize.request_template plus its task to a private file, run task_authorize.argv with the file and an owner reference in place of the placeholders, then start the ${input.operation} with the same request, the returned authorization_id and attempt_id, and readiness_receipt before receipt_expires_at on this same connection. The receipt proves preparation only; it does not authorize the task or guarantee provider availability.`
-        : "Resolve every blocker and check again. This is a preparation failure, not a Vibe run result; do not substitute another implementer automatically."
+        : refresh.waitFor
+          ? "The supervisor is refreshing its worker records after a worker update. Call vibe_status again with the same workspace and operation and wait_seconds up to 300; repeat while VSUP_PREPARING is returned."
+          : "Resolve every blocker and check again. This is a preparation failure, not a Vibe run result; do not substitute another implementer automatically."
     };
+    return { body, ...(refresh.waitFor ? { waitFor: refresh.waitFor } : {}) };
+  }
+
+  private async readinessRefresh(observed: { firstPass: boolean; earlier: RunManager["lastRefresh"]; policy: CurrentPolicy | undefined; executableFound: boolean; admission: BackendAdmission | undefined; facts: PreparationFacts | undefined; unprepared: SupervisorError | undefined; blockers: SupervisorError[] }): Promise<{ field?: Record<string, unknown>; waitFor?: "refresh" | "lock" }> {
+    const { blockers, unprepared } = observed;
+    const pinBlocker = pinBlockerOf(observed.admission);
+    const action = observed.executableFound ? decideRefresh({ backend: this.activeBackendKind, pinReason: pinReasonOf(pinBlocker), facts: observed.facts ?? null }) : "none";
+    const repaired = (replacement: SupervisorError): void => {
+      for (const target of [action === "repin" ? pinBlocker : undefined, unprepared]) {
+        const index = target ? blockers.indexOf(target) : -1;
+        if (index >= 0) blockers.splice(index, 1);
+      }
+      blockers.push(replacement);
+    };
+    const replace = (target: SupervisorError | undefined, replacement: SupervisorError): void => {
+      const index = target ? blockers.indexOf(target) : -1;
+      if (index >= 0) blockers[index] = replacement; else blockers.push(replacement);
+    };
+    const running = this.workerRefresh;
+    if (running) {
+      repaired(normalizeError(this.refreshingError(running)));
+      return { field: { status: "running", stage: running.stage, ...(running.from ? { from: running.from } : {}), ...(running.to ? { to: running.to } : {}), started_at: running.startedAt }, waitFor: "refresh" };
+    }
+    if (action === "none") {
+      this.annotatePreparationBlocker(unprepared, observed.facts, replace);
+      return {};
+    }
+    const hold: RefreshHold | null = observed.policy ? refreshHold({ stopping: this.stopping, bootDrift: observed.policy.bootDrift, configPath: this.policy.configPath, busy: this.activeSlots > 0 || this.startPreparations.size > 0 }) : "boot_drift";
+    if (hold === "busy") return { field: { status: "pending", reason: "busy", action } };
+    if (hold) return { field: { status: "held", reason: hold, action } };
+    const last = this.lastRefresh;
+    if (last && !last.reported && last.outcome.kind === "failed") {
+      last.reported = true;
+      blockers.push(last.outcome.error);
+      return { field: { status: "failed", action } };
+    }
+    if (last && !last.reported && action === "repin" && last.outcome.kind === "pin_failed" && last.outcome.identity === null) {
+      last.reported = true;
+      replace(pinBlocker, last.outcome.error);
+      return { field: { status: "refused", action } };
+    }
+    if (!observed.firstPass && last && last !== observed.earlier && last.outcome.kind === "install_unsettled") {
+      last.reported = true;
+      repaired(normalizeError(this.preparingError("install_unsettled", `The ${workerDisplayName(this.activeBackendKind)} install is still changing (${last.outcome.reason}); nothing was written. Check readiness again once the update has finished.`, { reason: last.outcome.reason, ...(last.outcome.from ? { from: last.outcome.from } : {}), ...(last.outcome.to ? { to: last.outcome.to } : {}) }, UNSETTLED_RETRY_SECONDS)));
+      return { field: { status: "install_unsettled", reason: last.outcome.reason } };
+    }
+    let pinTarget: import("../contracts.js").WorkerPinTarget | undefined;
+    if (action === "repin") {
+      pinTarget = await this.backends.get(this.activeBackendKind)?.pinTarget?.().catch(() => undefined);
+      if (!pinTarget) return {};
+      if (this.pinFailure) {
+        const identity = await installIdentity(pinTarget);
+        if (identity !== null && identity === this.pinFailure.identity) {
+          replace(pinBlocker, this.pinFailure.error);
+          return { field: { status: "refused", action } };
+        }
+        this.pinFailure = undefined;
+      }
+    }
+    const begun = await this.beginRefresh(action, pinTarget);
+    if (!begun) return {};
+    if (begun.stage === "locked") {
+      repaired(normalizeError(this.preparingError("locked", "Another process holds the preparation lock and is refreshing or preparing the worker records. Check readiness again.", typeof begun.ownerPid === "number" ? { owner_pid: begun.ownerPid } : {}, REFRESH_RETRY_SECONDS)));
+      return { field: { status: "locked", action }, waitFor: "lock" };
+    }
+    repaired(normalizeError(this.refreshingError({ stage: begun.stage === "pinning" ? "pinning" : "preparing", from: begun.from, to: begun.to })));
+    const active = this.workerRefresh;
+    return { field: { status: "running", stage: begun.stage, ...(active ? { started_at: active.startedAt } : {}) }, waitFor: "refresh" };
+  }
+
+  private annotatePreparationBlocker(unprepared: SupervisorError | undefined, facts: PreparationFacts | undefined, replace: (target: SupervisorError | undefined, replacement: SupervisorError) => void): void {
+    if (!unprepared || !facts) return;
+    const status = facts.status.status;
+    const last = this.lastRefresh?.outcome;
+    if (status === "failed" && !facts.interrupted && last?.kind === "prepared" && !last.passed) {
+      replace(unprepared, { ...unprepared, details: { ...unprepared.details, report_path: last.reportPath, findings: last.findings.slice(0, MAX_BLOCKER_FINDINGS) } });
+      return;
+    }
+    if (status === "missing" || status === "stale") replace(unprepared, { ...unprepared, details: { ...unprepared.details, prepare_check: this.prepareCheckCommand() } });
   }
 
   async status(value: StatusToolInput, wait?: WaitOptions): Promise<Record<string, unknown>> {
     const input = parseInput(statusSchema, value);
-    if (input.workspace !== undefined) return this.readiness({ workspace: input.workspace, operation: input.operation ?? "review", base_ref: input.base_ref, expected_candidate: input.expected_candidate });
+    if (input.workspace !== undefined) return this.readiness({ workspace: input.workspace, operation: input.operation ?? "review", base_ref: input.base_ref, expected_candidate: input.expected_candidate }, input.wait_seconds, wait?.signal);
     const runtime = this.requireRun(input.run_id ?? "");
     await this.ensureLoaded(runtime);
     this.assertLogReadable(runtime);
@@ -987,6 +1250,7 @@ export class RunManager {
     // state or finish creating a worktree has reached its bounded disposition.
     const pendingStarts = Promise.all([
       ...(this.initializePromise ? [this.initializePromise] : []),
+      ...(this.workerRefresh ? [this.workerRefresh.done] : []),
       ...this.startPreparations,
       ...[...this.runs.values()].map((runtime) => runtime.starting).filter((starting): starting is Promise<unknown> => Boolean(starting))
     ].map((pending) => Promise.resolve(pending).catch(() => undefined)));
@@ -1039,7 +1303,10 @@ export class RunManager {
     this.stopping = true;
     if (this.retentionTimer) clearTimeout(this.retentionTimer);
     this.retentionTimer = undefined;
+    const refresh = this.workerRefresh;
+    refresh?.controller.abort();
     await this.initializePromise?.catch(() => undefined);
+    await refresh?.done;
     await Promise.all([...this.startPreparations]);
     await this.retentionRun;
     for (const runtime of this.runs.values()) this.notify(runtime);
@@ -1601,6 +1868,7 @@ export class RunManager {
     if (findingsMissing) addWarning(FINDINGS_MISSING_WARNING);
     if (contextReads) addWarning(contextReadsWarning(contextReads));
     if (computedReads === "undetermined") addWarning(READS_UNDETERMINED_WARNING);
+    addWarning(runtime.refreshWarning);
     runtime.record.result = {
       ...(stopReason ? { stopReason } : {}),
       summary,
@@ -1912,6 +2180,21 @@ function launchFailure(error: SupervisorError): SupervisorError {
   return { ...error, message: `${error.message} The worker never started, so the run never reached inference.`, details: { ...error.details, launch_failed: true } };
 }
 
+function pinBlockerOf(admission: BackendAdmission | undefined): SupervisorError | undefined {
+  return admission?.pin === "failed" ? admission.blockers[0] : undefined;
+}
+
+function pinReasonOf(blocker: SupervisorError | undefined): string | null {
+  if (!blocker) return null;
+  const reason = blocker.details?.reason;
+  return typeof reason === "string" ? reason : blocker.code;
+}
+
+function refreshedFacts(facts: PreparationFacts | undefined): { from: string; at: string } | undefined {
+  if (!facts || facts.status.status !== "passed" || facts.origin !== "automatic" || !facts.previous_worker_version || !facts.checked_at) return undefined;
+  return { from: facts.previous_worker_version, at: facts.checked_at };
+}
+
 function preparationBlocker(preparation: PreparationStatus | undefined): SupervisorError | undefined {
   return preparation && preparation.status !== "passed" ? supervisorError("VSUP_INVALID_STATE", "Matching candidate conformance is required before dispatch.", { preparation }) : undefined;
 }
@@ -1965,7 +2248,14 @@ function shellQuote(value: string): string {
 }
 
 function restartRequired(drift: readonly string[]): Error {
-  return codedError("VSUP_RESTART_REQUIRED", `The selected configuration changed boot-bound settings since this server started (${drift.join(", ")}); new starts are refused until the server is restarted or the settings are reverted.`, { boot_drift: [...drift] });
+  const settings = drift.filter((entry) => entry !== "build");
+  const build = drift.includes("build");
+  const message = !build
+    ? `The selected configuration changed boot-bound settings since this server started (${settings.join(", ")}); new starts are refused until the server is restarted or the settings are reverted.`
+    : settings.length === 0
+      ? "The installed supervisor files changed since this server started; new starts are refused until the server is restarted so that it runs the installed build."
+      : `The selected configuration changed boot-bound settings since this server started (${settings.join(", ")}) and the installed supervisor files changed; new starts are refused until the server is restarted.`;
+  return codedError("VSUP_RESTART_REQUIRED", message, { boot_drift: [...drift] });
 }
 
 function supervisorErrorOf(error: unknown): SupervisorError | undefined {
@@ -2001,8 +2291,8 @@ async function settlesWithin(operation: Promise<unknown>, milliseconds: number):
   } finally { if (timer) clearTimeout(timer); }
 }
 
-function codedError(code: SupervisorErrorCode, message: string, details?: Record<string, unknown>): Error & { code: SupervisorErrorCode; remediation: string; retryable: boolean } {
-  const normalized = supervisorError(code, message, details);
+function codedError(code: SupervisorErrorCode, message: string, details?: Record<string, unknown>, retryable = false): Error & { code: SupervisorErrorCode; remediation: string; retryable: boolean } {
+  const normalized = supervisorError(code, message, details, retryable);
   return Object.assign(new Error(message), normalized);
 }
 

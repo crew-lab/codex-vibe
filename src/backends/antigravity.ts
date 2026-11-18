@@ -10,7 +10,7 @@ import type {
   StartRunInput, SupervisorBackend, BackendCallbacks, RuntimeCheck, UsageState, SupervisorError
 } from '../contracts.js';
 import { supervisorError, type SupervisorConfig } from '../contracts.js';
-import { checkPreparation, type PreparationStatus } from '../preparation/evidence.js';
+import { checkPreparation, readPreparationFacts, type PreparationFacts, type PreparationStatus } from '../preparation/evidence.js';
 import { spawnManaged } from '../process/managed.js';
 import { startReaper, type ReaperHandle } from '../process/reaper.js';
 import { assertNoProjectAntigravityExtensions, assertNoProjectVibeExtensions } from '../security/workspace-guard.js';
@@ -147,6 +147,7 @@ const VERSION_PROBE_MAX_BYTES = 64 * 1024;
 export interface AntigravityBackendOptions {
   preparation?: {
     check: (config: SupervisorConfig, dataDir?: string) => Promise<PreparationStatus>;
+    facts?: (config: SupervisorConfig, dataDir?: string) => Promise<PreparationFacts>;
   };
   dataDir?: string;
   expectedExecutableSha256?: string | undefined;
@@ -691,6 +692,7 @@ export async function cleanupPrivateDirectories(
 export class AntigravityBackend implements SupervisorBackend {
   readonly kind = 'antigravity' as const;
   private probedSha256?: string | undefined;
+  private probedVersion: string | null = null;
 
   constructor(
     private readonly config: SupervisorConfig,
@@ -740,6 +742,7 @@ export class AntigravityBackend implements SupervisorBackend {
     const cmd = executable(this.config);
     const resolved = await resolveAntigravityExecutable(cmd);
     this.probedSha256 = resolved.sha256 ?? undefined;
+    this.probedVersion = resolved.version;
     const versionVerified = Boolean(resolved.version && isSupportedAntigravityVersion(resolved.version));
     const pinnedVersion = versionVerified && resolved.version ? resolved.version : MINIMUM_ANTIGRAVITY_VERSION;
     return {
@@ -754,6 +757,17 @@ export class AntigravityBackend implements SupervisorBackend {
 
   async preparationCheck(): Promise<PreparationStatus> {
     return (this.options.preparation?.check ?? checkPreparation)(this.config, this.options.dataDir);
+  }
+
+  async preparationFacts(): Promise<PreparationFacts> {
+    const injected = this.options.preparation;
+    if (injected?.facts) return injected.facts(this.config, this.options.dataDir);
+    if (injected) return { status: await injected.check(this.config, this.options.dataDir), changed: null, interrupted: false };
+    return readPreparationFacts(this.config, this.options.dataDir);
+  }
+
+  async workerVersion(): Promise<string | null> {
+    return this.probedVersion;
   }
 
   async admissionCheck(_stage: AdmissionStage): Promise<BackendAdmission> {

@@ -1,5 +1,5 @@
 import { modelObservationSchema } from "../reporting/telemetry.js";
-import { checkPreparation, type PreparationStatus } from "../preparation/evidence.js";
+import { checkPreparation, readPreparationFacts, type PreparationFacts, type PreparationStatus } from "../preparation/evidence.js";
 import { createHash } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
 import { access, rm } from 'node:fs/promises';
@@ -8,7 +8,7 @@ import type {
   AdmissionStage, ApprovalLedgerEntry, ApprovalLedgerSnapshot, BackendAdmission, BackendCallbacks, BackendCapabilities, BackendKind, BackendRunHandle, BackendStartResult, EventSeverity,
   PinIdentity, ProcessRecord, ResultSummary, RuntimeCheck, StartRunInput, SupervisorBackend, SupervisorConfig, SupervisorError, SupervisorErrorCode, ToolCallCounts
 } from '../contracts.js';
-import { MAX_APPROVAL_LEDGER_RECORDS, supervisorError } from '../contracts.js';
+import { MAX_APPROVAL_LEDGER_RECORDS, supervisorError, type WorkerPinTarget } from '../contracts.js';
 import { describeFailure, reportBackgroundFailure } from '../diagnostics/background.js';
 import { sanitizeForPersistence } from '../persistence/atomic.js';
 import { spawnManaged, type ManagedProcess } from '../process/managed.js';
@@ -100,7 +100,7 @@ export const DEFAULT_APP_SERVER_TIMING: Readonly<AppServerTiming> = {
 };
 
 export interface AppServerBackendOptions {
-  preparation?: { check: (config: SupervisorConfig, dataDir?: string) => Promise<PreparationStatus> };
+  preparation?: { check: (config: SupervisorConfig, dataDir?: string) => Promise<PreparationStatus>; facts?: (config: SupervisorConfig, dataDir?: string) => Promise<PreparationFacts> };
   dataDir?: string;
   executable?: string;
   expectedServerVersion?: string;
@@ -1178,6 +1178,27 @@ export class AppServerBackend implements SupervisorBackend {
   }
 
   async preparationCheck(): Promise<PreparationStatus> { return (this.options.preparation?.check ?? checkPreparation)(this.config, this.options.dataDir); }
+
+  async preparationFacts(): Promise<PreparationFacts> {
+    const injected = this.options.preparation;
+    if (injected?.facts) return injected.facts(this.config, this.options.dataDir);
+    if (injected) return { status: await injected.check(this.config, this.options.dataDir), changed: null, interrupted: false };
+    return readPreparationFacts(this.config, this.options.dataDir);
+  }
+
+  async pinTarget(): Promise<WorkerPinTarget> {
+    const manifestPath = this.options.pin?.manifestPath ?? this.config.paths?.vibePinManifest;
+    if (!manifestPath || this.options.pin?.verify) throw new PinCheckError('manifest-unreadable', 'No pin manifest is configured for this server, so the worker pin cannot be refreshed.');
+    return { executable: await this.appServerExecutable(), manifestPath, minimumVersion: this.expectedVersion() };
+  }
+
+  async workerVersion(): Promise<string | null> {
+    try { return (await locateEnvironment(await this.appServerExecutable(), this.expectedVersion())).version; }
+    catch (error) {
+      const metadata = error instanceof PinCheckError ? error.details.metadata : undefined;
+      return typeof metadata === 'string' && metadata.length > 0 ? metadata : null;
+    }
+  }
 
   private async manifestVersion(): Promise<string | null> {
     const manifestPath = this.options.pin?.manifestPath ?? this.config.paths?.vibePinManifest;

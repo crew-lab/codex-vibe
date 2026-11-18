@@ -16,6 +16,7 @@ export type { PreparedReceiptIdentity } from './antigravity-prepare.js';
 const MAX_REPORTED_FINDINGS = 20;
 const MAX_FINDING_MESSAGE = 600;
 const CONFORMANCE_TIMEOUT_MS = 180_000;
+const CONFORMANCE_KILL_GRACE_MS = 5_000;
 
 export interface ReportedFinding { code: string; message: string }
 
@@ -106,10 +107,16 @@ async function runVibePreparation(input: RunPreparationInput, provenance: Prepar
 function runConformanceChild(argv: string[], home: string, stderr: 'inherit' | 'ignore', signal: AbortSignal | undefined): Promise<number> {
   return new Promise<number>((resolve, reject) => {
     const child = spawn(process.execPath, argv, { stdio: ['ignore', 'ignore', stderr], env: { PATH: process.env.PATH, HOME: home, TMPDIR: home }, timeout: CONFORMANCE_TIMEOUT_MS });
-    const abort = (): void => { child.kill('SIGTERM'); };
+    let escalation: NodeJS.Timeout | undefined;
+    const abort = (): void => {
+      child.kill('SIGTERM');
+      escalation = setTimeout(() => { child.kill('SIGKILL'); }, CONFORMANCE_KILL_GRACE_MS);
+      escalation.unref();
+    };
     if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
-    child.once('error', (error) => { signal?.removeEventListener('abort', abort); reject(error); });
+    child.once('error', (error) => { clearTimeout(escalation); signal?.removeEventListener('abort', abort); reject(error); });
     child.once('close', (code) => {
+      clearTimeout(escalation);
       signal?.removeEventListener('abort', abort);
       if (signal?.aborted) reject(signal.reason); else resolve(code ?? 1);
     });

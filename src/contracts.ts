@@ -182,7 +182,8 @@ export type SupervisorErrorCode =
   | "VSUP_NO_PROGRESS" | "VSUP_INVALID_STATE" | "VSUP_STORAGE_ERROR" | "VSUP_INTERNAL"
   | "VSUP_RESTART_REQUIRED" | "VSUP_READINESS_RECEIPT_INVALID"
   | "VSUP_OWNER_LOCKED" | "VSUP_PREPARATION_TIMEOUT"
-  | "VSUP_BUDGET_EXCEEDED" | "VSUP_AUTHORIZATION_INVALID" | "VSUP_ATTEMPT_CONSUMED";
+  | "VSUP_BUDGET_EXCEEDED" | "VSUP_AUTHORIZATION_INVALID" | "VSUP_ATTEMPT_CONSUMED"
+  | "VSUP_PREPARING";
 
 export interface RunRecord {
   /** Release that created the run; absent on records written without it. */
@@ -339,10 +340,19 @@ export interface BackendAdmission {
   blockers: SupervisorError[];
 }
 
+export interface WorkerPinTarget {
+  executable: string;
+  manifestPath: string;
+  minimumVersion: string;
+}
+
 export interface SupervisorBackend {
   admissionCheck?(stage: AdmissionStage): Promise<BackendAdmission>;
   releaseAdmission?(): void;
   preparationCheck?(): Promise<import("./preparation/evidence.js").PreparationStatus>;
+  preparationFacts?(): Promise<import("./preparation/evidence.js").PreparationFacts>;
+  workerVersion?(): Promise<string | null>;
+  pinTarget?(): Promise<WorkerPinTarget>;
   readonly kind: BackendKind;
   probe(): Promise<BackendCapabilities>;
   start(input: StartRunInput, callbacks: BackendCallbacks): Promise<BackendStartResult>;
@@ -413,11 +423,12 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_INVALID_STATE: "The request conflicts with the current state: check the run status and use an action valid for it, or wait until a shutting-down supervisor has been restarted, or inspect the isolated session path named in the message.",
   VSUP_STORAGE_ERROR: "Check the supervisor data directory permissions and disk space.",
   VSUP_INTERNAL: "Inspect supervisor diagnostics and retry; report the error if it persists.",
-  VSUP_RESTART_REQUIRED: "A boot-bound setting (paths.vibe, paths.app_server, paths.vibe_pin_manifest, retention or limits) in the selected config differs from the value this server started with, so new starts are refused rather than partially adopted. Revert the setting, or close any active run and deliberately restart the Codex MCP server; allowed_workspace_roots changes never need a restart.",
+  VSUP_RESTART_REQUIRED: "A boot-bound setting (paths.vibe, paths.app_server, paths.vibe_pin_manifest, retention or limits) in the selected config differs from the value this server started with, or the installed supervisor files changed since it started (build in details.boot_drift), so new starts are refused rather than partially adopted. Revert the setting, or close any active run and deliberately restart the Codex MCP server so it runs the installed build; allowed_workspace_roots changes never need a restart.",
   VSUP_OWNER_LOCKED: "Another vibe-supervisor owns this data directory, or its owner lock needs inspection. Stop the other process or give each Codex session its own VIBE_SUPERVISOR_HOME, then retry; for an unsafe or malformed lock, inspect the file named in details.lock_path.",
   VSUP_PREPARATION_TIMEOUT: "Preparation did not finish within its fixed deadline and no run was created. Check that the workspace, repository and configuration filesystems respond, then check readiness again.",
   VSUP_READINESS_RECEIPT_INVALID: "No run was created and nothing was launched. Call vibe_status with workspace and operation on this same connection, resolve any blockers, and start once with the new readiness_receipt; do not retry the start automatically.",
   VSUP_BUDGET_EXCEEDED: "Increase budgets.<root>.max_cost_usd_per_day in config.toml or wait until earlier runs age out of the 24-hour rolling window.",
+  VSUP_PREPARING: "The supervisor is refreshing its own worker records (pin manifest and no-inference preparation) after a worker update; nothing was started and no attempt was consumed. Check readiness again with vibe_status in workspace mode, passing wait_seconds up to 300 to wait for it, and repeat while this code is returned.",
 };
 
 export function supervisorError(code: SupervisorErrorCode, message: string, details?: Record<string, unknown>, retryable = false): SupervisorError {

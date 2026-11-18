@@ -33,12 +33,13 @@ export const MEANINGS = {
   VSUP_PREPARATION_TIMEOUT: 'A readiness check or start exceeded its 30 s preparation deadline (configuration reread, workspace validation or base resolution); no run was created.',
   VSUP_STORAGE_ERROR: 'A filesystem fault (disk full, permissions, read-only, I/O) hit the data directory.',
   VSUP_INTERNAL: 'An unexpected supervisor failure; the detail is only on stderr.',
-  VSUP_RESTART_REQUIRED: 'The selected configuration, reread before a readiness check or start, changes a boot-bound setting (a path, retention or a limit) that the running server cannot adopt.',
+  VSUP_RESTART_REQUIRED: 'The selected configuration, reread before a readiness check or start, changes a boot-bound setting (a path, retention or a limit) that the running server cannot adopt, or the installed supervisor build changed since the server started (details.boot_drift includes build).',
   VSUP_READINESS_RECEIPT_INVALID: 'A start carried a readiness_receipt that is malformed, altered, expired, from another server instance, or bound to a different policy revision, operation, workspace or base_ref, or whose edit base no longer resolves or resolves to another commit; details.reason names which.',
   VSUP_BUDGET_EXCEEDED: 'The daily budget limit for the workspace root has been reached.',
+  VSUP_PREPARING: 'A readiness check found the worker updated and is re-pinning (Vibe) and re-running the no-inference preparation, or another process holds the preparation lock, or the worker install is still changing; details.stage, details.from and details.to say which.',
 };
 
-const RETRYABLE = new Set(['VSUP_RATE_LIMITED']);
+const RETRYABLE = new Set(['VSUP_RATE_LIMITED', 'VSUP_PREPARING']);
 
 const cell = (text) => text.replaceAll('|', '\\|').replace(/\s+/g, ' ').trim();
 
