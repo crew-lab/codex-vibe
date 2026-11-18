@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   PinCheckError,
   generatePinManifest,
+  inspectInstall,
   loadPinManifest,
   locateEnvironment,
   parsePinManifest,
@@ -412,5 +413,41 @@ describe('manifest generation', () => {
     const env = await makeEnvironment({ version: '2.27.0' });
     await expectReason(generatePinManifest({ executable: env.shim }), 'version-mismatch');
     await expectReason(generatePinManifest({ executable: env.shim, expectedVersion: '2.27.0' }), 'version-mismatch');
+  });
+
+  it('accepts matching RECORD hashes and produces the same manifest with or without the requirement', async () => {
+    const env = await makeEnvironment();
+    const strict = await generatePinManifest({ executable: env.shim, requireRecordHashes: true });
+    expect(strict).toEqual(await generatePinManifest({ executable: env.shim }));
+    expect((await inspectInstall({ executable: env.shim })).recordProblems).toEqual({ unhashed: [], mismatched: [] });
+  });
+
+  it('names a file whose bytes differ from its RECORD hash', async () => {
+    const env = await makeEnvironment();
+    await writeFile(path.join(env.site, 'vibe', '__init__.py'), `__version__ = "tampered"\n`);
+    const error = await expectReason(generatePinManifest({ executable: env.shim, requireRecordHashes: true }), 'record-hash-mismatch');
+    expect(error.details).toEqual({ mismatched: { paths: ['vibe/__init__.py'], total: 1 } });
+    const inspection = await inspectInstall({ executable: env.shim });
+    expect(inspection.recordProblems).toEqual({ unhashed: [], mismatched: ['vibe/__init__.py'] });
+    expect(inspection.manifest.files['vibe/__init__.py']).toBe(digest(`__version__ = "tampered"\n`));
+  });
+
+  it.each([['an empty hash', ''], ['an md5 hash', 'md5=abcdef']])('names a row with %s as unhashed', async (_label, hash) => {
+    const env = await makeEnvironment();
+    const recordFile = path.join(env.distInfo, 'RECORD');
+    const lines = (await readFile(recordFile, 'utf8')).split('\n').map((line) => (line.startsWith('_native.so,') ? `_native.so,${hash},7` : line));
+    await writeFile(recordFile, lines.join('\n'));
+    const error = await expectReason(generatePinManifest({ executable: env.shim, requireRecordHashes: true }), 'record-unhashed');
+    expect(error.details).toEqual({ unhashed: { paths: ['_native.so'], total: 1 } });
+    const inspection = await inspectInstall({ executable: env.shim });
+    expect(inspection.recordProblems).toEqual({ unhashed: ['_native.so'], mismatched: [] });
+    expect((await generatePinManifest({ executable: env.shim })).files['_native.so']).toBeDefined();
+  });
+
+  it('generates for a downgrade from 3.1.4 to 3.1.3', async () => {
+    const newer = await makeEnvironment({ version: '3.1.4', name: 'newer' });
+    expect((await generatePinManifest({ executable: newer.shim, requireRecordHashes: true })).version).toBe('3.1.4');
+    const older = await makeEnvironment({ version: '3.1.3', name: 'older' });
+    expect((await generatePinManifest({ executable: older.shim, requireRecordHashes: true })).version).toBe('3.1.3');
   });
 });

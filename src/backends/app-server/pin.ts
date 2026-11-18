@@ -10,7 +10,7 @@ export type PinFailureReason =
   | 'executable-invalid' | 'executable-missing' | 'shebang-unreadable' | 'shebang-unsupported'
   | 'interpreter-missing' | 'environment-unsupported' | 'environment-mismatch'
   | 'dist-info-missing' | 'dist-info-ambiguous' | 'version-unreadable' | 'version-mismatch'
-  | 'record-unreadable' | 'record-malformed' | 'record-mismatch'
+  | 'record-unreadable' | 'record-malformed' | 'record-mismatch' | 'record-unhashed' | 'record-hash-mismatch'
   | 'manifest-unreadable' | 'manifest-invalid' | 'manifest-version-mismatch'
   | 'script-unlisted' | 'file-missing' | 'file-extra' | 'file-mismatch' | 'file-unsafe'
   | 'limit-exceeded';
@@ -82,6 +82,21 @@ export interface PinCheckOptions {
 interface RecordEntry {
   relative: string;
   absolute: string;
+  hash: string;
+}
+
+export interface RecordProblems {
+  unhashed: string[];
+  mismatched: string[];
+}
+
+export interface PinInspection {
+  manifest: PinManifest;
+  recordProblems: RecordProblems;
+}
+
+export interface PinGenerateOptions extends Omit<PinCheckOptions, 'manifest' | 'manifestPath'> {
+  requireRecordHashes?: boolean;
 }
 
 type FileProblemKind = 'missing' | 'unsafe' | 'too-large';
@@ -309,7 +324,7 @@ async function readRecord(located: LocatedEnvironment, limits: PinLimits): Promi
     const absolute = path.join(located.sitePackages, relative);
     if (!isPathWithinRoot(located.environmentRoot, absolute)) throw new PinCheckError('file-unsafe', 'RECORD lists a path outside the environment.');
     if (isVolatile(relative, recordRelative)) continue;
-    entries.push({ relative, absolute });
+    entries.push({ relative, absolute, hash: row.hash });
   }
   return { recordSha256: sha256Of(data), entries, listed };
 }
@@ -406,7 +421,22 @@ export function serializePinManifest(manifest: PinManifest): string {
   return `${JSON.stringify({ format: manifest.format, version: manifest.version, record_sha256: manifest.record_sha256, files }, null, 2)}\n`;
 }
 
-export async function generatePinManifest(options: Omit<PinCheckOptions, 'manifest' | 'manifestPath'>): Promise<PinManifest> {
+function recordHashOf(sha256Hex: string): string {
+  return `sha256=${Buffer.from(sha256Hex, 'hex').toString('base64url')}`;
+}
+
+function findRecordProblems(entries: readonly RecordEntry[], hashes: ReadonlyMap<string, string>): RecordProblems {
+  const problems: RecordProblems = { unhashed: [], mismatched: [] };
+  for (const entry of entries) {
+    const digest = hashes.get(entry.relative);
+    if (digest === undefined) continue;
+    if (!entry.hash.startsWith('sha256=')) problems.unhashed.push(entry.relative);
+    else if (entry.hash !== recordHashOf(digest)) problems.mismatched.push(entry.relative);
+  }
+  return problems;
+}
+
+export async function inspectInstall(options: PinGenerateOptions): Promise<PinInspection> {
   const limits = resolveLimits(options.limits);
   const expectedVersion = options.expectedVersion ?? SUPPORTED_VIBE;
   const located = await locateEnvironment(options.executable, expectedVersion, limits);
@@ -414,9 +444,18 @@ export async function generatePinManifest(options: Omit<PinCheckOptions, 'manife
   const outcome = await hashEntries(entries, limits, options.signal);
   if (outcome.missing.length > 0) throw new PinCheckError('file-missing', 'Files listed in RECORD are missing.', { missing: limited(outcome.missing) });
   if (outcome.unsafe.length > 0) throw new PinCheckError('file-unsafe', 'Files listed in RECORD are not plain regular files.', { unsafe: limited(outcome.unsafe) });
+  const recordProblems = findRecordProblems(entries, outcome.hashes);
+  if (options.requireRecordHashes === true) {
+    if (recordProblems.unhashed.length > 0) throw new PinCheckError('record-unhashed', 'RECORD lists files without a sha256 hash.', { unhashed: limited(recordProblems.unhashed) });
+    if (recordProblems.mismatched.length > 0) throw new PinCheckError('record-hash-mismatch', 'Installed files differ from the hashes in RECORD.', { mismatched: limited(recordProblems.mismatched) });
+  }
   const extra = await findUnlisted(located, listed, limits);
   if (extra.length > 0) throw new PinCheckError('file-extra', 'Files exist that RECORD does not list.', { extra: limited(extra) });
-  return { format: 1, version: located.version, record_sha256: recordSha256, files: Object.fromEntries(outcome.hashes) };
+  return { manifest: { format: 1, version: located.version, record_sha256: recordSha256, files: Object.fromEntries(outcome.hashes) }, recordProblems };
+}
+
+export async function generatePinManifest(options: PinGenerateOptions): Promise<PinManifest> {
+  return (await inspectInstall(options)).manifest;
 }
 
 export async function verifyPinnedInstall(options: PinCheckOptions): Promise<PinnedEnvironment> {

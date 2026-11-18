@@ -1,4 +1,4 @@
-import { realpath, lstat, mkdir, open, chmod } from 'node:fs/promises';
+import { realpath, lstat, mkdir, open, chmod, rename, unlink } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
@@ -166,4 +166,28 @@ export async function createPrivateFile(file: string, data: string | Uint8Array,
   const handle = await open(absolute, flag === 'wx' ? constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | noFollow : constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | noFollow, 0o600);
   try { await handle.chmod(0o600); await handle.writeFile(data); await handle.sync(); }
   finally { await handle.close(); }
+}
+
+export async function writePrivateFileAtomic(file: string, bytes: string | Uint8Array): Promise<void> {
+  const absolute = path.resolve(file);
+  const directory = path.dirname(absolute);
+  await assertNoSymlinkComponents(directory);
+  if (!(await lstat(directory)).isDirectory()) throw new WorkspacePathError('Private file parent must be a real directory');
+  try { const info = await lstat(absolute); if (info.isSymbolicLink() || !info.isFile()) throw new WorkspacePathError('Private file must be a regular file'); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  const temp = path.join(directory, `.${path.basename(absolute)}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`);
+  let handle;
+  try {
+    handle = await open(temp, 'wx', 0o600);
+    await handle.writeFile(bytes);
+    await handle.sync();
+    await handle.close(); handle = undefined;
+    await rename(temp, absolute);
+    const dirHandle = await open(directory, 'r');
+    try { await dirHandle.sync(); } finally { await dirHandle.close(); }
+  } catch (error) {
+    if (handle) await handle.close().catch(() => {});
+    await unlink(temp).catch(() => {});
+    throw error;
+  }
 }

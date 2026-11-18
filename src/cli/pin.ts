@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { resolveAppServerExecutable } from '../backends/app-server.js';
-import { PinCheckError, generatePinManifest, serializePinManifest } from '../backends/app-server/pin.js';
+import { PinCheckError, inspectInstall, serializePinManifest, type RecordProblems } from '../backends/app-server/pin.js';
+import { replacePinManifest } from '../backends/app-server/pin-replace.js';
 import { loadResolvedConfig } from '../config/config.js';
 import { DEFAULT_CONFIG } from '../config/defaults.js';
 import { supervisorError, type SupervisorConfig } from '../contracts.js';
@@ -39,6 +40,18 @@ export function parsePinManifestArgs(args: string[]): PinManifestArgs {
   return parsed;
 }
 
+const WARNED_PATHS = 3;
+
+function recordWarning(problems: RecordProblems): string | undefined {
+  const parts: string[] = [];
+  for (const [label, list] of [['without a sha256 hash', problems.unhashed], ['that differ from their RECORD hash', problems.mismatched]] as const) {
+    if (list.length === 0) continue;
+    const shown = list.slice(0, WARNED_PATHS).join(', ');
+    parts.push(`${list.length} file(s) ${label} (${shown}${list.length > WARNED_PATHS ? ', ...' : ''})`);
+  }
+  return parts.length === 0 ? undefined : `Warning: RECORD lists ${parts.join('; ')}. The manifest still pins what is installed now.\n`;
+}
+
 function print(line: string): void { process.stdout.write(`${line}\n`); }
 
 async function loadConfigForPin(options: PinManifestArgs): Promise<SupervisorConfig> {
@@ -64,8 +77,8 @@ export async function pinManifestCommand(args: string[]): Promise<void> {
   let executable: string;
   try { executable = await resolveAppServerExecutable(config, options.executable); }
   catch { throw Object.assign(new Error('The vibe-app-server executable could not be located.'), { supervisor: supervisorError('VSUP_VIBE_NOT_FOUND', 'The vibe-app-server executable could not be located; pass --executable <path> or set paths.vibe or paths.app_server.') }); }
-  let manifest;
-  try { manifest = await generatePinManifest({ executable, expectedVersion: selectedVibeVersion(config.vibeVersion) }); }
+  let inspection;
+  try { inspection = await inspectInstall({ executable, expectedVersion: selectedVibeVersion(config.vibeVersion) }); }
   catch (error) {
     if (error instanceof PinCheckError) {
       const detail = Object.keys(error.details).length > 0 ? ` ${JSON.stringify(error.details)}` : '';
@@ -73,11 +86,17 @@ export async function pinManifestCommand(args: string[]): Promise<void> {
     }
     throw error;
   }
-  await createPrivateFile(path.resolve(output), serializePinManifest(manifest), options.force ? 'w' : 'wx')
-    .catch((error: unknown) => {
+  const { manifest, recordProblems } = inspection;
+  const target = path.resolve(output);
+  if (options.force) await replacePinManifest(target, manifest);
+  else {
+    await createPrivateFile(target, serializePinManifest(manifest), 'wx').catch((error: unknown) => {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') fail(`${output} already exists; pass --force to replace it.`, 2);
       throw error;
     });
+  }
+  const warning = recordWarning(recordProblems);
+  if (warning) process.stderr.write(warning);
   print(`Wrote the pin manifest for Vibe ${manifest.version} (${Object.keys(manifest.files).length} files, RECORD sha256 ${manifest.record_sha256}) to ${output}.`);
   print('The manifest records what is installed now: review that this is the Vibe build you intend to supervise before relying on it.');
 }
