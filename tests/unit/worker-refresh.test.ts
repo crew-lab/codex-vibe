@@ -1,4 +1,8 @@
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { digest } from '../../src/acceptance/schema.js';
+import { AntigravityBackend } from '../../src/backends/antigravity.js';
 import { describe, expect, it } from 'vitest';
 import { REMEDIATION, supervisorError } from '../../src/contracts.js';
 import { PinCheckError, type PinManifest } from '../../src/backends/app-server/pin.js';
@@ -79,6 +83,20 @@ describe('VSUP_PREPARING', () => {
   });
 });
 
+describe('agy worker identity', () => {
+  it('hashes the binary without launching it and reports no version', async () => {
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), 'vsup-agy-identity-')));
+    try {
+      const marker = path.join(root, 'launched');
+      const binary = path.join(root, 'agy');
+      await writeFile(binary, `#!/bin/sh\ntouch "${marker}"\necho "agy 1.6.0"\n`, { mode: 0o755 });
+      const backend = new AntigravityBackend({ ...DEFAULT_CONFIG, backend: 'antigravity', paths: { antigravity: binary }, experimental: { antigravity: true } });
+      expect(await backend.workerIdentity()).toEqual({ version: null, digest: digest(await readFile(binary)) });
+      await expect(stat(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+});
+
 describe('runWorkerRefresh', () => {
   const lock = (): OwnerLock & { released: number } => {
     const value = { path: '/lock', token: 't', released: 0, release: async () => { value.released += 1; } };
@@ -119,13 +137,19 @@ describe('runWorkerRefresh', () => {
   });
 
   it('reports an install that is still changing and writes nothing', async () => {
-    for (const reason of ['dist-info-missing', 'dist-info-ambiguous', 'record-unhashed', 'record-hash-mismatch', 'file-missing'] as const) {
+    for (const reason of ['dist-info-missing', 'dist-info-ambiguous', 'record-unreadable', 'record-hash-mismatch', 'file-missing'] as const) {
       let replaced = 0;
       const deps = dependencies({ generatePinManifest: async () => { throw new PinCheckError(reason, 'changing'); }, replacePinManifest: async () => { replaced += 1; return { previousVersion: null, historyPath: null }; } });
       expect(await runWorkerRefresh(plan(), lock(), deps)).toMatchObject({ kind: 'install_unsettled', reason });
       expect(replaced).toBe(0);
       expect(deps.prepared).toEqual([]);
     }
+  });
+
+  it('refuses a RECORD row without a hash instead of waiting for it, and names the row', async () => {
+    const deps = dependencies({ generatePinManifest: async () => { throw new PinCheckError('record-unhashed', 'RECORD lists files without a sha256 hash.', { unhashed: { paths: ['vibe/core.py'], total: 1 } }); } });
+    expect(await runWorkerRefresh(plan(), lock(), deps)).toMatchObject({ kind: 'pin_failed', error: { details: { reason: 'record-unhashed', unhashed: { paths: ['vibe/core.py'], total: 1 } } } });
+    expect(deps.prepared).toEqual([]);
   });
 
   it('reports any other re-pin failure as a pin error', async () => {

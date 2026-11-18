@@ -28,7 +28,7 @@ export interface RefreshConditions {
 }
 
 const PREPARE_ONLY_COMPONENTS: ReadonlySet<PreparationComponentName> = new Set<PreparationComponentName>(['pin', 'policy', 'node_major']);
-const UNSETTLED_PIN_REASONS: ReadonlySet<string> = new Set(['dist-info-missing', 'dist-info-ambiguous', 'record-unreadable', 'record-unhashed', 'record-hash-mismatch', 'file-missing']);
+const UNSETTLED_PIN_REASONS: ReadonlySet<string> = new Set(['dist-info-missing', 'dist-info-ambiguous', 'record-unreadable', 'record-hash-mismatch', 'file-missing']);
 const UNSETTLED_READINESS_PIN_REASONS: ReadonlySet<string> = new Set(['dist-info-missing', 'dist-info-ambiguous', 'record-unreadable']);
 const MAX_RECORD_BYTES = 4 * 1024 * 1024;
 const MAX_RECEIPT_BYTES = 16 * 1024;
@@ -107,6 +107,13 @@ async function receiptPinComponent(config: SupervisorConfig, dataDir: string): P
   } catch { return undefined; }
 }
 
+const PIN_FILE_LIST_KEYS = ['unhashed', 'mismatched', 'missing', 'extra', 'unsafe', 'names'] as const;
+
+export function pinFileLists(details: Readonly<Record<string, unknown>> | undefined): Record<string, unknown> {
+  if (!details) return {};
+  return Object.fromEntries(PIN_FILE_LIST_KEYS.filter((key) => details[key] !== undefined).map((key) => [key, details[key]]));
+}
+
 export function pinFailureError(error: PinCheckError): SupervisorError {
   return supervisorError(error.code, error.message.slice(0, 500), { reason: error.reason, ...error.details });
 }
@@ -139,7 +146,7 @@ export interface WorkerRefreshPlan {
 
 export type RefreshOutcome =
   | { kind: 'not_needed' }
-  | { kind: 'install_unsettled'; reason: string; from?: string | undefined; to?: string | undefined }
+  | { kind: 'install_unsettled'; reason: string; files: Record<string, unknown>; from?: string | undefined; to?: string | undefined }
   | { kind: 'pin_failed'; error: SupervisorError; identity: string | null; from?: string | undefined; to?: string | undefined }
   | { kind: 'prepared'; passed: boolean; repinned: boolean; from?: string | undefined; to?: string | undefined; reportPath: string; findings: ReportedFinding[] }
   | { kind: 'aborted' }
@@ -165,7 +172,7 @@ export async function runWorkerRefresh(plan: WorkerRefreshPlan, lock: OwnerLock,
       catch (error) {
         signal.throwIfAborted();
         if (!(error instanceof PinCheckError)) throw error;
-        if (isUnsettledPinReason(error.reason)) return { kind: 'install_unsettled', reason: error.reason, from, to };
+        if (isUnsettledPinReason(error.reason)) return { kind: 'install_unsettled', reason: error.reason, files: pinFileLists(error.details), from, to };
         return { kind: 'pin_failed', error: pinFailureError(error), identity, from, to };
       }
       signal.throwIfAborted();

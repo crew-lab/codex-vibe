@@ -8,6 +8,8 @@ import { supervisorError, type SupervisorConfig } from '../contracts.js';
 import { createPrivateFile } from '../security/paths.js';
 import { selectedVibeVersion } from '../backends/app-server/supported-vibe.js';
 import { fail } from './fail.js';
+import { isOwnerLockContention, type OwnerLock } from '../core/owner-lock.js';
+import { acquirePreparationLock, preparationRunningMessage } from '../preparation/lock.js';
 
 export const PIN_MANIFEST_USAGE = 'Usage: vibe-supervisor pin-manifest [--config <path>] [--executable <path>] [--output <path>] [--force]';
 
@@ -54,8 +56,13 @@ function recordWarning(problems: RecordProblems): string | undefined {
 
 function print(line: string): void { process.stdout.write(`${line}\n`); }
 
-async function loadConfigForPin(options: PinManifestArgs): Promise<SupervisorConfig> {
-  try { return (await loadResolvedConfig({ requirePinManifest: false, ...(options.config ? { configPath: options.config } : {}) })).config; }
+interface PinConfig { config: SupervisorConfig; dataDir?: string }
+
+async function loadConfigForPin(options: PinManifestArgs): Promise<PinConfig> {
+  try {
+    const resolved = await loadResolvedConfig({ requirePinManifest: false, ...(options.config ? { configPath: options.config } : {}) });
+    return { config: resolved.config, dataDir: resolved.dataDir };
+  }
   catch (error) {
     if (options.output === undefined) throw error;
     const reason = error instanceof Error ? error.message : String(error);
@@ -64,19 +71,37 @@ async function loadConfigForPin(options: PinManifestArgs): Promise<SupervisorCon
       throw error;
     }
     process.stderr.write(`Ignoring the unusable configuration and using --executable and --output alone: ${reason}\n`);
-    return { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits }, retention: { ...DEFAULT_CONFIG.retention } };
+    return { config: { ...DEFAULT_CONFIG, limits: { ...DEFAULT_CONFIG.limits }, retention: { ...DEFAULT_CONFIG.retention } } };
+  }
+}
+
+async function lockForConfiguredManifest(loaded: PinConfig, target: string): Promise<OwnerLock | undefined> {
+  const configured = loaded.config.paths?.vibePinManifest;
+  if (loaded.dataDir === undefined || !configured || !path.isAbsolute(configured) || path.resolve(configured) !== target) return undefined;
+  try { return await acquirePreparationLock(loaded.config, loaded.dataDir); }
+  catch (error) {
+    if (isOwnerLockContention(error)) fail(preparationRunningMessage(error).replace('run prepare check again', 'run pin-manifest again'), 1);
+    throw error;
   }
 }
 
 export async function pinManifestCommand(args: string[]): Promise<void> {
   const options = parsePinManifestArgs(args);
-  const config = await loadConfigForPin(options);
+  const loaded = await loadConfigForPin(options);
+  const { config } = loaded;
   const output = options.output ?? config.paths?.vibePinManifest;
   if (!output) fail('No output path: set paths.vibe_pin_manifest in the configuration or pass --output <path>.', 2);
   if (!path.isAbsolute(output)) fail('The output path must be absolute.', 2);
   let executable: string;
   try { executable = await resolveAppServerExecutable(config, options.executable); }
   catch { throw Object.assign(new Error('The vibe-app-server executable could not be located.'), { supervisor: supervisorError('VSUP_VIBE_NOT_FOUND', 'The vibe-app-server executable could not be located; pass --executable <path> or set paths.vibe or paths.app_server.') }); }
+  const target = path.resolve(output);
+  const lock = options.force ? await lockForConfiguredManifest(loaded, target) : undefined;
+  try { await writePinManifest(options, config, executable, target, output); }
+  finally { await lock?.release(); }
+}
+
+async function writePinManifest(options: PinManifestArgs, config: SupervisorConfig, executable: string, target: string, output: string): Promise<void> {
   let inspection;
   try { inspection = await inspectInstall({ executable, expectedVersion: selectedVibeVersion(config.vibeVersion) }); }
   catch (error) {
@@ -87,7 +112,6 @@ export async function pinManifestCommand(args: string[]): Promise<void> {
     throw error;
   }
   const { manifest, recordProblems } = inspection;
-  const target = path.resolve(output);
   if (options.force) await replacePinManifest(target, manifest);
   else {
     await createPrivateFile(target, serializePinManifest(manifest), 'wx').catch((error: unknown) => {

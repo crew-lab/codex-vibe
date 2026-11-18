@@ -46,7 +46,7 @@ import { bindingMismatchError, dispatchBinding, type DispatchBinding } from "./d
 import { candidateEntrypoint, taskAuthorizeCommand } from "./dispatch-command.js";
 import { candidateIdentity, type PreparationFacts, type PreparationStatus } from "../preparation/evidence.js";
 import { inspectPreparationLock } from "../preparation/lock.js";
-import { decideRefresh, defaultWorkerRefreshDependencies, installIdentity, isUnsettledReadinessPinReason, refreshHold, refreshSummary, refreshWarning, runWorkerRefresh, workerDisplayName, workerUpdatedDuringRunWarning, type RefreshAction, type RefreshHold, type RefreshOutcome, type RefreshStage, type WorkerRefreshDependencies } from "../preparation/worker-refresh.js";
+import { decideRefresh, defaultWorkerRefreshDependencies, installIdentity, isUnsettledReadinessPinReason, pinFileLists, refreshHold, refreshSummary, refreshWarning, runWorkerRefresh, workerDisplayName, workerUpdatedDuringRunWarning, type RefreshAction, type RefreshHold, type RefreshOutcome, type RefreshStage, type WorkerRefreshDependencies } from "../preparation/worker-refresh.js";
 import { verifyTaskInputs, taskInputManifestSchema, type TaskInputManifest } from "../preparation/task-inputs.js";
 
 function assertPreparedManifestScope(manifest: TaskInputManifest, contract: AcceptanceContract | undefined): void {
@@ -630,7 +630,7 @@ export class RunManager {
     if (!blocker) return this.refreshWarningFor(facts);
     backend?.releaseAdmission?.();
     const action = decideRefresh({ backend: this.activeBackendKind, pinReason: pinReasonOf(pinBlocker), facts: facts ?? null });
-    const repairable = (action === "repin" && blocker === pinBlocker) || (action === "prepare" && blocker === unprepared);
+    const repairable = (blocker === pinBlocker && (action === "repin" || isUnsettledReadinessPinReason(pinReasonOf(pinBlocker)))) || (action === "prepare" && blocker === unprepared);
     throw codedError(blocker.code, blocker.message, { ...blocker.details, ...(repairable ? { worker_refresh: START_REFRESH_HINT } : {}), attempt_consumed: false });
   }
 
@@ -867,8 +867,8 @@ export class RunManager {
     }
     const pinReason = pinReasonOf(pinBlocker);
     if (observed.executableFound && this.activeBackendKind === "app-server" && isUnsettledReadinessPinReason(pinReason)) {
-      replace(pinBlocker, normalizeError(this.preparingError("install_unsettled", `The ${workerDisplayName(this.activeBackendKind)} install is still changing (${pinReason}); nothing was written. Check readiness again once the update has finished.`, { reason: pinReason }, UNSETTLED_RETRY_SECONDS)));
-      return { field: { status: "install_unsettled", reason: pinReason }, waitFor: "install" };
+      replace(pinBlocker, normalizeError(this.preparingError("install_unsettled", `The ${workerDisplayName(this.activeBackendKind)} install is still changing (${pinReason}); nothing was written. Check readiness again once the update has finished.`, { reason: pinReason, ...pinFileLists(pinBlocker?.details) }, UNSETTLED_RETRY_SECONDS)));
+      return { field: { status: "install_unsettled", reason: pinReason, ...pinFileLists(pinBlocker?.details) }, waitFor: "install" };
     }
     if (action === "none") {
       this.annotatePreparationBlocker(unprepared, observed.facts, replace);
@@ -886,12 +886,12 @@ export class RunManager {
     if (last && !last.reported && action === "repin" && last.outcome.kind === "pin_failed" && last.outcome.identity === null) {
       last.reported = true;
       replace(pinBlocker, last.outcome.error);
-      return { field: { status: "refused", action } };
+      return { field: { status: "refused", action, reason: last.outcome.error.details?.reason, ...pinFileLists(last.outcome.error.details) } };
     }
     if (!observed.firstPass && last && last !== observed.earlier && last.outcome.kind === "install_unsettled") {
       last.reported = true;
-      repaired(normalizeError(this.preparingError("install_unsettled", `The ${workerDisplayName(this.activeBackendKind)} install is still changing (${last.outcome.reason}); nothing was written. Check readiness again once the update has finished.`, { reason: last.outcome.reason, ...(last.outcome.from ? { from: last.outcome.from } : {}), ...(last.outcome.to ? { to: last.outcome.to } : {}) }, UNSETTLED_RETRY_SECONDS)));
-      return { field: { status: "install_unsettled", reason: last.outcome.reason } };
+      repaired(normalizeError(this.preparingError("install_unsettled", `The ${workerDisplayName(this.activeBackendKind)} install is still changing (${last.outcome.reason}); nothing was written. Check readiness again once the update has finished.`, { reason: last.outcome.reason, ...last.outcome.files, ...(last.outcome.from ? { from: last.outcome.from } : {}), ...(last.outcome.to ? { to: last.outcome.to } : {}) }, UNSETTLED_RETRY_SECONDS)));
+      return { field: { status: "install_unsettled", reason: last.outcome.reason, ...last.outcome.files } };
     }
     let pinTarget: import("../contracts.js").WorkerPinTarget | undefined;
     if (action === "repin") {
@@ -901,7 +901,7 @@ export class RunManager {
         const identity = await installIdentity(pinTarget);
         if (identity !== null && identity === this.pinFailure.identity && this.now() - this.pinFailure.at < PIN_FAILURE_MEMORY_MS) {
           replace(pinBlocker, this.pinFailure.error);
-          return { field: { status: "refused", action } };
+          return { field: { status: "refused", action, reason: this.pinFailure.error.details?.reason, ...pinFileLists(this.pinFailure.error.details) } };
         }
         this.pinFailure = undefined;
       }

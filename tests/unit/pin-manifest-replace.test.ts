@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { serializePinManifest, type PinManifest } from '../../src/backends/app-server/pin.js';
 import { replacePinManifest } from '../../src/backends/app-server/pin-replace.js';
 import { pinManifestCommand } from '../../src/cli/pin.js';
+import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
+import { acquirePreparationLock } from '../../src/preparation/lock.js';
 import { writePrivateFileAtomic } from '../../src/security/paths.js';
 import { makeFakeVibeEnvironment } from './support/fake-vibe-environment.js';
 
@@ -80,7 +82,7 @@ describe('replacePinManifest', () => {
 });
 
 describe('pin-manifest command', () => {
-  async function setup(): Promise<{ args: string[]; output: string; stderr: string[]; fakeRecord: string }> {
+  async function setup(): Promise<{ args: string[]; output: string; stderr: string[]; fakeRecord: string; fake: string }> {
     const fake = await makeFakeVibeEnvironment(scratch);
     const config = path.join(scratch, 'config.toml');
     await writeFile(config, 'version = 1\nallowed_workspace_roots = []\n', { mode: 0o600 });
@@ -89,7 +91,7 @@ describe('pin-manifest command', () => {
     const stderr: string[] = [];
     vi.spyOn(process.stdout, 'write').mockImplementation((() => true) as typeof process.stdout.write);
     vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: string | Uint8Array) => { stderr.push(String(chunk)); return true; }) as typeof process.stderr.write);
-    return { args: ['--config', config, '--executable', fake.shim, '--output', output], output, stderr, fakeRecord: path.join(fake.distInfo, 'RECORD') };
+    return { args: ['--config', config, '--executable', fake.shim, '--output', output], output, stderr, fakeRecord: path.join(fake.distInfo, 'RECORD'), fake: fake.shim };
   }
 
   it('replaces with --force leaving one history file, and refuses without it', async () => {
@@ -102,6 +104,27 @@ describe('pin-manifest command', () => {
     const history = await readdir(path.join(path.dirname(output), 'pin-history'));
     expect(history).toHaveLength(1);
     expect(await readFile(path.join(path.dirname(output), 'pin-history', history[0] as string), 'utf8')).toBe(first);
+  });
+
+  it('takes the preparation lock to replace the configured manifest and writes nothing while it is held', async () => {
+    const { args, output, fake } = await setup();
+    const configured = path.join(scratch, 'configured.toml');
+    await writeFile(configured, `version = 1\nallowed_workspace_roots = []\n[paths]\nvibe_pin_manifest = ${JSON.stringify(output)}\n`, { mode: 0o600 });
+    const configuredArgs = ['--config', configured, '--executable', fake, '--force'];
+    await pinManifestCommand(configuredArgs);
+    const first = await readFile(output, 'utf8');
+    const held = await acquirePreparationLock({ ...DEFAULT_CONFIG, paths: { vibePinManifest: output } });
+    try {
+      await expect(pinManifestCommand(configuredArgs)).rejects.toThrow(/^A preparation is already running \(pid \d+\); wait for it to finish, then run pin-manifest again\.$/);
+      expect(await readFile(output, 'utf8')).toBe(first);
+      await expect(readdir(path.join(path.dirname(output), 'pin-history'))).rejects.toMatchObject({ code: 'ENOENT' });
+      const elsewhere = path.join(scratch, 'elsewhere.json');
+      await pinManifestCommand(['--config', configured, '--executable', fake, '--output', elsewhere, '--force']);
+      expect(JSON.parse(await readFile(elsewhere, 'utf8'))).toMatchObject({ format: 1 });
+      await writeFile(path.join(scratch, 'broken.toml'), 'not toml [', { mode: 0o600 });
+      await pinManifestCommand(['--config', path.join(scratch, 'broken.toml'), ...args.slice(2), '--force']);
+    } finally { await held.release(); }
+    await expect(pinManifestCommand(configuredArgs)).resolves.toBeUndefined();
   });
 
   it('warns on stderr and still writes when a RECORD row is unhashed', async () => {

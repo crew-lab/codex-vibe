@@ -198,7 +198,8 @@ describe('Vibe worker refresh at readiness', () => {
     await box.swap('3.1.3');
     const unsettled = await readiness(manager, box.workspace, 30);
     expect(codes(unsettled)).toEqual(['VSUP_PREPARING']);
-    expect(unsettled.blockers[0]).toMatchObject({ retryable: true, details: { stage: 'install_unsettled', reason: 'record-hash-mismatch' } });
+    expect(unsettled.blockers[0]).toMatchObject({ retryable: true, details: { stage: 'install_unsettled', reason: 'record-hash-mismatch', mismatched: { paths: ['vibe/__init__.py'], total: 1 } } });
+    expect(unsettled.worker_refresh).toMatchObject({ status: 'install_unsettled', mismatched: { paths: ['vibe/__init__.py'] } });
     expect(await readFile(box.manifest)).toEqual(manifestBefore);
     expect(await readFile(receiptPath(box.config, box.state))).toEqual(receiptBefore);
     await expect(readdir(path.join(box.state, PIN_HISTORY_DIRECTORY))).rejects.toMatchObject({ code: 'ENOENT' });
@@ -339,13 +340,31 @@ describe('Vibe worker refresh at readiness', () => {
     expect(box.pins.count).toBe(2);
   }, 60_000);
 
+  it('refuses a RECORD row without a hash and names the row', async () => {
+    const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2' });
+    const manager = box.manager();
+    const record = path.join(box.sitePackages('3.1.3'), 'mistral_vibe-3.1.3.dist-info', 'RECORD');
+    await writeFile(record, (await readFile(record, 'utf8')).split('\n').map((line) => line.startsWith('_native.so,') ? '_native.so,,' : line).join('\n'));
+    const manifestBefore = await readFile(box.manifest);
+    await box.swap('3.1.3');
+    const refused = await readiness(manager, box.workspace, 30);
+    expect(codes(refused)).toEqual(['VSUP_VIBE_VERSION_UNSUPPORTED']);
+    expect(refused.blockers[0]).toMatchObject({ retryable: false, details: { reason: 'record-unhashed', unhashed: { paths: ['_native.so'], total: 1 } } });
+    expect(refused.worker_refresh).toMatchObject({ status: 'refused', reason: 'record-unhashed', unhashed: { paths: ['_native.so'] } });
+    expect(box.pins.count).toBe(1);
+    expect(box.calls).toHaveLength(0);
+    expect(await readFile(box.manifest)).toEqual(manifestBefore);
+  }, 60_000);
+
   it('reports a missing dist-info at readiness as an install still changing and writes nothing', async () => {
     const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2' });
     const manager = box.manager();
     const distInfo = path.join(box.sitePackages('3.1.2'), 'mistral_vibe-3.1.2.dist-info');
     const aside = path.join(box.root, 'dist-info-aside');
     const manifestBefore = await readFile(box.manifest);
+    const start = await grant(manager, box.workspace);
     await rename(distInfo, aside);
+    expect(await rejection(start())).toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED', details: { reason: 'dist-info-missing', attempt_consumed: false, worker_refresh: expect.stringMatching(/readiness/) } });
     const unsettled = await readiness(manager, box.workspace);
     expect(codes(unsettled)).toEqual(['VSUP_PREPARING']);
     expect(unsettled.blockers[0]).toMatchObject({ retryable: true, details: { stage: 'install_unsettled', reason: 'dist-info-missing' } });
