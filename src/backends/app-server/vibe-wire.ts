@@ -35,6 +35,7 @@ export interface VibeWireFacts {
   disabledTools: readonly string[];
   runtimeSettings: readonly WireSetting[];
   agentSettingKeys: { defaultAgent: string; enabledAgents: string };
+  modelSettingKey: string;
   managedConfig: { route: string; baseUrlSetting: string };
   configRead: { harnessSelectionSourceOptional: boolean };
   bundledSkills: { names: readonly string[]; provenance: WireSkillProvenance };
@@ -76,6 +77,7 @@ export const VIBE_WIRE: VibeWireFacts = {
     { key: 'bypass_tool_permissions', value: false }
   ],
   agentSettingKeys: { defaultAgent: 'default_agent', enabledAgents: 'enabled_agents' },
+  modelSettingKey: 'active_model',
   managedConfig: { route: '/api/v1/code/managed-config', baseUrlSetting: 'vibe_base_url' },
   configRead: { harnessSelectionSourceOptional: true },
   bundledSkills: {

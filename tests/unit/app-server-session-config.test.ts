@@ -181,8 +181,10 @@ describe('child process environment additions', () => {
       VIBE_SESSION_LOGGING__GENERATE_TITLES: 'false',
       VIBE_BYPASS_TOOL_PERMISSIONS: 'false',
       VIBE_DEFAULT_AGENT: 'supervisor-review',
-      VIBE_ENABLED_AGENTS: '["supervisor-review"]'
+      VIBE_ENABLED_AGENTS: '["supervisor-review"]',
+      VIBE_ACTIVE_MODEL: 'mistral-medium-3.5'
     });
+    expect(buildSessionConfig({ mode: 'edit', workspace, runDirectory, maxTurns: 5, model: 'mistral-large-4-0' }).environment.VIBE_ACTIVE_MODEL).toBe('mistral-large-4-0');
   });
 
   it('keeps every writable location inside the run directory and carries no credential', () => {

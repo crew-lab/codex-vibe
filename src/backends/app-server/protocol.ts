@@ -265,6 +265,8 @@ export interface TurnError {
   code: TurnErrorCode | 'unknown';
   rawCode: string | null;
   message: string | null;
+  reason?: string;
+  httpStatus?: number;
 }
 
 export interface Turn {
@@ -284,7 +286,13 @@ function parseTurnError(raw: unknown): TurnError | null {
   if (typeof raw !== 'object' || Array.isArray(raw)) return { code: 'unknown', rawCode: null, message: null };
   const body = raw as Record<string, unknown>;
   const rawCode = typeof body.code === 'string' ? body.code : null;
-  return { code: isTurnErrorCode(rawCode) ? rawCode : 'unknown', rawCode, message: typeof body.message === 'string' ? body.message : null };
+  const details = body.details !== null && typeof body.details === 'object' && !Array.isArray(body.details) ? body.details as Record<string, unknown> : {};
+  const { reason, httpStatus } = details;
+  return {
+    code: isTurnErrorCode(rawCode) ? rawCode : 'unknown', rawCode, message: typeof body.message === 'string' ? body.message : null,
+    ...(typeof reason === 'string' ? { reason: reason.slice(0, 64) } : {}),
+    ...(typeof httpStatus === 'number' && Number.isInteger(httpStatus) ? { httpStatus } : {})
+  };
 }
 
 const turnSchema = z.object({

@@ -372,11 +372,11 @@ async function main(argv) {
     pairs.push([workspace, '<workspace>'], [runDirectory, '<run-directory>']);
     const record = {
       label, mode, role, purpose: control ? 'network-control' : 'conformance', spawned: false, stages: [], timings_ms: {}, handshake: null, session_start: null,
-      readiness: null, readback: null, thinking: null, observed: null, notifications: { total: 0, by_method: {}, unknown_methods: [] },
+      readiness: null, readback: null, model: null, thinking: null, observed: null, notifications: { total: 0, by_method: {}, unknown_methods: [] },
       server_requests: [], server_warnings: [], stats_after: null, stderr: { bytes: 0, tail: '' }, shutdown: null, blocked: null
     };
     const note = (id, severity, message, details) => addFinding(id, severity, message, label, details);
-    const plan = sessionConfig.buildSessionConfig({ mode, workspace, runDirectory, maxTurns: MAX_TURNS, excludedGlobs: options.excludedGlobs, ...(config.vibeReviewThinking === undefined ? {} : { reviewThinking: config.vibeReviewThinking }) });
+    const plan = sessionConfig.buildSessionConfig({ mode, workspace, runDirectory, maxTurns: MAX_TURNS, excludedGlobs: options.excludedGlobs, ...(config.vibeReviewThinking === undefined ? {} : { reviewThinking: config.vibeReviewThinking }), ...(config.vibeModel === undefined ? {} : { model: config.vibeModel }) });
     await sessionConfig.writeSessionFiles(plan);
     const childEnvironment = { ...environment.buildChildEnvironment(process.env), ...plan.environment };
     delete childEnvironment.MISTRAL_API_KEY;
@@ -533,7 +533,8 @@ async function main(argv) {
         for (const item of [...before, ...after]) {
           if (reported.has(item.path)) continue;
           reported.add(item.path);
-          note('readback-mismatch', 'fail', `${item.path}: expected ${bounded(item.expected)}, got ${bounded(item.actual)}`, { path: item.path });
+          if (item.path === readback.ACTIVE_MODEL_ALIAS_FIELD) note('model-not-selected', 'fail', readback.modelNotSelectedMessage(item), { path: item.path });
+          else note('readback-mismatch', 'fail', `${item.path}: expected ${bounded(item.expected)}, got ${bounded(item.actual)}`, { path: item.path });
         }
 
         const effectiveConfig = secondEffective.value.config;
@@ -549,6 +550,7 @@ async function main(argv) {
         }));
         const alias = secondRuntime.value.runtime.activeModel?.alias ?? null;
         const activeRaw = valueAt(secondRuntime.raw, ['runtime', 'config', 'activeModel']);
+        record.model = { requested: plan.expectation.model, before: firstRuntime.value.runtime.activeModel?.alias ?? null, after: alias, name: secondRuntime.value.runtime.activeModel?.name ?? null };
         record.thinking = {
           requested: plan.expectation.thinking,
           write_status: write.value.status,
@@ -716,10 +718,12 @@ async function main(argv) {
   const askVisible = subjectRuns.length > 0 && subjectRuns.every((item) => item.observed?.permission_ask_visible === true);
   const askAbsent = subjectRuns.some((item) => item.observed !== null && Object.values(profileTools(item)).some((policy) => policy.permission !== 'ask'));
   const thinkingConfirmed = subjectRuns.length > 0 && subjectRuns.every((item) => typeof item.thinking?.requested === 'string' && item.thinking.after === item.thinking.requested && item.thinking.effective_models_thinking === item.thinking.requested);
+  const modelSelected = subjectRuns.length > 0 && subjectRuns.every((item) => typeof item.model?.requested === 'string' && item.model.after === item.model.requested);
   const experimentsOff = subjectRuns.length > 0 && subjectRuns.every((item) => item.observed?.settings?.['experiments.enable']?.actual === false);
   report.gates = {
     'target-no-inference-conformance-check': report.result,
     'permission-ask-visible-in-effective-config': { config: askVisible ? 'visible' : askAbsent ? 'not-visible' : 'unknown', approval_handler_reached: 'needs-hosted-run' },
+    'model-selection': { requested: subjectRuns[0]?.model?.requested ?? null, selected: modelSelected, provider_name: subjectRuns[0]?.model?.name ?? null, account_access: 'needs-hosted-run' },
     'thinking-effect': { setting_read_back: thinkingConfirmed, levels: subjectRuns[0]?.thinking?.levels ?? null, effect: 'needs-hosted-run' },
     'experiments-fetch-off': { setting_read_back: experimentsOff, network: report.network_observation?.experiments_verdict ?? 'not-observed' },
     'nested-run-typescript-shape-and-gating': { check: 'needs-hosted-run' }

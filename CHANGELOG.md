@@ -14,6 +14,9 @@ A worker update no longer stops work until someone repairs it by hand.
 - A Vibe preparation that times out or produces no report is a finished failure with the finding `conformance_timeout` or `conformance_no_report`, and is not retried; one interrupted by a shutdown or an outside signal is.
 - A run's result warns (`worker_updated_during_run`) when the worker was updated during the run or cannot be re-read after it. A run whose launch never started says in `next_action` that the task was never sent, and its status, result and a start that waited carry the `task_authorize` command.
 
+- The supervisor names the Vibe model. `vibe_model` (default `mistral-medium-3.5`) is set as Vibe's `active_model` for every run and the read-back requires Vibe to report that alias, at a start, after a compaction and in the no-inference preparation check. A Vibe release that changes its default model no longer changes the model a run uses; a Vibe that does not offer the alias fails before the first turn with `model_not_selected` and names the setting. Readiness reports the alias as `worker.model`, and exports record it as the requested model.
+- A provider refusal that is not about the API key, such as a model the account's plan does not include, is reported as `VSUP_BACKEND_ERROR` with `details.reason: provider_refused`, the model and the provider's sentence, and no longer as a rejected key. It is recognised by its HTTP 403 status or by the sentence Vibe 3.1.3 and later use for it; a turn error's `details` now carry `http_status` when Vibe reports one.
+
 ### Changed
 
 - The preparation receipt binds only the boot-bound settings, not `excluded_globs`, `budgets` or workspace roots. Every existing receipt goes stale once.

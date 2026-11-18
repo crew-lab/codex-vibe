@@ -1,6 +1,6 @@
 import { supervisorError, type RunState, type SupervisorError } from '../../contracts.js';
 import type { EventFatal } from './events.js';
-import type { Turn } from './protocol.js';
+import type { Turn, TurnError } from './protocol.js';
 
 export const STOP_REASON_END_TURN = 'end_turn';
 export const STOP_REASON_TURN_LIMIT = 'turn_limit';
@@ -25,6 +25,7 @@ export interface OutcomeInput {
   hasFinalMessage: boolean;
   auditClean?: boolean;
   auditedWrites?: number;
+  model?: string;
 }
 
 export interface RunOutcome {
@@ -78,19 +79,30 @@ function deadlineOutcome(input: OutcomeInput): RunOutcome {
   if (input.auditClean !== true) return failure('VSUP_TIMEOUT', 'The run exceeded its configured timeout.');
   const turn = input.turn;
   if (turn !== null && turn.status === 'completed' && turn.error === null) {
-    const finished = turnOutcome(turn, input.hasFinalMessage);
+    const finished = turnOutcome(turn, input.hasFinalMessage, input.model);
     return { ...finished, warnings: [...finished.warnings, LATE_COMPLETION_WARNING] };
   }
   if ((input.auditedWrites ?? 0) > 0) return { state: 'completed', stopReason: STOP_REASON_TIMEOUT, warnings: [TIMEOUT_RESULT_WARNING] };
   return failure('VSUP_TIMEOUT', 'The run exceeded its configured timeout.');
 }
 
-function errorOutcome(turn: Turn): RunOutcome | null {
+const PROVIDER_REFUSAL_SENTENCE = /model provider refused this request/i;
+const PROVIDER_REFUSAL_REASON = 'http_forbidden';
+const HTTP_FORBIDDEN = 403;
+
+function providerRefusedForAnotherReason(error: TurnError): boolean {
+  return error.reason === PROVIDER_REFUSAL_REASON || error.httpStatus === HTTP_FORBIDDEN || (error.message !== null && PROVIDER_REFUSAL_SENTENCE.test(error.message));
+}
+
+function errorOutcome(turn: Turn, model: string | undefined): RunOutcome | null {
   const error = turn.error;
   if (error === null) return null;
-  const details = { error_code: error.rawCode ?? 'unknown', ...(error.message === null ? {} : { message: error.message.slice(0, 300) }) };
+  const details = { error_code: error.rawCode ?? 'unknown', ...(error.message === null ? {} : { message: error.message.slice(0, 300) }), ...(error.httpStatus === undefined ? {} : { http_status: error.httpStatus }) };
   switch (error.code) {
     case 'invalid_api_key':
+      if (providerRefusedForAnotherReason(error)) {
+        return failure('VSUP_BACKEND_ERROR', `The model provider refused the request${model === undefined ? '' : ` for model ${model}`} for a reason other than the API key; details.message carries the provider's reason. If the account cannot use this model, set vibe_model to one it can, then restart the supervisor.`, { ...details, classification: 'configuration', reason: 'provider_refused', ...(model === undefined ? {} : { model }) });
+      }
       return failure('VSUP_AUTH_REQUIRED', 'The Vibe provider rejected the API key.', details);
     case 'invalid_model':
       return failure('VSUP_BACKEND_ERROR', 'The Vibe provider rejected the configured model; this is a configuration failure.', { ...details, classification: 'configuration' });
@@ -106,11 +118,11 @@ function errorOutcome(turn: Turn): RunOutcome | null {
   }
 }
 
-function turnOutcome(turn: Turn | null, hasFinalMessage: boolean): RunOutcome {
+function turnOutcome(turn: Turn | null, hasFinalMessage: boolean, model?: string): RunOutcome {
   if (turn === null) return failure('VSUP_BACKEND_ERROR', 'The Vibe backend never reported a completed turn.');
   if (turn.status === 'in_progress') return failure('VSUP_BACKEND_ERROR', 'The Vibe backend reported the turn as still in progress at the end of the run.');
   if (turn.status === 'interrupted') return failure('VSUP_BACKEND_ERROR', 'The turn was interrupted by something other than the supervisor.', { classification: 'unrequested_interrupt' });
-  const fromError = errorOutcome(turn);
+  const fromError = errorOutcome(turn, model);
   if (fromError) return fromError;
   if (turn.status === 'failed') return failure('VSUP_BACKEND_ERROR', 'The Vibe backend failed the turn without an error code.');
   switch (turn.stopReason) {
@@ -125,5 +137,5 @@ function turnOutcome(turn: Turn | null, hasFinalMessage: boolean): RunOutcome {
 }
 
 export function mapOutcome(input: OutcomeInput): RunOutcome {
-  return conditionOutcome(input) ?? turnOutcome(input.turn, input.hasFinalMessage);
+  return conditionOutcome(input) ?? turnOutcome(input.turn, input.hasFinalMessage, input.model);
 }

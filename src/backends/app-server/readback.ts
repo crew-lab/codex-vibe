@@ -24,6 +24,7 @@ export interface ReadbackExpectation {
   toolPolicies: Readonly<Record<string, ToolPolicyExpectation>>;
   settings: readonly SettingExpectation[];
   thinking: SessionThinking;
+  model: string;
 }
 
 export interface ReadbackObservation {
@@ -41,6 +42,8 @@ export interface ReadbackMismatch {
   expected: unknown;
   actual: unknown;
 }
+
+export const ACTIVE_MODEL_ALIAS_FIELD = 'runtime.config.activeModel.alias';
 
 const MAX_FORMATTED_MISMATCHES = 20;
 const MAX_FORMATTED_VALUE_CHARS = 120;
@@ -126,13 +129,11 @@ export function compareReadback(expected: ReadbackExpectation, observed: Readbac
     equal(`${prefix}.denylist`, [...policy.denylist], isRecord(entry) ? entry.denylist : undefined);
   }
 
-  if (options.checkThinking) {
-    const active = runtime.activeModel;
-    equal('runtime.config.activeModel.thinking', expected.thinking, active?.thinking ?? undefined);
-    const alias = active?.alias ?? null;
-    if (alias === null) mismatches.push({ path: 'runtime.config.activeModel.alias', expected: 'a model alias', actual: undefined });
-    else equal(`config.${describePath(['models', alias, 'thinking'])}`, expected.thinking, valueAt(config, ['models', alias, 'thinking']));
-  }
+  const active = runtime.activeModel;
+  const alias = active?.alias ?? undefined;
+  if (options.checkThinking) equal('runtime.config.activeModel.thinking', expected.thinking, active?.thinking ?? undefined);
+  equal(ACTIVE_MODEL_ALIAS_FIELD, expected.model, alias);
+  if (options.checkThinking && alias !== undefined) equal(`config.${describePath(['models', alias, 'thinking'])}`, expected.thinking, valueAt(config, ['models', alias, 'thinking']));
 
   return mismatches;
 }
@@ -141,6 +142,11 @@ function formatValue(value: unknown): string {
   if (value === undefined) return 'missing';
   const text = JSON.stringify(value) ?? String(value);
   return text.length > MAX_FORMATTED_VALUE_CHARS ? `${text.slice(0, MAX_FORMATTED_VALUE_CHARS)}...` : text;
+}
+
+export function modelNotSelectedMessage(mismatch: ReadbackMismatch): string {
+  const reported = mismatch.actual === undefined ? 'no active model' : formatValue(mismatch.actual);
+  return `Vibe did not select the configured model ${formatValue(mismatch.expected)}; it reports ${reported}. Set vibe_model to a model this Vibe version offers, then restart the supervisor.`;
 }
 
 export function formatReadbackMismatches(mismatches: readonly ReadbackMismatch[]): string {

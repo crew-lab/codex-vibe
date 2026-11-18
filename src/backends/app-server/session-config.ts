@@ -7,6 +7,7 @@ import { workerRules } from '../../core/worker-context.js';
 import { anchoredDenylistPatterns, type DenylistAnchor } from '../../security/globs.js';
 import { buildConfigModelWrite, type SessionAgentConfigInput } from './protocol.js';
 import { type ReadbackExpectation, type SettingExpectation, type ToolPolicyExpectation } from './readback.js';
+import { sessionModel } from './model.js';
 import { sessionThinking, type SessionThinking } from './thinking.js';
 import { PINNED_WIRE, type WireSetting, type WireSettingValue } from './vibe-wire.js';
 
@@ -23,9 +24,9 @@ const SECRET_FILE_PATTERNS = ['.env', '.env.*', '.envrc', '.envrc.*', '*.pem', '
 const RESERVED_DIRECTORIES = ['.git', '.vibe', '.agents'];
 const RESERVED_FILES = ['.vibeignore'];
 
-function runtimeSettings(agent: string): readonly WireSetting[] {
+function runtimeSettings(agent: string, model: string): readonly WireSetting[] {
   const { defaultAgent, enabledAgents } = PINNED_WIRE.agentSettingKeys;
-  return [...PINNED_WIRE.runtimeSettings, { key: defaultAgent, value: agent }, { key: enabledAgents, value: [agent] }];
+  return [...PINNED_WIRE.runtimeSettings, { key: defaultAgent, value: agent }, { key: enabledAgents, value: [agent] }, { key: PINNED_WIRE.modelSettingKey, value: model }];
 }
 
 export interface SessionDirectories {
@@ -41,6 +42,7 @@ export interface SessionConfigInput {
   maxTurns: number;
   excludedGlobs?: readonly DenylistExclusion[];
   reviewThinking?: SessionThinking;
+  model?: string;
 }
 
 export interface AgentProfileDocument {
@@ -112,7 +114,7 @@ function encodeSettingValue(value: WireSettingValue): string {
   return typeof value === 'boolean' ? String(value) : JSON.stringify(value);
 }
 
-function buildEnvironment(directories: SessionDirectories, agent: string): Record<string, string> {
+function buildEnvironment(directories: SessionDirectories, agent: string, model: string): Record<string, string> {
   const environment: Record<string, string> = {
     HOME: directories.home,
     VIBE_HOME: directories.vibeHome,
@@ -120,14 +122,14 @@ function buildEnvironment(directories: SessionDirectories, agent: string): Recor
     LOG_LEVEL,
     VIBE_SESSION_LOGGING__SAVE_DIR: path.join(directories.vibeHome, 'sessions')
   };
-  for (const setting of runtimeSettings(agent)) environment[settingEnvironmentName(setting.key)] = encodeSettingValue(setting.value);
+  for (const setting of runtimeSettings(agent, model)) environment[settingEnvironmentName(setting.key)] = encodeSettingValue(setting.value);
   return environment;
 }
 
-function buildExpectation(workspace: string, agent: string, tools: readonly string[], denylist: readonly string[], thinking: SessionThinking): ReadbackExpectation {
+function buildExpectation(workspace: string, agent: string, tools: readonly string[], denylist: readonly string[], thinking: SessionThinking, model: string): ReadbackExpectation {
   const toolPolicies: Record<string, ToolPolicyExpectation> = Object.fromEntries(tools.map((tool) => [tool, { permission: TOOL_PERMISSION, denylist }]));
-  const settings: SettingExpectation[] = runtimeSettings(agent).map((setting) => ({ path: setting.key.split('.'), value: setting.value, match: setting.match ?? 'equal' }));
-  return { harness: PINNED_WIRE.harness, agent, cwd: workspace, tools, disabledTools: DISABLED_TOOLS, toolPolicies, settings, thinking };
+  const settings: SettingExpectation[] = runtimeSettings(agent, model).map((setting) => ({ path: setting.key.split('.'), value: setting.value, match: setting.match ?? 'equal' }));
+  return { harness: PINNED_WIRE.harness, agent, cwd: workspace, tools, disabledTools: DISABLED_TOOLS, toolPolicies, settings, thinking, model };
 }
 
 export function buildSessionConfig(input: SessionConfigInput): SessionConfigPlan {
@@ -138,6 +140,7 @@ export function buildSessionConfig(input: SessionConfigInput): SessionConfigPlan
   const directories = sessionDirectories(input.runDirectory);
   const tools = PROFILE_TOOLS[input.mode];
   const agent = AGENT_NAMES[input.mode];
+  const model = sessionModel(input.model);
   const document: AgentProfileDocument = {
     display_name: input.mode === 'review' ? 'Supervisor Review' : 'Supervisor Edit',
     description: 'Supervisor-owned workspace policy',
@@ -151,8 +154,8 @@ export function buildSessionConfig(input: SessionConfigInput): SessionConfigPlan
     directories,
     agentConfig: { cwd: workspace, agent, enabledTools: [...tools], disabledTools: [...DISABLED_TOOLS], maxTurns: input.maxTurns, systemPrompt: workerRules('vibe', input.mode) },
     profile: { directory: profileDirectory, file: path.join(profileDirectory, `${agent}.toml`), document, content: stringify(document) },
-    environment: buildEnvironment(directories, agent),
-    expectation: buildExpectation(workspace, agent, tools, denylist, sessionThinking(input.mode, input.reviewThinking))
+    environment: buildEnvironment(directories, agent, model),
+    expectation: buildExpectation(workspace, agent, tools, denylist, sessionThinking(input.mode, input.reviewThinking), model)
   };
 }
 

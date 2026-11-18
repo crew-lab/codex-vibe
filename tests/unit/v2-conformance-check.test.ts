@@ -272,6 +272,30 @@ describe('v2 conformance check against the scripted fake app-server', () => {
     expect(at(result.report, 'gates.thinking-effect.setting_read_back')).toBe(true);
   }, 60_000);
 
+  it('names the default model, reads it back and records the selection when Vibe defaults to another one', async () => {
+    const fake = await makeLaunchableFakeVibe(path.join(scratch, 'fake'), { scenario: { name: 'default-model-moved', models: ['mistral-large-4-0', 'mistral-medium-3.5'], defaultModel: 'mistral-large-4-0' } });
+    const result = await runCheck(['--manifest', fake.manifest, '--executable', fake.appServer, '--mode', 'review']);
+
+    expect(result.code, result.stderr).toBe(0);
+    const run = (result.report.runs as Json[])[0]!;
+    expect(at(run, 'model')).toEqual({ requested: 'mistral-medium-3.5', before: 'mistral-medium-3.5', after: 'mistral-medium-3.5', name: 'mistral-medium-3.5' });
+    expect(at(result.report, 'gates.model-selection')).toEqual({ requested: 'mistral-medium-3.5', selected: true, provider_name: 'mistral-medium-3.5', account_access: 'needs-hosted-run' });
+  }, 60_000);
+
+  it('fails with the setting to change when Vibe does not offer the configured model and falls back to its default', async () => {
+    const fake = await makeLaunchableFakeVibe(path.join(scratch, 'fake'), { scenario: { name: 'model-not-offered', models: ['mistral-large-4-0'], defaultModel: 'mistral-large-4-0' } });
+    const config = path.join(scratch, 'config.toml');
+    await writeFile(config, `version = 1\nvibe_model = "retired-model"\n\n[paths]\napp_server = ${JSON.stringify(fake.appServer)}\nvibe_pin_manifest = ${JSON.stringify(fake.manifest)}\n`, { mode: 0o600 });
+    const result = await runCheck(['--config', config, '--mode', 'review']);
+
+    expect(result.code).toBe(1);
+    expect(result.report.result).toBe('fail');
+    expect(findingIds(result.report, 'fail')).toContain('model-not-selected');
+    const finding = (result.report.findings as Json[]).find((item) => item.id === 'model-not-selected')!;
+    expect(finding.message).toBe('Vibe did not select the configured model "retired-model"; it reports "mistral-large-4-0". Set vibe_model to a model this Vibe version offers, then restart the supervisor.');
+    expect(at(result.report, 'gates.model-selection.selected')).toBe(false);
+  }, 60_000);
+
   it('redacts paths and secrets that arrive through the server standard error', async () => {
     const stderr = `Traceback: File "/Users/someone/secret/vibe/main.py" and ${scratch}/inside using ${sentinelKey}`;
     const fake = await makeLaunchableFakeVibe(path.join(scratch, 'fake'), { scenario: { name: 'startup-failure', startup: { stderr, exitCode: 1 } } });

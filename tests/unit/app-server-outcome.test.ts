@@ -38,6 +38,20 @@ describe('turn outcome mapping', () => {
     expect(mapOutcome({ turn: turn({ status: 'interrupted', stopReason: 'limit' }), hasFinalMessage: true })).toMatchObject({ state: 'failed', error: { code: 'VSUP_BACKEND_ERROR', details: { classification: 'unrequested_interrupt' } } });
   });
 
+  it('reports a provider refusal that is not about the key as a configuration failure naming the model', () => {
+    const refused = (error: Record<string, unknown>, model?: string) => mapOutcome({ turn: turn({ status: 'failed', error: { code: 'invalid_api_key', ...error } }), hasFinalMessage: false, ...(model === undefined ? {} : { model }) });
+    const bySentence = refused({ message: 'The model provider refused this request: This model is not available in your subscription tier.' }, 'mistral-medium-3.5');
+    expect(bySentence).toMatchObject({ state: 'failed', error: { code: 'VSUP_BACKEND_ERROR', retryable: false, details: { reason: 'provider_refused', classification: 'configuration', model: 'mistral-medium-3.5', error_code: 'invalid_api_key', message: expect.stringContaining('subscription tier') } } });
+    expect(bySentence.error?.message).toContain('for model mistral-medium-3.5');
+    expect(bySentence.error?.message).toContain('vibe_model');
+    expect(refused({ message: 'wrapped by another layer', details: { reason: 'http_forbidden' } })).toMatchObject({ error: { code: 'VSUP_BACKEND_ERROR', details: { reason: 'provider_refused' } } });
+    expect(refused({ message: 'API error from mistral: forbidden', details: { httpStatus: 403 } })).toMatchObject({ error: { code: 'VSUP_BACKEND_ERROR', details: { reason: 'provider_refused', http_status: 403 } } });
+    expect(refused({ message: 'API error from mistral: unauthorized', details: { httpStatus: 401 } })).toMatchObject({ error: { code: 'VSUP_AUTH_REQUIRED', details: { http_status: 401 } } });
+    expect(refused({ message: 'The model provider refused this request (HTTP 403).' }).error?.message).not.toContain('for model');
+    expect(refused({ message: 'Invalid API key (from env var MISTRAL_API_KEY). Please check your API key and try again.', details: { reason: 'http_unauthorized' } })).toMatchObject({ error: { code: 'VSUP_AUTH_REQUIRED' } });
+    expect(refused({ message: null })).toMatchObject({ error: { code: 'VSUP_AUTH_REQUIRED' } });
+  });
+
   it('maps turn error codes', () => {
     expect(mapOutcome({ turn: failedWith('invalid_api_key'), hasFinalMessage: false })).toMatchObject({ state: 'failed', error: { code: 'VSUP_AUTH_REQUIRED' } });
     expect(mapOutcome({ turn: failedWith('invalid_model'), hasFinalMessage: false })).toMatchObject({ state: 'failed', error: { code: 'VSUP_BACKEND_ERROR', details: { classification: 'configuration', error_code: 'invalid_model' } } });

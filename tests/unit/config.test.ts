@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { configFingerprint, getConfigPath, getDataDir, loadConfig, loadResolvedConfig, resolveConfigSelection } from "../../src/config/config.js";
 import { DEFAULT_CONFIG } from "../../src/config/defaults.js";
-import { bootBoundDrift } from "../../src/config/policy.js";
+import { bootBoundDrift, bootBoundSettings } from "../../src/config/policy.js";
 import { validateConfig } from "../../src/config/validation.js";
 import { selectedVibeVersion } from "../../src/backends/app-server/supported-vibe.js";
 
@@ -252,6 +252,22 @@ describe("app-server keys", () => {
     expect(bootBoundDrift(off, high)).toEqual(["vibe_review_thinking"]);
     expect(bootBoundDrift(validateConfig(appServer), off)).toEqual(["vibe_review_thinking"]);
     expect(bootBoundDrift(validateConfig(appServer), high)).toEqual([]);
+  });
+
+  it("takes vibe_model as a model alias, leaves it unset when absent and treats a change as a boot-bound policy change", () => {
+    const unset = validateConfig(appServer);
+    expect(unset).not.toHaveProperty("vibeModel");
+    expect(bootBoundSettings(unset).vibe_model).toBe("mistral-medium-3.5");
+    const large = validateConfig({ ...appServer, vibe_model: "mistral-large-4-0" });
+    expect(large).toMatchObject({ vibeModel: "mistral-large-4-0" });
+    expect(bootBoundSettings(large).vibe_model).toBe("mistral-large-4-0");
+    expect(configFingerprint(large)).not.toBe(configFingerprint(unset));
+    expect(bootBoundDrift(unset, large)).toEqual(["vibe_model"]);
+    expect(bootBoundDrift(unset, validateConfig({ ...appServer, vibe_model: "mistral-medium-3.5" }))).toEqual([]);
+    for (const value of ["", " leading", "-dash", "two words", "semi;colon", "x".repeat(101), 7, null]) {
+      expect(() => validateConfig({ ...appServer, vibe_model: value }), String(value)).toThrow(/vibe_model/);
+    }
+    for (const value of ["devstral-small", "qwen2.5-coder:7b", "local/model_1"]) expect(validateConfig({ ...appServer, vibe_model: value })).toMatchObject({ vibeModel: value });
   });
 
   it("loads the new keys from TOML and reports a missing manifest as a stable configuration error", async () => {

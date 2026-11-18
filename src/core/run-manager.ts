@@ -31,6 +31,7 @@ import type { OpenedReceipt } from "./readiness-receipt.js";
 import { assertNoProjectAntigravityExtensions, assertNoProjectVibeExtensions, assertSimpleGlobRoot } from "../security/workspace-guard.js";
 import { PRIVATE_DIRECTORY_NAMES } from "../backends/app-server/session-config.js";
 import { PinCheckError } from "../backends/app-server/pin.js";
+import { sessionModel } from "../backends/app-server/model.js";
 import { turnBackstop } from "../backends/app-server/usage.js";
 import { NO_FINAL_MESSAGE_WARNING } from "../backends/app-server/outcome.js";
 import { approvalsToWire, eventFromWire, eventToWire, integrityToWire, runFromWire, runToWire, usageToWire } from "./serialization.js";
@@ -852,7 +853,7 @@ export class RunManager {
       candidate: { version: APP_VERSION, sha256: servingCandidate },
       preparation: preparation ?? { status: "not_reported" },
       admission: admission ? { credential: admission.credential, pin: admission.pin } : { status: "not_reported" },
-      worker: { backend: this.activeBackendKind, version: workerVersion, ...(refreshed ? { refreshed: { at: refreshed.at, from: refreshed.from } } : {}) },
+      worker: { backend: this.activeBackendKind, version: workerVersion, ...(this.activeBackendKind === "app-server" ? { model: sessionModel(this.config.vibeModel) } : {}), ...(refreshed ? { refreshed: { at: refreshed.at, from: refreshed.from } } : {}) },
       ...(refresh.field ? { worker_refresh: refresh.field } : {}),
       effective_limits: { max_turns: limits.maxTurns, timeout_seconds: limits.timeoutSeconds },
       blockers: blockers.map((error) => ({ code: error.code, message: error.message, remediation: error.remediation, retryable: error.retryable, ...(error.details ? { details: error.details } : {}) })),

@@ -2,6 +2,25 @@
 
 Current source policy admits **stable Mistral Vibe versions at or above 3.1.2**, without a per-release allowlist. The optional `vibe_version` is a minimum, defaulting to 3.1.2. The actual installed version is detected from package metadata and must match both its manifest and the startup handshake. This version eligibility is not qualification: candidate-specific preparation and hosted gates remain separate, and evidence never transfers to another archive or installation. Its tagged-source review is in [Vibe 3.0.2 compatibility assessment](compatibility-v3.md), and does not certify the installed runtime, hosted behavior, or this current candidate. The five MCP tools require a local one-start dispatch grant created with `task authorize`; see [the reference](reference.md#cli). Historical compatibility and acceptance evidence below names the 2.26.1 archive it belongs to and does not transfer to 3.0.2. Google Antigravity (supported `agy` versions `1.4.0`, `1.4.3`, `1.4.4`, `backend = "antigravity"`) remains an optional experimental backend documented in [ADR 0008](adr/0008-antigravity-execution-backend.md), off unless `experimental.antigravity = true`, and not for production until the [Antigravity gates](#antigravity-trust-assumptions) pass on the target. There is no ACP adapter or fallback to an unverified entry point.
 
+## Model selection and provider refusals in Vibe 3.1.3
+
+Read from Vibe's tagged source, `v3.1.3` = commit `63dab302305c80131ea1e5b1c3cb18c2a4fd96d3`, through the GitHub API; nothing was installed or run. The first hosted run on Vibe 3.1.3 was refused because of the first three facts ([evidence](../research/evidence/vibe-313-worker-update-20261118/README.md)).
+
+- **The default model moved.** The built-in default is `mistral-large-4-0` (thinking levels `low`, `medium` and `high`, no `off`; a 1,048,576-token window). `mistral-medium-3.5`, the model every earlier run used, stays in the built-in table (provider name `mistral-vibe-cli-latest`, thinking levels `off` and `high`, a 262,144-token window).
+- **An unset `active_model` is Vibe's choice.** It resolves through an experiment-routed default, then the model catalog's default, then the catalog's recommended model, then the built-in default. The supervisor keeps experiments and the catalog off and sets `active_model` itself (`vibe_model`).
+- **An alias Vibe does not offer falls back silently.** Vibe records a warning, clears the setting and runs its default. The read-back's compare of the active alias is what catches it.
+- **Settings arrive through the environment.** An environment configuration layer reads `VIBE_<SETTING>` variables against the schema that holds `active_model` and the other pinned settings.
+- **A provider refusal keeps the wire code `invalid_api_key`.** Vibe maps both a rejected key (HTTP 401) and a refused request (HTTP 403) to it; the error's `details` carry `httpStatus` and a `reason` of `http_unauthorized` or `http_forbidden`. For 401 the message is the invalid-key sentence. For 403 it is "The model provider refused this request: " followed by the provider's explanation. The supervisor reports HTTP 403, that reason or that sentence as `provider_refused`, and everything else as `VSUP_AUTH_REQUIRED`.
+- **Turn error codes the supervisor does not map yet:** `usage_limit`, `pricing_unavailable`, `credential_unavailable`, `invalid_image_attachment` and `images_not_supported`. Each arrives as `VSUP_BACKEND_ERROR` with the raw code in `details.error_code`.
+
+| Path at the tag | SHA-256 |
+|---|---|
+| `vibe/core/config/vibe_schema.py` | `f0b4a6b699245733103d1c86374e088053daa99b11d3147c20b20995d64a0acb` |
+| `vibe/core/config/layers/environment.py` | `21985836ed899cbb694f472d0cee9188dcd8a9e9b8c25285c13086b0a07635eb` |
+| `vibe/app_server/models.py` | `c7f3256a71c7692399df2d64f7260407c9773a5f792667dcba4e2075f63a2a1c` |
+| `vibe/app_server/_unified_harness_backend_adapter.py` | `c64b6a1a470bb27de105f00fc53465b1f90ab9f14f44415a221e1ecd92301119` |
+| `harness/runtimes/python/python/mistralai_vibe_local_harness/vibe/_completion.py` | `ec0b1c2c650908a108f5f2a74e1f1c4b364393fb247fe72cc6a3e16c21f2503e` |
+
 ## Historical Vibe 2.26.1 source basis and evidence
 
 The following source review and target reports are historical evidence for the exact 2.26.1 source or archive named in each section. They do not describe the current default and do not qualify Vibe 3.0.2.
@@ -124,6 +143,8 @@ Supervisor `diagnostic` events carry a `reason`, and some failures carry the sam
 | `background_failure` | event, warning | A background task failed (`context` names it) without affecting the run's state. |
 | `ignored_backend_state_transition` | event, warning | The backend reported a run state that is invalid from the current state; the transition was ignored (`backend_state`, `run_state`). |
 | `readback_mismatch` | `VSUP_BACKEND_ERROR` `details.reason` | The startup read-back differed from the supervisor's session configuration; `details.fields` lists the paths. The run fails before the first turn. A `config/read` that omits or nulls `hooksCount` or `skillsCount` is a mismatch too. |
+| `model_not_selected` | `VSUP_BACKEND_ERROR` `details.reason` | The read-back shows Vibe running another model than the one the supervisor named: `details.configured_model` and `details.active_model`. The run fails before the first turn; the preparation check reports the same as the finding `model-not-selected`. Set `vibe_model` to a model this Vibe offers. |
+| `provider_refused` | `VSUP_BACKEND_ERROR` `details.reason` | The provider refused the first model call for a reason other than the API key, such as a model the account's plan does not include: `details.model` and the provider's sentence in `details.message`. |
 
 Other `VSUP_BACKEND_ERROR` `details.reason` values name an unsafe event: `unapproved_effect`, `unknown_entry_kind`, `unknown_effect_status`, `malformed_notification`, `patch_failed`, `retention_exceeded`, `history_paging_failed`, `watermark_gap`, `session_handoff_unsafe`, `historical_effect_changed` and `unfinished_effect` (an effect had not finished when the turn ended). A budget stop whose final audit could not run fails with `audit_unavailable`, or with the audit's own error. Usage faults are `usage_counter_regressed` (a counter went backwards outside a handoff) and `price_unavailable` (a cost ceiling is set but Vibe reports no prices).
 

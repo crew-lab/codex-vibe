@@ -294,7 +294,8 @@ describe('app-server backend: clean runs', () => {
       VIBE_ENABLE_TELEMETRY: 'false',
       VIBE_DISABLED_SKILLS: '["*"]',
       VIBE_ENABLE_PR_MONITORING: 'false',
-      VIBE_INCLUDE_COMMIT_SIGNATURE: 'false'
+      VIBE_INCLUDE_COMMIT_SIGNATURE: 'false',
+      VIBE_ACTIVE_MODEL: 'mistral-medium-3.5'
     });
     expect(start.envNames).not.toContain('UNRELATED_SECRET_TOKEN');
     expect(start.envNames).toContain('VIBE_SUPERVISOR_CHILD');
@@ -657,6 +658,9 @@ describe('app-server backend: outcomes', () => {
   it('maps provider error codes: auth, rate limit and refusal', async () => {
     const withError = (code: string) => ({ name: code, steps: [{ op: 'end', status: 'failed', error: { message: 'provider said no', code, details: null } }] });
     expect(errorOf(await new Harness(withError('invalid_api_key')).run()).code).toBe('VSUP_AUTH_REQUIRED');
+    const refused = errorOf(await new Harness({ name: 'provider-refused', steps: [{ op: 'end', status: 'failed', error: { message: 'The model provider refused this request: This model is not available in your subscription tier.', code: 'invalid_api_key', details: null } }] }).run());
+    expect(refused).toMatchObject({ code: 'VSUP_BACKEND_ERROR', retryable: false, details: { reason: 'provider_refused', classification: 'configuration', model: 'mistral-medium-3.5', error_code: 'invalid_api_key', message: expect.stringContaining('subscription tier') } });
+    expect(refused.message).toContain('vibe_model');
     expect(errorOf(await new Harness(withError('rate_limit')).run()).code).toBe('VSUP_RATE_LIMITED');
     const refusal = await new Harness(withError('refusal')).run();
     expect(refusal.state).toBe('completed');
@@ -837,6 +841,35 @@ describe('app-server backend: startup failures', () => {
     expect(failure.details?.reason).toBe('readback_mismatch');
     expect(failure.details?.fields).toEqual(expect.arrayContaining(['runtime.config.activeModel.thinking', 'config.models["mistral-medium-3.5"].thinking']));
     expect(harness.frames('config/model/write')).toHaveLength(1);
+    expect(harness.frames('turn/start')).toHaveLength(0);
+    harness.expectCleanedUp();
+  });
+
+  it('runs on the model the supervisor names when Vibe defaults to another one', async () => {
+    const harness = new Harness({ name: 'default-model-moved', models: ['mistral-large-4-0', 'mistral-medium-3.5'], defaultModel: 'mistral-large-4-0', steps: [{ op: 'say', text: 'done' }, { op: 'end' }] });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(harness.states.flatMap((item) => item.update?.modelObservations ?? []).at(-1)).toMatchObject({ alias: 'mistral-medium-3.5', requested_model: 'mistral-medium-3.5', requested_model_source: 'explicit-selection' });
+  });
+
+  it('names another model when the configuration does', async () => {
+    const harness = new Harness({ name: 'configured-model', models: ['mistral-large-4-0', 'mistral-medium-3.5'], defaultModel: 'mistral-medium-3.5', steps: [{ op: 'say', text: 'done' }, { op: 'end' }] }, { config: { vibeModel: 'mistral-large-4-0' } });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(((harness.log().find((entry) => entry.kind === 'start') as Json).env as Json).VIBE_ACTIVE_MODEL).toBe('mistral-large-4-0');
+    expect(harness.states.flatMap((item) => item.update?.modelObservations ?? []).at(-1)).toMatchObject({ alias: 'mistral-large-4-0', requested_model: 'mistral-large-4-0' });
+  });
+
+  it('fails before the first turn when Vibe falls back from a model it does not offer to its own default', async () => {
+    const harness = new Harness({ name: 'model-not-offered', models: ['mistral-large-4-0'], defaultModel: 'mistral-large-4-0', steps: [{ op: 'say', text: 'must never run' }] });
+    const failure = await rejection(harness.start());
+
+    expect(failure).toMatchObject({ code: 'VSUP_BACKEND_ERROR', retryable: false, details: { reason: 'model_not_selected', classification: 'configuration', configured_model: 'mistral-medium-3.5', active_model: 'mistral-large-4-0' } });
+    expect(failure.message).toContain('vibe_model');
+    expect(failure.details?.fields).toEqual(expect.arrayContaining(['runtime.config.activeModel.alias', 'config.active_model']));
+    expect(harness.frames('config/model/write')).toHaveLength(0);
     expect(harness.frames('turn/start')).toHaveLength(0);
     harness.expectCleanedUp();
   });

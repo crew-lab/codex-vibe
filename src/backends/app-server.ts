@@ -37,7 +37,7 @@ import {
   parseSessionReadyWaitResult, parseSessionStartResult, parseTurnStartResult, serverErrorIssues,
   type AgentStats, type RuntimeReadResult, type SessionStartResult, type Turn
 } from './app-server/protocol.js';
-import { compareReadback, formatReadbackMismatches, type ReadbackMismatch } from './app-server/readback.js';
+import { ACTIVE_MODEL_ALIAS_FIELD, compareReadback, formatReadbackMismatches, modelNotSelectedMessage, type ReadbackMismatch } from './app-server/readback.js';
 import { buildSessionConfig, buildThinkingWrite, writeSessionFiles, type SessionConfigPlan } from './app-server/session-config.js';
 import { UsageTracker, describeUsageFault, turnBackstop, type BudgetCeilings, type UsageFault, type UsageUpdate } from './app-server/usage.js';
 import { buildWorkspaceListing, NO_LISTING, type ListingLimits, type WorkspaceListing } from './app-server/workspace-listing.js';
@@ -527,13 +527,20 @@ class AppServerRun {
       if (config.skillsCount !== 0) mismatches.push({ path: 'config/read.skillsCount', expected: 0, actual: config.skillsCount });
     }
     if (mismatches.length > 0) {
+      const fields = mismatches.slice(0, 20).map((item) => item.path);
+      const model = mismatches.find((item) => item.path === ACTIVE_MODEL_ALIAS_FIELD);
+      if (model) {
+        throw supervisorError('VSUP_BACKEND_ERROR', modelNotSelectedMessage(model), {
+          reason: 'model_not_selected', classification: 'configuration', configured_model: model.expected, active_model: model.actual ?? null, fields, total: mismatches.length
+        });
+      }
       throw supervisorError('VSUP_BACKEND_ERROR', `Vibe did not apply the supervisor session configuration: ${formatReadbackMismatches(mismatches)}`, {
-        reason: 'readback_mismatch', fields: mismatches.slice(0, 20).map((item) => item.path), total: mismatches.length
+        reason: 'readback_mismatch', fields, total: mismatches.length
       });
     }
     if (checkThinking) {
       if (this.modelObservations.length >= 100) throw supervisorError('VSUP_OUTPUT_LIMIT', 'Model observation limit exceeded.');
-      this.modelObservations.push(modelObservationSchema.parse({ observed_at: new Date().toISOString(), source: 'runtime/read', reported_name: runtime.runtime.activeModel?.name ?? null, prices_per_million: { input: runtime.runtime.stats.inputPricePerMillion, output: runtime.runtime.stats.outputPricePerMillion, cached_input: runtime.runtime.stats.cachedInputPricePerMillion }, session_model: sessionStart.state.session.model, alias: runtime.runtime.activeModel?.alias ?? null, thinking: runtime.runtime.activeModel?.thinking ?? null, requested_thinking: this.plan.expectation.thinking, requested_thinking_source: 'supervisor-session-config', requested_model: null, requested_model_source: 'unavailable' }));
+      this.modelObservations.push(modelObservationSchema.parse({ observed_at: new Date().toISOString(), source: 'runtime/read', reported_name: runtime.runtime.activeModel?.name ?? null, prices_per_million: { input: runtime.runtime.stats.inputPricePerMillion, output: runtime.runtime.stats.outputPricePerMillion, cached_input: runtime.runtime.stats.cachedInputPricePerMillion }, session_model: sessionStart.state.session.model, alias: runtime.runtime.activeModel?.alias ?? null, thinking: runtime.runtime.activeModel?.thinking ?? null, requested_thinking: this.plan.expectation.thinking, requested_thinking_source: 'supervisor-session-config', requested_model: this.plan.expectation.model, requested_model_source: 'explicit-selection' }));
       if (this.startReported.settled) await this.callbacks.onState('running', { modelObservations: [...this.modelObservations] });
     }
     return runtime;
@@ -935,7 +942,7 @@ class AppServerRun {
       const error = (budgetOnly ? this.failure : this.integrityFailure) ?? this.gapError();
       if (error) return { state: 'failed', error: this.mentionStops(error), warnings: [] };
     }
-    const outcome = mapOutcome({ turn: this.completedTurn, conditions: this.conditions, hasFinalMessage: audit?.finalMessage != null, auditClean: audit !== null && audit.fatal === null && audit.pendingEffects.length === 0, auditedWrites: audit?.effects.filter((effect) => effect.outcome === 'executed' && isWriteTool(effect.tool)).length ?? 0 });
+    const outcome = mapOutcome({ turn: this.completedTurn, conditions: this.conditions, hasFinalMessage: audit?.finalMessage != null, auditClean: audit !== null && audit.fatal === null && audit.pendingEffects.length === 0, auditedWrites: audit?.effects.filter((effect) => effect.outcome === 'executed' && isWriteTool(effect.tool)).length ?? 0, model: this.plan.expectation.model });
     if (outcome.state === 'completed' && audit === null && this.hasCondition('budget')) {
       return {
         state: 'failed', warnings: [],
@@ -1240,7 +1247,7 @@ export class AppServerBackend implements SupervisorBackend {
     let anchors: ReturnType<typeof workspaceAnchors>;
     try {
       anchors = workspaceAnchors(input.exclusions, input.cwd);
-      plan = buildSessionConfig({ mode: input.mode, workspace: input.workerWorkspace, runDirectory: input.runDirectory, maxTurns: input.limits.maxTurns, excludedGlobs: denylistAnchors(input.exclusions, input.cwd, input.workerWorkspace), ...(this.config.vibeReviewThinking === undefined ? {} : { reviewThinking: this.config.vibeReviewThinking }) });
+      plan = buildSessionConfig({ mode: input.mode, workspace: input.workerWorkspace, runDirectory: input.runDirectory, maxTurns: input.limits.maxTurns, excludedGlobs: denylistAnchors(input.exclusions, input.cwd, input.workerWorkspace), ...(this.config.vibeReviewThinking === undefined ? {} : { reviewThinking: this.config.vibeReviewThinking }), ...(this.config.vibeModel === undefined ? {} : { model: this.config.vibeModel }) });
     } catch (error) { throw toSupervisorError(error, []); }
     const listing = promptTakesListing(input) ? await buildWorkspaceListing(input.workerWorkspace, this.options.listing, anchors) : NO_LISTING;
     const run = new AppServerRun({

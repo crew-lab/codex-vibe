@@ -17,6 +17,7 @@ import {
 import {
   compareReadback,
   formatReadbackMismatches,
+  modelNotSelectedMessage,
   type ReadbackExpectation,
   type ReadbackMismatch,
   type ReadbackObservation
@@ -248,6 +249,25 @@ describe('compareReadback on unit inputs', () => {
     const effectiveOnly = cleanWire(high.expectation, 'high');
     assign(effectiveOnly.runtime as Json, ['runtime', 'config', 'activeModel', 'thinking'], 'off');
     expect(paths(compareReadback(high.expectation, observe(effectiveOnly), { checkThinking: true }))).toEqual(['runtime.config.activeModel.thinking']);
+  });
+
+  it('requires the model the plan names in every read-back and says which setting to change', () => {
+    const large = buildSessionConfig({ mode: 'review', workspace, runDirectory: '/srv/runs/run-0004', maxTurns: 5, model: 'mistral-large-4-0' });
+    expect(large.environment.VIBE_ACTIVE_MODEL).toBe('mistral-large-4-0');
+    expect(plan.environment.VIBE_ACTIVE_MODEL).toBe(alias);
+    for (const checkThinking of [false, true]) {
+      const found = compareReadback(large.expectation, observe(cleanWire(large.expectation, 'high')), { checkThinking });
+      expect(paths(found)).toEqual(['runtime.config.activeModel.alias']);
+      expect(found[0]).toMatchObject({ expected: 'mistral-large-4-0', actual: alias });
+    }
+    const fallenBack = cleanWire(plan.expectation, 'off');
+    assign(fallenBack.effective as Json, ['config', 'active_model'], '');
+    assign(fallenBack.runtime as Json, ['runtime', 'config', 'activeModel', 'alias'], 'mistral-large-4-0');
+    assign(fallenBack.effective as Json, ['config', 'models', 'mistral-large-4-0', 'thinking'], 'off');
+    const mismatches = compareReadback(plan.expectation, observe(fallenBack), { checkThinking: true });
+    expect(paths(mismatches)).toEqual(['config.active_model', 'runtime.config.activeModel.alias']);
+    expect(modelNotSelectedMessage(mismatches[1]!)).toBe('Vibe did not select the configured model "mistral-medium-3.5"; it reports "mistral-large-4-0". Set vibe_model to a model this Vibe version offers, then restart the supervisor.');
+    expect(modelNotSelectedMessage({ path: 'runtime.config.activeModel.alias', expected: 'mistral-medium-3.5', actual: undefined })).toContain('it reports no active model.');
   });
 });
 

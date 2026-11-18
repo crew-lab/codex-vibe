@@ -43,7 +43,7 @@ const HANGING_CHILD = `setInterval(() => undefined, 1000);
 `;
 
 type Blocker = { code: string; message: string; retryable: boolean; details?: Record<string, unknown> };
-type Readiness = Record<string, unknown> & { eligible: boolean; blockers: Blocker[]; readiness_receipt?: string; warnings?: string[]; worker: { backend: string; version: string | null; refreshed?: { at: string; from?: string } }; worker_refresh?: Record<string, unknown>; boot_drift: string[]; effective_limits: { max_turns: number; timeout_seconds: number } };
+type Readiness = Record<string, unknown> & { eligible: boolean; blockers: Blocker[]; readiness_receipt?: string; warnings?: string[]; worker: { backend: string; version: string | null; model?: string; refreshed?: { at: string; from?: string } }; worker_refresh?: Record<string, unknown>; boot_drift: string[]; effective_limits: { max_turns: number; timeout_seconds: number } };
 
 interface Gate { promise: Promise<void>; open(): void }
 function gate(): Gate {
@@ -139,7 +139,7 @@ describe('Vibe worker refresh at readiness', () => {
   it('re-pins and re-prepares after an update, then starts and warns about the refresh', async () => {
     const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2' });
     const manager = box.manager();
-    expect(await readiness(manager, box.workspace)).toMatchObject({ eligible: true, worker: { backend: 'app-server', version: '3.1.2' } });
+    expect(await readiness(manager, box.workspace)).toMatchObject({ eligible: true, worker: { backend: 'app-server', version: '3.1.2', model: 'mistral-medium-3.5' } });
     await box.swap('3.1.3');
     const first = await readiness(manager, box.workspace);
     expect(first.eligible).toBe(false);
@@ -638,7 +638,9 @@ describe('Antigravity worker refresh at readiness', () => {
 
   it('re-prepares after an agy update and records the versions on both sides', async () => {
     const box = await agyBox();
-    expect(await readiness(box.manager, box.workspace)).toMatchObject({ eligible: true, worker: { backend: 'antigravity', version: '1.5.8' } });
+    const before = await readiness(box.manager, box.workspace);
+    expect(before).toMatchObject({ eligible: true, worker: { backend: 'antigravity', version: '1.5.8' } });
+    expect(before.worker).not.toHaveProperty('model');
     await box.writeAgy('1.6.0');
     const ready = await readiness(box.manager, box.workspace, 30);
     expect(ready).toMatchObject({ eligible: true, worker: { version: '1.6.0', refreshed: { from: '1.5.8' } } });

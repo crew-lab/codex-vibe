@@ -19,7 +19,7 @@ const STORE_PREFIX = 'vibe-session-logging-disabled-';
 
 const SCENARIO_KEYS = new Set([
   'name', 'serverName', 'serverVersion', 'startup', 'watermark', 'sessionId', 'log', 'errors', 'runtime', 'harness',
-  'harnessSelectionSource', 'effectiveConfig', 'effectiveFromEnv', 'thinkingLevels', 'modelWrite', 'readyInitially',
+  'harnessSelectionSource', 'effectiveConfig', 'effectiveFromEnv', 'thinkingLevels', 'modelWrite', 'models', 'defaultModel', 'readyInitially',
   'baselineStats', 'contextWindow', 'afterStop', 'eof', 'eofDelayMs', 'interrupt', 'extraFields', 'omit', 'effectWhileBlocked',
   'badCursor', 'afterHandoff', 'notifyBeforeTurnResponse', 'historyListDelayMs', 'steps'
 ]);
@@ -793,6 +793,14 @@ function envOverrides() {
   return out;
 }
 
+function initialModel() {
+  const known = scenario.models ?? ['mistral-medium-3.5'];
+  const fallback = scenario.defaultModel ?? known[0];
+  const requested = scenario.effectiveFromEnv === false ? undefined : process.env.VIBE_ACTIVE_MODEL;
+  const pinned = typeof requested === 'string' && known.includes(requested);
+  return { modelAlias: pinned ? requested : fallback, modelPinned: pinned };
+}
+
 function effectiveConfig() {
   const session = state.session;
   const options = session.agentConfig;
@@ -819,6 +827,7 @@ function effectiveConfig() {
     bypass_tool_permissions: scenario.runtime?.bypassToolPermissions ?? options.autoApprove ?? false
   };
   if (scenario.effectiveFromEnv !== false) mergeDeep(base, envOverrides());
+  base.active_model = session.modelPinned ? session.modelAlias : '';
   if (session.thinkingWritten) base.models[session.modelAlias] = { thinking: session.reasoningEffort };
   if (scenario.effectiveConfig) mergeDeep(base, scenario.effectiveConfig);
   if (state.currentSessionId && scenario.afterHandoff?.effectiveConfig) mergeDeep(base, scenario.afterHandoff.effectiveConfig);
@@ -942,7 +951,7 @@ const handlers = {
     state.session = {
       createdAt: now(), agentConfig: config, cwd: config.cwd ?? config.workdir ?? null, status: { type: 'idle' }, activeTurn: null,
       turnContext: null, turns: [], ready: scenario.readyInitially === true, stopped: false,
-      modelAlias: 'mistral-medium-3.5', modelPinned: false, reasoningEffort: 'high', thinkingWritten: false
+      ...initialModel(), reasoningEffort: 'high', thinkingWritten: false
     };
     ensureStore();
     record('event', { name: 'sessionStart', agentConfig: config, initializedNotificationSeen: state.initializedNotificationSeen });

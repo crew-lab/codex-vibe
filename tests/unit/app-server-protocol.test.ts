@@ -342,6 +342,11 @@ describe('response parsers', () => {
     expect(parse({ status: 'failed', error: { code: 'brand_new', message: 'm' } }).error).toEqual({ code: 'unknown', rawCode: 'brand_new', message: 'm' });
     expect(parse({ status: 'failed', error: { message: 'no code' } }).error).toEqual({ code: 'unknown', rawCode: null, message: 'no code' });
     expect(parse({ status: 'failed', error: 'bare string' }).error).toEqual({ code: 'unknown', rawCode: null, message: null });
+    expect(parse({ status: 'failed', error: { code: 'invalid_api_key', message: 'm', details: { reason: 'http_forbidden', other: 1 } } }).error).toEqual({ code: 'invalid_api_key', rawCode: 'invalid_api_key', message: 'm', reason: 'http_forbidden' });
+    expect(parse({ status: 'failed', error: { code: 'invalid_api_key', message: 'm', details: { reason: 'http_forbidden', httpStatus: 403 } } }).error).toEqual({ code: 'invalid_api_key', rawCode: 'invalid_api_key', message: 'm', reason: 'http_forbidden', httpStatus: 403 });
+    expect(parse({ status: 'failed', error: { code: 'rate_limit', message: 'm', details: { httpStatus: '429' } } }).error).toEqual({ code: 'rate_limit', rawCode: 'rate_limit', message: 'm' });
+    expect(parse({ status: 'failed', error: { code: 'invalid_api_key', message: 'm', details: { reason: 7 } } }).error).toEqual({ code: 'invalid_api_key', rawCode: 'invalid_api_key', message: 'm' });
+    expect(parse({ status: 'failed', error: { code: 'invalid_api_key', message: 'm', details: ['reason'] } }).error).toEqual({ code: 'invalid_api_key', rawCode: 'invalid_api_key', message: 'm' });
     expect(isTurnErrorCode('brand_new')).toBe(false);
     for (const status of ['in_progress', 'completed', 'failed', 'interrupted']) expect(parse({ status }).status).toBe(status);
   });

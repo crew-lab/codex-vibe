@@ -6,6 +6,7 @@ import { BACKEND_KINDS, type SupervisorConfig } from "../contracts.js";
 import { MAX_TURNS_LIMIT } from "../mcp/schemas.js";
 import { isSupportedVibeVersion } from "../backends/app-server/supported-vibe.js";
 import { SESSION_THINKING_LEVELS } from "../backends/app-server/thinking.js";
+import { VIBE_MODEL_ALIAS } from "../backends/app-server/model.js";
 
 const pathString = z.string().min(1).max(4096);
 const rootString = pathString.refine((value) => path.isAbsolute(value) || value === "~" || value.startsWith("~/"), "must be an absolute path or start with ~/");
@@ -41,6 +42,7 @@ const baseSchema = z.object({
   backend: z.enum(BACKEND_KINDS).optional(),
   vibe_version: z.string().max(64).refine((value) => isSupportedVibeVersion(value), "must be a stable Vibe version at or above the supported minimum").optional(),
   vibe_review_thinking: z.enum(SESSION_THINKING_LEVELS).optional(),
+  vibe_model: z.string().regex(VIBE_MODEL_ALIAS, "must be a Vibe model alias: letters, digits and . _ : / -, starting with a letter or digit, at most 100 characters").optional(),
   allowed_workspace_roots: z.array(rootString).max(100).default([]),
   excluded_globs: z.record(pathString, z.array(excludedGlobString).max(MAX_EXCLUDED_GLOBS_PER_ROOT)).optional(),
   retention: z.object({
@@ -151,6 +153,7 @@ export function validateConfig(input: unknown, home = process.env.HOME ?? proces
     ...(parsed.backend === undefined ? {} : { backend: parsed.backend }),
     ...(parsed.vibe_version === undefined ? {} : { vibeVersion: parsed.vibe_version }),
     ...(parsed.vibe_review_thinking === undefined ? {} : { vibeReviewThinking: parsed.vibe_review_thinking }),
+    ...(parsed.vibe_model === undefined ? {} : { vibeModel: parsed.vibe_model }),
     allowedWorkspaceRoots: parsed.allowed_workspace_roots,
     ...(excludedGlobs === undefined ? {} : { excludedGlobs }),
     ...(budgets === undefined ? {} : { budgets }),
