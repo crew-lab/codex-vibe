@@ -183,11 +183,15 @@ export async function writePrivateFileAtomic(file: string, bytes: string | Uint8
     await handle.sync();
     await handle.close(); handle = undefined;
     await rename(temp, absolute);
-    const dirHandle = await open(directory, 'r');
-    try { await dirHandle.sync(); } finally { await dirHandle.close(); }
   } catch (error) {
     if (handle) await handle.close().catch(() => {});
     await unlink(temp).catch(() => {});
     throw error;
   }
+  await syncDirectory(directory).catch(() => undefined);
+}
+
+async function syncDirectory(directory: string): Promise<void> {
+  const dirHandle = await open(directory, 'r');
+  try { await dirHandle.sync(); } finally { await dirHandle.close(); }
 }

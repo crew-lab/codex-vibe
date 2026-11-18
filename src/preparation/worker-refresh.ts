@@ -6,18 +6,19 @@ import { supervisorError } from '../contracts.js';
 import type { OwnerLock } from '../core/owner-lock.js';
 import { generatePinManifest, loadPinManifest, locateEnvironment, PinCheckError, type PinGenerateOptions, type PinManifest } from '../backends/app-server/pin.js';
 import { replacePinManifest, type PinReplacement } from '../backends/app-server/pin-replace.js';
-import { receiptPath, type PreparationComponentName, type PreparationFacts } from './evidence.js';
+import { type PreparationComponentName, type PreparationFacts } from './evidence.js';
 import { acquirePreparationLock } from './lock.js';
 import { runPreparation, type PreparationResult, type ReportedFinding, type RunPreparationInput } from './run.js';
 
 export type RefreshAction = 'none' | 'repin' | 'prepare';
 export type RefreshStage = 'pinning' | 'preparing' | 'locked' | 'install_unsettled';
-export type RefreshHold = 'stopping' | 'boot_drift' | 'no_config_path' | 'busy';
+export type RefreshHold = 'stopping' | 'config_unreadable' | 'boot_drift' | 'no_config_path' | 'busy';
 
 export interface RefreshObservation {
   backend: BackendKind;
   pinReason: string | null;
   facts: PreparationFacts | null;
+  workerVersion?: string | null | undefined;
 }
 
 export interface RefreshConditions {
@@ -31,9 +32,7 @@ const PREPARE_ONLY_COMPONENTS: ReadonlySet<PreparationComponentName> = new Set<P
 const UNSETTLED_PIN_REASONS: ReadonlySet<string> = new Set(['dist-info-missing', 'dist-info-ambiguous', 'record-unreadable', 'record-hash-mismatch', 'file-missing']);
 const UNSETTLED_READINESS_PIN_REASONS: ReadonlySet<string> = new Set(['dist-info-missing', 'dist-info-ambiguous', 'record-unreadable']);
 const MAX_RECORD_BYTES = 4 * 1024 * 1024;
-const MAX_RECEIPT_BYTES = 16 * 1024;
-const PREVIOUS_BINARY_PREFIX = 'sha256:';
-const PREVIOUS_BINARY_DIGITS = 12;
+const DIGEST_LABEL_DIGITS = 12;
 
 export function decideRefresh(observed: RefreshObservation): RefreshAction {
   if (observed.pinReason !== null) return observed.backend === 'app-server' && observed.pinReason === 'manifest-version-mismatch' ? 'repin' : 'none';
@@ -41,7 +40,14 @@ export function decideRefresh(observed: RefreshObservation): RefreshAction {
   if (!facts) return 'none';
   if (facts.interrupted) return 'prepare';
   if (facts.status.status !== 'stale' || !facts.changed || facts.changed.length === 0) return 'none';
-  return facts.changed.every((component) => PREPARE_ONLY_COMPONENTS.has(component)) ? 'prepare' : 'none';
+  if (!facts.changed.every((component) => PREPARE_ONLY_COMPONENTS.has(component))) return 'none';
+  return agyBinaryChangedWithoutVersion(observed) ? 'none' : 'prepare';
+}
+
+export function agyBinaryChangedWithoutVersion(observed: RefreshObservation): boolean {
+  const facts = observed.facts;
+  if (observed.backend !== 'antigravity' || !facts || facts.status.status !== 'stale' || !facts.changed?.includes('pin')) return false;
+  return !facts.worker_version || !observed.workerVersion || facts.worker_version === observed.workerVersion;
 }
 
 export function refreshHold(conditions: RefreshConditions): RefreshHold | null {
@@ -60,28 +66,27 @@ export function isUnsettledReadinessPinReason(reason: string | null): boolean {
   return reason !== null && UNSETTLED_READINESS_PIN_REASONS.has(reason);
 }
 
-export function previousBinaryLabel(pinSha256: string): string {
-  return `${PREVIOUS_BINARY_PREFIX}${pinSha256.slice(0, PREVIOUS_BINARY_DIGITS)}`;
-}
-
 export function workerDisplayName(backend: BackendKind): string {
   return backend === 'antigravity' ? 'Antigravity CLI' : 'Vibe';
 }
 
 export function refreshWarning(backend: BackendKind, from: string, to: string | null): string {
-  const target = to ?? (backend === 'antigravity' ? 'the installed binary' : 'the installed version');
-  const source = backend === 'antigravity' && from.startsWith(PREVIOUS_BINARY_PREFIX) ? `(previous binary ${from})` : from;
-  return `${workerDisplayName(backend)} ${source} -> ${target} was refreshed automatically; no-inference preparation passed; hosted quality has not been re-run on this version.`;
+  const target = to ?? 'the installed version';
+  return `${workerDisplayName(backend)} ${from} -> ${target} was refreshed automatically; no-inference preparation passed; hosted quality has not been re-run on this version.`;
 }
 
 export const WORKER_UPDATED_DURING_RUN = 'worker_updated_during_run';
 
 export function workerUpdatedDuringRunWarning(backend: BackendKind, launched: { version: string; digest: string }, current: { version: string | null; digest: string }): string {
-  const short = (value: string): string => `sha256:${value.slice(0, PREVIOUS_BINARY_DIGITS)}`;
+  const short = (value: string): string => `sha256:${value.slice(0, DIGEST_LABEL_DIGITS)}`;
   const sameVersion = backend === 'antigravity' || current.version === null || current.version === launched.version;
   const from = backend === 'antigravity' ? short(launched.digest) : sameVersion ? `${launched.version} (RECORD ${short(launched.digest)})` : launched.version;
   const to = backend === 'antigravity' ? short(current.digest) : sameVersion ? `${current.version ?? launched.version} (RECORD ${short(current.digest)})` : current.version ?? 'unknown';
   return `${WORKER_UPDATED_DURING_RUN}: ${workerDisplayName(backend)} ${from} -> ${to} was installed while this run was in progress; the run kept the worker it launched with. Check readiness before the next run.`;
+}
+
+export function workerUnreadableAfterRunWarning(backend: BackendKind, reason: string): string {
+  return `${WORKER_UPDATED_DURING_RUN}: the ${workerDisplayName(backend)} worker could not be re-read after the run (${reason}); it may have been updated or removed while the run was in progress. Check readiness before the next run.`;
 }
 
 export async function installIdentity(target: WorkerPinTarget): Promise<string | null> {
@@ -96,15 +101,6 @@ export async function installIdentity(target: WorkerPinTarget): Promise<string |
 async function manifestVersion(manifestPath: string): Promise<string | undefined> {
   try { return (await loadPinManifest(manifestPath)).version; }
   catch { return undefined; }
-}
-
-async function receiptPinComponent(config: SupervisorConfig, dataDir: string): Promise<string | undefined> {
-  try {
-    const file = receiptPath(config, dataDir);
-    if ((await stat(file)).size > MAX_RECEIPT_BYTES) return undefined;
-    const pin = (JSON.parse((await readFile(file)).toString('utf8')) as { components?: { pin?: unknown } } | null)?.components?.pin;
-    return typeof pin === 'string' && /^[a-f0-9]{64}$/.test(pin) ? pin : undefined;
-  } catch { return undefined; }
 }
 
 const PIN_FILE_LIST_KEYS = ['unhashed', 'mismatched', 'missing', 'extra', 'unsafe', 'names'] as const;
@@ -146,8 +142,9 @@ export interface WorkerRefreshPlan {
 
 export type RefreshOutcome =
   | { kind: 'not_needed' }
-  | { kind: 'install_unsettled'; reason: string; files: Record<string, unknown>; from?: string | undefined; to?: string | undefined }
+  | { kind: 'install_unsettled'; reason: string; identity: string | null; files: Record<string, unknown>; from?: string | undefined; to?: string | undefined }
   | { kind: 'pin_failed'; error: SupervisorError; identity: string | null; from?: string | undefined; to?: string | undefined }
+  | { kind: 'repinned'; from?: string | undefined; to?: string | undefined }
   | { kind: 'prepared'; passed: boolean; repinned: boolean; from?: string | undefined; to?: string | undefined; reportPath: string; findings: ReportedFinding[] }
   | { kind: 'aborted' }
   | { kind: 'failed'; error: SupervisorError };
@@ -158,13 +155,14 @@ export async function runWorkerRefresh(plan: WorkerRefreshPlan, lock: OwnerLock,
     signal.throwIfAborted();
     const { action, facts } = await plan.assess();
     if (action === 'none') return { kind: 'not_needed' };
-    let from = facts?.previous_worker_version;
     let to = (await plan.workerVersion()) ?? undefined;
+    const recorded = facts?.worker_version && facts.worker_version !== to ? facts.worker_version : undefined;
+    let from = recorded ?? facts?.previous_worker_version;
     let repinned = false;
     if (action === 'repin') {
       const target = plan.pinTarget;
       if (!target) return { kind: 'failed', error: supervisorError('VSUP_VIBE_VERSION_UNSUPPORTED', 'The Vibe pin target is not available, so the manifest cannot be refreshed.', { reason: 'manifest-unreadable' }) };
-      from = await manifestVersion(target.manifestPath);
+      from = recorded ?? await manifestVersion(target.manifestPath) ?? from;
       plan.onStage('pinning', from, to);
       const identity = await installIdentity(target);
       let manifest: PinManifest;
@@ -172,17 +170,15 @@ export async function runWorkerRefresh(plan: WorkerRefreshPlan, lock: OwnerLock,
       catch (error) {
         signal.throwIfAborted();
         if (!(error instanceof PinCheckError)) throw error;
-        if (isUnsettledPinReason(error.reason)) return { kind: 'install_unsettled', reason: error.reason, files: pinFileLists(error.details), from, to };
+        if (isUnsettledPinReason(error.reason)) return { kind: 'install_unsettled', reason: error.reason, identity, files: pinFileLists(error.details), from, to };
         return { kind: 'pin_failed', error: pinFailureError(error), identity, from, to };
       }
       signal.throwIfAborted();
       to = manifest.version;
       const replaced = await dependencies.replacePinManifest(target.manifestPath, manifest);
-      from = replaced.previousVersion ?? from;
+      from = recorded ?? replaced.previousVersion ?? from;
       repinned = true;
-    } else if (plan.backend === 'antigravity' && facts?.changed?.includes('pin')) {
-      const previous = await receiptPinComponent(plan.config, plan.dataDir);
-      if (previous) from = previousBinaryLabel(previous);
+      if ((await plan.assess()).action !== 'prepare') return { kind: 'repinned', from, to };
     }
     plan.onStage('preparing', from, to);
     signal.throwIfAborted();
@@ -202,6 +198,7 @@ export function refreshSummary(backend: BackendKind, outcome: RefreshOutcome): s
   const span = (from?: string, to?: string): string => from || to ? `${name} ${from ?? 'unknown'} -> ${to ?? 'unknown'}` : name;
   switch (outcome.kind) {
     case 'prepared': return `${span(outcome.from, outcome.to)}: ${outcome.repinned ? 're-pinned, ' : ''}preparation ${outcome.passed ? 'passed' : 'failed'}`;
+    case 'repinned': return `${span(outcome.from, outcome.to)}: re-pinned; the preparation needs prepare check --kit`;
     case 'install_unsettled': return `${span(outcome.from, outcome.to)}: install still changing (${outcome.reason}); will retry at the next readiness check`;
     case 'pin_failed': return `${span(outcome.from, outcome.to)}: re-pin refused (${String(outcome.error.details?.reason ?? outcome.error.code)})`;
     case 'failed': return `${name} refresh failed (${outcome.error.code})`;

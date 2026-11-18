@@ -422,6 +422,15 @@ describe('manifest generation', () => {
     expect((await inspectInstall({ executable: env.shim })).recordProblems).toEqual({ unhashed: [], mismatched: [] });
   });
 
+  it('accepts the standard RECORD hash of an empty file, written independently of the encoder', async () => {
+    const env = await makeEnvironment();
+    await writeFile(path.join(env.site, 'vibe', 'py.typed'), '');
+    const record = path.join(env.distInfo, 'RECORD');
+    await writeFile(record, `vibe/py.typed,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0\n${await readFile(record, 'utf8')}`);
+    const manifest = await generatePinManifest({ executable: env.shim, requireRecordHashes: true });
+    expect(manifest.files['vibe/py.typed']).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+  });
+
   it('names a file whose bytes differ from its RECORD hash', async () => {
     const env = await makeEnvironment();
     await writeFile(path.join(env.site, 'vibe', '__init__.py'), `__version__ = "tampered"\n`);

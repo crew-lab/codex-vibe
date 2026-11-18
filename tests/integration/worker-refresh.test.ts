@@ -52,6 +52,12 @@ function gate(): Gate {
   return { promise, open };
 }
 
+async function abortable(pending: Promise<void> | undefined, signal: AbortSignal | undefined): Promise<void> {
+  if (!pending) return;
+  await Promise.race([pending, new Promise<void>((resolve) => { if (signal?.aborted) resolve(); else signal?.addEventListener('abort', () => resolve(), { once: true }); })]);
+  signal?.throwIfAborted();
+}
+
 async function git(cwd: string, args: string[]): Promise<void> {
   await exec('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.test', ...args], { cwd });
 }
@@ -102,7 +108,7 @@ async function vibeBox(options: { versions: string[]; initial: string; minimum?:
     managerCount += 1;
     const created = new RunManager(bootConfig, path.join(root, `data-${managerCount}`), [backend], undefined, {
       policy: selectedConfigPolicy(configPath), preparationDataDir: state, ...(settings.now ? { now: settings.now } : {}),
-      workerRefresh: { generatePinManifest: async (pinOptions) => { pins.count += 1; return generatePinManifest(pinOptions); }, runPreparation: async (input) => { calls.push(input); await settings.hold?.promise; return runPreparation({ ...input, conformanceScript: scripts[settings.script ?? 'passing'] }); } }
+      workerRefresh: { generatePinManifest: async (pinOptions) => { pins.count += 1; return generatePinManifest(pinOptions); }, runPreparation: async (input) => { calls.push(input); await abortable(settings.hold?.promise, input.signal); return runPreparation({ ...input, conformanceScript: scripts[settings.script ?? 'passing'] }); } }
     });
     managers.push(created);
     return created;
@@ -143,7 +149,7 @@ describe('Vibe worker refresh at readiness', () => {
     expect(ready).toMatchObject({ eligible: true, blockers: [], worker: { backend: 'app-server', version: '3.1.3', refreshed: { from: '3.1.2', at: expect.any(String) } }, warnings: [WARNING] });
     expect(parsePinManifest(await readFile(box.manifest, 'utf8')).version).toBe('3.1.3');
     const history = await readdir(path.join(box.state, PIN_HISTORY_DIRECTORY));
-    expect(history).toEqual([expect.stringMatching(/^vibe-pin-3\.1\.2-\d{8}T\d{6}Z\.json$/)]);
+    expect(history).toEqual([expect.stringMatching(/^vibe-pin-manifest-3\.1\.2-\d{8}T\d{6}Z\.json$/)]);
     expect(await readPreparationFacts(box.config, box.state)).toMatchObject({ status: { status: 'passed' }, origin: 'automatic', previous_worker_version: '3.1.2' });
     expect(box.calls).toHaveLength(1);
     const started = await (await grant(manager, box.workspace))();
@@ -249,6 +255,18 @@ describe('Vibe worker refresh at readiness', () => {
     expect(await readiness(other, box.workspace, 60)).toMatchObject({ eligible: true });
     expect(await readiness(owner, box.workspace, 60)).toMatchObject({ eligible: true });
     expect(box.calls).toHaveLength(1);
+  }, 60_000);
+
+  it('says the configuration could not be reread instead of blaming boot drift', async () => {
+    const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2' });
+    const manager = box.manager();
+    await manager.initialize();
+    await writeFile(box.configPath, 'not toml [', { mode: 0o600 });
+    await box.swap('3.1.3');
+    const report = await readiness(manager, box.workspace, 5);
+    expect(codes(report)).toContain('VSUP_CONFIG_INVALID');
+    expect(report.worker_refresh).toMatchObject({ status: 'held', reason: 'config_unreadable' });
+    expect(box.calls).toHaveLength(0);
   }, 60_000);
 
   it('does not refresh while a restart is required', async () => {
@@ -393,6 +411,89 @@ describe('Vibe worker refresh at readiness', () => {
     expect(box.calls).toHaveLength(0);
   }, 60_000);
 
+  it('re-pins but leaves the preparation to the owner when the receipt is not one a refresh may renew', async () => {
+    const cases: Array<[string, (receipt: Record<string, unknown>) => Record<string, unknown> | null]> = [
+      ['changed candidate', (receipt) => ({ ...receipt, identity: '0'.repeat(64), components: { ...(receipt.components as Record<string, unknown>), candidate: '0'.repeat(64) } })],
+      ['missing receipt', () => null],
+      ['receipt without components', (receipt) => { const { components: _dropped, ...rest } = receipt; return rest; }]
+    ];
+    for (const [label, change] of cases) {
+      const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2' });
+      const file = receiptPath(box.config, box.state);
+      const changed = change(JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>);
+      if (changed) await atomicWriteJson(file, changed); else await rm(file);
+      const manager = box.manager();
+      await box.swap('3.1.3');
+      const report = await readiness(manager, box.workspace, 30);
+      expect(codes(report), label).toEqual(['VSUP_INVALID_STATE']);
+      expect(report.blockers[0]!.details, label).toMatchObject({ prepare_check: expect.stringContaining('prepare check --kit') });
+      expect(parsePinManifest(await readFile(box.manifest, 'utf8')).version, label).toBe('3.1.3');
+      expect(box.calls, label).toHaveLength(0);
+    }
+  }, 120_000);
+
+  it('re-prepares after a version bump that follows a finished failure', async () => {
+    const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2' });
+    const file = receiptPath(box.config, box.state);
+    await atomicWriteJson(file, { ...(JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>), result: 'failed' });
+    const manager = box.manager();
+    expect(codes(await readiness(manager, box.workspace))).toEqual(['VSUP_INVALID_STATE']);
+    await box.swap('3.1.3');
+    expect(await readiness(manager, box.workspace, 60)).toMatchObject({ eligible: true, worker: { refreshed: { from: '3.1.2' } } });
+    expect(box.calls).toHaveLength(1);
+  }, 60_000);
+
+  it('still records the previous version after a refresh stopped between the re-pin and the receipt', async () => {
+    const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2' });
+    const first = box.manager({ hold: gate() });
+    await box.swap('3.1.3');
+    expect(codes(await readiness(first, box.workspace))).toEqual(['VSUP_PREPARING']);
+    await vi.waitFor(() => expect(box.calls).toHaveLength(1), { timeout: 10_000 });
+    await first.shutdown();
+    expect(parsePinManifest(await readFile(box.manifest, 'utf8')).version).toBe('3.1.3');
+    expect(await readPreparationFacts(box.config, box.state)).toMatchObject({ status: { status: 'stale' }, changed: ['pin'], worker_version: '3.1.2' });
+    const second = box.manager();
+    const ready = await readiness(second, box.workspace, 60);
+    expect(ready).toMatchObject({ eligible: true, worker: { refreshed: { from: '3.1.2' } }, warnings: [WARNING] });
+    expect(box.calls.map((call) => call.previousWorkerVersion)).toEqual(['3.1.2', '3.1.2']);
+  }, 60_000);
+
+  it('reports an install that stays inconsistent for two minutes as damaged, and recovers once it is fixed', async () => {
+    const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2' });
+    let clock = Date.now();
+    const manager = box.manager({ now: () => clock });
+    const changed = path.join(box.sitePackages('3.1.3'), 'vibe', '__init__.py');
+    const original = await readFile(changed);
+    await writeFile(changed, '__version__ = "damaged"\n');
+    await box.swap('3.1.3');
+    const unsettled = await readiness(manager, box.workspace, 30);
+    expect(unsettled.blockers[0]).toMatchObject({ code: 'VSUP_PREPARING', details: { stage: 'install_unsettled', reason: 'record-hash-mismatch' } });
+    expect(box.pins.count).toBe(1);
+    clock += 121_000;
+    const damaged = await readiness(manager, box.workspace, 30);
+    expect(codes(damaged)).toEqual(['VSUP_VIBE_VERSION_UNSUPPORTED']);
+    expect(damaged.blockers[0]).toMatchObject({ retryable: false, remediation: expect.stringMatching(/^Reinstall Vibe/), details: { reason: 'record-hash-mismatch', mismatched: { paths: ['vibe/__init__.py'] } } });
+    expect(damaged.worker_refresh).toMatchObject({ status: 'install_damaged' });
+    expect(box.pins.count).toBe(2);
+    expect(codes(await readiness(manager, box.workspace))).toEqual(['VSUP_VIBE_VERSION_UNSUPPORTED']);
+    expect(box.pins.count).toBe(2);
+    await writeFile(changed, original);
+    clock += 61_000;
+    expect(await readiness(manager, box.workspace, 60)).toMatchObject({ eligible: true });
+    expect(box.pins.count).toBe(3);
+  }, 60_000);
+
+  it('reports a dist-info missing for two minutes as damaged', async () => {
+    const box = await vibeBox({ versions: ['3.1.2'], initial: '3.1.2' });
+    let clock = Date.now();
+    const manager = box.manager({ now: () => clock });
+    await rename(path.join(box.sitePackages('3.1.2'), 'mistral_vibe-3.1.2.dist-info'), path.join(box.root, 'aside'));
+    expect((await readiness(manager, box.workspace)).blockers[0]).toMatchObject({ code: 'VSUP_PREPARING', details: { stage: 'install_unsettled' } });
+    clock += 121_000;
+    const damaged = await readiness(manager, box.workspace, 5);
+    expect(damaged.blockers[0]).toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED', retryable: false, details: { reason: 'dist-info-missing' } });
+  }, 60_000);
+
   it('gives the exact prepare check command for a missing receipt and starts nothing', async () => {
     const box = await vibeBox({ versions: ['3.1.2'], initial: '3.1.2' });
     await rm(receiptPath(box.config, box.state));
@@ -424,6 +525,18 @@ describe('worker changes around a run', () => {
     expect(result.state).not.toBe('completed');
   }, 60_000);
 
+  it('warns when the worker could not be re-read after a run', async () => {
+    const box = await vibeBox({ versions: ['3.1.2'], initial: '3.1.2' });
+    const manager = box.manager();
+    await writeFile(path.join(box.environments['3.1.2']!.directory, 'scenario.json'), JSON.stringify(scenario('3.1.2', [{ op: 'hold' }])));
+    const run = await (await grant(manager, box.workspace, 0))();
+    await vi.waitFor(async () => expect((await manager.status({ run_id: run.run_id })).state).toBe('running'), { timeout: 10_000 });
+    await rename(path.join(box.sitePackages('3.1.2'), 'mistral_vibe-3.1.2.dist-info'), path.join(box.root, 'aside'));
+    await manager.close({ run_id: run.run_id });
+    const result = await manager.result({ run_id: run.run_id, detail: 'full' }) as { warnings: string[] };
+    expect(result.warnings.filter((warning) => warning.startsWith('worker_updated_during_run'))).toEqual([expect.stringMatching(/could not be re-read after the run \(dist-info-missing\); it may have been updated or removed/)]);
+  }, 60_000);
+
   it('offers the authorize command again for a launch that never sent the task', async () => {
     const box = await vibeBox({ versions: ['3.1.2'], initial: '3.1.2' });
     const manager = box.manager();
@@ -452,39 +565,65 @@ describe('worker changes around a run', () => {
 });
 
 describe('Antigravity worker refresh at readiness', () => {
-  it('re-prepares after the agy binary changes', async () => {
+  async function agyBox(options: { recordVersion?: boolean } = {}) {
     const root = await mkdtemp(path.join(await realpath(tmpdir()), 'vsup-refresh-agy-')); roots.push(root);
     const workspace = path.join(root, 'workspace'); await mkdir(workspace);
     const state = path.join(root, 'state'); await mkdir(state, { mode: 0o700 });
     const agy = path.join(root, 'bin', 'agy'); await mkdir(path.dirname(agy));
-    const writeAgy = async (version: string): Promise<void> => { await writeFile(`${agy}.next`, `#!/bin/sh\necho "agy ${version}"\n`, { mode: 0o755 }); await rename(`${agy}.next`, agy); };
+    let installed = '1.5.8';
+    const writeAgy = async (version: string, variant = ''): Promise<void> => { installed = version; await writeFile(`${agy}.next`, `#!/bin/sh\necho "agy ${version}"\n${variant}`, { mode: 0o755 }); await rename(`${agy}.next`, agy); };
     await writeAgy('1.5.8');
     const configPath = path.join(state, 'config.toml');
     await writeFile(configPath, `version = 1\nbackend = "antigravity"\nallowed_workspace_roots = [${JSON.stringify(workspace)}]\n[experimental]\nantigravity = true\n[paths]\nantigravity = ${JSON.stringify(agy)}\n`, { mode: 0o600 });
     const config = await loadConfig({ configPath });
     vi.stubEnv('GEMINI_API_KEY', 'agy-refresh-test-key');
     const calls: RunPreparationInput[] = [];
+    let recordVersion = options.recordVersion !== false;
     const prepare = async (input: RunPreparationInput) => {
       calls.push(input);
       const report = Buffer.from(JSON.stringify({ result: 'pass' }));
       const reports = path.join(input.dataDir, 'preparation-reports'); await mkdir(reports, { recursive: true, mode: 0o700 });
       const reportPath = path.join(reports, `${digest(report)}.json`);
       await writeFile(reportPath, report, { mode: 0o600 });
-      await atomicWriteJson(receiptPath(input.config, input.dataDir), { schema_version: 1, result: 'passed', identity: await preparationIdentity(input.config), checked_at: new Date().toISOString(), report_sha256: digest(report), components: await preparationComponents(input.config), ...(input.origin ? { origin: input.origin } : {}), ...(input.previousWorkerVersion ? { previous_worker_version: input.previousWorkerVersion } : {}) });
+      await atomicWriteJson(receiptPath(input.config, input.dataDir), { schema_version: 1, result: 'passed', identity: await preparationIdentity(input.config), checked_at: new Date().toISOString(), report_sha256: digest(report), components: await preparationComponents(input.config), ...(input.origin ? { origin: input.origin } : {}), ...(input.previousWorkerVersion ? { previous_worker_version: input.previousWorkerVersion } : {}), ...(recordVersion ? { worker_version: installed } : {}) });
       return { status: 'passed' as const, candidate_sha256: 'c'.repeat(64), hosted_acceptance: 'unverified' as const, report_sha256: digest(report), report_path: reportPath, findings: [] };
     };
     await prepare({ config, configPath, dataDir: state, stderr: 'ignore' });
     calls.length = 0;
-    const previousPin = (await preparationComponents(config)).pin;
+    recordVersion = true;
     const manager = new RunManager(config, path.join(root, 'data'), [new AntigravityBackend(config, { dataDir: state })], undefined, { policy: selectedConfigPolicy(configPath), preparationDataDir: state, workerRefresh: { runPreparation: prepare } });
     managers.push(manager);
-    expect(await readiness(manager, workspace)).toMatchObject({ eligible: true, worker: { backend: 'antigravity', version: '1.5.8' } });
-    await writeAgy('1.6.0');
-    const ready = await readiness(manager, workspace, 30);
-    expect(ready).toMatchObject({ eligible: true, worker: { version: '1.6.0', refreshed: { from: `sha256:${previousPin.slice(0, 12)}` } } });
-    expect(ready.warnings).toEqual([`Antigravity CLI (previous binary sha256:${previousPin.slice(0, 12)}) -> 1.6.0 was refreshed automatically; no-inference preparation passed; hosted quality has not been re-run on this version.`]);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ origin: 'automatic', previousWorkerVersion: `sha256:${previousPin.slice(0, 12)}` });
+    return { workspace, state, config, configPath, manager, calls, writeAgy };
+  }
+
+  it('re-prepares after an agy update and records the versions on both sides', async () => {
+    const box = await agyBox();
+    expect(await readiness(box.manager, box.workspace)).toMatchObject({ eligible: true, worker: { backend: 'antigravity', version: '1.5.8' } });
+    await box.writeAgy('1.6.0');
+    const ready = await readiness(box.manager, box.workspace, 30);
+    expect(ready).toMatchObject({ eligible: true, worker: { version: '1.6.0', refreshed: { from: '1.5.8' } } });
+    expect(ready.warnings).toEqual(['Antigravity CLI 1.5.8 -> 1.6.0 was refreshed automatically; no-inference preparation passed; hosted quality has not been re-run on this version.']);
+    expect(box.calls).toHaveLength(1);
+    expect(box.calls[0]).toMatchObject({ origin: 'automatic', previousWorkerVersion: '1.5.8' });
+    expect(await readPreparationFacts(box.config, box.state)).toMatchObject({ status: { status: 'passed' }, worker_version: '1.6.0', previous_worker_version: '1.5.8' });
+  }, 60_000);
+
+  it('does not re-prepare a different agy binary that reports the same version', async () => {
+    const box = await agyBox();
+    await box.writeAgy('1.5.8', '# swapped\n');
+    const report = await readiness(box.manager, box.workspace, 5);
+    expect(codes(report)).toEqual(['VSUP_INVALID_STATE']);
+    expect(report.blockers[0]!.details).toMatchObject({ preparation: { status: 'stale' }, worker_change: expect.stringMatching(/changed while its version stayed 1\.5\.8/), prepare_check: expect.stringContaining('prepare check --kit') });
+    expect(box.calls).toHaveLength(0);
+  }, 60_000);
+
+  it('does not re-prepare an agy change when the receipt predates the recorded version', async () => {
+    const box = await agyBox({ recordVersion: false });
+    await box.writeAgy('1.6.0');
+    const report = await readiness(box.manager, box.workspace, 5);
+    expect(codes(report)).toEqual(['VSUP_INVALID_STATE']);
+    expect(report.blockers[0]!.details).toMatchObject({ worker_change: expect.stringMatching(/predates/) });
+    expect(box.calls).toHaveLength(0);
   }, 60_000);
 });
 
@@ -528,6 +667,25 @@ describe('running build and limits in readiness', () => {
     expect(report.blockers).toContainEqual(expect.objectContaining({ code: 'VSUP_RESTART_REQUIRED', message: expect.stringMatching(/installed supervisor files changed/), details: { boot_drift: ['build'] } }));
     expect(await rejection(start())).toMatchObject({ code: 'VSUP_RESTART_REQUIRED', details: { boot_drift: ['build'] } });
     expect(backend.starts).toBe(0);
+  });
+
+  it('captures the build on the first later read when it was unreadable at boot, and never claims a change it could not read', async () => {
+    const box = await plainBox();
+    let build: string | undefined;
+    const backend = new IdleBackend();
+    const manager = new RunManager(box.config, path.join(box.root, 'data'), [backend], undefined, { policy: selectedConfigPolicy(box.configPath), buildIdentity: async () => { if (build === undefined) throw new Error('dist missing'); return build; } });
+    managers.push(manager);
+    await manager.initialize();
+    expect(await readiness(manager, box.workspace)).toMatchObject({ eligible: true, boot_drift: [], candidate: { sha256: null } });
+    build = 'c'.repeat(64);
+    expect(await readiness(manager, box.workspace)).toMatchObject({ eligible: true, boot_drift: [], candidate: { sha256: 'c'.repeat(64) } });
+    build = undefined;
+    const unreadable = await readiness(manager, box.workspace);
+    expect(unreadable).toMatchObject({ eligible: false, boot_drift: ['build_unreadable'], candidate: { sha256: 'c'.repeat(64) } });
+    expect(unreadable.blockers).toContainEqual(expect.objectContaining({ code: 'VSUP_RESTART_REQUIRED', message: expect.stringMatching(/could not be read.*Check readiness again/) }));
+    expect(unreadable.blockers.map((blocker) => blocker.message).join(' ')).not.toMatch(/files changed/);
+    build = 'c'.repeat(64);
+    expect(await readiness(manager, box.workspace)).toMatchObject({ eligible: true, boot_drift: [] });
   });
 
   it('reports the limits a run with omitted fields gets', async () => {

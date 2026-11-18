@@ -106,6 +106,29 @@ export function isOwnerLockContention(error: unknown): boolean {
   return typeof details === "object" && details !== null && "contended" in details && details.contended === true;
 }
 
+interface LockWording { unsafe(lockPath: string): string; malformed(lockPath: string): string; changed(lockPath: string): string; recovering(lockPath: string): string; exhausted(lockPath: string): string; alive(dataDir: string, lockPath: string, pid: number): string }
+
+const OWNER_LOCK_WORDING: LockWording = {
+  unsafe: (lockPath) => `The supervisor owner lock ${lockPath} is unsafe; inspect it manually.`,
+  malformed: (lockPath) => `The supervisor owner lock ${lockPath} is malformed; inspect it manually.`,
+  changed: (lockPath) => `The supervisor owner lock ${lockPath} changed during stale-owner recovery; retry.`,
+  recovering: (lockPath) => `Another process is recovering the supervisor owner lock ${lockPath}; retry shortly.`,
+  exhausted: (lockPath) => `Could not acquire the supervisor data-directory lock ${lockPath}.`,
+  alive: (dataDir, lockPath, pid) => `Another vibe-supervisor (pid ${pid}) owns ${dataDir}. Lock file: ${lockPath}. Stop that process, or give each Codex session its own VIBE_SUPERVISOR_HOME.`
+};
+
+function lockWording(lockFile: string): LockWording {
+  if (lockFile === LOCK_FILE) return OWNER_LOCK_WORDING;
+  return {
+    unsafe: (lockPath) => `The lock ${lockPath} is not a plain regular file; inspect it, and delete it when no process that uses it is running.`,
+    malformed: (lockPath) => `The lock ${lockPath} is malformed; delete it when no preparation or re-pin is running, then retry.`,
+    changed: (lockPath) => `The lock ${lockPath} changed while a stale owner was being cleared; retry.`,
+    recovering: (lockPath) => `Another process is clearing a stale owner of the lock ${lockPath}; retry shortly.`,
+    exhausted: (lockPath) => `Could not acquire the lock ${lockPath}; retry.`,
+    alive: (_dataDir, lockPath, pid) => `Another process (pid ${pid}) holds the lock ${lockPath}; wait for it to finish, then retry.`
+  };
+}
+
 function parseLock(text: string): ParsedLock | undefined {
   let value: unknown;
   try { value = JSON.parse(text); } catch { return undefined; }
@@ -115,13 +138,13 @@ function parseLock(text: string): ParsedLock | undefined {
   return { pid: record.pid, token: record.token, ...(typeof record.started_at === "string" ? { startedAt: record.started_at } : {}) };
 }
 
-async function observe(lockPath: string, deps: OwnerLockDeps): Promise<Observation | undefined> {
+async function observe(lockPath: string, deps: OwnerLockDeps, wording: LockWording = OWNER_LOCK_WORDING): Promise<Observation | undefined> {
   for (let reread = 0; ; reread += 1) {
     let info: LockFileInfo;
     let text: string;
     try {
       info = await deps.fs.stat(lockPath);
-      if (info.isSymbolicLink || !info.isFile || info.size > MAX_LOCK_BYTES) throw lockError(`The supervisor owner lock ${lockPath} is unsafe; inspect it manually.`, lockPath);
+      if (info.isSymbolicLink || !info.isFile || info.size > MAX_LOCK_BYTES) throw lockError(wording.unsafe(lockPath), lockPath);
       text = await deps.fs.read(lockPath);
     } catch (error) {
       if (errorCode(error) === "ENOENT") return undefined;
@@ -154,7 +177,7 @@ function withDefaults(overrides: Partial<OwnerLockDeps>): OwnerLockDeps {
 export async function inspectOwnerLock(dataDir: string, overrides: Partial<OwnerLockDeps> = {}, lockFile: string = LOCK_FILE): Promise<OwnerLockStatus> {
   const deps = withDefaults(overrides);
   const lockPath = path.join(dataDir, lockFile);
-  const observed = await observe(lockPath, deps);
+  const observed = await observe(lockPath, deps, lockWording(lockFile));
   if (!observed) return { path: lockPath, held: false };
   if (!observed.parsed) return { path: lockPath, held: true, owner: "malformed" };
   return { path: lockPath, held: true, owner: await classifyOwner(observed.parsed, deps), pid: observed.parsed.pid, ...(observed.parsed.startedAt ? { startedAt: observed.parsed.startedAt } : {}) };
@@ -188,6 +211,7 @@ async function claimStaleRecovery(deps: OwnerLockDeps, recoveryPath: string): Pr
 export async function acquireOwnerLock(dataDir: string, overrides: Partial<OwnerLockDeps> = {}, lockFile: string = LOCK_FILE): Promise<OwnerLock> {
   const deps = withDefaults(overrides);
   const lockPath = path.join(dataDir, lockFile);
+  const wording = lockWording(lockFile);
   const recoveryPath = `${lockPath}${RECOVERY_SUFFIX}`;
   const token = randomUUID();
   const payload = JSON.stringify({ pid: deps.pid, token, started_at: new Date(deps.now()).toISOString() });
@@ -204,9 +228,9 @@ export async function acquireOwnerLock(dataDir: string, overrides: Partial<Owner
     catch (error) {
       if (errorCode(error) !== "EEXIST") throw error;
       if (!clearedStaleRecovery && await claimStaleRecovery(deps, recoveryPath)) { clearedStaleRecovery = true; continue; }
-      throw lockError(`Another process is recovering the supervisor owner lock ${lockPath}; retry shortly.`, lockPath, undefined, true);
+      throw lockError(wording.recovering(lockPath), lockPath, undefined, true);
     }
-    try { await reclaimStaleOwner(dataDir, lockPath, deps); }
+    try { await reclaimStaleOwner(dataDir, lockPath, deps, wording); }
     finally {
       try {
         const guard = JSON.parse(await deps.fs.read(recoveryPath)) as { token?: unknown };
@@ -214,19 +238,19 @@ export async function acquireOwnerLock(dataDir: string, overrides: Partial<Owner
       } catch {}
     }
   }
-  throw lockError(`Could not acquire the supervisor data-directory lock ${lockPath}.`, lockPath);
+  throw lockError(wording.exhausted(lockPath), lockPath);
 }
 
-async function reclaimStaleOwner(dataDir: string, lockPath: string, deps: OwnerLockDeps): Promise<void> {
-  const observed = await observe(lockPath, deps);
+async function reclaimStaleOwner(dataDir: string, lockPath: string, deps: OwnerLockDeps, wording: LockWording): Promise<void> {
+  const observed = await observe(lockPath, deps, wording);
   if (!observed) return;
-  if (!observed.parsed) throw lockError(`The supervisor owner lock ${lockPath} is malformed; inspect it manually.`, lockPath);
+  if (!observed.parsed) throw lockError(wording.malformed(lockPath), lockPath);
   const owner = await classifyOwner(observed.parsed, deps);
-  if (owner === "alive") throw lockError(`Another vibe-supervisor (pid ${observed.parsed.pid}) owns ${dataDir}. Lock file: ${lockPath}. Stop that process, or give each Codex session its own VIBE_SUPERVISOR_HOME.`, lockPath, observed.parsed.pid, true);
+  if (owner === "alive") throw lockError(wording.alive(dataDir, lockPath, observed.parsed.pid), lockPath, observed.parsed.pid, true);
   let again: string;
   try { again = await deps.fs.read(lockPath); }
   catch (error) { if (errorCode(error) === "ENOENT") return; throw error; }
-  if (again !== observed.text) throw lockError(`The supervisor owner lock ${lockPath} changed during stale-owner recovery; retry.`, lockPath);
+  if (again !== observed.text) throw lockError(wording.changed(lockPath), lockPath);
   await removeIfPresent(deps, lockPath);
 }
 

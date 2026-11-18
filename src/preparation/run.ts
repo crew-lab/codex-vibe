@@ -5,6 +5,7 @@ import path from 'node:path';
 import { digest } from '../acceptance/schema.js';
 import type { SupervisorConfig } from '../contracts.js';
 import { atomicWriteJson } from '../persistence/atomic.js';
+import { loadPinManifest } from '../backends/app-server/pin.js';
 import { publicValue } from '../reporting/export.js';
 import { readOwnedFile } from '../reporting/private-files.js';
 import { createPrivateDir, createPrivateFile } from '../security/paths.js';
@@ -45,6 +46,7 @@ export interface RunPreparationInput {
   previousWorkerVersion?: string | undefined;
   beforeFinalReceipt?: ((written: PreparedReceiptIdentity) => Promise<void>) | undefined;
   conformanceScript?: string | undefined;
+  conformanceTimeoutMs?: number | undefined;
 }
 
 export interface PreparationResult {
@@ -78,7 +80,8 @@ async function runVibePreparation(input: RunPreparationInput, provenance: Prepar
   const candidate = await candidateIdentity();
   const identity = await preparationIdentity(config, candidate);
   const components = await preparationComponents(config, candidate);
-  const facts = receiptProvenance(provenance);
+  const workerVersion = await loadPinManifest(manifest).then((pinned) => pinned.version, () => undefined);
+  const facts = receiptProvenance({ ...provenance, workerVersion });
   const receipt = receiptPath(config, input.dataDir);
   const script = input.conformanceScript ?? path.join(packageRoot, 'scripts/v2-conformance-check.mjs');
   const temporary = await realpath(await mkdtemp(path.join(tmpdir(), 'vsup-preparation-')));
@@ -90,13 +93,17 @@ async function runVibePreparation(input: RunPreparationInput, provenance: Prepar
     const started = Buffer.from(JSON.stringify({ result: 'incomplete', stage: 'no-inference-check-started', checked_at: new Date().toISOString() }) + '\n');
     await createPrivateFile(path.join(reports, `${digest(started)}.json`), started, 'wx');
     await atomicWriteJson(receipt, { schema_version: 1, result: 'failed', identity, checked_at: new Date().toISOString(), report_sha256: digest(started), components, ...facts });
-    const status = await runConformanceChild(argv, temporary, input.stderr, signal);
+    const timeoutMs = input.conformanceTimeoutMs ?? CONFORMANCE_TIMEOUT_MS;
+    const exit = await runConformanceChild(argv, temporary, input.stderr, signal, timeoutMs);
     signal?.throwIfAborted();
-    const bytes = await readOwnedFile(output, 4 * 1024 * 1024);
-    const report = JSON.parse(bytes.toString('utf8')) as { result?: string; network_observation?: { verdict?: string } };
+    const produced = exit.timedOut ? undefined : await readConformanceReport(output);
+    const bytes = produced?.bytes ?? syntheticReport(exit.timedOut
+      ? { code: 'conformance_timeout', message: `The no-inference check did not finish within ${Math.round(timeoutMs / 1000)} seconds and was stopped.` }
+      : { code: 'conformance_no_report', message: `The no-inference check ended (${exit.signal ? `signal ${exit.signal}` : `exit code ${exit.code ?? 'unknown'}`}) without a readable report.` });
+    const report = produced?.report ?? (JSON.parse(bytes.toString('utf8')) as ConformanceReport);
     await input.beforeFinalReceipt?.({ identity, candidate });
     signal?.throwIfAborted();
-    const passed = status === 0 && report.result === 'pass' && report.network_observation?.verdict === 'none-observed-control-validated';
+    const passed = produced !== undefined && exit.code === 0 && report.result === 'pass' && report.network_observation?.verdict === 'none-observed-control-validated';
     const savedReport = path.join(reports, `${digest(bytes)}.json`);
     try { await createPrivateFile(savedReport, bytes, 'wx'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST' || digest(await readOwnedFile(savedReport)) !== digest(bytes)) throw error; }
     await atomicWriteJson(receipt, { schema_version: 1, result: passed ? 'passed' : 'failed', identity, checked_at: new Date().toISOString(), report_sha256: digest(bytes), components, ...facts });
@@ -104,21 +111,39 @@ async function runVibePreparation(input: RunPreparationInput, provenance: Prepar
   } finally { await rm(temporary, { recursive: true, force: true }); }
 }
 
-function runConformanceChild(argv: string[], home: string, stderr: 'inherit' | 'ignore', signal: AbortSignal | undefined): Promise<number> {
-  return new Promise<number>((resolve, reject) => {
-    const child = spawn(process.execPath, argv, { stdio: ['ignore', 'ignore', stderr], env: { PATH: process.env.PATH, HOME: home, TMPDIR: home }, timeout: CONFORMANCE_TIMEOUT_MS });
+interface ConformanceReport { result?: string; network_observation?: { verdict?: string } }
+interface ConformanceExit { code: number | null; signal: NodeJS.Signals | null; timedOut: boolean }
+
+async function readConformanceReport(output: string): Promise<{ bytes: Buffer; report: ConformanceReport } | undefined> {
+  try {
+    const bytes = await readOwnedFile(output, 4 * 1024 * 1024);
+    const report = JSON.parse(bytes.toString('utf8')) as unknown;
+    return report && typeof report === 'object' ? { bytes, report: report as ConformanceReport } : undefined;
+  } catch { return undefined; }
+}
+
+function syntheticReport(finding: { code: string; message: string }): Buffer {
+  return Buffer.from(JSON.stringify({ result: 'fail', stage: 'no-inference-check', checked_at: new Date().toISOString(), findings: [{ level: 'fail', ...finding }] }) + '\n');
+}
+
+function runConformanceChild(argv: string[], home: string, stderr: 'inherit' | 'ignore', signal: AbortSignal | undefined, timeoutMs: number): Promise<ConformanceExit> {
+  return new Promise<ConformanceExit>((resolve, reject) => {
+    const child = spawn(process.execPath, argv, { stdio: ['ignore', 'ignore', stderr], env: { PATH: process.env.PATH, HOME: home, TMPDIR: home } });
     let escalation: NodeJS.Timeout | undefined;
-    const abort = (): void => {
+    let timedOut = false;
+    const stop = (): void => {
+      if (escalation) return;
       child.kill('SIGTERM');
       escalation = setTimeout(() => { child.kill('SIGKILL'); }, CONFORMANCE_KILL_GRACE_MS);
       escalation.unref();
     };
-    if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
-    child.once('error', (error) => { clearTimeout(escalation); signal?.removeEventListener('abort', abort); reject(error); });
-    child.once('close', (code) => {
-      clearTimeout(escalation);
-      signal?.removeEventListener('abort', abort);
-      if (signal?.aborted) reject(signal.reason); else resolve(code ?? 1);
+    const deadline = setTimeout(() => { timedOut = true; stop(); }, timeoutMs);
+    const finish = (): void => { clearTimeout(deadline); clearTimeout(escalation); signal?.removeEventListener('abort', stop); };
+    if (signal?.aborted) stop(); else signal?.addEventListener('abort', stop, { once: true });
+    child.once('error', (error) => { finish(); reject(error); });
+    child.once('close', (code, exitSignal) => {
+      finish();
+      if (signal?.aborted) reject(signal.reason); else resolve({ code, signal: exitSignal, timedOut });
     });
   });
 }

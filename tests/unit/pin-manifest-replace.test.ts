@@ -10,6 +10,22 @@ import { acquirePreparationLock } from '../../src/preparation/lock.js';
 import { writePrivateFileAtomic } from '../../src/security/paths.js';
 import { makeFakeVibeEnvironment } from './support/fake-vibe-environment.js';
 
+const failDirectoryOpen: { directory: string | undefined; refused: number } = vi.hoisted(() => ({ directory: undefined, refused: 0 }));
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    open: (async (...args: Parameters<typeof actual.open>) => {
+      if (failDirectoryOpen.directory !== undefined && String(args[0]) === failDirectoryOpen.directory && args[1] === 'r') {
+        failDirectoryOpen.refused += 1;
+        throw Object.assign(new Error('directory sync refused'), { code: 'EIO' });
+      }
+      return actual.open(...args);
+    }) as typeof actual.open
+  };
+});
+
 let scratch = '';
 
 beforeEach(async () => { scratch = await realpath(await mkdtemp(path.join(os.tmpdir(), 'pin-replace-'))); });
@@ -19,6 +35,16 @@ const manifestFor = (version: string): PinManifest => ({ format: 1, version, rec
 const clock = (iso: string) => () => new Date(iso);
 
 describe('writePrivateFileAtomic', () => {
+  it('reports success once the rename happened even if the directory sync fails', async () => {
+    const file = path.join(scratch, 'synced.bin');
+    failDirectoryOpen.directory = scratch;
+    try { await writePrivateFileAtomic(file, 'written'); }
+    finally { failDirectoryOpen.directory = undefined; }
+    expect(failDirectoryOpen.refused).toBe(1);
+    expect(await readFile(file, 'utf8')).toBe('written');
+    expect(await readdir(scratch)).toEqual(['synced.bin']);
+  });
+
   it('writes the bytes exactly with mode 0600 and leaves no temporary file', async () => {
     const file = path.join(scratch, 'out.bin');
     const bytes = Buffer.from([0, 255, 10, 13, 128]);
@@ -59,16 +85,57 @@ describe('replacePinManifest', () => {
     await replacePinManifest(target, manifestFor(versions[0] as string));
     const results = [];
     for (const [index, stamp] of stamps.entries()) results.push(await replacePinManifest(target, manifestFor(versions[index + 1] as string), clock(stamp)));
-    expect(results[0]).toEqual({ previousVersion: '3.1.2', historyPath: path.join(historyDirectory(), 'vibe-pin-3.1.2-20261118T101500Z.json') });
+    expect(results[0]).toEqual({ previousVersion: '3.1.2', historyPath: path.join(historyDirectory(), 'pin-3.1.2-20261118T101500Z.json') });
     expect((await readdir(historyDirectory())).sort()).toEqual([
-      'vibe-pin-3.1.3-20261118T101600Z.json',
-      'vibe-pin-3.1.4-20261118T101700Z.json',
-      'vibe-pin-3.1.5-20261118T101800Z.json',
+      'pin-3.1.3-20261118T101600Z.json',
+      'pin-3.1.4-20261118T101700Z.json',
+      'pin-3.1.5-20261118T101800Z.json',
     ]);
-    expect(await readFile(path.join(historyDirectory(), 'vibe-pin-3.1.5-20261118T101800Z.json'), 'utf8')).toBe(serializePinManifest(manifestFor('3.1.5')));
+    expect(await readFile(path.join(historyDirectory(), 'pin-3.1.5-20261118T101800Z.json'), 'utf8')).toBe(serializePinManifest(manifestFor('3.1.5')));
     expect((await lstat(historyDirectory())).mode & 0o7777).toBe(0o700);
-    expect((await lstat(path.join(historyDirectory(), 'vibe-pin-3.1.3-20261118T101600Z.json'))).mode & 0o7777).toBe(0o600);
+    expect((await lstat(path.join(historyDirectory(), 'pin-3.1.3-20261118T101600Z.json'))).mode & 0o7777).toBe(0o600);
     expect(await readFile(target, 'utf8')).toBe(serializePinManifest(manifestFor('3.1.6')));
+  });
+
+  it('archives only a manifest that differs, so re-pinning the same install keeps the older versions', async () => {
+    const target = path.join(scratch, 'pin.json');
+    await replacePinManifest(target, manifestFor('3.1.2'));
+    expect((await replacePinManifest(target, manifestFor('3.1.3'), clock('2026-11-18T10:15:00Z'))).historyPath).toBe(path.join(historyDirectory(), 'pin-3.1.2-20261118T101500Z.json'));
+    for (const minute of ['16', '17', '18', '19']) expect(await replacePinManifest(target, manifestFor('3.1.3'), clock(`2026-11-18T10:${minute}:00Z`))).toEqual({ previousVersion: '3.1.3', historyPath: null });
+    expect(await readdir(historyDirectory())).toEqual(['pin-3.1.2-20261118T101500Z.json']);
+  });
+
+  it('never prunes the file it just archived, even when the clock went backwards', async () => {
+    const target = path.join(scratch, 'pin.json');
+    await replacePinManifest(target, manifestFor('3.1.2'));
+    for (const [index, minute] of ['15', '16', '17'].entries()) await replacePinManifest(target, manifestFor(`3.1.${index + 3}`), clock(`2026-11-18T10:${minute}:00Z`));
+    const result = await replacePinManifest(target, manifestFor('3.1.9'), clock('2026-11-18T09:00:00Z'));
+    const names = await readdir(historyDirectory());
+    expect(names).toHaveLength(3);
+    expect(names).toContain(path.basename(result.historyPath as string));
+    expect(await readFile(result.historyPath as string, 'utf8')).toBe(serializePinManifest(manifestFor('3.1.5')));
+  });
+
+  it('adds a suffix instead of overwriting a history file with the same name', async () => {
+    const target = path.join(scratch, 'pin.json');
+    await replacePinManifest(target, manifestFor('3.1.2'));
+    await replacePinManifest(target, manifestFor('3.1.3'), clock('2026-11-18T10:15:00Z'));
+    await writeFile(target, serializePinManifest(manifestFor('3.1.2')), { mode: 0o600 });
+    const second = await replacePinManifest(target, manifestFor('3.1.4'), clock('2026-11-18T10:15:00Z'));
+    expect(second.historyPath).toBe(path.join(historyDirectory(), 'pin-3.1.2-20261118T101500Z-1.json'));
+    expect(await readFile(path.join(historyDirectory(), 'pin-3.1.2-20261118T101500Z.json'), 'utf8')).toBe(serializePinManifest(manifestFor('3.1.2')));
+  });
+
+  it('keeps separate histories for two manifests in one directory', async () => {
+    const first = path.join(scratch, 'pin.json');
+    const second = path.join(scratch, 'pin-manifest.json');
+    await replacePinManifest(first, manifestFor('3.1.2'));
+    await replacePinManifest(second, manifestFor('3.1.2'));
+    await replacePinManifest(first, manifestFor('3.1.3'), clock('2026-11-18T10:00:00Z'));
+    for (const [index, minute] of ['15', '16', '17', '18'].entries()) await replacePinManifest(second, manifestFor(`3.1.${index + 3}`), clock(`2026-11-18T10:${minute}:00Z`));
+    const names = await readdir(historyDirectory());
+    expect(names).toContain('pin-3.1.2-20261118T100000Z.json');
+    expect(names.filter((name) => name.startsWith('pin-manifest-'))).toHaveLength(3);
   });
 
   it('archives an invalid previous file under unknown', async () => {
@@ -76,7 +143,7 @@ describe('replacePinManifest', () => {
     await writeFile(target, 'not json {', { mode: 0o600 });
     const result = await replacePinManifest(target, manifestFor('3.1.4'), clock('2026-11-18T10:15:00Z'));
     expect(result.previousVersion).toBeNull();
-    expect(result.historyPath).toBe(path.join(historyDirectory(), 'vibe-pin-unknown-20261118T101500Z.json'));
+    expect(result.historyPath).toBe(path.join(historyDirectory(), 'pin-unknown-20261118T101500Z.json'));
     expect(await readFile(result.historyPath as string, 'utf8')).toBe('not json {');
   });
 });
@@ -94,16 +161,18 @@ describe('pin-manifest command', () => {
     return { args: ['--config', config, '--executable', fake.shim, '--output', output], output, stderr, fakeRecord: path.join(fake.distInfo, 'RECORD'), fake: fake.shim };
   }
 
-  it('replaces with --force leaving one history file, and refuses without it', async () => {
+  it('replaces with --force, archiving the previous manifest only when it differs, and refuses without it', async () => {
     const { args, output } = await setup();
-    await pinManifestCommand(args);
-    const first = await readFile(output, 'utf8');
+    await writeFile(output, serializePinManifest(manifestFor('3.1.1')), { mode: 0o600 });
     await expect(pinManifestCommand(args)).rejects.toThrow(/already exists/);
-    expect(await readFile(output, 'utf8')).toBe(first);
+    expect(await readFile(output, 'utf8')).toBe(serializePinManifest(manifestFor('3.1.1')));
     await pinManifestCommand([...args, '--force']);
+    const first = await readFile(output, 'utf8');
     const history = await readdir(path.join(path.dirname(output), 'pin-history'));
-    expect(history).toHaveLength(1);
-    expect(await readFile(path.join(path.dirname(output), 'pin-history', history[0] as string), 'utf8')).toBe(first);
+    expect(history).toEqual([expect.stringMatching(/^pin-3\.1\.1-\d{8}T\d{6}Z\.json$/)]);
+    await pinManifestCommand([...args, '--force']);
+    expect(await readFile(output, 'utf8')).toBe(first);
+    expect(await readdir(path.join(path.dirname(output), 'pin-history'))).toEqual(history);
   });
 
   it('takes the preparation lock to replace the configured manifest and writes nothing while it is held', async () => {

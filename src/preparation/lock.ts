@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { SupervisorConfig } from '../contracts.js';
 import { acquireOwnerLock, inspectOwnerLock, type OwnerLock, type OwnerLockDeps, type OwnerLockStatus } from '../core/owner-lock.js';
+import { createPrivateDir } from '../security/paths.js';
 import { receiptPath } from './evidence.js';
 
 export const PREPARATION_LOCK_FILE = 'preparation.lock';
@@ -9,8 +10,10 @@ export function preparationLockDirectory(config: SupervisorConfig, dataDir?: str
   return path.dirname(receiptPath(config, dataDir));
 }
 
-export function acquirePreparationLock(config: SupervisorConfig, dataDir?: string, overrides: Partial<OwnerLockDeps> = {}): Promise<OwnerLock> {
-  return acquireOwnerLock(preparationLockDirectory(config, dataDir), overrides, PREPARATION_LOCK_FILE);
+export async function acquirePreparationLock(config: SupervisorConfig, dataDir?: string, overrides: Partial<OwnerLockDeps> = {}): Promise<OwnerLock> {
+  const directory = preparationLockDirectory(config, dataDir);
+  await createPrivateDir(directory);
+  return acquireOwnerLock(directory, overrides, PREPARATION_LOCK_FILE);
 }
 
 export function inspectPreparationLock(config: SupervisorConfig, dataDir?: string, overrides: Partial<OwnerLockDeps> = {}): Promise<OwnerLockStatus> {

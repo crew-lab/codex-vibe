@@ -1,4 +1,4 @@
-import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -92,6 +92,48 @@ describe('runPreparation', () => {
     const pid = Number(await readFile(pidFile, 'utf8'));
     expect(() => process.kill(pid, 0)).toThrow();
     expect(await readPreparationFacts(config)).toMatchObject({ status: { status: 'failed' }, interrupted: true, origin: 'automatic' });
+  });
+});
+
+describe('runPreparation endings that are not an abort', () => {
+  it('stops a check that runs past its limit and records a finished failure that names the timeout', async () => {
+    const { root, configPath, script, config } = await fixture(HANGING_CHILD);
+    const result = await runPreparation({ config, configPath, dataDir: root, stderr: 'ignore', conformanceScript: script, conformanceTimeoutMs: 300 });
+    expect(result).toMatchObject({ status: 'failed', findings: [{ code: 'conformance_timeout', message: expect.stringMatching(/within 0 seconds|within \d+ seconds/) }] });
+    const pid = Number(await readFile(path.join(root, 'child.pid'), 'utf8'));
+    expect(() => process.kill(pid, 0)).toThrow();
+    expect(await readPreparationFacts(config)).toMatchObject({ status: { status: 'failed' }, interrupted: false, worker_version: '3.2.0' });
+  });
+
+  it('records a finished failure when the check exits without a report', async () => {
+    const { root, configPath, script, config } = await fixture('process.exitCode = 3;\n');
+    const result = await runPreparation({ config, configPath, dataDir: root, stderr: 'ignore', conformanceScript: script });
+    expect(result).toMatchObject({ status: 'failed', findings: [{ code: 'conformance_no_report', message: expect.stringContaining('exit code 3') }] });
+    expect(await readPreparationFacts(config)).toMatchObject({ status: { status: 'failed' }, interrupted: false });
+  });
+});
+
+describe('preparation lock', () => {
+  it('creates its private directory when the data directory does not exist yet', async () => {
+    const root = await mkdtemp(path.join(await realpath(os.tmpdir()), 'preparation-lock-')); roots.push(root);
+    const dataDir = path.join(root, 'not-yet', 'data');
+    const config = { ...DEFAULT_CONFIG, backend: 'antigravity' as const, paths: { antigravity: '/unused/agy' }, experimental: { antigravity: true } };
+    const lock = await acquirePreparationLock(config, dataDir);
+    try {
+      expect((await stat(dataDir)).mode & 0o777).toBe(0o700);
+      expect(lock.path).toBe(path.join(dataDir, 'preparation.lock'));
+    } finally { await lock.release(); }
+  });
+
+  it('names the preparation lock, not the supervisor lock, when it is malformed', async () => {
+    const { root, config } = await fixture(PASSING_CHILD);
+    const file = path.join(root, 'preparation.lock');
+    await writeFile(file, 'not a lock', { mode: 0o600 });
+    const old = new Date(Date.now() - 60_000);
+    await utimes(file, old, old);
+    const error = await acquirePreparationLock(config, root).then(() => undefined, (failure: unknown) => failure as Error);
+    expect(error?.message).toBe(`The lock ${file} is malformed; delete it when no preparation or re-pin is running, then retry.`);
+    expect(error?.message).not.toMatch(/supervisor/);
   });
 });
 

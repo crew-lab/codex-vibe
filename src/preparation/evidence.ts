@@ -19,11 +19,11 @@ export type PreparationComponents = z.infer<typeof componentsSchema>;
 const componentLabels: Record<keyof PreparationComponents, string> = { candidate: 'candidate', pin: 'pin', node_major: 'Node major version', policy: 'policy' };
 export type PreparationComponentName = keyof PreparationComponents;
 export type PreparationOrigin = 'manual' | 'automatic';
-const receiptSchema = z.object({ schema_version: z.literal(1), result: z.enum(['passed','failed']), identity: z.string().regex(/^[a-f0-9]{64}$/), checked_at: z.string().datetime(), report_sha256: z.string().regex(/^[a-f0-9]{64}$/), components: componentsSchema.optional(), origin: z.enum(['manual','automatic']).optional(), previous_worker_version: z.string().min(1).max(64).optional() }).strict();
+const receiptSchema = z.object({ schema_version: z.literal(1), result: z.enum(['passed','failed']), identity: z.string().regex(/^[a-f0-9]{64}$/), checked_at: z.string().datetime(), report_sha256: z.string().regex(/^[a-f0-9]{64}$/), components: componentsSchema.optional(), origin: z.enum(['manual','automatic']).optional(), previous_worker_version: z.string().min(1).max(64).optional(), worker_version: z.string().min(1).max(64).optional() }).strict();
 type PreparationReceipt = z.infer<typeof receiptSchema>;
-export interface PreparationProvenance { origin?: PreparationOrigin | undefined; previousWorkerVersion?: string | undefined }
-export function receiptProvenance(provenance: PreparationProvenance): Pick<PreparationReceipt, 'origin' | 'previous_worker_version'> {
-  return receiptSchema.pick({ origin: true, previous_worker_version: true }).parse({ ...(provenance.origin ? { origin: provenance.origin } : {}), ...(provenance.previousWorkerVersion ? { previous_worker_version: provenance.previousWorkerVersion } : {}) });
+export interface PreparationProvenance { origin?: PreparationOrigin | undefined; previousWorkerVersion?: string | undefined; workerVersion?: string | undefined }
+export function receiptProvenance(provenance: PreparationProvenance): Pick<PreparationReceipt, 'origin' | 'previous_worker_version' | 'worker_version'> {
+  return receiptSchema.pick({ origin: true, previous_worker_version: true, worker_version: true }).parse({ ...(provenance.origin ? { origin: provenance.origin } : {}), ...(provenance.previousWorkerVersion ? { previous_worker_version: provenance.previousWorkerVersion } : {}), ...(provenance.workerVersion ? { worker_version: provenance.workerVersion.slice(0, 64) } : {}) });
 }
 export interface PreparationFacts {
   status: PreparationStatus;
@@ -31,6 +31,7 @@ export interface PreparationFacts {
   interrupted: boolean;
   origin?: PreparationOrigin;
   previous_worker_version?: string;
+  worker_version?: string;
   checked_at?: string;
 }
 export async function candidateIdentity(root = packageRoot): Promise<string> {
@@ -104,8 +105,8 @@ function isIncompleteReport(bytes: Buffer): boolean {
   try { return (JSON.parse(bytes.toString('utf8')) as { result?: unknown } | null)?.result === 'incomplete'; }
   catch { return false; }
 }
-function receiptFacts(receipt: PreparationReceipt): Pick<PreparationFacts, 'origin' | 'previous_worker_version' | 'checked_at'> {
-  return { ...(receipt.origin ? { origin: receipt.origin } : {}), ...(receipt.previous_worker_version ? { previous_worker_version: receipt.previous_worker_version } : {}), checked_at: receipt.checked_at };
+function receiptFacts(receipt: PreparationReceipt): Pick<PreparationFacts, 'origin' | 'previous_worker_version' | 'worker_version' | 'checked_at'> {
+  return { ...(receipt.origin ? { origin: receipt.origin } : {}), ...(receipt.previous_worker_version ? { previous_worker_version: receipt.previous_worker_version } : {}), ...(receipt.worker_version ? { worker_version: receipt.worker_version } : {}), checked_at: receipt.checked_at };
 }
 export async function readPreparationFacts(config: SupervisorConfig, dataDirOverride?: string): Promise<PreparationFacts> {
   let candidate: string | null = null;

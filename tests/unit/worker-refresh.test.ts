@@ -9,7 +9,7 @@ import { PinCheckError, type PinManifest } from '../../src/backends/app-server/p
 import type { OwnerLock } from '../../src/core/owner-lock.js';
 import type { PreparationFacts } from '../../src/preparation/evidence.js';
 import type { RunPreparationInput } from '../../src/preparation/run.js';
-import { decideRefresh, previousBinaryLabel, refreshHold, refreshSummary, refreshWarning, runWorkerRefresh, type WorkerRefreshDependencies, type WorkerRefreshPlan } from '../../src/preparation/worker-refresh.js';
+import { decideRefresh, refreshHold, refreshSummary, refreshWarning, runWorkerRefresh, type WorkerRefreshDependencies, type WorkerRefreshPlan } from '../../src/preparation/worker-refresh.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
 import { errorsDocPath, renderErrorsDoc } from '../../scripts/errors-doc.mjs';
 
@@ -31,8 +31,15 @@ describe('decideRefresh', () => {
   it('re-prepares a receipt made stale only by the pin, the policy or the Node major', () => {
     for (const changed of [['pin'], ['policy'], ['node_major'], ['pin', 'policy', 'node_major']] as const) {
       expect(decideRefresh({ backend: 'app-server', pinReason: null, facts: facts('stale', { changed: [...changed] }) })).toBe('prepare');
-      expect(decideRefresh({ backend: 'antigravity', pinReason: null, facts: facts('stale', { changed: [...changed] }) })).toBe('prepare');
+      expect(decideRefresh({ backend: 'antigravity', pinReason: null, facts: facts('stale', { changed: [...changed], worker_version: '1.5.8' }), workerVersion: '1.6.0' })).toBe('prepare');
     }
+  });
+
+  it('leaves an agy binary that changed without a version change, or without a recorded version, to the owner', () => {
+    expect(decideRefresh({ backend: 'antigravity', pinReason: null, facts: facts('stale', { changed: ['pin'], worker_version: '1.6.0' }), workerVersion: '1.6.0' })).toBe('none');
+    expect(decideRefresh({ backend: 'antigravity', pinReason: null, facts: facts('stale', { changed: ['pin'] }), workerVersion: '1.6.0' })).toBe('none');
+    expect(decideRefresh({ backend: 'antigravity', pinReason: null, facts: facts('stale', { changed: ['pin'], worker_version: '1.5.8' }), workerVersion: null })).toBe('none');
+    expect(decideRefresh({ backend: 'antigravity', pinReason: null, facts: facts('stale', { changed: ['policy'] }), workerVersion: '1.6.0' })).toBe('prepare');
   });
 
   it('re-prepares an interrupted run', () => {
@@ -63,12 +70,9 @@ describe('refreshHold', () => {
 });
 
 describe('refresh wording', () => {
-  it('names the versions for Vibe and the previous binary for agy', () => {
+  it('names the versions for Vibe and agy', () => {
     expect(refreshWarning('app-server', '3.1.2', '3.1.3')).toBe('Vibe 3.1.2 -> 3.1.3 was refreshed automatically; no-inference preparation passed; hosted quality has not been re-run on this version.');
-    const label = previousBinaryLabel('ab'.repeat(32));
-    expect(label).toBe('sha256:abababababab');
-    expect(label.length).toBeLessThanOrEqual(64);
-    expect(refreshWarning('antigravity', label, '1.6.0')).toBe('Antigravity CLI (previous binary sha256:abababababab) -> 1.6.0 was refreshed automatically; no-inference preparation passed; hosted quality has not been re-run on this version.');
+    expect(refreshWarning('antigravity', '1.5.8', '1.6.0')).toBe('Antigravity CLI 1.5.8 -> 1.6.0 was refreshed automatically; no-inference preparation passed; hosted quality has not been re-run on this version.');
     expect(refreshSummary('app-server', { kind: 'prepared', passed: true, repinned: true, from: '3.1.2', to: '3.1.3', reportPath: '/private/report.json', findings: [] })).toBe('Vibe 3.1.2 -> 3.1.3: re-pinned, preparation passed');
     expect(refreshSummary('app-server', { kind: 'not_needed' })).toBeUndefined();
   });
@@ -98,6 +102,10 @@ describe('agy worker identity', () => {
 });
 
 describe('runWorkerRefresh', () => {
+  const assessments = (...steps: Awaited<ReturnType<WorkerRefreshPlan['assess']>>[]): WorkerRefreshPlan['assess'] => {
+    let index = 0;
+    return async () => steps[Math.min(index++, steps.length - 1)]!;
+  };
   const lock = (): OwnerLock & { released: number } => {
     const value = { path: '/lock', token: 't', released: 0, release: async () => { value.released += 1; } };
     return value;
@@ -106,7 +114,7 @@ describe('runWorkerRefresh', () => {
   const plan = (overrides: Partial<WorkerRefreshPlan> = {}): WorkerRefreshPlan => ({
     backend: 'app-server', config: { ...DEFAULT_CONFIG, paths: { vibePinManifest: '/nowhere/vibe-pin-manifest.json' } }, configPath: '/nowhere/config.toml', dataDir: '/nowhere',
     signal: new AbortController().signal, pinTarget: { executable: '/nowhere/vibe-app-server', manifestPath: '/nowhere/vibe-pin-manifest.json', minimumVersion: '3.1.2' },
-    workerVersion: async () => '3.1.3', assess: async () => ({ action: 'repin', facts: facts('passed') }), onStage: () => undefined, ...overrides
+    workerVersion: async () => '3.1.3', assess: assessments({ action: 'repin', facts: facts('passed') }, { action: 'prepare', facts: facts('stale', { changed: ['pin'] }) }), onStage: () => undefined, ...overrides
   });
   const dependencies = (overrides: Partial<WorkerRefreshDependencies> = {}): WorkerRefreshDependencies & { prepared: RunPreparationInput[] } => {
     const prepared: RunPreparationInput[] = [];
@@ -119,6 +127,28 @@ describe('runWorkerRefresh', () => {
       ...overrides
     };
   };
+
+  it('re-pins but leaves the preparation to the owner when the receipt is not refreshable after the re-pin', async () => {
+    for (const after of [facts('missing'), facts('stale', { changed: ['candidate', 'pin'] }), facts('stale', { changed: null })]) {
+      const held = lock(); const deps = dependencies(); let replaced = 0;
+      deps.replacePinManifest = async () => { replaced += 1; return { previousVersion: '3.1.2', historyPath: null }; };
+      const outcome = await runWorkerRefresh(plan({ assess: assessments({ action: 'repin', facts: facts('passed') }, { action: 'none', facts: after }) }), held, deps);
+      expect(outcome).toEqual({ kind: 'repinned', from: '3.1.2', to: '3.1.3' });
+      expect(replaced).toBe(1);
+      expect(deps.prepared).toEqual([]);
+      expect(held.released).toBe(1);
+    }
+    expect(refreshSummary('app-server', { kind: 'repinned', from: '3.1.2', to: '3.1.3' })).toBe('Vibe 3.1.2 -> 3.1.3: re-pinned; the preparation needs prepare check --kit');
+  });
+
+  it('takes the previous version from the old receipt when it differs from the installed one', async () => {
+    const deps = dependencies();
+    await runWorkerRefresh(plan({ assess: async () => ({ action: 'prepare', facts: facts('stale', { changed: ['pin'], worker_version: '3.1.1', previous_worker_version: '3.0.9' }) }) }), lock(), deps);
+    expect(deps.prepared[0]).toMatchObject({ previousWorkerVersion: '3.1.1' });
+    const same = dependencies();
+    await runWorkerRefresh(plan({ assess: async () => ({ action: 'prepare', facts: facts('failed', { interrupted: true, worker_version: '3.1.3', previous_worker_version: '3.1.2' }) }) }), lock(), same);
+    expect(same.prepared[0]).toMatchObject({ previousWorkerVersion: '3.1.2' });
+  });
 
   it('re-pins, then prepares with the previous version and releases the lock', async () => {
     const held = lock(); const deps = dependencies(); const stages: string[] = [];

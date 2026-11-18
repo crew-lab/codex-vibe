@@ -1,12 +1,10 @@
 import { lstat, readFile, readdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
-import { createPrivateDir, writePrivateFileAtomic } from '../../security/paths.js';
+import { createPrivateDir, createPrivateFile, writePrivateFileAtomic } from '../../security/paths.js';
 import { parsePinManifest, serializePinManifest, type PinManifest } from './pin.js';
 
 export const PIN_HISTORY_DIRECTORY = 'pin-history';
 export const PIN_HISTORY_KEEP = 3;
-
-const HISTORY_NAME = /^vibe-pin-.+-(\d{8}T\d{6}Z)\.json$/;
 
 export interface PinReplacement {
   previousVersion: string | null;
@@ -21,6 +19,14 @@ function safeVersion(version: string): string {
   return version.replace(/[^0-9A-Za-z.+_]/g, '_');
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function historyPattern(stem: string): RegExp {
+  return new RegExp(`^${escapeRegExp(stem)}-[0-9A-Za-z.+_]+-(\\d{8}T\\d{6}Z)(?:-(\\d+))?\\.json$`);
+}
+
 async function existingRegularFile(file: string): Promise<boolean> {
   try {
     const info = await lstat(file);
@@ -32,28 +38,41 @@ async function existingRegularFile(file: string): Promise<boolean> {
   }
 }
 
-async function pruneHistory(directory: string): Promise<void> {
-  const names = (await readdir(directory)).filter((name) => HISTORY_NAME.test(name));
-  const stamped = names.map((name) => ({ name, stamp: HISTORY_NAME.exec(name)?.[1] ?? '' }));
-  stamped.sort((a, b) => (a.stamp === b.stamp ? (a.name < b.name ? 1 : -1) : a.stamp < b.stamp ? 1 : -1));
-  for (const stale of stamped.slice(PIN_HISTORY_KEEP)) await unlink(path.join(directory, stale.name));
+async function archive(directory: string, stem: string, version: string, now: Date, bytes: Buffer): Promise<string> {
+  const base = `${stem}-${safeVersion(version)}-${historyStamp(now)}`;
+  for (let suffix = 0; ; suffix += 1) {
+    const candidate = path.join(directory, suffix === 0 ? `${base}.json` : `${base}-${suffix}.json`);
+    try { await createPrivateFile(candidate, bytes, 'wx'); return candidate; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
+  }
+}
+
+async function pruneHistory(directory: string, stem: string, kept: string): Promise<void> {
+  const pattern = historyPattern(stem);
+  const entries = (await readdir(directory)).flatMap((name) => {
+    const match = pattern.exec(name);
+    return match && path.join(directory, name) !== kept ? [{ name, stamp: match[1] ?? '', suffix: Number(match[2] ?? 0) }] : [];
+  });
+  entries.sort((a, b) => (a.stamp !== b.stamp ? (a.stamp < b.stamp ? 1 : -1) : b.suffix - a.suffix));
+  for (const stale of entries.slice(PIN_HISTORY_KEEP - 1)) await unlink(path.join(directory, stale.name));
 }
 
 export async function replacePinManifest(manifestPath: string, manifest: PinManifest, now: () => Date = () => new Date()): Promise<PinReplacement> {
   const target = path.resolve(manifestPath);
-  let replacement: PinReplacement = { previousVersion: null, historyPath: null };
-  if (await existingRegularFile(target)) {
-    const previous = await readFile(target);
-    let version = 'unknown';
-    let previousVersion: string | null = null;
-    try { previousVersion = parsePinManifest(previous.toString('utf8')).version; version = previousVersion; } catch { previousVersion = null; }
-    const directory = path.join(path.dirname(target), PIN_HISTORY_DIRECTORY);
-    await createPrivateDir(directory);
-    const historyPath = path.join(directory, `vibe-pin-${safeVersion(version)}-${historyStamp(now())}.json`);
-    await writePrivateFileAtomic(historyPath, previous);
-    await pruneHistory(directory);
-    replacement = { previousVersion, historyPath };
+  const serialized = Buffer.from(serializePinManifest(manifest));
+  let previous: Buffer | undefined;
+  if (await existingRegularFile(target)) previous = await readFile(target);
+  let previousVersion: string | null = null;
+  if (previous) { try { previousVersion = parsePinManifest(previous.toString('utf8')).version; } catch { previousVersion = null; } }
+  if (!previous || previous.equals(serialized)) {
+    await writePrivateFileAtomic(target, serialized);
+    return { previousVersion, historyPath: null };
   }
-  await writePrivateFileAtomic(target, serializePinManifest(manifest));
-  return replacement;
+  const directory = path.join(path.dirname(target), PIN_HISTORY_DIRECTORY);
+  const stem = path.basename(target).replace(/\.json$/i, '');
+  await createPrivateDir(directory);
+  const historyPath = await archive(directory, stem, previousVersion ?? 'unknown', now(), previous);
+  await writePrivateFileAtomic(target, serialized);
+  await pruneHistory(directory, stem, historyPath);
+  return { previousVersion, historyPath };
 }

@@ -174,12 +174,15 @@ async function startPreparationRefusingProxy(): Promise<PreparationRefusingProxy
 
 async function runHookStdinCheck(
   hookScriptPath: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  signal?: AbortSignal
 ): Promise<{ decision?: string; reason?: string }> {
+  signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [hookScriptPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 5000
+      timeout: 5000,
+      ...(signal ? { signal } : {})
     });
     const stdoutChunks: Buffer[] = [];
     child.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(Buffer.from(chunk)));
@@ -209,8 +212,10 @@ async function runCliSlashCommandReadback(
   cwd: string,
   childHome: string,
   childTmp: string,
-  proxyPort: number
+  proxyPort: number,
+  signal?: AbortSignal
 ): Promise<{ code: number; parsed: Record<string, unknown> | null }> {
+  signal?.throwIfAborted();
   const neutralizerBin = await setupHeadlessBrowserNeutralizer(path.join(childHome, '.bin'));
   return new Promise((resolve) => {
     const child = spawn(
@@ -234,7 +239,8 @@ async function runCliSlashCommandReadback(
           BROWSER: 'false',
           NO_COLOR: '1'
         },
-        timeout: 10_000
+        timeout: 10_000,
+        ...(signal ? { signal } : {})
       }
     );
     const stdoutChunks: Buffer[] = [];
@@ -319,6 +325,7 @@ export async function runAntigravityPreparationCheck(
 
   const findings: Array<{ level: 'info' | 'fail'; code: string; message: string }> = [];
   const configuredCmd = config.paths?.antigravity ?? 'agy';
+  signal?.throwIfAborted();
   const resolved = await resolveAntigravityExecutable(configuredCmd);
 
   if (!resolved.resolvedPath || !resolved.version || !resolved.sha256) {
@@ -454,11 +461,11 @@ export async function runAntigravityPreparationCheck(
 
       if (resolved.resolvedPath && resolved.version && isSupportedAntigravityVersion(resolved.version)) {
         proxy.setRun(`subject-${mode}`);
-        const configReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/config', workspace, childHome, childTmp, proxy.port);
-        const hooksReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/hooks', workspace, childHome, childTmp, proxy.port);
-        const permsReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/permissions', workspace, childHome, childTmp, proxy.port);
-        const skillsReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/skills', workspace, childHome, childTmp, proxy.port);
-        const agentsReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/agents', workspace, childHome, childTmp, proxy.port);
+        const configReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/config', workspace, childHome, childTmp, proxy.port, signal);
+        const hooksReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/hooks', workspace, childHome, childTmp, proxy.port, signal);
+        const permsReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/permissions', workspace, childHome, childTmp, proxy.port, signal);
+        const skillsReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/skills', workspace, childHome, childTmp, proxy.port, signal);
+        const agentsReadback = await runCliSlashCommandReadback(resolved.resolvedPath, '/agents', workspace, childHome, childTmp, proxy.port, signal);
 
         const readbacks = [
           { cmd: '/config', rb: configReadback },
@@ -613,7 +620,7 @@ export async function runAntigravityPreparationCheck(
           toolCall: { name: testCase.tool, args: testCase.args },
           stepIdx: idx + 1,
           conversationId: `prep-${mode}`
-        });
+        }, signal);
         if (response.decision !== testCase.expectedDecision) {
           allSyntheticPassed = false;
           findings.push({
@@ -648,7 +655,7 @@ export async function runAntigravityPreparationCheck(
         agyVersion: resolved.version,
         signal,
         readback: (slashCommand, cwd, childHome, childTmp) =>
-          runCliSlashCommandReadback(executablePath, slashCommand, cwd, childHome, childTmp, proxy.port)
+          runCliSlashCommandReadback(executablePath, slashCommand, cwd, childHome, childTmp, proxy.port, signal)
       });
       probeReport = probes.report;
       findings.push(...probes.findings);
@@ -755,7 +762,7 @@ export async function runAntigravityPreparationCheck(
     checked_at: new Date().toISOString(),
     report_sha256: reportSha256,
     components,
-    ...facts
+    ...receiptProvenance({ ...options.provenance, ...(resolved.version ? { workerVersion: resolved.version } : {}) })
   });
 
   return {
