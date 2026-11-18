@@ -70,7 +70,7 @@ Now, each its own commit. Every step answers a failure in the third runs, or is 
 5. **agy strict mode.** Find the allow-rule target form agy matches for a read inside the workspace, on the worker machine, by trying forms through the control probe. The aim is two gates, agy's permissions and our hook, instead of the hook alone.
 6. **Measurements on the worker machine,** recorded with `quality-pack.mjs record`: the two reviews five times with `vibe_review_thinking = "off"`; `review-total` and both edits on agy; the calendar-date replay with the type-check line in the brief and default turns.
 7. **Candidates, no failure behind them yet:** fewer model calls for a review of small named files (`review-total` takes four); `context_reads` for agy; agy `--json-schema` for findings; judging an agy edit that stopped at its turn limit, once agy edits have run and a write in flight at the stop can be told apart; the [search sidecar](review-search-tool.md) only if reviews miss code they were not given.
-8. **Release 2.2.1** once the calendar-date replay passes on Vibe. agy ships experimental.
+8. **Release 2.2.2** once a worker update has refreshed itself on the worker machine and the quality pack has passed after it. 2.2.1 is released; agy ships experimental.
 
 After every Vibe or agy release: readiness until eligible, then the quality pack, recorded. That run is the regression test for the worker.
 
