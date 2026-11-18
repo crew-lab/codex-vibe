@@ -28,7 +28,8 @@ export interface RefreshConditions {
 }
 
 const PREPARE_ONLY_COMPONENTS: ReadonlySet<PreparationComponentName> = new Set<PreparationComponentName>(['pin', 'policy', 'node_major']);
-const UNSETTLED_PIN_REASONS: ReadonlySet<string> = new Set(['dist-info-missing', 'dist-info-ambiguous', 'record-unhashed', 'record-hash-mismatch', 'file-missing']);
+const UNSETTLED_PIN_REASONS: ReadonlySet<string> = new Set(['dist-info-missing', 'dist-info-ambiguous', 'record-unreadable', 'record-unhashed', 'record-hash-mismatch', 'file-missing']);
+const UNSETTLED_READINESS_PIN_REASONS: ReadonlySet<string> = new Set(['dist-info-missing', 'dist-info-ambiguous', 'record-unreadable']);
 const MAX_RECORD_BYTES = 4 * 1024 * 1024;
 const MAX_RECEIPT_BYTES = 16 * 1024;
 const PREVIOUS_BINARY_PREFIX = 'sha256:';
@@ -55,6 +56,10 @@ export function isUnsettledPinReason(reason: string): boolean {
   return UNSETTLED_PIN_REASONS.has(reason);
 }
 
+export function isUnsettledReadinessPinReason(reason: string | null): boolean {
+  return reason !== null && UNSETTLED_READINESS_PIN_REASONS.has(reason);
+}
+
 export function previousBinaryLabel(pinSha256: string): string {
   return `${PREVIOUS_BINARY_PREFIX}${pinSha256.slice(0, PREVIOUS_BINARY_DIGITS)}`;
 }
@@ -67,6 +72,16 @@ export function refreshWarning(backend: BackendKind, from: string, to: string | 
   const target = to ?? (backend === 'antigravity' ? 'the installed binary' : 'the installed version');
   const source = backend === 'antigravity' && from.startsWith(PREVIOUS_BINARY_PREFIX) ? `(previous binary ${from})` : from;
   return `${workerDisplayName(backend)} ${source} -> ${target} was refreshed automatically; no-inference preparation passed; hosted quality has not been re-run on this version.`;
+}
+
+export const WORKER_UPDATED_DURING_RUN = 'worker_updated_during_run';
+
+export function workerUpdatedDuringRunWarning(backend: BackendKind, launched: { version: string; digest: string }, current: { version: string | null; digest: string }): string {
+  const short = (value: string): string => `sha256:${value.slice(0, PREVIOUS_BINARY_DIGITS)}`;
+  const sameVersion = backend === 'antigravity' || current.version === null || current.version === launched.version;
+  const from = backend === 'antigravity' ? short(launched.digest) : sameVersion ? `${launched.version} (RECORD ${short(launched.digest)})` : launched.version;
+  const to = backend === 'antigravity' ? short(current.digest) : sameVersion ? `${current.version ?? launched.version} (RECORD ${short(current.digest)})` : current.version ?? 'unknown';
+  return `${WORKER_UPDATED_DURING_RUN}: ${workerDisplayName(backend)} ${from} -> ${to} was installed while this run was in progress; the run kept the worker it launched with. Check readiness before the next run.`;
 }
 
 export async function installIdentity(target: WorkerPinTarget): Promise<string | null> {

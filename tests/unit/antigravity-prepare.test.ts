@@ -320,6 +320,31 @@ describe('Antigravity preparation probes through a fake agy', () => {
     expect(out.report.profiles.edit.cli_readback_passed).toBe(true);
   }, 90_000);
 
+  it('ends a running agy probe when the preparation is aborted', async () => {
+    const root = await makeRoot();
+    const dataDir = path.join(root, 'data');
+    await mkdir(dataDir, { recursive: true });
+    const pidFile = path.join(root, 'probe.pid');
+    const script = path.join(root, 'agy-hanging-probe');
+    await writeFile(script, `#!/bin/sh\ncase "$*" in *stream-json*) echo $$ > "${pidFile}"; exec sleep 120;; esac\nexec "${process.execPath}" "${fixture}" "$@"\n`);
+    await chmod(script, 0o755);
+    const config = { ...DEFAULT_CONFIG, backend: 'antigravity' as const, allowedWorkspaceRoots: [root], paths: { antigravity: script }, experimental: { antigravity: true } };
+    const controller = new AbortController();
+    const running = runAntigravityPreparationCheck(config, { dataDir, signal: controller.signal });
+    running.catch(() => undefined);
+    let pid = 0;
+    for (let attempt = 0; attempt < 600 && !pid; attempt += 1) {
+      pid = Number(await readFile(pidFile, 'utf8').catch(() => '0'));
+      if (!pid) await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(pid).toBeGreaterThan(0);
+    const abortedAt = Date.now();
+    controller.abort();
+    await expect(running).rejects.toMatchObject({ name: 'AbortError' });
+    expect(Date.now() - abortedAt).toBeLessThan(10_000);
+    expect(() => process.kill(pid, 0)).toThrow();
+  }, 60_000);
+
   it('accepts agy 1.5.9 executable during preparation', async () => {
     const out = await prepareWith('version-1.5.9');
     expect(out.status).toBe('passed');

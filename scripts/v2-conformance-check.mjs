@@ -234,7 +234,19 @@ function withinMs(promise, ms) {
   return Promise.race([promise.then(() => true, () => true), idle(ms).then(() => false)]);
 }
 
+const liveWorkerPids = new Set();
+
+function endWorkersAndExit(exitCode) {
+  for (const pid of liveWorkerPids) {
+    try { process.kill(process.platform === 'win32' ? pid : -pid, 'SIGKILL'); }
+    catch { try { process.kill(pid, 'SIGKILL'); } catch {} }
+  }
+  process.exit(exitCode);
+}
+
 async function main(argv) {
+  process.once('SIGTERM', () => endWorkersAndExit(143));
+  process.once('SIGINT', () => endWorkersAndExit(130));
   const options = parseArguments(argv);
   const startedAt = new Date();
   const dist = await loadDist(options.dist);
@@ -426,6 +438,11 @@ async function main(argv) {
           onStderr: (chunk) => { record.stderr.bytes += Buffer.byteLength(chunk); stderrTail = `${stderrTail}${chunk}`.slice(-STDERR_KEEP_BYTES); },
           onLimit: (stream) => { unexpectedEnd = `${stream} budget exceeded`; }
         });
+        const workerPid = child.child.pid;
+        if (workerPid !== undefined) {
+          liveWorkerPids.add(workerPid);
+          child.done.finally(() => liveWorkerPids.delete(workerPid)).catch(() => undefined);
+        }
         child.done.then((exit) => { if (!record.shutdown) unexpectedEnd = `the app-server exited with ${exit.signal ? `signal ${exit.signal}` : `code ${exit.code ?? 'null'}`}`; }, () => undefined);
         await new Promise((resolve, reject) => {
           if (child.child.pid !== undefined) { resolve(undefined); return; }

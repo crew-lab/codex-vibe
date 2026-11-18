@@ -197,6 +197,22 @@ describe('v2 conformance check against the scripted fake app-server', () => {
     expect(alive(workerPid(fake.workerRecord))).toBe(false);
   }, 60_000);
 
+  it('ends the app-server and its group when it is stopped by SIGTERM mid-check', async () => {
+    const fake = await makeLaunchableFakeVibe(path.join(scratch, 'fake'), { scenario: { name: 'stopped' }, spawnGrandchild: true });
+    const dist = process.env.VIBE_SUPERVISOR_TEST_DIST!;
+    const { spawn } = await import('node:child_process');
+    const check = spawn(process.execPath, [script, '--dist', dist, '--output', path.join(scratch, 'stopped.json'), '--manifest', fake.manifest, '--executable', fake.appServer, '--mode', 'review'], { stdio: 'ignore' });
+    const exited = new Promise<number | null>((resolve) => { check.once('exit', (code) => resolve(code)); });
+    for (let attempt = 0; attempt < 400 && !existsSync(fake.workerRecord); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(existsSync(fake.workerRecord)).toBe(true);
+    check.kill('SIGTERM');
+    expect(await exited).toBe(143);
+    const worker = workerPid(fake.workerRecord); const grandchild = grandchildPid(fake.workerRecord);
+    for (let attempt = 0; attempt < 100 && (alive(worker) || alive(grandchild)); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(alive(worker)).toBe(false);
+    expect(alive(grandchild)).toBe(false);
+  }, 60_000);
+
   it('sends only a labelled placeholder key when asked and never echoes it', async () => {
     const logFile = path.join(scratch, 'fake.log');
     const fake = await makeLaunchableFakeVibe(path.join(scratch, 'fake'), { scenario: { name: 'conformance', log: logFile, harnessSelectionSource: null, runtime: { skills: BUNDLED_SKILL_NAMES.map((name) => ({ name, source: 'plugin', scope: 'builtin', registry: null })) } } });

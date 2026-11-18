@@ -46,7 +46,7 @@ import { bindingMismatchError, dispatchBinding, type DispatchBinding } from "./d
 import { candidateEntrypoint, taskAuthorizeCommand } from "./dispatch-command.js";
 import { candidateIdentity, type PreparationFacts, type PreparationStatus } from "../preparation/evidence.js";
 import { inspectPreparationLock } from "../preparation/lock.js";
-import { decideRefresh, defaultWorkerRefreshDependencies, installIdentity, refreshHold, refreshSummary, refreshWarning, runWorkerRefresh, workerDisplayName, type RefreshAction, type RefreshHold, type RefreshOutcome, type RefreshStage, type WorkerRefreshDependencies } from "../preparation/worker-refresh.js";
+import { decideRefresh, defaultWorkerRefreshDependencies, installIdentity, isUnsettledReadinessPinReason, refreshHold, refreshSummary, refreshWarning, runWorkerRefresh, workerDisplayName, workerUpdatedDuringRunWarning, type RefreshAction, type RefreshHold, type RefreshOutcome, type RefreshStage, type WorkerRefreshDependencies } from "../preparation/worker-refresh.js";
 import { verifyTaskInputs, taskInputManifestSchema, type TaskInputManifest } from "../preparation/task-inputs.js";
 
 function assertPreparedManifestScope(manifest: TaskInputManifest, contract: AcceptanceContract | undefined): void {
@@ -152,9 +152,12 @@ const DEFAULT_REMEDIATION = "Inspect the run status and supervisor diagnostics, 
 const REFRESH_RETRY_SECONDS = 30;
 const UNSETTLED_RETRY_SECONDS = 15;
 const LOCK_POLL_MS = 500;
+const INSTALL_POLL_MS = 1000;
+const WORKER_IDENTITY_DEADLINE_MS = 5000;
 const PREPARE_KIT_PLACEHOLDER = "<kit directory>";
 const MAX_BLOCKER_FINDINGS = 5;
-const PIN_RECHECK_NOTE = "Kept until the installed version or its RECORD changes or the server restarts; after fixing the files without a reinstall, restart the server to re-check.";
+const PIN_FAILURE_MEMORY_MS = 60_000;
+const PIN_RECHECK_NOTE = "Kept for 60 seconds, or until the installed version or its RECORD changes; the next readiness check after that re-pins again, so fixing the files needs no restart.";
 const START_REFRESH_HINT = "A readiness check (vibe_status with workspace and operation) refreshes the worker pin and preparation after a worker update; check readiness, then start again.";
 
 export interface RunManagerOptions {
@@ -165,6 +168,7 @@ export interface RunManagerOptions {
   usageDataDir?: string;
   buildIdentity?: () => Promise<string>;
   workerRefresh?: Partial<WorkerRefreshDependencies>;
+  now?: () => number;
 }
 
 interface ActiveRefresh {
@@ -179,8 +183,10 @@ interface ActiveRefresh {
 
 interface ReadinessEvaluation {
   body: Record<string, unknown>;
-  waitFor?: "refresh" | "lock";
+  waitFor?: ReadinessWait;
 }
+
+type ReadinessWait = "refresh" | "lock" | "install";
 
 type StartOptions = {
   authorizationId: string;
@@ -225,7 +231,8 @@ export class RunManager {
   private readonly refreshDependencies: WorkerRefreshDependencies;
   private workerRefresh: ActiveRefresh | undefined;
   private lastRefresh: { outcome: RefreshOutcome; reported: boolean } | undefined;
-  private pinFailure: { identity: string; error: SupervisorError } | undefined;
+  private pinFailure: { identity: string; error: SupervisorError; at: number } | undefined;
+  private readonly now: () => number;
 
   constructor(private readonly config: SupervisorConfig, private readonly dataDir: string, backends: readonly SupervisorBackend[] = [], preAcquiredLock?: OwnerLock, options: RunManagerOptions = {}) {
     this.ownerLock = preAcquiredLock;
@@ -235,6 +242,7 @@ export class RunManager {
     this.sessionId = options.sessionId;
     this.recoveryWorkerWindowMs = options.recoveryWorkerWindowMs ?? RECOVERY_WORKER_WINDOW_MS;
     this.buildIdentity = options.buildIdentity ?? (() => candidateIdentity());
+    this.now = options.now ?? Date.now;
     this.refreshDependencies = { ...defaultWorkerRefreshDependencies, ...options.workerRefresh };
     this.runRoot = path.join(path.resolve(dataDir), "runs");
     for (const backend of backends) this.backends.set(backend.kind, backend);
@@ -382,7 +390,8 @@ export class RunManager {
       ...started, state: record.state, backend: record.backend, worker_workspace: record.workerWorkspace,
       next_action: this.nextAction(record, record.state),
       ...(record.error ? { error: record.error } : {}),
-      ...(settled ? { result: await this.compactResult(runtime, false, START_ENVELOPE_RESERVE_CHARS) } : {})
+      ...(settled ? { result: await this.compactResult(runtime, false, START_ENVELOPE_RESERVE_CHARS) } : {}),
+      ...await this.retryAuthorization(runtime)
     };
   }
 
@@ -694,13 +703,13 @@ export class RunManager {
     if (this.workerRefresh === state) this.workerRefresh = undefined;
     if (outcome.kind === "not_needed") return;
     this.lastRefresh = { outcome, reported: false };
-    if (outcome.kind === "pin_failed" && outcome.identity) this.pinFailure = { identity: outcome.identity, error: { ...outcome.error, details: { ...outcome.error.details, rechecked_when: PIN_RECHECK_NOTE } } };
+    if (outcome.kind === "pin_failed" && outcome.identity) this.pinFailure = { identity: outcome.identity, at: this.now(), error: { ...outcome.error, details: { ...outcome.error.details, rechecked_when: PIN_RECHECK_NOTE } } };
     if (outcome.kind === "prepared") this.pinFailure = undefined;
     const line = refreshSummary(state.backend, outcome);
     if (line) writeDiagnostic(line);
   }
 
-  private async waitForRefresh(kind: "refresh" | "lock", seconds: number, signal?: AbortSignal): Promise<void> {
+  private async waitForRefresh(kind: ReadinessWait, seconds: number, signal?: AbortSignal): Promise<void> {
     const deadline = Date.now() + seconds * 1000;
     const remaining = (): number => deadline - Date.now();
     const pause = (milliseconds: number): Promise<void> => new Promise<void>((resolve) => {
@@ -723,6 +732,15 @@ export class RunManager {
       } finally {
         if (timer) clearTimeout(timer);
         if (onAbort) signal?.removeEventListener("abort", onAbort);
+      }
+      return;
+    }
+    if (kind === "install") {
+      const backend = this.backends.get(this.activeBackendKind);
+      while (remaining() > 0 && !signal?.aborted && !this.stopping) {
+        await pause(Math.min(INSTALL_POLL_MS, remaining()));
+        const admission = await backend?.admissionCheck?.("readiness").catch(() => undefined);
+        if (!isUnsettledReadinessPinReason(pinReasonOf(pinBlockerOf(admission)))) return;
       }
       return;
     }
@@ -827,7 +845,7 @@ export class RunManager {
     return { body, ...(refresh.waitFor ? { waitFor: refresh.waitFor } : {}) };
   }
 
-  private async readinessRefresh(observed: { firstPass: boolean; earlier: RunManager["lastRefresh"]; policy: CurrentPolicy | undefined; executableFound: boolean; admission: BackendAdmission | undefined; facts: PreparationFacts | undefined; unprepared: SupervisorError | undefined; blockers: SupervisorError[] }): Promise<{ field?: Record<string, unknown>; waitFor?: "refresh" | "lock" }> {
+  private async readinessRefresh(observed: { firstPass: boolean; earlier: RunManager["lastRefresh"]; policy: CurrentPolicy | undefined; executableFound: boolean; admission: BackendAdmission | undefined; facts: PreparationFacts | undefined; unprepared: SupervisorError | undefined; blockers: SupervisorError[] }): Promise<{ field?: Record<string, unknown>; waitFor?: ReadinessWait }> {
     const { blockers, unprepared } = observed;
     const pinBlocker = pinBlockerOf(observed.admission);
     const action = observed.executableFound ? decideRefresh({ backend: this.activeBackendKind, pinReason: pinReasonOf(pinBlocker), facts: observed.facts ?? null }) : "none";
@@ -846,6 +864,11 @@ export class RunManager {
     if (running) {
       repaired(normalizeError(this.refreshingError(running)));
       return { field: { status: "running", stage: running.stage, ...(running.from ? { from: running.from } : {}), ...(running.to ? { to: running.to } : {}), started_at: running.startedAt }, waitFor: "refresh" };
+    }
+    const pinReason = pinReasonOf(pinBlocker);
+    if (observed.executableFound && this.activeBackendKind === "app-server" && isUnsettledReadinessPinReason(pinReason)) {
+      replace(pinBlocker, normalizeError(this.preparingError("install_unsettled", `The ${workerDisplayName(this.activeBackendKind)} install is still changing (${pinReason}); nothing was written. Check readiness again once the update has finished.`, { reason: pinReason }, UNSETTLED_RETRY_SECONDS)));
+      return { field: { status: "install_unsettled", reason: pinReason }, waitFor: "install" };
     }
     if (action === "none") {
       this.annotatePreparationBlocker(unprepared, observed.facts, replace);
@@ -876,7 +899,7 @@ export class RunManager {
       if (!pinTarget) return {};
       if (this.pinFailure) {
         const identity = await installIdentity(pinTarget);
-        if (identity !== null && identity === this.pinFailure.identity) {
+        if (identity !== null && identity === this.pinFailure.identity && this.now() - this.pinFailure.at < PIN_FAILURE_MEMORY_MS) {
           replace(pinBlocker, this.pinFailure.error);
           return { field: { status: "refused", action } };
         }
@@ -928,7 +951,8 @@ export class RunManager {
       ...(runtime.record.sessionMode === "correctable" ? { candidate_revision: runtime.record.candidateRevision ?? null, patch_sha256: runtime.record.candidatePatchSha256 ?? null, max_corrections: runtime.record.maxCorrections ?? 0 } : {}),
       next_action: this.nextAction(runtime.record, runtime.record.state, nextAfterSeq),
       ...(runtime.record.error ? { error: runtime.record.error } : {}),
-      ...(runtime.storageDegraded ? { warnings: [`Run state could not be saved (${runtime.storageDegraded.code} in ${runtime.storageDegraded.directory}); progress recorded since may be lost if the supervisor restarts.`] } : {})
+      ...(runtime.storageDegraded ? { warnings: [`Run state could not be saved (${runtime.storageDegraded.code} in ${runtime.storageDegraded.directory}); progress recorded since may be lost if the supervisor restarts.`] } : {}),
+      ...await this.retryAuthorization(runtime)
     };
     if (!SETTLED_RESULT_STATES.has(runtime.record.state)) return body;
     return { ...body, result: await this.compactResult(runtime, false, JSON.stringify(body).length + STATUS_RESULT_RESERVE_CHARS) };
@@ -940,9 +964,10 @@ export class RunManager {
     this.assertLogReadable(runtime);
     await this.flushQuietly(runtime);
     const result = record.result;
-    if (input.detail === "compact") return this.compactResult(runtime, input.include_transcript);
+    if (input.detail === "compact") return { ...await this.compactResult(runtime, input.include_transcript), ...await this.retryAuthorization(runtime) };
     const next_action = this.nextAction(record, record.state);
-    if (!result) return { supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: record.state, backend: record.backend, summary: "Run has not produced a result yet.", artifacts: [], changed_files: [], warnings: [], ...(record.error ? { error: record.error } : {}), next_action };
+    const retry = await this.retryAuthorization(runtime);
+    if (!result) return { supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: record.state, backend: record.backend, summary: "Run has not produced a result yet.", artifacts: [], changed_files: [], warnings: [], ...(record.error ? { error: record.error } : {}), next_action, ...retry };
     const output: Record<string, unknown> = {
       schema_version: 1, supervisor_version: record.supervisorVersion ?? null, run_id: record.runId, state: record.state, backend: record.backend,
       ...(record.executionState ? { execution_state: record.executionState } : {}),
@@ -954,7 +979,8 @@ export class RunManager {
       workspace: { source: record.sourceWorkspace, worker: record.workerWorkspace },
       artifacts: (result.artifacts ?? []).map(artifactToWire),
       changed_files: result.changedFiles ?? [], ...(record.usage ? { usage: usageToWire(record.usage) } : {}), warnings: result.warnings ?? [], ...(result.integrity ? { integrity: integrityToWire(result.integrity) } : {}), ...(result.contextReads ? { context_reads: contextReadsToWire(result.contextReads) } : {}), answer_present: result.answerPresent === true, ...(record.error ? { error: record.error } : {}),
-      next_action
+      next_action,
+      ...retry
     };
     if (input.include_transcript) {
       const transcriptPath = path.join(runtime.directory, "transcript.md");
@@ -1792,8 +1818,20 @@ export class RunManager {
     };
   }
 
+  private async workerUpdatedWarning(runtime: Runtime): Promise<string | undefined> {
+    const launched = runtime.record.pin;
+    const backend = runtime.backend ?? this.backends.get(runtime.record.backend);
+    if (!launched || !backend?.workerIdentity) return undefined;
+    try {
+      const current = await withDeadline(backend.workerIdentity(), WORKER_IDENTITY_DEADLINE_MS, "Worker identity re-read exceeded its deadline.");
+      if (current.digest === launched.recordSha256 && (current.version === null || current.version === launched.vibeVersion)) return undefined;
+      return workerUpdatedDuringRunWarning(runtime.record.backend, { version: launched.vibeVersion, digest: launched.recordSha256 }, current);
+    } catch { return undefined; }
+  }
+
   private async writeArtifacts(runtime: Runtime, resultState: RunState): Promise<void> {
     await this.ensureLoaded(runtime);
+    const workerUpdated = await this.workerUpdatedWarning(runtime);
     const artifactDir = path.join(runtime.directory, "artifacts");
     await createPrivateDir(artifactDir);
     let patchInfo: { patchPath: string; statPath: string; sha256: string; bytes: number; changedFiles: string[] } | undefined;
@@ -1869,6 +1907,7 @@ export class RunManager {
     if (contextReads) addWarning(contextReadsWarning(contextReads));
     if (computedReads === "undetermined") addWarning(READS_UNDETERMINED_WARNING);
     addWarning(runtime.refreshWarning);
+    addWarning(workerUpdated);
     runtime.record.result = {
       ...(stopReason ? { stopReason } : {}),
       summary,
@@ -2152,7 +2191,20 @@ export class RunManager {
     await this.serial(runtime, () => this.settle(runtime, outcome));
   }
 
+  private neverSent(record: RunRecord): boolean {
+    return record.executionState === "not_started" && (record.state === "failed" || record.state === "cancelled");
+  }
+
+  private async retryAuthorization(runtime: Runtime): Promise<{ task_authorize?: Awaited<ReturnType<typeof taskAuthorizeCommand>> }> {
+    const record = runtime.record;
+    if (!this.neverSent(record) || !this.policy.configPath) return {};
+    const baseRef = record.mode === "edit" ? record.worktree?.baseRef ?? runtime.baseRef ?? "HEAD" : undefined;
+    try { return { task_authorize: await taskAuthorizeCommand({ configPath: this.policy.configPath, operation: record.mode, workspace: record.sourceWorkspace, baseRef }) }; }
+    catch { return {}; }
+  }
+
   private nextAction(record: RunRecord, state: RunState, afterSeq?: number): string {
+    if (this.neverSent(record) && record.state === state) return NOT_SENT_NEXT_ACTION;
     switch (state) {
       case "awaiting_validation": return "This historical correction record cannot continue; inspect its preserved artifacts and close it.";
       case "completed": return "Check stop_reason and warnings before trusting the result; call vibe_close when done.";
@@ -2174,6 +2226,7 @@ export class RunManager {
   }
 }
 
+const NOT_SENT_NEXT_ACTION = "The task was never sent to the worker, so nothing ran. Read error and fix its cause, then authorize the same request again (task_authorize, when present, is the command for this run's workspace, operation and base) and start it with the new authorization_id and attempt_id; this run's grant stays spent. Call vibe_close on this run when done.";
 const NOT_STARTED_SUMMARY = "The worker never started, so the run never reached inference; read error for the launch failure.";
 
 function launchFailure(error: SupervisorError): SupervisorError {

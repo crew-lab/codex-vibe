@@ -755,8 +755,9 @@ function killProcessGroup(child: ChildProcess): void {
   }
 }
 
-function runAgy(executablePath: string, cwd: string, env: NodeJS.ProcessEnv, skipPermissions: boolean): Promise<AgyRunOutput> {
-  return new Promise((resolve) => {
+function runAgy(executablePath: string, cwd: string, env: NodeJS.ProcessEnv, skipPermissions: boolean, abortSignal?: AbortSignal): Promise<AgyRunOutput> {
+  abortSignal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
     const stderrCapture = openStderrCapture(env.TMPDIR);
     const child = spawn(
       executablePath,
@@ -770,6 +771,8 @@ function runAgy(executablePath: string, cwd: string, env: NodeJS.ProcessEnv, ski
       timedOut = true;
       killProcessGroup(child);
     }, PROBE_RUN_TIMEOUT_MS);
+    const abort = (): void => { killProcessGroup(child); };
+    abortSignal?.addEventListener('abort', abort, { once: true });
     child.stdout?.on('data', (chunk: Buffer) => {
       size += chunk.length;
       if (size <= MAX_STDOUT_BYTES) chunks.push(Buffer.from(chunk));
@@ -779,7 +782,10 @@ function runAgy(executablePath: string, cwd: string, env: NodeJS.ProcessEnv, ski
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve({ exitCode, timedOut, stdout, signal, stderr: readStderrTail(stderrCapture) });
+      abortSignal?.removeEventListener('abort', abort);
+      const stderr = readStderrTail(stderrCapture);
+      if (abortSignal?.aborted) { reject(abortSignal.reason); return; }
+      resolve({ exitCode, timedOut, stdout, signal, stderr });
     };
     child.once('error', () => settle(null, null, ''));
     child.once('close', (code, signal) => {
@@ -819,6 +825,7 @@ interface ProbeContext {
   hookScript: string;
   skipPermissions: boolean;
   agyVersion: string | null;
+  signal?: AbortSignal | undefined;
 }
 
 interface ToolProbeRun {
@@ -860,7 +867,7 @@ async function runToolProbe(
   const run = `probe-${label}`;
   context.proxy.setRun(run);
   context.model.beginRun(run, nonce, probePath);
-  const output = await runAgy(context.executablePath, workspace, probeEnvironment(childHome, childTmp, context.proxy.port, context.model.url, neutralizerBin), context.skipPermissions);
+  const output = await runAgy(context.executablePath, workspace, probeEnvironment(childHome, childTmp, context.proxy.port, context.model.url, neutralizerBin), context.skipPermissions, context.signal);
   const requests = context.model.requests.filter((request) => request.run === run);
   const probeTool = context.model.issuedTool(run);
 
@@ -1015,6 +1022,7 @@ export async function runAgyProbes(options: {
   readback: SlashReadback;
   skipPermissions?: boolean;
   agyVersion?: string | null;
+  signal?: AbortSignal | undefined;
 }): Promise<{ report: AgyProbeReport; findings: ProbeFinding[] }> {
   const findings: ProbeFinding[] = [];
   const root = path.join(options.root, 'agy-probes');
@@ -1022,7 +1030,7 @@ export async function runAgyProbes(options: {
   const hookScript = path.join(root, 'probe-hook.mjs');
   await writeFile(hookScript, PROBE_HOOK_SCRIPT, { mode: 0o700 });
   const model = await startScriptedModelServer();
-  const context: ProbeContext = { executablePath: options.executablePath, root, proxy: options.proxy, model, hookScript, skipPermissions: options.skipPermissions === true, agyVersion: options.agyVersion ?? null };
+  const context: ProbeContext = { executablePath: options.executablePath, root, proxy: options.proxy, model, hookScript, skipPermissions: options.skipPermissions === true, agyVersion: options.agyVersion ?? null, signal: options.signal };
   const report = notRunProbeReport();
 
   try {
@@ -1066,7 +1074,7 @@ export async function runAgyProbes(options: {
     await writeIsolatedSettings(egressHome, 'review', egressWorkspace, [], { modelProvider: 'gemini' });
     await writeAntigravityPreToolHook(egressHome, { mode: 'review', workerWorkspace: egressWorkspace, excludedAnchors: [] });
     options.proxy.setRun('egress-probe');
-    const egressOutput = await runAgy(options.executablePath, egressWorkspace, probeEnvironment(egressHome, egressTmp, options.proxy.port, null, neutralizerBin), options.skipPermissions === true);
+    const egressOutput = await runAgy(options.executablePath, egressWorkspace, probeEnvironment(egressHome, egressTmp, options.proxy.port, null, neutralizerBin), options.skipPermissions === true, options.signal);
     const egressAttempts = options.proxy.attemptsFor('egress-probe');
     const proxyEvaluation = evaluateProxyProbe(egressAttempts.map((attempt) => attempt.host));
     if (egressOutput.timedOut) {

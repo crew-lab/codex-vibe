@@ -9,7 +9,7 @@ import type {
   AdmissionStage, BackendAdmission, BackendCapabilities, BackendRunHandle, BackendStartResult, PinIdentity,
   StartRunInput, SupervisorBackend, BackendCallbacks, RuntimeCheck, UsageState, SupervisorError
 } from '../contracts.js';
-import { supervisorError, type SupervisorConfig } from '../contracts.js';
+import { supervisorError, type SupervisorConfig, type WorkerIdentity } from '../contracts.js';
 import { checkPreparation, readPreparationFacts, type PreparationFacts, type PreparationStatus } from '../preparation/evidence.js';
 import { spawnManaged } from '../process/managed.js';
 import { startReaper, type ReaperHandle } from '../process/reaper.js';
@@ -768,6 +768,10 @@ export class AntigravityBackend implements SupervisorBackend {
 
   async workerVersion(): Promise<string | null> {
     return this.probedVersion;
+  }
+
+  async workerIdentity(): Promise<WorkerIdentity> {
+    return { version: null, digest: digest(await readFile(await resolveExecutableFile(executable(this.config)))) };
   }
 
   async admissionCheck(_stage: AdmissionStage): Promise<BackendAdmission> {

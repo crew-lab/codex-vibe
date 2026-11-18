@@ -91,7 +91,7 @@ async function vibeBox(options: { versions: string[]; initial: string; minimum?:
   const calls: RunPreparationInput[] = [];
   const pins = { count: 0 };
   let managerCount = 0;
-  const manager = (settings: { script?: keyof typeof scripts; hold?: Gate; config?: SupervisorConfig } = {}): RunManager => {
+  const manager = (settings: { script?: keyof typeof scripts; hold?: Gate; config?: SupervisorConfig; now?: () => number } = {}): RunManager => {
     const bootConfig = settings.config ?? config;
     const backend = new AppServerBackend(bootConfig, {
       dataDir: state,
@@ -101,7 +101,7 @@ async function vibeBox(options: { versions: string[]; initial: string; minimum?:
     });
     managerCount += 1;
     const created = new RunManager(bootConfig, path.join(root, `data-${managerCount}`), [backend], undefined, {
-      policy: selectedConfigPolicy(configPath), preparationDataDir: state,
+      policy: selectedConfigPolicy(configPath), preparationDataDir: state, ...(settings.now ? { now: settings.now } : {}),
       workerRefresh: { generatePinManifest: async (pinOptions) => { pins.count += 1; return generatePinManifest(pinOptions); }, runPreparation: async (input) => { calls.push(input); await settings.hold?.promise; return runPreparation({ ...input, conformanceScript: scripts[settings.script ?? 'passing'] }); } }
     });
     managers.push(created);
@@ -298,38 +298,80 @@ describe('Vibe worker refresh at readiness', () => {
     expect(box.calls).toHaveLength(0);
   }, 60_000);
 
-  it('remembers a refused re-pin against the install and does not hash it again', async () => {
+  it('remembers a refused re-pin against the install for a minute, then heals without a restart', async () => {
     const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2' });
-    const manager = box.manager();
+    let clock = Date.now();
+    const manager = box.manager({ now: () => clock });
     const extra = path.join(box.sitePackages('3.1.3'), 'vibe', 'planted.py');
     await writeFile(extra, 'print("unlisted")\n');
     const manifestBefore = await readFile(box.manifest);
     await box.swap('3.1.3');
     const refused = await readiness(manager, box.workspace, 30);
     expect(codes(refused)).toEqual(['VSUP_VIBE_VERSION_UNSUPPORTED']);
-    expect(refused.blockers[0]).toMatchObject({ retryable: false, details: { reason: 'file-extra', rechecked_when: expect.stringMatching(/restart/) } });
+    expect(refused.blockers[0]).toMatchObject({ retryable: false, details: { reason: 'file-extra', rechecked_when: expect.stringMatching(/60 seconds.*no restart/) } });
     expect(box.pins.count).toBe(1);
     const again = await readiness(manager, box.workspace, 30);
     expect(again.blockers[0]).toMatchObject({ details: { reason: 'file-extra' } });
     expect(box.pins.count).toBe(1);
     expect(box.calls).toHaveLength(0);
     expect(await readFile(box.manifest)).toEqual(manifestBefore);
+    await rm(extra);
+    expect(codes(await readiness(manager, box.workspace, 30))).toEqual(['VSUP_VIBE_VERSION_UNSUPPORTED']);
+    expect(box.pins.count).toBe(1);
+    clock += 61_000;
+    expect(await readiness(manager, box.workspace, 60)).toMatchObject({ eligible: true, worker: { refreshed: { from: '3.1.2' } } });
+    expect(box.pins.count).toBe(2);
   }, 60_000);
 
-  it('shows a re-pin refusal it cannot key to the install once, then tries again', async () => {
+  it('treats a RECORD not yet written during the re-pin as an install still changing', async () => {
     const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2' });
     const manager = box.manager();
     const record = path.join(box.environments['3.1.3']!.directory, 'tools', 'mistral-vibe', 'lib', 'python3.12', 'site-packages', 'mistral_vibe-3.1.3.dist-info', 'RECORD');
     const saved = await readFile(record);
     await rm(record);
     await box.swap('3.1.3');
-    const refused = await readiness(manager, box.workspace, 30);
-    expect(codes(refused)).toEqual(['VSUP_VIBE_VERSION_UNSUPPORTED']);
-    expect(refused.blockers[0]).toMatchObject({ details: { reason: 'record-unreadable' } });
+    const unsettled = await readiness(manager, box.workspace, 30);
+    expect(codes(unsettled)).toEqual(['VSUP_PREPARING']);
+    expect(unsettled.blockers[0]).toMatchObject({ retryable: true, details: { stage: 'install_unsettled', reason: 'record-unreadable' } });
     expect(box.pins.count).toBe(1);
     await writeFile(record, saved);
     expect(await readiness(manager, box.workspace, 60)).toMatchObject({ eligible: true });
     expect(box.pins.count).toBe(2);
+  }, 60_000);
+
+  it('reports a missing dist-info at readiness as an install still changing and writes nothing', async () => {
+    const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2' });
+    const manager = box.manager();
+    const distInfo = path.join(box.sitePackages('3.1.2'), 'mistral_vibe-3.1.2.dist-info');
+    const aside = path.join(box.root, 'dist-info-aside');
+    const manifestBefore = await readFile(box.manifest);
+    await rename(distInfo, aside);
+    const unsettled = await readiness(manager, box.workspace);
+    expect(codes(unsettled)).toEqual(['VSUP_PREPARING']);
+    expect(unsettled.blockers[0]).toMatchObject({ retryable: true, details: { stage: 'install_unsettled', reason: 'dist-info-missing' } });
+    expect(unsettled.worker_refresh).toMatchObject({ status: 'install_unsettled', reason: 'dist-info-missing' });
+    expect(await readFile(box.manifest)).toEqual(manifestBefore);
+    await rename(aside, distInfo);
+    expect(await readiness(manager, box.workspace, 5)).toMatchObject({ eligible: true });
+    expect(box.pins.count).toBe(0);
+    expect(await readFile(box.manifest)).toEqual(manifestBefore);
+    await rename(distInfo, aside);
+    expect(codes(await readiness(manager, box.workspace))).toEqual(['VSUP_PREPARING']);
+    await box.swap('3.1.3');
+    expect(await readiness(manager, box.workspace, 60)).toMatchObject({ eligible: true, worker: { version: '3.1.3', refreshed: { from: '3.1.2' } } });
+    expect(box.pins.count).toBe(1);
+  }, 60_000);
+
+  it('waits through a dist-info that reappears at the same version without re-pinning', async () => {
+    const box = await vibeBox({ versions: ['3.1.2'], initial: '3.1.2' });
+    const manager = box.manager();
+    const distInfo = path.join(box.sitePackages('3.1.2'), 'mistral_vibe-3.1.2.dist-info');
+    const aside = path.join(box.root, 'dist-info-aside');
+    await rename(distInfo, aside);
+    setTimeout(() => { void rename(aside, distInfo); }, 300);
+    expect(await readiness(manager, box.workspace, 30)).toMatchObject({ eligible: true });
+    expect(box.pins.count).toBe(0);
+    expect(box.calls).toHaveLength(0);
   }, 60_000);
 
   it('gives the exact prepare check command for a missing receipt and starts nothing', async () => {
@@ -341,6 +383,52 @@ describe('Vibe worker refresh at readiness', () => {
     expect(report.blockers[0]!.details).toMatchObject({ preparation: { status: 'missing' } });
     expect(command.endsWith(` prepare check --kit <kit directory> --config ${box.configPath}`)).toBe(true);
     expect(box.calls).toHaveLength(0);
+  }, 60_000);
+});
+
+describe('worker changes around a run', () => {
+  it('warns when the worker was updated while a run was in progress, and not otherwise', async () => {
+    const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2' });
+    const manager = box.manager();
+    await writeFile(path.join(box.environments['3.1.2']!.directory, 'scenario.json'), JSON.stringify(scenario('3.1.2', [{ op: 'hold' }])));
+    const steady = await (await grant(manager, box.workspace, 0))();
+    await vi.waitFor(async () => expect((await manager.status({ run_id: steady.run_id })).state).toBe('running'), { timeout: 10_000 });
+    await manager.close({ run_id: steady.run_id });
+    const steadyResult = await manager.result({ run_id: steady.run_id, detail: 'full' }) as { warnings: string[] };
+    expect(steadyResult.warnings.filter((warning) => warning.startsWith('worker_updated_during_run'))).toEqual([]);
+    const updated = await (await grant(manager, box.workspace, 0))();
+    await vi.waitFor(async () => expect((await manager.status({ run_id: updated.run_id })).state).toBe('running'), { timeout: 10_000 });
+    await box.swap('3.1.3');
+    await manager.close({ run_id: updated.run_id });
+    const result = await manager.result({ run_id: updated.run_id, detail: 'full' }) as { state: string; warnings: string[] };
+    expect(result.warnings.filter((warning) => warning.startsWith('worker_updated_during_run'))).toEqual([expect.stringMatching(/^worker_updated_during_run: Vibe 3\.1\.2 -> 3\.1\.3 was installed while this run was in progress/)]);
+    expect(result.state).not.toBe('completed');
+  }, 60_000);
+
+  it('offers the authorize command again for a launch that never sent the task', async () => {
+    const box = await vibeBox({ versions: ['3.1.2'], initial: '3.1.2' });
+    const manager = box.manager();
+    await writeFile(path.join(box.environments['3.1.2']!.directory, 'scenario.json'), JSON.stringify({ name: 'startup-failure', serverVersion: '3.1.2', startup: { exitCode: 1, stderr: 'Error: the Unified Harness runtime could not be loaded' } }));
+    const finished = await (await grant(manager, box.workspace))();
+    expect(finished).toMatchObject({ state: 'failed', result: { execution_state: 'not_started' } });
+    const status = await manager.status({ run_id: finished.run_id }) as { next_action: string; task_authorize?: { argv: string[]; request_template: { operation: string; request: { cwd: string } } } };
+    expect(status.next_action).toMatch(/never sent to the worker.*authorize the same request again/);
+    expect(status.task_authorize?.argv.slice(-2)).toEqual(['--config', box.configPath]);
+    expect(status.task_authorize?.request_template).toMatchObject({ operation: 'review', request: { cwd: box.workspace } });
+    const full = await manager.result({ run_id: finished.run_id, detail: 'full' }) as { next_action: string; task_authorize?: { argv: string[] } };
+    expect(full.next_action).toBe(status.next_action);
+    expect(full.task_authorize?.argv.at(-1)).toBe(box.configPath);
+    const compact = await manager.result({ run_id: finished.run_id }) as { task_authorize?: { argv: string[] } };
+    expect(compact.task_authorize?.argv.at(-1)).toBe(box.configPath);
+  }, 60_000);
+
+  it('keeps the ordinary next action for a run that did start', async () => {
+    const box = await vibeBox({ versions: ['3.1.2'], initial: '3.1.2' });
+    const manager = box.manager();
+    const finished = await (await grant(manager, box.workspace))();
+    const status = await manager.status({ run_id: finished.run_id }) as { next_action: string; task_authorize?: unknown };
+    expect(status.next_action).not.toMatch(/never sent/);
+    expect(status.task_authorize).toBeUndefined();
   }, 60_000);
 });
 

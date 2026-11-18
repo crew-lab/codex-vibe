@@ -340,6 +340,11 @@ export interface BackendAdmission {
   blockers: SupervisorError[];
 }
 
+export interface WorkerIdentity {
+  version: string | null;
+  digest: string;
+}
+
 export interface WorkerPinTarget {
   executable: string;
   manifestPath: string;
@@ -352,6 +357,7 @@ export interface SupervisorBackend {
   preparationCheck?(): Promise<import("./preparation/evidence.js").PreparationStatus>;
   preparationFacts?(): Promise<import("./preparation/evidence.js").PreparationFacts>;
   workerVersion?(): Promise<string | null>;
+  workerIdentity?(): Promise<WorkerIdentity>;
   pinTarget?(): Promise<WorkerPinTarget>;
   readonly kind: BackendKind;
   probe(): Promise<BackendCapabilities>;
