@@ -96,6 +96,7 @@ async function runVibePreparation(input: RunPreparationInput, provenance: Prepar
     const timeoutMs = input.conformanceTimeoutMs ?? CONFORMANCE_TIMEOUT_MS;
     const exit = await runConformanceChild(argv, temporary, input.stderr, signal, timeoutMs);
     signal?.throwIfAborted();
+    if (exit.signal && !exit.timedOut) throw new Error(`The no-inference check was ended by ${exit.signal} from outside the supervisor; it did not finish and is left as interrupted.`);
     const produced = exit.timedOut ? undefined : await readConformanceReport(output);
     const bytes = produced?.bytes ?? syntheticReport(exit.timedOut
       ? { code: 'conformance_timeout', message: `The no-inference check did not finish within ${Math.round(timeoutMs / 1000)} seconds and was stopped.` }

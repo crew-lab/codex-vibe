@@ -153,6 +153,9 @@ const DEFAULT_REMEDIATION = "Inspect the run status and supervisor diagnostics, 
 const REFRESH_RETRY_SECONDS = 30;
 const UNSETTLED_RETRY_SECONDS = 15;
 const UNSETTLED_LIMIT_MS = 120_000;
+const BOOT_BUILD_ATTEMPTS = 3;
+const BOOT_BUILD_RETRY_MS = 200;
+const UNKNOWN_BUILD_WARNING = "The identity of the running supervisor build could not be read when this server started, so a replaced build cannot be detected and expected_candidate cannot match; restart the server to restore the check.";
 const LOCK_POLL_MS = 500;
 const INSTALL_POLL_MS = 1000;
 const WORKER_IDENTITY_DEADLINE_MS = 5000;
@@ -160,6 +163,7 @@ const PREPARE_KIT_PLACEHOLDER = "<kit directory>";
 const MAX_BLOCKER_FINDINGS = 5;
 const PIN_FAILURE_MEMORY_MS = 60_000;
 const PIN_RECHECK_NOTE = "Kept for 60 seconds, or until the installed version or its RECORD changes; the next readiness check after that re-pins again, so fixing the files needs no restart.";
+const START_UNSETTLED_HINT = "The worker install is incomplete. A readiness check (vibe_status with workspace and operation) reports whether it is still updating or looks damaged; check readiness before starting again.";
 const START_REFRESH_HINT = "A readiness check (vibe_status with workspace and operation) refreshes the worker pin and preparation after a worker update; check readiness, then start again.";
 
 export interface RunManagerOptions {
@@ -181,6 +185,7 @@ interface ActiveRefresh {
   startedAt: string;
   controller: AbortController;
   done: Promise<void>;
+  recheck: boolean;
 }
 
 interface ReadinessEvaluation {
@@ -234,7 +239,7 @@ export class RunManager {
   private workerRefresh: ActiveRefresh | undefined;
   private lastRefresh: { outcome: RefreshOutcome; reported: boolean } | undefined;
   private pinFailure: { identity: string; error: SupervisorError; at: number } | undefined;
-  private unsettled: { reason: string; identity: string | null; files: Record<string, unknown>; since: number; checkedAt: number } | undefined;
+  private unsettled: { reason: string; identity: string | null; files: Record<string, unknown>; since: number; checkedAt: number; seenAt: number } | undefined;
   private readonly now: () => number;
 
   constructor(private readonly config: SupervisorConfig, private readonly dataDir: string, backends: readonly SupervisorBackend[] = [], preAcquiredLock?: OwnerLock, options: RunManagerOptions = {}) {
@@ -269,7 +274,7 @@ export class RunManager {
     await createPrivateDir(this.dataDir);
     await createPrivateDir(this.runRoot);
     this.ownerLock ??= await acquireOwnerLock(this.dataDir);
-    this.bootBuild = await this.buildIdentity().catch(() => undefined);
+    this.bootBuild = await this.bootBuildIdentity();
     if (this.backends.size === 0) await this.loadDefaultBackends();
     const entries = await readdir(this.runRoot, { withFileTypes: true });
     for (const entry of entries) {
@@ -490,25 +495,32 @@ export class RunManager {
     }
   }
 
-  private async currentPolicy(): Promise<CurrentPolicy> {
+  private async bootBuildIdentity(): Promise<string | undefined> {
+    for (let attempt = 1; attempt <= BOOT_BUILD_ATTEMPTS; attempt += 1) {
+      const identity = await this.buildIdentity().catch(() => undefined);
+      if (identity !== undefined || attempt === BOOT_BUILD_ATTEMPTS) return identity;
+      await new Promise((resolve) => setTimeout(resolve, BOOT_BUILD_RETRY_MS));
+    }
+    return undefined;
+  }
+
+  private async currentPolicy(): Promise<ServingPolicy> {
     let policy: CurrentPolicy;
     try { policy = await readCurrentPolicy(this.policy, this.config); }
     catch (error) {
       const detail = supervisorErrorOf(error)?.message ?? (error instanceof Error ? error.message : String(error));
       throw codedError("VSUP_CONFIG_INVALID", `The selected configuration ${this.policy.configPath ?? "(in-memory)"} could not be reread and validated; no earlier snapshot or default is used. ${detail}`.slice(0, 2000), { configPath: this.policy.configPath });
     }
+    if (this.bootBuild === undefined) return { ...policy, buildUnreadable: false };
     const current = await this.buildIdentity().catch(() => undefined);
-    if (this.bootBuild === undefined) {
-      this.bootBuild = current;
-      return policy;
-    }
-    if (current === undefined) return { ...policy, bootDrift: [...policy.bootDrift, "build_unreadable"] };
-    return current === this.bootBuild ? policy : { ...policy, bootDrift: [...policy.bootDrift, "build"] };
+    if (current === undefined) return { ...policy, buildUnreadable: true };
+    return current === this.bootBuild ? { ...policy, buildUnreadable: false } : { ...policy, bootDrift: [...policy.bootDrift, "build"], buildUnreadable: false };
   }
 
   private async admissionPolicy(): Promise<CurrentPolicy> {
     const policy = await this.currentPolicy();
     if (policy.bootDrift.length) throw restartRequired(policy.bootDrift);
+    if (policy.buildUnreadable) throw buildUnreadable({ attempt_consumed: false });
     return policy;
   }
 
@@ -638,8 +650,10 @@ export class RunManager {
     backend?.releaseAdmission?.();
     const workerVersion = await backend?.workerVersion?.().catch(() => null) ?? null;
     const action = decideRefresh({ backend: this.activeBackendKind, pinReason: pinReasonOf(pinBlocker), facts: facts ?? null, workerVersion });
-    const repairable = (blocker === pinBlocker && (action === "repin" || isUnsettledReadinessPinReason(pinReasonOf(pinBlocker)))) || (action === "prepare" && blocker === unprepared);
-    throw codedError(blocker.code, blocker.message, { ...blocker.details, ...(repairable ? { worker_refresh: START_REFRESH_HINT } : {}), attempt_consumed: false });
+    const unsettled = blocker === pinBlocker && isUnsettledReadinessPinReason(pinReasonOf(pinBlocker));
+    const repairable = (blocker === pinBlocker && action === "repin") || (action === "prepare" && blocker === unprepared);
+    const hint = unsettled ? START_UNSETTLED_HINT : repairable ? START_REFRESH_HINT : undefined;
+    throw codedError(blocker.code, blocker.message, { ...blocker.details, ...(hint ? { worker_refresh: hint } : {}), attempt_consumed: false });
   }
 
   private async refreshWarningFor(facts: PreparationFacts | undefined): Promise<string | undefined> {
@@ -664,7 +678,7 @@ export class RunManager {
     return [process.execPath, candidateEntrypoint, "prepare", "check", "--kit", PREPARE_KIT_PLACEHOLDER, "--config", this.policy.configPath ?? "<config path>"].map((word) => word.startsWith("<") || /^[A-Za-z0-9_.,:=+@%/-]+$/.test(word) ? word : shellQuote(word)).join(" ");
   }
 
-  private async beginRefresh(action: RefreshAction, pinTarget: import("../contracts.js").WorkerPinTarget | undefined): Promise<{ stage: RefreshStage; from?: string | undefined; to?: string | undefined; ownerPid?: number; error?: SupervisorError } | undefined> {
+  private async beginRefresh(action: RefreshAction, pinTarget: import("../contracts.js").WorkerPinTarget | undefined, recheck = false): Promise<{ stage: RefreshStage; from?: string | undefined; to?: string | undefined; ownerPid?: number; error?: SupervisorError } | undefined> {
     if (this.workerRefresh) return this.workerRefresh;
     if (this.stopping || this.activeSlots > 0 || this.startPreparations.size > 0 || !this.policy.configPath) return undefined;
     const configPath = this.policy.configPath;
@@ -672,7 +686,7 @@ export class RunManager {
     const backend = this.backends.get(kind);
     if (!backend) return undefined;
     let finish!: () => void;
-    const state: ActiveRefresh = { backend: kind, stage: action === "repin" ? "pinning" : "preparing", startedAt: new Date().toISOString(), controller: new AbortController(), done: new Promise<void>((resolve) => { finish = resolve; }) };
+    const state: ActiveRefresh = { backend: kind, stage: action === "repin" ? "pinning" : "preparing", startedAt: new Date().toISOString(), controller: new AbortController(), done: new Promise<void>((resolve) => { finish = resolve; }), recheck };
     this.workerRefresh = state;
     let lock: OwnerLock;
     try { lock = await this.refreshDependencies.acquireLock(this.config, this.preparationDataDir ?? path.resolve(this.dataDir)); }
@@ -775,10 +789,11 @@ export class RunManager {
     const blockers: SupervisorError[] = [];
     const block = (error: unknown): void => { blockers.push(supervisorErrorOf(error) ?? normalizeError(error)); };
     if (this.stopping) blockers.push(supervisorError("VSUP_INVALID_STATE", "The supervisor is shutting down."));
-    let policy: CurrentPolicy | undefined;
+    let policy: ServingPolicy | undefined;
     try { policy = await withDeadline(this.currentPolicy(), deadline - Date.now(), "Configuration reread exceeded its preparation deadline."); }
     catch (error) { block(error); }
     if (policy?.bootDrift.length) block(restartRequired(policy.bootDrift));
+    if (policy?.buildUnreadable) block(buildUnreadable());
     const baseRef = input.operation === "edit" ? input.base_ref ?? "HEAD" : undefined;
     let workspace: string | null = null;
     let baseCommit: string | null = null;
@@ -814,7 +829,7 @@ export class RunManager {
     const taskAuthorize = this.policy.configPath ? await taskAuthorizeCommand({ configPath: this.policy.configPath, operation: input.operation, workspace: workspace ?? input.workspace, baseRef }) : null;
     const limits = this.dispatchLimits(input.operation);
     const refreshed = refreshedFacts(facts);
-    const warnings = refreshed ? [refreshWarning(this.activeBackendKind, refreshed.from, workerVersion)] : [];
+    const warnings = [...(refreshed ? [refreshWarning(this.activeBackendKind, refreshed.from, workerVersion)] : []), ...(this.bootBuild === undefined ? [UNKNOWN_BUILD_WARNING] : [])];
     const body = {
       server_version: APP_VERSION,
       supervisor_runtime: { node: process.version, executable: await realpath(process.execPath), platform: process.platform, arch: process.arch },
@@ -855,7 +870,7 @@ export class RunManager {
     return { body, ...(refresh.waitFor ? { waitFor: refresh.waitFor } : {}) };
   }
 
-  private async readinessRefresh(observed: { firstPass: boolean; earlier: RunManager["lastRefresh"]; policy: CurrentPolicy | undefined; executableFound: boolean; admission: BackendAdmission | undefined; facts: PreparationFacts | undefined; unprepared: SupervisorError | undefined; blockers: SupervisorError[]; workerVersion: string | null }): Promise<{ field?: Record<string, unknown>; waitFor?: ReadinessWait }> {
+  private async readinessRefresh(observed: { firstPass: boolean; earlier: RunManager["lastRefresh"]; policy: ServingPolicy | undefined; executableFound: boolean; admission: BackendAdmission | undefined; facts: PreparationFacts | undefined; unprepared: SupervisorError | undefined; blockers: SupervisorError[]; workerVersion: string | null }): Promise<{ field?: Record<string, unknown>; waitFor?: ReadinessWait }> {
     const { blockers, unprepared } = observed;
     const pinBlocker = pinBlockerOf(observed.admission);
     const action = observed.executableFound ? decideRefresh({ backend: this.activeBackendKind, pinReason: pinReasonOf(pinBlocker), facts: observed.facts ?? null, workerVersion: observed.workerVersion }) : "none";
@@ -871,6 +886,12 @@ export class RunManager {
       if (index >= 0) blockers[index] = replacement; else blockers.push(replacement);
     };
     const running = this.workerRefresh;
+    const damaged = this.damagedTracked();
+    if (running?.recheck && damaged) {
+      damaged.seenAt = this.now();
+      replace(pinBlocker, this.damagedInstallError(damaged.reason, damaged.files, damaged.since));
+      return { field: { status: "install_damaged", reason: damaged.reason, ...damaged.files, recheck: "running" }, waitFor: "refresh" };
+    }
     if (running) {
       repaired(normalizeError(this.refreshingError(running)));
       return { field: { status: "running", stage: running.stage, ...(running.from ? { from: running.from } : {}), ...(running.to ? { to: running.to } : {}), started_at: running.startedAt }, waitFor: "refresh" };
@@ -889,7 +910,7 @@ export class RunManager {
       this.annotatePreparationBlocker(unprepared, observed.facts, replace, observed.workerVersion);
       return {};
     }
-    const hold: RefreshHold | null = observed.policy ? refreshHold({ stopping: this.stopping, bootDrift: observed.policy.bootDrift, configPath: this.policy.configPath, busy: this.activeSlots > 0 || this.startPreparations.size > 0 }) : "config_unreadable";
+    const hold: RefreshHold | null = !observed.policy ? "config_unreadable" : observed.policy.buildUnreadable ? "build_unreadable" : refreshHold({ stopping: this.stopping, bootDrift: observed.policy.bootDrift, configPath: this.policy.configPath, busy: this.activeSlots > 0 || this.startPreparations.size > 0 });
     if (hold === "busy") return { field: { status: "pending", reason: "busy", action } };
     if (hold) return { field: { status: "held", reason: hold, action } };
     const last = this.lastRefresh;
@@ -922,11 +943,16 @@ export class RunManager {
         }
         this.pinFailure = undefined;
       }
-      const tracked = this.unsettled;
-      if (tracked && this.now() - tracked.since >= UNSETTLED_LIMIT_MS && this.now() - tracked.checkedAt < PIN_FAILURE_MEMORY_MS) {
+      const tracked = this.damagedTracked();
+      if (tracked) {
         if (await installIdentity(pinTarget) === tracked.identity) {
+          tracked.seenAt = this.now();
           replace(pinBlocker, this.damagedInstallError(tracked.reason, tracked.files, tracked.since));
-          return { field: { status: "install_damaged", reason: tracked.reason, ...tracked.files } };
+          const field = { status: "install_damaged", reason: tracked.reason, ...tracked.files };
+          if (this.now() - tracked.checkedAt < PIN_FAILURE_MEMORY_MS) return { field };
+          const begun = await this.beginRefresh(action, pinTarget, true);
+          const rechecking = begun !== undefined && begun.stage !== "locked";
+          return { field: { ...field, recheck: rechecking ? "running" : "not_started" }, ...(rechecking ? { waitFor: "refresh" as const } : {}) };
         }
         this.unsettled = undefined;
       }
@@ -943,10 +969,20 @@ export class RunManager {
   }
 
   private trackUnsettled(reason: string, identity: string | null, files: Record<string, unknown>): { since: number } {
+    const now = this.now();
     const tracked = this.unsettled;
-    if (tracked && tracked.reason === reason && tracked.identity === identity) { tracked.files = files; tracked.checkedAt = this.now(); return tracked; }
-    this.unsettled = { reason, identity, files, since: this.now(), checkedAt: this.now() };
+    if (tracked && tracked.reason === reason && tracked.identity === identity && now - tracked.seenAt <= UNSETTLED_LIMIT_MS) {
+      tracked.files = files; tracked.checkedAt = now; tracked.seenAt = now;
+      return tracked;
+    }
+    this.unsettled = { reason, identity, files, since: now, checkedAt: now, seenAt: now };
     return this.unsettled;
+  }
+
+  private damagedTracked(): NonNullable<RunManager["unsettled"]> | undefined {
+    const tracked = this.unsettled;
+    const now = this.now();
+    return tracked && now - tracked.since >= UNSETTLED_LIMIT_MS && now - tracked.seenAt <= UNSETTLED_LIMIT_MS ? tracked : undefined;
   }
 
   private unsettledAnswer(reason: string, identity: string | null, files: Record<string, unknown>, extra: Record<string, unknown>): SupervisorError {
@@ -973,7 +1009,7 @@ export class RunManager {
     }
     if (status !== "missing" && status !== "stale") return;
     const binaryChanged = agyBinaryChangedWithoutVersion({ backend: this.activeBackendKind, pinReason: null, facts, workerVersion });
-    replace(unprepared, { ...unprepared, details: { ...unprepared.details, ...(binaryChanged ? { worker_change: facts.worker_version ? `The agy binary changed while its version stayed ${facts.worker_version}; it is not re-prepared automatically. Run prepare check with the kit if this binary is intended.` : "The agy binary changed and the receipt predates the recorded worker version, so the change cannot be told from a same-version swap; run prepare check with the kit." } : {}), prepare_check: this.prepareCheckCommand() } });
+    replace(unprepared, { ...unprepared, details: { ...unprepared.details, ...(binaryChanged ? { worker_change: agyChangeDescription(facts.worker_version, workerVersion) } : {}), prepare_check: this.prepareCheckCommand() } });
   }
 
   async status(value: StatusToolInput, wait?: WaitOptions): Promise<Record<string, unknown>> {
@@ -2285,6 +2321,12 @@ function launchFailure(error: SupervisorError): SupervisorError {
   return { ...error, message: `${error.message} The worker never started, so the run never reached inference.`, details: { ...error.details, launch_failed: true } };
 }
 
+function agyChangeDescription(recorded: string | undefined, current: string | null): string {
+  if (!recorded) return "The agy binary changed and the receipt was written before it recorded the worker version, so the change cannot be told from a same-version swap; run prepare check with the kit.";
+  if (current === null) return `The agy binary changed and its current version could not be read (the receipt recorded ${recorded}); it is not re-prepared automatically. Check readiness again, or run prepare check with the kit if this binary is intended.`;
+  return `The agy binary changed while its version stayed ${recorded}; it is not re-prepared automatically. Run prepare check with the kit if this binary is intended.`;
+}
+
 function pinBlockerOf(admission: BackendAdmission | undefined): SupervisorError | undefined {
   return admission?.pin === "failed" ? admission.blockers[0] : undefined;
 }
@@ -2352,10 +2394,15 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+type ServingPolicy = CurrentPolicy & { buildUnreadable: boolean };
+
+function buildUnreadable(extra: Record<string, unknown> = {}): Error {
+  return codedError("VSUP_INVALID_STATE", "The installed supervisor files could not be read, so the running build cannot be compared with them; new starts are refused. Check readiness again shortly, and restart the server if the build was replaced or removed.", { reason: "build_unreadable", ...extra }, true);
+}
+
 function restartRequired(drift: readonly string[]): Error {
-  const settings = drift.filter((entry) => entry !== "build" && entry !== "build_unreadable");
+  const settings = drift.filter((entry) => entry !== "build");
   const build = drift.includes("build");
-  if (drift.includes("build_unreadable") && !build && settings.length === 0) return codedError("VSUP_RESTART_REQUIRED", "The installed supervisor files could not be read; new starts are refused. Check readiness again shortly, and restart the server if the build was replaced or removed.", { boot_drift: [...drift] });
   const message = !build
     ? `The selected configuration changed boot-bound settings since this server started (${settings.join(", ")}); new starts are refused until the server is restarted or the settings are reverted.`
     : settings.length === 0

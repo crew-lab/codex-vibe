@@ -12,7 +12,7 @@ import { runPreparation, type PreparationResult, type ReportedFinding, type RunP
 
 export type RefreshAction = 'none' | 'repin' | 'prepare';
 export type RefreshStage = 'pinning' | 'preparing' | 'locked' | 'install_unsettled';
-export type RefreshHold = 'stopping' | 'config_unreadable' | 'boot_drift' | 'no_config_path' | 'busy';
+export type RefreshHold = 'stopping' | 'config_unreadable' | 'build_unreadable' | 'boot_drift' | 'no_config_path' | 'busy';
 
 export interface RefreshObservation {
   backend: BackendKind;

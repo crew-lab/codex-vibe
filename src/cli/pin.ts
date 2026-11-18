@@ -1,3 +1,4 @@
+import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { resolveAppServerExecutable } from '../backends/app-server.js';
 import { PinCheckError, inspectInstall, serializePinManifest, type RecordProblems } from '../backends/app-server/pin.js';
@@ -75,9 +76,15 @@ async function loadConfigForPin(options: PinManifestArgs): Promise<PinConfig> {
   }
 }
 
+async function samePath(first: string, second: string): Promise<boolean> {
+  if (path.resolve(first) === path.resolve(second)) return true;
+  const [a, b] = await Promise.all([realpath(first).catch(() => undefined), realpath(second).catch(() => undefined)]);
+  return a !== undefined && a === b;
+}
+
 async function lockForConfiguredManifest(loaded: PinConfig, target: string): Promise<OwnerLock | undefined> {
   const configured = loaded.config.paths?.vibePinManifest;
-  if (loaded.dataDir === undefined || !configured || !path.isAbsolute(configured) || path.resolve(configured) !== target) return undefined;
+  if (loaded.dataDir === undefined || !configured || !path.isAbsolute(configured) || !await samePath(configured, target)) return undefined;
   try { return await acquirePreparationLock(loaded.config, loaded.dataDir); }
   catch (error) {
     if (isOwnerLockContention(error)) fail(preparationRunningMessage(error).replace('run prepare check again', 'run pin-manifest again'), 1);

@@ -382,7 +382,9 @@ describe('Vibe worker refresh at readiness', () => {
     const manifestBefore = await readFile(box.manifest);
     const start = await grant(manager, box.workspace);
     await rename(distInfo, aside);
-    expect(await rejection(start())).toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED', details: { reason: 'dist-info-missing', attempt_consumed: false, worker_refresh: expect.stringMatching(/readiness/) } });
+    const refusedStart = await rejection(start());
+    expect(refusedStart).toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED', details: { reason: 'dist-info-missing', attempt_consumed: false, worker_refresh: expect.stringMatching(/reports whether it is still updating or looks damaged/) } });
+    expect(String(refusedStart.details?.worker_refresh)).not.toMatch(/refreshes/);
     const unsettled = await readiness(manager, box.workspace);
     expect(codes(unsettled)).toEqual(['VSUP_PREPARING']);
     expect(unsettled.blockers[0]).toMatchObject({ retryable: true, details: { stage: 'install_unsettled', reason: 'dist-info-missing' } });
@@ -469,18 +471,54 @@ describe('Vibe worker refresh at readiness', () => {
     const unsettled = await readiness(manager, box.workspace, 30);
     expect(unsettled.blockers[0]).toMatchObject({ code: 'VSUP_PREPARING', details: { stage: 'install_unsettled', reason: 'record-hash-mismatch' } });
     expect(box.pins.count).toBe(1);
-    clock += 121_000;
+    clock += 61_000;
+    expect(codes(await readiness(manager, box.workspace, 30))).toEqual(['VSUP_PREPARING']);
+    expect(box.pins.count).toBe(2);
+    clock += 61_000;
     const damaged = await readiness(manager, box.workspace, 30);
     expect(codes(damaged)).toEqual(['VSUP_VIBE_VERSION_UNSUPPORTED']);
     expect(damaged.blockers[0]).toMatchObject({ retryable: false, remediation: expect.stringMatching(/^Reinstall Vibe/), details: { reason: 'record-hash-mismatch', mismatched: { paths: ['vibe/__init__.py'] } } });
     expect(damaged.worker_refresh).toMatchObject({ status: 'install_damaged' });
-    expect(box.pins.count).toBe(2);
+    expect(box.pins.count).toBe(3);
     expect(codes(await readiness(manager, box.workspace))).toEqual(['VSUP_VIBE_VERSION_UNSUPPORTED']);
-    expect(box.pins.count).toBe(2);
+    expect(box.pins.count).toBe(3);
     await writeFile(changed, original);
     clock += 61_000;
     expect(await readiness(manager, box.workspace, 60)).toMatchObject({ eligible: true });
-    expect(box.pins.count).toBe(3);
+    expect(box.pins.count).toBe(4);
+  }, 60_000);
+
+  it('keeps answering damaged across polls while the install stays the same, re-checking it at most once a minute', async () => {
+    const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2' });
+    let clock = Date.now();
+    const manager = box.manager({ now: () => clock });
+    await writeFile(path.join(box.sitePackages('3.1.3'), 'vibe', '__init__.py'), '__version__ = "damaged"\n');
+    await box.swap('3.1.3');
+    const answers: string[] = [];
+    for (let poll = 0; poll < 9; poll += 1) {
+      const report = await readiness(manager, box.workspace, poll % 2 === 0 ? 30 : 0);
+      answers.push(`${report.blockers[0]!.code}:${String(report.worker_refresh?.status)}`);
+      await vi.waitFor(() => expect(report.worker_refresh?.recheck === 'running' ? (manager as unknown as { workerRefresh?: unknown }).workerRefresh : undefined).toBeUndefined(), { timeout: 10_000 });
+      clock += 45_000;
+    }
+    const firstDamaged = answers.findIndex((answer) => answer.startsWith('VSUP_VIBE_VERSION_UNSUPPORTED'));
+    expect(firstDamaged).toBeGreaterThan(0);
+    expect(answers.slice(firstDamaged).every((answer) => answer === 'VSUP_VIBE_VERSION_UNSUPPORTED:install_damaged'), answers.join(', ')).toBe(true);
+    expect(box.pins.count).toBeLessThan(9);
+  }, 60_000);
+
+  it('starts the clock again for an unsettled state not seen for over two minutes', async () => {
+    const box = await vibeBox({ versions: ['3.1.2'], initial: '3.1.2' });
+    let clock = Date.now();
+    const manager = box.manager({ now: () => clock });
+    const distInfo = path.join(box.sitePackages('3.1.2'), 'mistral_vibe-3.1.2.dist-info');
+    const aside = path.join(box.root, 'aside');
+    await rename(distInfo, aside);
+    expect((await readiness(manager, box.workspace)).blockers[0]).toMatchObject({ code: 'VSUP_PREPARING', details: { stage: 'install_unsettled' } });
+    await rename(aside, distInfo);
+    clock += 300_000;
+    await rename(distInfo, aside);
+    expect((await readiness(manager, box.workspace)).blockers[0]).toMatchObject({ code: 'VSUP_PREPARING', details: { stage: 'install_unsettled' } });
   }, 60_000);
 
   it('reports a dist-info missing for two minutes as damaged', async () => {
@@ -489,7 +527,9 @@ describe('Vibe worker refresh at readiness', () => {
     const manager = box.manager({ now: () => clock });
     await rename(path.join(box.sitePackages('3.1.2'), 'mistral_vibe-3.1.2.dist-info'), path.join(box.root, 'aside'));
     expect((await readiness(manager, box.workspace)).blockers[0]).toMatchObject({ code: 'VSUP_PREPARING', details: { stage: 'install_unsettled' } });
-    clock += 121_000;
+    clock += 61_000;
+    expect((await readiness(manager, box.workspace)).blockers[0]).toMatchObject({ code: 'VSUP_PREPARING' });
+    clock += 61_000;
     const damaged = await readiness(manager, box.workspace, 5);
     expect(damaged.blockers[0]).toMatchObject({ code: 'VSUP_VIBE_VERSION_UNSUPPORTED', retryable: false, details: { reason: 'dist-info-missing' } });
   }, 60_000);
@@ -617,12 +657,22 @@ describe('Antigravity worker refresh at readiness', () => {
     expect(box.calls).toHaveLength(0);
   }, 60_000);
 
+  it('says so when the agy binary changed and its current version could not be read', async () => {
+    const box = await agyBox();
+    await box.writeAgy('1.5.8', 'exit 1\n');
+    const report = await readiness(box.manager, box.workspace, 5);
+    const preparation = report.blockers.find((blocker) => blocker.code === 'VSUP_INVALID_STATE');
+    expect(preparation?.details).toMatchObject({ worker_change: expect.stringMatching(/current version could not be read \(the receipt recorded 1\.5\.8\)/) });
+    expect(String(preparation?.details?.worker_change)).not.toMatch(/stayed/);
+    expect(box.calls).toHaveLength(0);
+  }, 60_000);
+
   it('does not re-prepare an agy change when the receipt predates the recorded version', async () => {
     const box = await agyBox({ recordVersion: false });
     await box.writeAgy('1.6.0');
     const report = await readiness(box.manager, box.workspace, 5);
     expect(codes(report)).toEqual(['VSUP_INVALID_STATE']);
-    expect(report.blockers[0]!.details).toMatchObject({ worker_change: expect.stringMatching(/predates/) });
+    expect(report.blockers[0]!.details).toMatchObject({ worker_change: expect.stringMatching(/written before it recorded the worker version/) });
     expect(box.calls).toHaveLength(0);
   }, 60_000);
 });
@@ -669,23 +719,40 @@ describe('running build and limits in readiness', () => {
     expect(backend.starts).toBe(0);
   });
 
-  it('captures the build on the first later read when it was unreadable at boot, and never claims a change it could not read', async () => {
+  it('keeps a build unreadable at boot unknown for the life of the server and says so', async () => {
     const box = await plainBox();
-    let build: string | undefined;
+    let reads = 0;
+    const disk: { build?: string } = {};
+    const manager = new RunManager(box.config, path.join(box.root, 'data'), [new IdleBackend()], undefined, { policy: selectedConfigPolicy(box.configPath), buildIdentity: async () => { reads += 1; if (disk.build === undefined) throw new Error('dist missing'); return disk.build; } });
+    managers.push(manager);
+    await manager.initialize();
+    expect(reads).toBe(3);
+    disk.build = 'c'.repeat(64);
+    const report = await readiness(manager, box.workspace);
+    expect(report).toMatchObject({ eligible: true, boot_drift: [], restart_required: false, candidate: { sha256: null } });
+    expect(report.warnings).toEqual([expect.stringMatching(/could not be read when this server started.*restart the server to restore the check/)]);
+    expect(reads).toBe(3);
+    const expecting = await manager.status({ workspace: box.workspace, operation: 'review', expected_candidate: 'c'.repeat(64) }) as Readiness;
+    expect(codes(expecting)).toEqual(['VSUP_INVALID_STATE']);
+  });
+
+  it('treats a build that cannot be read later as a retryable blocker, not as a restart', async () => {
+    const box = await plainBox();
+    let build: string | undefined = 'c'.repeat(64);
     const backend = new IdleBackend();
     const manager = new RunManager(box.config, path.join(box.root, 'data'), [backend], undefined, { policy: selectedConfigPolicy(box.configPath), buildIdentity: async () => { if (build === undefined) throw new Error('dist missing'); return build; } });
     managers.push(manager);
-    await manager.initialize();
-    expect(await readiness(manager, box.workspace)).toMatchObject({ eligible: true, boot_drift: [], candidate: { sha256: null } });
-    build = 'c'.repeat(64);
-    expect(await readiness(manager, box.workspace)).toMatchObject({ eligible: true, boot_drift: [], candidate: { sha256: 'c'.repeat(64) } });
+    expect(await readiness(manager, box.workspace)).toMatchObject({ eligible: true, candidate: { sha256: 'c'.repeat(64) } });
+    const start = await grant(manager, box.workspace, 0);
     build = undefined;
     const unreadable = await readiness(manager, box.workspace);
-    expect(unreadable).toMatchObject({ eligible: false, boot_drift: ['build_unreadable'], candidate: { sha256: 'c'.repeat(64) } });
-    expect(unreadable.blockers).toContainEqual(expect.objectContaining({ code: 'VSUP_RESTART_REQUIRED', message: expect.stringMatching(/could not be read.*Check readiness again/) }));
-    expect(unreadable.blockers.map((blocker) => blocker.message).join(' ')).not.toMatch(/files changed/);
+    expect(unreadable).toMatchObject({ eligible: false, boot_drift: [], restart_required: false, candidate: { sha256: 'c'.repeat(64) } });
+    expect(unreadable.blockers).toEqual([expect.objectContaining({ code: 'VSUP_INVALID_STATE', retryable: true, message: expect.stringMatching(/could not be read.*Check readiness again shortly.*restart the server if the build was replaced/), details: { reason: 'build_unreadable' } })]);
+    expect(await rejection(start())).toMatchObject({ code: 'VSUP_INVALID_STATE', retryable: true, details: { reason: 'build_unreadable', attempt_consumed: false } });
+    expect(backend.starts).toBe(0);
     build = 'c'.repeat(64);
     expect(await readiness(manager, box.workspace)).toMatchObject({ eligible: true, boot_drift: [] });
+    expect((await start()).error).toBeUndefined();
   });
 
   it('reports the limits a run with omitted fields gets', async () => {

@@ -105,6 +105,12 @@ describe('runPreparation endings that are not an abort', () => {
     expect(await readPreparationFacts(config)).toMatchObject({ status: { status: 'failed' }, interrupted: false, worker_version: '3.2.0' });
   });
 
+  it('leaves the placeholder when a signal it did not send ends the check', async () => {
+    const { root, configPath, script, config } = await fixture("process.kill(process.pid, 'SIGTERM');\nsetInterval(() => undefined, 1000);\n");
+    await expect(runPreparation({ config, configPath, dataDir: root, stderr: 'ignore', conformanceScript: script })).rejects.toThrow(/ended by SIGTERM from outside the supervisor/);
+    expect(await readPreparationFacts(config)).toMatchObject({ status: { status: 'failed' }, interrupted: true });
+  });
+
   it('records a finished failure when the check exits without a report', async () => {
     const { root, configPath, script, config } = await fixture('process.exitCode = 3;\n');
     const result = await runPreparation({ config, configPath, dataDir: root, stderr: 'ignore', conformanceScript: script });

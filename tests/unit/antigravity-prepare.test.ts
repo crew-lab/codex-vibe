@@ -355,7 +355,7 @@ describe('Antigravity preparation probes through a fake agy', () => {
     const seen: string[] = [];
     const out = await prepareWith('', false, { provenance: { origin: 'automatic', previousWorkerVersion: '1.5.8' }, beforeFinalReceipt: async ({ candidate }) => { seen.push(candidate); } });
     expect(seen).toEqual([out.candidate_sha256]);
-    expect(JSON.parse(await readFile(out.receipt, 'utf8'))).toMatchObject({ report_sha256: out.report_sha256, origin: 'automatic', previous_worker_version: '1.5.8' });
+    expect(JSON.parse(await readFile(out.receipt, 'utf8'))).toMatchObject({ report_sha256: out.report_sha256, origin: 'automatic', previous_worker_version: '1.5.8', worker_version: '1.5.8' });
   }, 90_000);
 
   it('refuses agy 1.5.7 executable during preparation', async () => {

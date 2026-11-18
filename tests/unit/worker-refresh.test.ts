@@ -132,12 +132,16 @@ describe('runWorkerRefresh', () => {
     for (const after of [facts('missing'), facts('stale', { changed: ['candidate', 'pin'] }), facts('stale', { changed: null })]) {
       const held = lock(); const deps = dependencies(); let replaced = 0;
       deps.replacePinManifest = async () => { replaced += 1; return { previousVersion: '3.1.2', historyPath: null }; };
-      const outcome = await runWorkerRefresh(plan({ assess: assessments({ action: 'repin', facts: facts('passed') }, { action: 'none', facts: after }) }), held, deps);
+      const decided = (observed: PreparationFacts, pinReason: string | null) => ({ action: decideRefresh({ backend: 'app-server', pinReason, facts: observed }), facts: observed });
+      const outcome = await runWorkerRefresh(plan({ assess: assessments(decided(facts('passed'), 'manifest-version-mismatch'), decided(after, null)) }), held, deps);
       expect(outcome).toEqual({ kind: 'repinned', from: '3.1.2', to: '3.1.3' });
       expect(replaced).toBe(1);
       expect(deps.prepared).toEqual([]);
       expect(held.released).toBe(1);
     }
+    const prepared = dependencies();
+    const refreshable = facts('stale', { changed: ['pin'] });
+    expect(await runWorkerRefresh(plan({ assess: assessments({ action: decideRefresh({ backend: 'app-server', pinReason: 'manifest-version-mismatch', facts: facts('passed') }), facts: facts('passed') }, { action: decideRefresh({ backend: 'app-server', pinReason: null, facts: refreshable }), facts: refreshable }) }), lock(), prepared)).toMatchObject({ kind: 'prepared', repinned: true });
     expect(refreshSummary('app-server', { kind: 'repinned', from: '3.1.2', to: '3.1.3' })).toBe('Vibe 3.1.2 -> 3.1.3: re-pinned; the preparation needs prepare check --kit');
   });
 

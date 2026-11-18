@@ -187,6 +187,10 @@ describe('pin-manifest command', () => {
       await expect(pinManifestCommand(configuredArgs)).rejects.toThrow(/^A preparation is already running \(pid \d+\); wait for it to finish, then run pin-manifest again\.$/);
       expect(await readFile(output, 'utf8')).toBe(first);
       await expect(readdir(path.join(path.dirname(output), 'pin-history'))).rejects.toMatchObject({ code: 'ENOENT' });
+      const alias = path.join(scratch, 'alias');
+      await symlink(path.dirname(output), alias);
+      await expect(pinManifestCommand(['--config', configured, '--executable', fake, '--output', path.join(alias, path.basename(output)), '--force'])).rejects.toThrow(/already running/);
+      expect(await readFile(output, 'utf8')).toBe(first);
       const elsewhere = path.join(scratch, 'elsewhere.json');
       await pinManifestCommand(['--config', configured, '--executable', fake, '--output', elsewhere, '--force']);
       expect(JSON.parse(await readFile(elsewhere, 'utf8'))).toMatchObject({ format: 1 });
