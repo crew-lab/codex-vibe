@@ -19,9 +19,11 @@ vibe-supervisor setup --workspace "$WORKSPACE" --config "$SUPERVISOR_HOME/agy/co
 
 The first registers as `vibe-supervisor` (Vibe, the default backend). In the second configuration set `backend = "antigravity"` and `[experimental] antigravity = true`, then run `prepare check` with that configuration. Codex lists each server's five tools under its own name; take the `task authorize` command from the readiness reply of the server that will run the task, because a grant is bound to that server's configuration.
 
-### Vibe CLI upgrade and manifest refresh
+### Worker updates
 
-When the underlying `mistral-vibe` CLI is upgraded to another supported stable version (3.1.2 or later), review and regenerate the installed file manifest and refresh candidate preparation before dispatch:
+After `vibe update` (to any stable version at or above the minimum, up or down) or an `agy` update, the next workspace readiness check re-pins Vibe and re-runs the no-inference preparation itself. Readiness returns `VSUP_PREPARING` meanwhile; call it again with `wait_seconds: 300` until it is eligible. No hosted re-qualification is needed for a new worker release; each run's export names the version it ran. Run one quality-pack review after an update, because the automatic refresh does not re-run hosted quality.
+
+When the blocker says the refresh cannot do it ([preparation](preparation.md#after-a-worker-update)), repair by hand:
 
 ```bash
 vibe-supervisor pin-manifest --config "$CONFIG" --force
@@ -29,7 +31,7 @@ vibe-supervisor doctor --config "$CONFIG" --json
 vibe-supervisor prepare check --kit <path-to-kit> --config "$CONFIG"
 ```
 
-The `--force` flag allows updating the existing manifest with the newly installed Vibe files. Running `doctor` and `prepare check` confirms manifest integrity, version match, and runtime compatibility before any task is dispatched. No hosted re-qualification is needed for a new Vibe release; each run's export names the Vibe version it ran.
+A new supervisor build always needs `prepare check` with its own kit.
 
 When Codex already has a connection, use the Node executable, CLI and config from its workspace readiness reply to run `prepare check`. A check run with a different Node version can pass locally while Codex reports the result as stale. Rerun preparation with the connected runtime and keep the existing pin if the Vibe installation still matches it.
 

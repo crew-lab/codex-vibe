@@ -6,6 +6,7 @@
 
 - **Released.** v2.2.1 (2026-11-15) is the latest release ([changelog](CHANGELOG.md)); `agy` remains opt-in and experimental.
 - **Included in v2.2.1:** Vibe at or above 3.1.2 and agy at or above 1.5.8; the supervisor's worker rules as Vibe's system prompt and at the head of agy's prompt; no file listing in a review that names `context_files`; thinking `high` for Vibe reviews (`vibe_review_thinking`); default `max_turns` raised to `25` for reviews and edits (`4a0d0ed`); `allowed_write_paths` enforced in agy's `PreToolUse` hook (`75995d8`) with summarized write-tool ledger reconciliation (`0ed905e`); credential, pin and preparation checked before the grant is spent; review results that show which named files were read; `prepare check` that prints its report path, failing findings and what made a receipt stale; `runs export --include answer` and, in the source repository, `quality-pack.mjs record` and `prompt`; a finished or audited edit kept at the deadline; the correction rule after a failed check.
+- **Unreleased 2.2.2:** worker updates repair themselves at readiness (Vibe re-pin gated on `RECORD` hashes, re-preparation for both workers, `VSUP_PREPARING`), the running build in `boot_drift`, `effective_limits` and `worker` in readiness, a receipt bound to boot-bound settings only (`1db676c`, `c8226d9`, `eaf4179`; [changelog](CHANGELOG.md)).
 - **Worker machine & verification:** `412d106` built the `2.2.1` RC archive cleanly (`127` test files, `1,830` passed, `1` skipped, checksums matched), passed `prepare check` from the installed archive for both Vibe `3.1.2` and `agy` `1.5.9` (`antigravity_skip_permissions = true`), passed the installed-RC Vibe calendar-date replay (`7ce9f997…`, `18.6s`, `end_turn`, default `25` turns confirmed), and passed both `agy` `1.5.9` quality-pack edits (`edit-shipping` `14/14`, `edit-reserve-all` `17/17`, both `end_turn`). Earlier `f783860` runs covered Vibe thinking-off sweeps and `agy` `review-total` (`9/9`).
 
 ## What works
@@ -17,6 +18,7 @@
 - **Evidence comes back.** Twelve record files, the 30 old answers and agy's strict-mode diagnostics were committed from the worker machine.
 - **Boundary.** Reviews stay read-only, edits stay in their worktrees, nothing reaches shell or network, and runs clean up after themselves.
 - **At the deadline.** A turn that finishes as the timeout cancels it keeps its result, and an edit cut off after audited writes is judged by its contract and checks.
+- **Worker updates without a manual repair** (unit and integration tests with fake workers only, not yet run on a worker). After a Vibe version change, up or down, readiness re-pins once every file matches its `RECORD` hash and re-runs preparation; after an agy update it re-runs preparation; meanwhile it returns `VSUP_PREPARING` and waits with `wait_seconds`. A failed check is not retried, changed files under the same version fail closed, and supervisor files replaced under a running server give `VSUP_RESTART_REQUIRED`. See [preparation](docs/preparation.md#after-a-worker-update).
 - **At the turn limit** (owner decision, 2026-11-15; unit and integration tests only, not yet seen on a worker). A Vibe edit that stops at its turn limit is judged by its contract and checks: the stop is reported only after a clean final history audit. Token and price limit stops stay `incomplete`, as do agy turn-limit edits, where a write in flight at the stop cannot be confirmed.
 
 ## What does not work well yet
@@ -48,13 +50,16 @@
 
 ## Next
 
-- **Support Vibe 3.1.3 and newer stable releases.** Keep the minimum-version policy without a per-release allowlist. Each installed runtime still needs a matching manifest, a verified startup handshake, and preparation for the selected supervisor candidate. The deployed build's compatibility with 3.1.3 and later needs qualification on the worker machine.
-- **Copy-rules CI trial deferred before inference.** The connected candidate accepted workspace readiness with an unverified runtime pin for Vibe 3.1.0, then stopped at startup because Vibe 3.1.3 was installed. The request omitted `max_turns` and the run recorded 20 turns and a separate 25-model-call cap. No worker files were read or changed. The verified export held an empty patch and the worktree was removed.
-- **Resume the trial on the current candidate.** Select the build with the 25-turn default, refresh the Vibe manifest using that build's CLI and config, run its matching preparation kit, and verify the candidate digest and pin on the connected server before issuing a fresh grant. Preserve the frozen request, observed file reads, and independent patch checks in the local trial record. Improve readiness so a stale manifest surfaces before dispatch.
+- **Vibe 3.1.3 and later on the 2.2.2 build.** Install the build, run its `prepare check --kit` once, then let readiness re-pin to the installed Vibe (checks below). Qualification of 3.1.3 itself is the quality pack on it.
+- **Resume the copy-rules CI trial** on the 2.2.2 build. It was deferred before inference: an older build accepted readiness and stopped at startup on Vibe 3.1.3 with a 20-turn default; no worker files were read or changed. Before the fresh grant, check `server_version`, `candidate.sha256` and `effective_limits` in the readiness reply. Preserve the frozen request, observed file reads and independent patch checks in the local trial record.
 
 ### On the worker machine
 
-1. **After any Vibe or agy update:** `prepare check`, then the quality pack, recorded. That run is the regression test for the worker.
+1. **After any Vibe or agy update:** call readiness with `wait_seconds: 300` and expect `eligible: true` without a manual step, then the quality pack, recorded. That run is the regression test for the worker. `prepare check --kit` is still needed after a new supervisor build.
+2. **Before relying on the automatic re-pin:** confirm the installed Vibe's `RECORD` has a sha256 on every row except `RECORD` itself and `.pyc` files (`awk -F, '$2==""' <dist-info>/RECORD`). Otherwise every readiness check returns `VSUP_PREPARING` (after a wait, stage `install_unsettled` with reason `record-unhashed`), and the manifest is never refreshed; `pin-manifest` names up to three such rows in its warning.
+3. **Time one `prepare check`.** It sets how long readiness takes to come back after an update; the skill waits up to three calls of 300 seconds.
+4. **Update Vibe** (or reinstall the previous version for a downgrade), call readiness with `wait_seconds: 300`, expect `eligible: true`, then run one quality-pack review.
+5. **Read-only mark.** See whether Codex prompts for approval on a tool not marked read-only, before `vibe_status`, which can now refresh the worker, loses that mark.
 
 ### Development, in this order, each its own commit
 
@@ -80,7 +85,7 @@ git clone https://github.com/crew-lab/codex-vibe.git vibe-supervisor && cd vibe-
 CACHE="$PWD/.npm-offline-cache" && node -e 'const l=require("./package-lock.json");const s=new Set();for(const[k,v]of Object.entries(l.packages)){if(!k||v.link||!v.version)continue;s.add((v.name||k.slice(k.lastIndexOf("node_modules/")+13))+"@"+v.version)}console.log([...s].join("\n"))' | xargs -P 8 -n 1 npm cache add --cache "$CACHE" && VIBE_SUPERVISOR_TEST_NPM_CACHE="$CACHE" npm run package:rc
 ```
 
-Install the archive and configure it as in [local operation](docs/local-operation.md). Vibe runs only on the machine that has it installed: run `vibe-supervisor pin-manifest`, then `vibe-supervisor prepare check --kit <absolute path of the kit> --config "$CONFIG"` once, because readiness and every start need its pass. After a Vibe upgrade, refresh the manifest with `pin-manifest --force`, pass `prepare check` again and rerun the quality pack.
+Install the archive and configure it as in [local operation](docs/local-operation.md). Vibe runs only on the machine that has it installed: run `vibe-supervisor pin-manifest`, then `vibe-supervisor prepare check --kit <absolute path of the kit> --config "$CONFIG"` once, because readiness and every start need its pass. After a Vibe or agy update, readiness re-pins and re-prepares by itself ([preparation](docs/preparation.md#after-a-worker-update)); rerun the quality pack.
 
 ## Pointers
 

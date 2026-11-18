@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.2.2 — unreleased
+
+A worker update no longer stops work until someone repairs it by hand.
+
+### Added
+
+- Worker updates repair themselves at readiness. When Vibe's installed version differs from its pin manifest, up or down, stable and at or above the minimum, the next workspace readiness check writes a new manifest (only when every installed file matches the sha256 in Vibe's `RECORD`) and re-runs the no-inference preparation; for agy a changed binary re-runs the preparation. Readiness returns the retryable `VSUP_PREPARING` meanwhile, and `wait_seconds` (0 to 300) in workspace mode waits for it. A start never triggers a refresh and is refused during one with `attempt_consumed: false`. A new supervisor build, a failed preparation, changed files under the same version and a version below the minimum still need the owner, and the blocker says what to run ([preparation](docs/preparation.md#after-a-worker-update)).
+- Readiness reports `effective_limits` (`max_turns`, `timeout_seconds` for the operation), `worker` (`backend`, `version`, and `refreshed` after an automatic refresh) and `worker_refresh`. After an automatic refresh, readiness and the runs it admits warn that hosted quality has not been re-run on the new version.
+- The running build is recorded at start: if the installed supervisor files change afterwards, `build` joins `boot_drift` and readiness and starts refuse with `VSUP_RESTART_REQUIRED`. `candidate.sha256` and `expected_candidate` describe the running build.
+- `pin-manifest --force` writes atomically and keeps the previous manifests in `pin-history/` (the newest three); `pin-manifest` warns when `RECORD` rows have no hash or files differ from their row.
+- `prepare check` and the automatic refresh share `preparation.lock`. A refresh's receipt records `origin` and `previous_worker_version`.
+- A run's result warns when the worker was updated during the run. A run whose launch never started says in `next_action` that the task was never sent, and its status and result carry the `task_authorize` command.
+
+### Changed
+
+- The preparation receipt binds only the boot-bound settings, not `excluded_globs`, `budgets` or workspace roots. Every existing receipt goes stale once.
+- The coordinator skill and the Codex agent wait through `VSUP_PREPARING`, ask for a restart on `VSUP_RESTART_REQUIRED`, compare `server_version` with the expected build, and no longer ask for a manual `prepare check` before each dispatch.
+
 ## 2.2.1 — 2026-11-15
 
 The aim of this release is that a task Codex hands to a worker comes back right more often, costs fewer turns and tokens, and that a correct result is not lost to the supervisor's own friction.
