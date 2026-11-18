@@ -151,9 +151,9 @@ function withDefaults(overrides: Partial<OwnerLockDeps>): OwnerLockDeps {
   return { ...defaults(), ...overrides };
 }
 
-export async function inspectOwnerLock(dataDir: string, overrides: Partial<OwnerLockDeps> = {}): Promise<OwnerLockStatus> {
+export async function inspectOwnerLock(dataDir: string, overrides: Partial<OwnerLockDeps> = {}, lockFile: string = LOCK_FILE): Promise<OwnerLockStatus> {
   const deps = withDefaults(overrides);
-  const lockPath = path.join(dataDir, LOCK_FILE);
+  const lockPath = path.join(dataDir, lockFile);
   const observed = await observe(lockPath, deps);
   if (!observed) return { path: lockPath, held: false };
   if (!observed.parsed) return { path: lockPath, held: true, owner: "malformed" };
@@ -185,9 +185,9 @@ async function claimStaleRecovery(deps: OwnerLockDeps, recoveryPath: string): Pr
   return false;
 }
 
-export async function acquireOwnerLock(dataDir: string, overrides: Partial<OwnerLockDeps> = {}): Promise<OwnerLock> {
+export async function acquireOwnerLock(dataDir: string, overrides: Partial<OwnerLockDeps> = {}, lockFile: string = LOCK_FILE): Promise<OwnerLock> {
   const deps = withDefaults(overrides);
-  const lockPath = path.join(dataDir, LOCK_FILE);
+  const lockPath = path.join(dataDir, lockFile);
   const recoveryPath = `${lockPath}${RECOVERY_SUFFIX}`;
   const token = randomUUID();
   const payload = JSON.stringify({ pid: deps.pid, token, started_at: new Date(deps.now()).toISOString() });

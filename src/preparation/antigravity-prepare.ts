@@ -22,7 +22,7 @@ import { publicValue } from '../reporting/export.js';
 import { denylistAnchors, workspaceAnchors } from '../security/globs.js';
 import { pathWithPrefix, setupHeadlessBrowserNeutralizer } from '../security/environment.js';
 import { createPrivateDir, createPrivateFile } from '../security/paths.js';
-import { candidateIdentity, preparationComponents, preparationIdentity, receiptPath, type PreparationComponents } from './evidence.js';
+import { candidateIdentity, preparationComponents, preparationIdentity, receiptPath, receiptProvenance, type PreparationComponents, type PreparationProvenance } from './evidence.js';
 import {
   isInferenceHost,
   NO_INFERENCE_GOOGLE_API_KEY,
@@ -252,9 +252,18 @@ async function runCliSlashCommandReadback(
   });
 }
 
+export interface PreparedReceiptIdentity { identity: string; candidate: string }
+
+export interface AntigravityPreparationOptions {
+  dataDir?: string;
+  provenance?: PreparationProvenance;
+  signal?: AbortSignal | undefined;
+  beforeFinalReceipt?: ((written: PreparedReceiptIdentity) => Promise<void>) | undefined;
+}
+
 export async function runAntigravityPreparationCheck(
   config: SupervisorConfig,
-  options: { dataDir?: string } = {}
+  options: AntigravityPreparationOptions = {}
 ): Promise<{
   status: 'passed' | 'failed';
   candidate_sha256: string;
@@ -263,6 +272,9 @@ export async function runAntigravityPreparationCheck(
   report_path: string;
   report: AntigravityPreparationReport;
 }> {
+  const { signal } = options;
+  signal?.throwIfAborted();
+  const facts = receiptProvenance(options.provenance ?? {});
   const candidate = await candidateIdentity();
   const targetReceipt = receiptPath(config, options.dataDir);
   const reportsDir = path.join(path.dirname(targetReceipt), 'preparation-reports');
@@ -300,8 +312,10 @@ export async function runAntigravityPreparationCheck(
     identity,
     checked_at: new Date().toISOString(),
     report_sha256: startedHash,
-    components
+    components,
+    ...facts
   });
+  signal?.throwIfAborted();
 
   const findings: Array<{ level: 'info' | 'fail'; code: string; message: string }> = [];
   const configuredCmd = config.paths?.antigravity ?? 'agy';
@@ -372,6 +386,7 @@ export async function runAntigravityPreparationCheck(
     const denylist = denylistAnchors(exclusions, workspace, workspace);
 
     for (const mode of ['review', 'edit'] as const) {
+      signal?.throwIfAborted();
       const childHome = path.join(tempRoot, `home-${mode}`);
       const childTmp = path.join(tempRoot, `tmp-${mode}`);
       await createPrivateDir(childHome);
@@ -622,6 +637,7 @@ export async function runAntigravityPreparationCheck(
         allSyntheticPassed && ledger.approvals.records.length === syntheticCases.length;
     }
 
+    signal?.throwIfAborted();
     const executablePath = resolved.resolvedPath;
     if (executablePath && resolved.version && isSupportedAntigravityVersion(resolved.version)) {
       const probes = await runAgyProbes({
@@ -646,6 +662,7 @@ export async function runAntigravityPreparationCheck(
     await proxy.close().catch(() => undefined);
     await rm(tempRoot, { recursive: true, force: true }).catch(() => undefined);
   }
+  signal?.throwIfAborted();
 
   const subjectAttempts = proxy.attempts.filter((a) => a.run.startsWith('subject-') || a.run.startsWith('probe-'));
   let networkVerdict: 'none-observed-control-validated' | 'failed';
@@ -717,6 +734,8 @@ export async function runAntigravityPreparationCheck(
     findings
   };
 
+  if (identity !== null) await options.beforeFinalReceipt?.({ identity, candidate });
+  signal?.throwIfAborted();
   const sanitizedReport = publicValue(rawReport) as AntigravityPreparationReport;
   const reportBytes = Buffer.from(JSON.stringify(sanitizedReport, null, 2) + '\n', 'utf8');
   const reportSha256 = digest(reportBytes);
@@ -734,7 +753,8 @@ export async function runAntigravityPreparationCheck(
     identity,
     checked_at: new Date().toISOString(),
     report_sha256: reportSha256,
-    components
+    components,
+    ...facts
   });
 
   return {

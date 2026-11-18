@@ -1,8 +1,8 @@
-import { mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { acquireOwnerLock, inspectOwnerLock, parseElapsedMs, readProcessStartTime } from "../../src/core/owner-lock.js";
+import { acquireOwnerLock, inspectOwnerLock, isOwnerLockContention, parseElapsedMs, readProcessStartTime } from "../../src/core/owner-lock.js";
 import type { OwnerLockDeps, OwnerLockFs } from "../../src/core/owner-lock.js";
 
 const DATA = "/data";
@@ -194,6 +194,26 @@ describe("owner lock on the real filesystem", () => {
     const second = await acquireOwnerLock(root);
     expect(JSON.parse(await readFile(join(root, "supervisor.lock"), "utf8"))).toMatchObject({ pid: process.pid, token: second.token });
     await second.release();
+  });
+
+  it("keeps a named lock file beside the owner lock, refuses a second holder and clears a dead holder", async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "vsup-lock-named-"))); roots.push(root);
+    const owner = await acquireOwnerLock(root);
+    const first = await acquireOwnerLock(root, {}, "preparation.lock");
+    expect(first.path).toBe(join(root, "preparation.lock"));
+    const refused = await acquireOwnerLock(root, {}, "preparation.lock").then(() => undefined, (error: unknown) => error);
+    expect(isOwnerLockContention(refused)).toBe(true);
+    expect(refused).toMatchObject({ details: { owner_pid: process.pid, lock_path: join(root, "preparation.lock") } });
+    await expect(inspectOwnerLock(root, {}, "preparation.lock")).resolves.toMatchObject({ held: true, owner: "alive", pid: process.pid });
+    await first.release();
+    await writeFile(join(root, "preparation.lock"), lockText(9001), { mode: 0o600 });
+    const dead = { kill: () => { throw Object.assign(new Error("no such process"), { code: "ESRCH" }); } };
+    await expect(inspectOwnerLock(root, dead, "preparation.lock")).resolves.toMatchObject({ held: true, owner: "stale", pid: 9001 });
+    const reclaimed = await acquireOwnerLock(root, dead, "preparation.lock");
+    expect(JSON.parse(await readFile(join(root, "preparation.lock"), "utf8"))).toMatchObject({ pid: process.pid, token: reclaimed.token });
+    await reclaimed.release();
+    await expect(inspectOwnerLock(root)).resolves.toMatchObject({ held: true, owner: "alive", pid: process.pid });
+    await owner.release();
   });
 });
 

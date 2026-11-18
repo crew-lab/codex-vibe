@@ -4,7 +4,8 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { digest } from '../../src/acceptance/schema.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
-import { checkPreparation, nodeMajor, preparationComponents, preparationIdentity, receiptPath } from '../../src/preparation/evidence.js';
+import { atomicWriteJson } from '../../src/persistence/atomic.js';
+import { checkPreparation, nodeMajor, preparationComponents, preparationIdentity, readPreparationFacts, receiptPath } from '../../src/preparation/evidence.js';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
@@ -80,5 +81,50 @@ describe('preparation status', () => {
     await writeReceipt('passed', false);
     await writeFile(manifest, JSON.stringify({ format: 1, version: '3.2.1', record_sha256: 'e'.repeat(64), files: {} }), { mode: 0o600 });
     expect((await checkPreparation(config)).reason).toBe('Candidate, pin, runtime or policy changed; the stale receipt had passed');
+  });
+
+  it('reports the facts a refresh decides on without parsing the reason', async () => {
+    const root = await mkdtemp(path.join(await realpath(os.tmpdir()), 'preparation-facts-')); roots.push(root);
+    const manifest = path.join(root, 'pin-manifest.json');
+    await writeFile(manifest, JSON.stringify({ format: 1, version: '3.2.0', record_sha256: 'd'.repeat(64), files: {} }), { mode: 0o600 });
+    const config = { ...DEFAULT_CONFIG, paths: { vibePinManifest: manifest } };
+    const reports = path.join(root, 'preparation-reports'); await mkdir(reports, { mode: 0o700 });
+    const saveReport = async (value: unknown) => { const bytes = Buffer.from(JSON.stringify(value)); await writeFile(path.join(reports, `${digest(bytes)}.json`), bytes, { mode: 0o600 }); return digest(bytes); };
+    const finished = await saveReport({ result: 'fail' });
+    const placeholder = await saveReport({ result: 'incomplete', stage: 'no-inference-check-started' });
+    const identity = await preparationIdentity(config);
+    const current = await preparationComponents(config);
+    const checkedAt = new Date().toISOString();
+    const writeReceipt = (fields: Record<string, unknown>) => atomicWriteJson(receiptPath(config), { schema_version: 1, result: 'failed', identity, checked_at: checkedAt, report_sha256: finished, components: current, ...fields });
+
+    expect(await readPreparationFacts(config)).toEqual({ status: expect.objectContaining({ status: 'missing' }), changed: null, interrupted: false });
+
+    await writeReceipt({ result: 'passed' });
+    expect(await readPreparationFacts(config)).toEqual({ status: expect.objectContaining({ status: 'passed' }), changed: null, interrupted: false, checked_at: checkedAt });
+
+    await writeReceipt({ origin: 'automatic', previous_worker_version: '3.1.2' });
+    const failed = await readPreparationFacts(config);
+    expect(failed).toEqual({ status: expect.objectContaining({ status: 'failed' }), changed: null, interrupted: false, origin: 'automatic', previous_worker_version: '3.1.2', checked_at: checkedAt });
+    expect(failed.status).toEqual(await checkPreparation(config));
+
+    await writeReceipt({ report_sha256: placeholder, origin: 'manual' });
+    expect(await readPreparationFacts(config)).toMatchObject({ status: { status: 'failed' }, changed: null, interrupted: true, origin: 'manual' });
+    await writeReceipt({ report_sha256: placeholder, identity: 'a'.repeat(64) });
+    expect(await readPreparationFacts(config)).toMatchObject({ status: { status: 'stale' }, interrupted: false });
+
+    for (const key of ['candidate', 'pin', 'node_major', 'policy'] as const) {
+      await writeReceipt({ identity: 'a'.repeat(64), components: { ...current, [key]: 'f'.repeat(64) } });
+      const facts = await readPreparationFacts(config);
+      expect(facts).toMatchObject({ status: { status: 'stale' }, changed: [key], interrupted: false });
+      expect(facts.status).toEqual(await checkPreparation(config));
+    }
+    await writeReceipt({ identity: 'a'.repeat(64), components: { ...current, policy: 'f'.repeat(64), candidate: 'e'.repeat(64) } });
+    expect(await readPreparationFacts(config)).toMatchObject({ status: { status: 'stale', reason: expect.stringMatching(/^candidate, policy changed/) }, changed: ['candidate', 'policy'] });
+
+    await writeReceipt({ identity: 'a'.repeat(64), components: undefined });
+    expect(await readPreparationFacts(config)).toMatchObject({ status: { status: 'stale' }, changed: null, interrupted: false });
+
+    await writeReceipt({ identity: 'a'.repeat(64) });
+    expect(await readPreparationFacts(config)).toMatchObject({ status: { status: 'stale', reason: expect.stringMatching(/^Candidate, pin, runtime or policy changed/) }, changed: null });
   });
 });

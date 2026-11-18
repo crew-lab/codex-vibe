@@ -2,7 +2,7 @@ import { mkdtemp, realpath, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { it, expect } from 'vitest';
-import { candidateIdentity, preparationIdentity, receiptPath } from '../../src/preparation/evidence.js';
+import { candidateIdentity, preparationComponents, preparationIdentity, receiptPath } from '../../src/preparation/evidence.js';
 import { TEST_CONFIG } from './support/test-config.js';
 import { elapsed } from '../../src/reporting/telemetry.js';
 it('binds the candidate to distribution bytes and configuration while allowing roots-only changes', async () => {
@@ -17,7 +17,11 @@ it('binds the candidate to distribution bytes and configuration while allowing r
     const config={...TEST_CONFIG,paths:{vibePinManifest:pin}};
     const identity=await preparationIdentity(config,before);
     expect(await preparationIdentity({...config,allowedWorkspaceRoots:['/another/task']},before)).toBe(identity);
+    expect(await preparationIdentity({...config,excludedGlobs:{'/another/task':['secret/**']},budgets:{'/another/task':{maxCostUsdPerDay:5}}},before)).toBe(identity);
+    expect(await preparationComponents({...config,excludedGlobs:{'/another/task':['secret/**']},budgets:{'/another/task':{maxCostUsdPerDay:5}},allowedWorkspaceRoots:['/another/task']},before)).toEqual(await preparationComponents(config,before));
     expect(await preparationIdentity({...config,limits:{...config.limits,maxTurnsEdit:99}},before)).not.toBe(identity);
+    expect(await preparationIdentity({...config,vibeReviewThinking:'off'},before)).not.toBe(identity);
+    expect((await preparationComponents({...config,vibeReviewThinking:'off'},before)).policy).not.toBe((await preparationComponents(config,before)).policy);
     expect(await preparationIdentity(config,'a'.repeat(64))).not.toBe(identity);
     expect(receiptPath(config)).toBe(path.join(root,'preparation-receipt.json'));
   } finally {await rm(root,{recursive:true,force:true});}

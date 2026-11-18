@@ -50,6 +50,10 @@ const BOOT_BOUND_SETTINGS: ReadonlyArray<readonly [string, (config: SupervisorCo
   ["experimental.antigravity_skip_permissions", (config) => config.experimental?.antigravitySkipPermissions ?? false],
 ];
 
+export function bootBoundSettings(config: SupervisorConfig): Record<string, unknown> {
+  return Object.fromEntries(BOOT_BOUND_SETTINGS.map(([key, value]) => [key, value(config)]));
+}
+
 export function bootBoundDrift(boot: SupervisorConfig, current: SupervisorConfig): string[] {
   return BOOT_BOUND_SETTINGS.filter(([, value]) => value(boot) !== value(current)).map(([key]) => key);
 }

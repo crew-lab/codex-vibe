@@ -1,36 +1,15 @@
-import { createPrivateDir, createPrivateFile } from '../security/paths.js';
 import path from 'node:path';
-import { readFile, mkdtemp, rm } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
-import { tmpdir } from 'node:os';
-import { realpath } from 'node:fs/promises';
+import { readFile, realpath } from 'node:fs/promises';
 import { z } from 'zod';
 import { loadResolvedConfig } from '../config/config.js';
-import { runAntigravityPreparationCheck } from '../preparation/antigravity-prepare.js';
-import { candidateIdentity, packageRoot, preparationComponents, preparationIdentity, receiptPath } from '../preparation/evidence.js';
+import { isOwnerLockContention } from '../core/owner-lock.js';
+import { candidateIdentity, packageRoot, preparationIdentity } from '../preparation/evidence.js';
+import { acquirePreparationLock, preparationRunningMessage } from '../preparation/lock.js';
+import { runPreparation, type PreparationResult } from '../preparation/run.js';
 import { digest } from '../acceptance/schema.js';
-import { readOwnedFile } from '../reporting/private-files.js';
-import { atomicWriteJson } from '../persistence/atomic.js';
-import { publicValue } from '../reporting/export.js';
-const MAX_REPORTED_FINDINGS = 20;
-const MAX_FINDING_MESSAGE = 600;
-export interface ReportedFinding { code: string; message: string }
-export function failingFindings(report: unknown): ReportedFinding[] {
-  const findings = (report as { findings?: unknown } | null)?.findings;
-  if (!Array.isArray(findings)) return [];
-  const failing: ReportedFinding[] = [];
-  for (const entry of findings) {
-    if (failing.length >= MAX_REPORTED_FINDINGS) break;
-    if (!entry || typeof entry !== 'object') continue;
-    const item = entry as { level?: unknown; severity?: unknown; code?: unknown; id?: unknown; message?: unknown };
-    const code = item.code ?? item.id;
-    if ((item.level ?? item.severity) !== 'fail' || typeof code !== 'string' || typeof item.message !== 'string') continue;
-    failing.push(publicValue({ code, message: item.message.slice(0, MAX_FINDING_MESSAGE) }) as ReportedFinding);
-  }
-  return failing;
-}
+export { failingFindings, type ReportedFinding } from '../preparation/run.js';
 const manifestSchema = z.object({schema_version:z.literal(1),version:z.string(),candidate_sha256:z.string().regex(/^[a-f0-9]{64}$/),script_sha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
-export async function prepareCommand(args: string[]): Promise<unknown> {
+export async function prepareCommand(args: string[]): Promise<PreparationResult> {
   if(args[0] !== 'check') throw new Error('Usage: prepare check --kit <directory> --config <file>');
   const values = new Map<string,string>();
   for(let i=1;i<args.length;i+=2){ const key=args[i]!;const value=args[i+1];if(!['--kit','--config'].includes(key)||!value||values.has(key))throw new Error('Invalid preparation arguments');values.set(key,value); }
@@ -42,35 +21,20 @@ export async function prepareCommand(args: string[]): Promise<unknown> {
   const scriptHash=digest(await readFile(script));
   if(manifest.candidate_sha256!==candidate || scriptHash!==manifest.script_sha256 || scriptHash!==digest(await readFile(path.join(packageRoot,'scripts/v2-conformance-check.mjs'))))throw new Error('Preparation kit does not match installed candidate');
   const preliminary=await loadResolvedConfig({configPath:values.get('--config')!,requirePinManifest:false});
-  if (preliminary.config.backend === 'antigravity') {
-    const out = await runAntigravityPreparationCheck(preliminary.config, { dataDir: preliminary.dataDir });
-    const current = await loadResolvedConfig({ configPath: preliminary.configPath, requirePinManifest: false });
-    if (await preparationIdentity(current.config, candidate) !== await preparationIdentity(preliminary.config, candidate)) {
-      throw new Error('Candidate or configuration changed during check');
-    }
-    return { status: out.status, candidate_sha256: out.candidate_sha256, hosted_acceptance: out.hosted_acceptance, report_sha256: out.report_sha256, report_path: out.report_path, findings: failingFindings(out.report) };
-  }
-  const resolved=await loadResolvedConfig({configPath:values.get('--config')!,requirePinManifest:true});
-  const identity=await preparationIdentity(resolved.config,candidate);
-  const components=await preparationComponents(resolved.config,candidate);
-  const temporary=await realpath(await mkdtemp(path.join(tmpdir(),'vsup-preparation-')));
-  const output=path.join(temporary,'conformance.json');
+  const antigravity = preliminary.config.backend === 'antigravity';
+  const resolved = antigravity ? preliminary : await loadResolvedConfig({configPath:values.get('--config')!,requirePinManifest:true});
+  const requirePinManifest = !antigravity;
+  const beforeFinalReceipt = async (written: { identity: string; candidate: string }): Promise<void> => {
+    const current = await loadResolvedConfig({ configPath: resolved.configPath, requirePinManifest });
+    const changed = antigravity
+      ? await preparationIdentity(current.config, written.candidate) !== await preparationIdentity(resolved.config, written.candidate)
+      : await preparationIdentity(current.config) !== written.identity;
+    if (changed) throw new Error('Candidate or configuration changed during check');
+  };
+  const lock = await acquirePreparationLock(resolved.config, resolved.dataDir).catch((error: unknown) => {
+    throw isOwnerLockContention(error) ? new Error(preparationRunningMessage(error)) : error;
+  });
   try {
-    const argv=[script,'--dist',path.join(packageRoot,'dist'),'--config',resolved.configPath,'--manifest',resolved.config.paths!.vibePinManifest!,'--placeholder-key','--observe-network','--output',output];
-    const reports = path.join(path.dirname(receiptPath(resolved.config)), 'preparation-reports');
-    await createPrivateDir(reports);
-    const started = Buffer.from(JSON.stringify({ result: 'incomplete', stage: 'no-inference-check-started', checked_at: new Date().toISOString() })+'\n');
-    await createPrivateFile(path.join(reports, `${digest(started)}.json`), started, 'wx');
-    await atomicWriteJson(receiptPath(resolved.config), {schema_version:1,result:'failed',identity,checked_at:new Date().toISOString(),report_sha256:digest(started),components});
-    const status=await new Promise<number>((resolve,reject)=>{const child=spawn(process.execPath,argv,{stdio:['ignore','ignore','inherit'],env:{PATH:process.env.PATH,HOME:temporary,TMPDIR:temporary},timeout:180_000});child.once('error',reject);child.once('close',code=>resolve(code??1));});
-    const bytes=await readOwnedFile(output,4*1024*1024);
-    const report=JSON.parse(bytes.toString('utf8')) as {result?:string;network_observation?:{verdict?:string}};
-    const current=await loadResolvedConfig({configPath:resolved.configPath,requirePinManifest:true});
-    if(await preparationIdentity(current.config)!==identity)throw new Error('Candidate or configuration changed during check');
-    const passed=status===0&&report.result==='pass'&&report.network_observation?.verdict==='none-observed-control-validated';
-    const savedReport = path.join(reports, `${digest(bytes)}.json`);
-    try { await createPrivateFile(savedReport, bytes, 'wx'); } catch(error) { if((error as NodeJS.ErrnoException).code !== 'EEXIST' || digest(await readOwnedFile(savedReport)) !== digest(bytes)) throw error; }
-    await atomicWriteJson(receiptPath(resolved.config),{schema_version:1,result:passed?'passed':'failed',identity,checked_at:new Date().toISOString(),report_sha256:digest(bytes),components});
-    return {status:passed?'passed':'failed',candidate_sha256:candidate,hosted_acceptance:'unverified',report_sha256:digest(bytes),report_path:savedReport,findings:failingFindings(report)};
-  } finally { await rm(temporary,{recursive:true,force:true}); }
+    return await runPreparation({ config: resolved.config, configPath: resolved.configPath, dataDir: resolved.dataDir, stderr: 'inherit', conformanceScript: script, beforeFinalReceipt });
+  } finally { await lock.release(); }
 }

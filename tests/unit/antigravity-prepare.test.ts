@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { failingFindings } from '../../src/cli/prepare.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
-import { antigravityPermissionsMatch, runAntigravityPreparationCheck } from '../../src/preparation/antigravity-prepare.js';
+import { antigravityPermissionsMatch, runAntigravityPreparationCheck, type AntigravityPreparationOptions } from '../../src/preparation/antigravity-prepare.js';
 import { WorkspacePathError } from '../../src/security/paths.js';
 import {
   admissionRefusedForPlantedConfiguration,
@@ -48,7 +48,7 @@ async function fakeAgy(root: string, mode: string): Promise<string> {
   return script;
 }
 
-async function prepareWith(mode: string, skipPermissions = false) {
+async function prepareWith(mode: string, skipPermissions = false, options: Omit<AntigravityPreparationOptions, 'dataDir'> = {}) {
   const root = await makeRoot();
   const dataDir = path.join(root, 'data');
   await mkdir(dataDir, { recursive: true });
@@ -59,8 +59,8 @@ async function prepareWith(mode: string, skipPermissions = false) {
     paths: { antigravity: await fakeAgy(root, mode) },
     experimental: { antigravity: true, ...(skipPermissions ? { antigravitySkipPermissions: true } : {}) }
   };
-  const out = await runAntigravityPreparationCheck(config, { dataDir });
-  return Object.assign(out, { argvLog: path.join(root, 'argv.log') });
+  const out = await runAntigravityPreparationCheck(config, { dataDir, ...options });
+  return Object.assign(out, { argvLog: path.join(root, 'argv.log'), receipt: path.join(dataDir, 'preparation-receipt.json') });
 }
 
 function evidence(overrides: Partial<ToolProbeEvidence>): ToolProbeEvidence {
@@ -324,6 +324,13 @@ describe('Antigravity preparation probes through a fake agy', () => {
     const out = await prepareWith('version-1.5.9');
     expect(out.status).toBe('passed');
     expect(out.report.executable.version).toBe('1.5.9');
+  }, 90_000);
+
+  it('writes the refresh facts into the receipt and confirms the identity before it', async () => {
+    const seen: string[] = [];
+    const out = await prepareWith('', false, { provenance: { origin: 'automatic', previousWorkerVersion: '1.5.8' }, beforeFinalReceipt: async ({ candidate }) => { seen.push(candidate); } });
+    expect(seen).toEqual([out.candidate_sha256]);
+    expect(JSON.parse(await readFile(out.receipt, 'utf8'))).toMatchObject({ report_sha256: out.report_sha256, origin: 'automatic', previous_worker_version: '1.5.8' });
   }, 90_000);
 
   it('refuses agy 1.5.7 executable during preparation', async () => {
