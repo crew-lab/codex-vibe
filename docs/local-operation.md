@@ -21,7 +21,7 @@ The first registers as `vibe-supervisor` (Vibe, the default backend). In the sec
 
 ### Worker updates
 
-After `vibe update` (to any stable version at or above the minimum, up or down) or an `agy` update, the next workspace readiness check re-pins Vibe and re-runs the no-inference preparation itself. Readiness returns `VSUP_PREPARING` meanwhile; call it again with `wait_seconds: 300` until it is eligible. No hosted re-qualification is needed for a new worker release; each run's export names the version it ran. Run one quality-pack review after an update, because the automatic refresh does not re-run hosted quality.
+After `vibe update` (to any stable version at or above the minimum, up or down) or an `agy` version update, the next workspace readiness check re-pins Vibe and re-runs the no-inference preparation itself; an agy binary changed under the same version needs `prepare check`. Readiness returns `VSUP_PREPARING` meanwhile; call it again with `wait_seconds: 300` until it is eligible. No hosted re-qualification is needed for a new worker release; each run's export names the version it ran. Run one quality-pack review after an update, because the automatic refresh does not re-run hosted quality.
 
 When the blocker says the refresh cannot do it ([preparation](preparation.md#after-a-worker-update)), repair by hand:
 
