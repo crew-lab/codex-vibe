@@ -97,10 +97,11 @@ async function checkEdit(definition, patchFile) {
     const copy = path.join(scratch, 'project');
     await cp(PROJECT, copy, { recursive: true });
     const patch = path.resolve(patchFile);
-    const changed = git(copy, ['apply', '--numstat', patch]).split('\n').filter(Boolean).map((line) => line.split('\t')[2]);
+    const patchIsEmpty = (await readFile(patch, 'utf8')).trim() === '';
+    const changed = patchIsEmpty ? [] : git(copy, ['apply', '--numstat', patch]).split('\n').filter(Boolean).map((line) => line.split('\t')[2]);
     const outside = changed.filter((file) => !definition.allowed_write_paths.includes(file));
     const missing = definition.acceptance_contract.required_changed_paths.filter((file) => !changed.includes(file));
-    git(copy, ['apply', patch]);
+    if (!patchIsEmpty) git(copy, ['apply', patch]);
     await mkdir(path.join(copy, 'quality-check'));
     await cp(path.join(PACK, 'checks', `${definition.id}.test.mjs`), path.join(copy, 'quality-check', `${definition.id}.test.mjs`));
     const run = spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...await testFiles(copy, ['tests', 'quality-check'])], { cwd: copy, encoding: 'utf8', timeout: TEST_TIMEOUT_MS, env: { PATH: process.env.PATH ?? '', HOME: scratch, TMPDIR: scratch } });

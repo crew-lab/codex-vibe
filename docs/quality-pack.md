@@ -1,11 +1,12 @@
 # Quality pack
 
-Four real tasks that measure whether Codex-to-Vibe produces good work, not only whether the supervisor stays in bounds. Each task runs on a small generated project, `orders`, with two planted bugs, and each result is judged by an independent check instead of the worker's summary. Run the pack on the machine that has Vibe after any change to the supervisor, the skill or the installed Vibe, and compare the results with the last run.
+Five real tasks that measure whether Codex-to-Vibe produces good work, not only whether the supervisor stays in bounds. Each task runs on a small generated project, `orders`, with two planted bugs and a small command line (`bin/orders.mjs`, documented in its `docs/cli.md`), and each result is judged by an independent check instead of the worker's summary. Run the pack on the machine that has Vibe after any change to the supervisor, the skill or the installed Vibe, and compare the results with the last run.
 
 | Task | Kind | What it measures |
 |---|---|---|
 | `edit-shipping` | edit | Fix an off-by-one at a documented threshold, change nothing else, and add named `node:test` cases |
 | `edit-reserve-all` | edit | An all-or-nothing operation across two source files with a new error class: a failure must leave nothing half-written |
+| `edit-stock-export` | edit | A command across four files (entry point, new module, its tests, a package script) with a required kebab-case flag, exact error messages and tests that need a temporary directory |
 | `review-total` | review | Find both planted defects in one function by checking it against a written specification |
 | `review-stock` | review | Answer a cross-file behaviour question whose correct answer is "no defect" |
 
@@ -46,7 +47,7 @@ On a real review, compare the frozen request's `context_files` with the executed
    node scripts/quality-pack.mjs check review-total --answer "$EXPORT/answer.txt"
    ```
 
-   An edit check applies the patch to a fresh copy outside any Git checkout, adds hidden tests and runs every test with `node --test`; it fails on a change outside the task's paths, a missing required change or any failing test. It runs the worker's code, so it uses a throwaway directory.
+   An edit check applies the patch to a fresh copy outside any Git checkout, adds hidden tests and runs every test with `node --test`; it fails on a change outside the task's paths, a missing required change or any failing test. An empty patch gets the same verdict, with every required path named as not changed. It runs the worker's code, so it uses a throwaway directory.
 
    The review check looks for each expected finding and the cited file. For `review-total`, the shipping finding must identify the strict comparison inside `shippingFor`. The checker also runs the three cases against a temporary copy of the bundled fixture and compares each reported tax, shipping and total with the specification and the code's actual result. When an Expected or Actual line is missing or malformed, its detail quotes the nearest line that mentions it. Use `--findings-only` to score answers to the original brief, which did not require the per-input results. Read the answer for unsupported findings before accepting it.
 
@@ -78,5 +79,11 @@ The output has two labelled parts: the supervisor's worker rules for that worker
 The review brief for `review-total` gives the worker the totals the coordinator observed by running the code. The task therefore measures explaining a measured difference and finding the wrong lines, not unaided arithmetic.
 
 The checker reads the answer form and ignores the same labels in the working. Scores from before the checker change of 2026-11-13 are not comparable with later ones.
+
+## What the edits measure
+
+`edit-shipping` and `edit-reserve-all` are small and pass on the real worker, while a real multi-file edit passed its static contract with code that did not work. `edit-stock-export` has the same shape. Its static contract is easy to meet, so its hidden tests judge behaviour: they run the command with `--out-dir <directory>` and `--out-dir=<directory>` and compare the written `stock.csv`, compare the two error messages and exit codes exactly, run the `export-stock` package script, run the worker's own test file on its own and require at least four passing cases, and reject trailing whitespace in the four changed files. A flag read under another key than `parseArgs` stores it (`values.outDir` for `--out-dir`), a `mkdtempSync()` without a prefix and a trailing space each fail by the named hidden test. The brief gives what the coordinator observed by running the command before the change and a fixed answer form, and pins no turn or time limit, so the configured defaults apply.
+
+The fixture gained `bin/`, `docs/cli.md` and `src/stock-file.mjs` with this task, and the review tasks do not name them. An edit run's workspace listing is longer than before.
 
 `node scripts/quality-pack.mjs list` lists the tasks. Each task's brief, limits, contract, hidden tests and expected findings are under `scripts/quality-pack/`.

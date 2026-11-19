@@ -1,0 +1,56 @@
+{
+  "id": "edit-stock-export",
+  "operation": "edit",
+  "what": "Add a CLI command with a required kebab-case flag across an entry point, a new module, its tests and a package script.",
+  "task": "Read docs/cli.md, bin/orders.mjs, src/stock-file.mjs, src/inventory.mjs, package.json, tests/inventory.test.mjs first.\nProject root: the repository root. The code imports its modules by paths relative to its own module (`../src/stock-file.mjs`). At run time the CLI reads the stock file and writes into the directory given on its command line; tests must find the CLI by a path relative to the test file (`fileURLToPath(new URL('../bin/orders.mjs', import.meta.url))`), not the working directory.\nThen create or change only: bin/orders.mjs, src/stock-export.mjs, tests/stock-export.test.mjs, package.json. Do not touch any other file.\nObserved before the change: with a stock file `{\"pear\": 3, \"apple\": 5}`, `node bin/orders.mjs available stock.json --sku apple` prints `5` and exits 0; `node bin/orders.mjs export stock.json --out-dir out` prints `usage: orders <available> ...` on standard error and exits 2; `npm run export-stock -- stock.json --out-dir out` fails with `Missing script: \"export-stock\"`.\nChange: implement the `export` command exactly as docs/cli.md describes it. Create src/stock-export.mjs with `export function stockCsv(stock)` and `export function writeStockExport(stock, { outDir })`. In bin/orders.mjs add an `export` command next to `available`, parse `--out-dir` with `node:util` `parseArgs` as `available` parses `--sku`, and pass its value to `writeStockExport` as `outDir`. Add the `export-stock` script to package.json as `node bin/orders.mjs export`, keeping the `test` script.\nMust reject or preserve: the two error messages in docs/cli.md exactly, on standard error with exit code 2, checking the stock file first, and writing nothing on an error; `--out-dir <directory>` and `--out-dir=<directory>` both work; the `available` command, `readStockFile` and every other file keep their behaviour.\nOn a conflict or failure: an existing `stock.csv` in the directory is replaced; if a check fails, create no directory and no file.\nTests: tests/stock-export.test.mjs using node:test with `import test from 'node:test'` and `import assert from 'node:assert/strict'`, importing the code as `../src/stock-export.mjs` and `../src/inventory.mjs` (named imports), with at least 4 top-level named `test(...)` cases, each with a strict assertion inside its callback, covering: `stockCsv` after a `reserve`; the CLI writing `stock.csv` with the right content into a new temporary directory; the exact missing `--out-dir` message and exit code; the exact missing stock file message. Run the CLI with `spawnSync(process.execPath, [cliPath, ...])` from `node:child_process`. Make each temporary directory with `node:fs` `mkdtempSync` under `os.tmpdir()` and remove it at the end of its test.\nBefore the final answer, check the source and tests for consistent export and import names and paths.\nYou cannot run anything: there is no shell, network or test runner, and every attempt is refused. Reason from the source; do not plan to execute or verify by running.\nFinal answer, in this form with each <...> replaced and nothing else changed:\nChanged: <path> - <what changed, one line> (one line per changed file)\nScratch files: <none, or their paths>",
+  "allowed_write_paths": [
+    "bin/orders.mjs",
+    "src/stock-export.mjs",
+    "tests/stock-export.test.mjs",
+    "package.json"
+  ],
+  "acceptance_contract": {
+    "schema_version": 1,
+    "allowed_changed_paths": [
+      "bin/orders.mjs",
+      "src/stock-export.mjs",
+      "tests/stock-export.test.mjs",
+      "package.json"
+    ],
+    "required_changed_paths": [
+      "bin/orders.mjs",
+      "src/stock-export.mjs",
+      "tests/stock-export.test.mjs",
+      "package.json"
+    ],
+    "checks": [
+      {
+        "id": "named-tests",
+        "kind": "node_test",
+        "path": "tests/stock-export.test.mjs",
+        "min_cases": 4
+      },
+      {
+        "id": "exports-stock-csv",
+        "kind": "text_contains",
+        "path": "src/stock-export.mjs",
+        "value": "export function stockCsv"
+      },
+      {
+        "id": "exports-write-stock-export",
+        "kind": "text_contains",
+        "path": "src/stock-export.mjs",
+        "value": "export function writeStockExport"
+      },
+      {
+        "id": "package-script",
+        "kind": "text_contains",
+        "path": "package.json",
+        "value": "\"export-stock\": \"node bin/orders.mjs export\""
+      }
+    ],
+    "required_validations": [
+      "quality-pack-check"
+    ]
+  }
+}

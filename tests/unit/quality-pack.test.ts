@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
+import { inspectNodeTests } from '../../src/acceptance/node-test.js';
 import { acceptanceContractSchema } from '../../src/acceptance/schema.js';
 import { editStartSchema, reviewStartSchema } from '../../src/mcp/schemas.js';
 
@@ -46,7 +47,7 @@ describe('quality pack', () => {
     const created = JSON.parse((await exec(process.execPath, [script, 'create', fixture])).stdout) as { base_commit: string };
     expect(created.base_commit).toMatch(/^[0-9a-f]{40}$/);
     const all = await tasks();
-    expect(all.map((task) => task.id).sort()).toEqual(['edit-reserve-all', 'edit-shipping', 'review-stock', 'review-total']);
+    expect(all.map((task) => task.id).sort()).toEqual(['edit-reserve-all', 'edit-shipping', 'edit-stock-export', 'review-stock', 'review-total']);
     for (const task of all) {
       const { stdout } = await exec(process.execPath, [script, 'request', task.id, '--cwd', fixture]);
       const document = JSON.parse(stdout) as { operation: string; request: Record<string, unknown> };
@@ -152,6 +153,136 @@ describe('quality pack', () => {
   });
 });
 
+const stockExportModule = `import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+
+export function stockCsv(stock) {
+  const rows = [...stock.entries()].sort(([left], [right]) => (left < right ? -1 : 1)).map(([sku, entry]) => \`\${sku},\${entry.available},\${entry.reserved}\`);
+  return ['sku,available,reserved', ...rows].map((line) => \`\${line}\\n\`).join('');
+}
+
+export function writeStockExport(stock, { outDir }) {
+  mkdirSync(outDir, { recursive: true });
+  const file = path.join(outDir, 'stock.csv');
+  writeFileSync(file, stockCsv(stock));
+  return file;
+}
+`;
+
+const stockExportCommand = `function exportStock(args) {
+  const { values, positionals } = parseArgs({ args, options: { 'out-dir': { type: 'string' } }, allowPositionals: true });
+  const [stockFile] = positionals;
+  if (!stockFile) fail('orders export: a stock file is required');
+  const outDir = values['out-dir'];
+  if (!outDir) fail('orders export: --out-dir is required');
+  process.stdout.write(\`wrote \${writeStockExport(readStockFile(stockFile), { outDir })}\\n\`);
+}
+
+const commands = { available, export: exportStock };`;
+
+const stockExportTests = `import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { stockCsv } from '../src/stock-export.mjs';
+import { createStock, reserve } from '../src/inventory.mjs';
+
+const cliPath = fileURLToPath(new URL('../bin/orders.mjs', import.meta.url));
+
+function exportIn(args) {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'stock-export-'));
+  try {
+    writeFileSync(path.join(directory, 'stock.json'), '{"apple": 5}');
+    const run = spawnSync(process.execPath, [cliPath, 'export', ...args(directory)], { encoding: 'utf8' });
+    return { run, csv: run.status === 0 ? readFileSync(path.join(directory, 'out', 'stock.csv'), 'utf8') : '' };
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+test('stockCsv shows a reservation', () => {
+  const stock = createStock([['apple', 5]]);
+  reserve(stock, 'apple', 2);
+  assert.equal(stockCsv(stock), 'sku,available,reserved\\napple,3,2\\n');
+});
+
+test('export writes stock.csv', () => {
+  assert.equal(exportIn((directory) => [path.join(directory, 'stock.json'), '--out-dir', path.join(directory, 'out')]).csv, 'sku,available,reserved\\napple,5,0\\n');
+});
+
+test('export needs --out-dir', () => {
+  assert.equal(exportIn((directory) => [path.join(directory, 'stock.json')]).run.stderr, 'orders export: --out-dir is required\\n');
+});
+
+test('export needs a stock file', () => {
+  assert.equal(exportIn(() => ['--out-dir', 'out']).run.stderr, 'orders export: a stock file is required\\n');
+});
+`;
+
+async function stockExportPatch(root: string, name: string, change: (files: { cli: string; tests: string }) => { cli: string; tests: string }): Promise<string> {
+  const fixture = path.join(root, name);
+  await exec(process.execPath, [script, 'create', fixture]);
+  const cliFile = path.join(fixture, 'bin', 'orders.mjs');
+  const original = await readFile(cliFile, 'utf8');
+  const reference = {
+    cli: original
+      .replace("import { readStockFile } from '../src/stock-file.mjs';", "import { readStockFile } from '../src/stock-file.mjs';\nimport { writeStockExport } from '../src/stock-export.mjs';")
+      .replace('const commands = { available };', stockExportCommand),
+    tests: stockExportTests
+  };
+  const files = change(reference);
+  await writeFile(cliFile, files.cli);
+  await writeFile(path.join(fixture, 'src', 'stock-export.mjs'), stockExportModule);
+  await writeFile(path.join(fixture, 'tests', 'stock-export.test.mjs'), files.tests);
+  const packageFile = path.join(fixture, 'package.json');
+  await writeFile(packageFile, (await readFile(packageFile, 'utf8')).replace('"test": "node --test"', '"test": "node --test",\n    "export-stock": "node bin/orders.mjs export"'));
+  await exec('git', ['add', '--intent-to-add', '--', 'src/stock-export.mjs', 'tests/stock-export.test.mjs'], { cwd: fixture });
+  const patch = path.join(root, `${name}.patch`);
+  await writeFile(patch, (await exec('git', ['diff'], { cwd: fixture })).stdout);
+  return patch;
+}
+
+async function checkStockExport(patch: string): Promise<{ passed: boolean; checks: { id: string; passed: boolean; detail: string }[] }> {
+  const run = await exec(process.execPath, [script, 'check', 'edit-stock-export', '--patch', patch]).catch((error: { stdout: string }) => error);
+  return JSON.parse(run.stdout) as { passed: boolean; checks: { id: string; passed: boolean; detail: string }[] };
+}
+
+describe('quality pack stock export edit', () => {
+  it('passes a working patch and fails the flag-key, temporary-directory and whitespace slips by behaviour', async () => {
+    const root = await scratch();
+    const reference = await checkStockExport(await stockExportPatch(root, 'reference', (files) => files));
+    expect(reference).toMatchObject({ passed: true, checks: expect.arrayContaining([{ id: 'all-tests-pass', passed: true, detail: '19 passed, 0 failed' }]) });
+
+    const slips = {
+      'flag-key': (files: { cli: string; tests: string }) => ({ ...files, cli: files.cli.replace("values['out-dir']", 'values.outDir') }),
+      'mkdtemp-prefix': (files: { cli: string; tests: string }) => ({ ...files, tests: files.tests.replace("mkdtempSync(path.join(os.tmpdir(), 'stock-export-'))", 'mkdtempSync()') }),
+      'trailing-whitespace': (files: { cli: string; tests: string }) => ({ ...files, tests: files.tests.replace("import test from 'node:test';", "import test from 'node:test';  ") })
+    };
+    const expectedFailures = {
+      'flag-key': 'export --out-dir <directory> creates the directory and writes stock.csv',
+      'mkdtemp-prefix': 'the worker tests run and pass on their own',
+      'trailing-whitespace': 'the changed files have no trailing whitespace'
+    };
+    for (const [name, slip] of Object.entries(slips)) {
+      const result = await checkStockExport(await stockExportPatch(root, name, slip));
+      expect(result.passed, name).toBe(false);
+      expect(result.checks.filter((item) => !item.passed).map((item) => item.id), name).toEqual(['all-tests-pass']);
+      expect(result.checks.find((item) => item.id === 'all-tests-pass')?.detail, name).toContain(expectedFailures[name as keyof typeof expectedFailures]);
+    }
+  }, 60_000);
+
+  it('gives an empty patch a verdict instead of an error', async () => {
+    const patch = path.join(await scratch(), 'empty.patch');
+    await writeFile(patch, '');
+    const result = await checkStockExport(patch);
+    expect(result.passed).toBe(false);
+    expect(result.checks.find((item) => item.id === 'required-paths-changed')).toMatchObject({ passed: false, detail: 'not changed: bin/orders.mjs, src/stock-export.mjs, tests/stock-export.test.mjs, package.json' });
+  });
+});
+
 const reviewFindings = 'src/cart.mjs calculates tax from gross. In shippingFor, subtotalCents > FREE_SHIPPING_FROM_CENTS excludes equality at 5000.';
 const reviewForm = [
   'Input 1: 1000 cents with a 10% discount\nExpected: tax 180, shipping 499, total 1579\nActual: tax 200, shipping 499, total 1599',
@@ -246,6 +377,19 @@ describe('quality pack prompt', () => {
     for (const file of definition.context_files ?? []) expect(stdout).toContain(`Approved context path: ${file}`);
     expect(stdout).toContain(definition.task);
     expect((await exec(process.execPath, [script, 'prompt', 'review-total', '--worker', 'agy'])).stdout).toContain('=== Worker rules (agy, review) ===');
+  });
+
+  it('prints the stock export edit brief with what the coordinator observed and the answer form', async () => {
+    const definition = (await tasks()).find((candidate) => candidate.id === 'edit-stock-export') as Task;
+    const { stdout } = await exec(process.execPath, [script, 'prompt', 'edit-stock-export']);
+    expect(stdout).toContain('=== Worker rules (vibe, edit) ===');
+    expect(stdout).toContain(definition.task);
+    expect(definition.task).toContain('Observed before the change:');
+    expect(definition.task).toContain('You cannot run anything');
+    expect(definition.task).toMatch(/Final answer, in this form[^\n]*\nChanged: <path>[^\n]*\nScratch files: <none, or their paths>$/);
+    expect(definition).not.toHaveProperty('max_turns');
+    expect(definition).not.toHaveProperty('timeout_seconds');
+    expect(inspectNodeTests(stockExportTests, 4)).toMatchObject({ passed: true, cases: 4 });
   });
 });
 
