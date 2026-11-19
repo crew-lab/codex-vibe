@@ -59,7 +59,7 @@ Done and proven on Vibe 3.1.2: version floors, worker rules per tool, no listing
 
 Done, decided by the owner on 2026-11-15 and not yet run on a worker: a Vibe edit that stops at its turn limit is judged by its contract and checks, as a timeout after audited writes already is. The stop is reported only after a clean final audit, so the checks decide and a finished patch is kept. agy turn-limit edits stay `incomplete`: the worker is ended at the limit and a write in flight cannot be confirmed.
 
-Done and not yet run on a worker: a worker update repairs itself at the next readiness check (Vibe re-pin once every file matches its `RECORD` hash, re-preparation for both workers, the retryable `VSUP_PREPARING`), and readiness reports the running build, the limits in force and the worker version. *Failure:* every `vibe update` stopped work until the manifest and preparation were redone by hand, and the copy-rules trial ran on an older build than expected.
+Implemented and verified on live Vibe 3.1.2 and 3.1.3 ([trial evidence](../research/evidence/vibe-313-model-pin-20261118/README.md)): a worker update repairs itself at the next readiness check (Vibe re-pin once every file matches its `RECORD` hash, re-preparation for both workers, the retryable `VSUP_PREPARING`), and readiness reports the running build, the limits in force and the worker version. *Failure:* every `vibe update` stopped work until the manifest and preparation were redone by hand, and the copy-rules trial ran on an older build than expected.
 
 Now, each its own commit. Every step answers a failure in the third runs, or is marked a candidate.
 
