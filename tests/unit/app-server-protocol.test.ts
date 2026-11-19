@@ -335,7 +335,7 @@ describe('response parsers', () => {
     expect(parse({ stopReason: 'length' }).stopReason).toBe('length');
     expect(parse({}).stopReason).toBeNull();
     expect(parse({ stopReason: 'something_new' })).toMatchObject({ stopReason: 'unknown', rawStopReason: 'something_new' });
-    for (const code of ['invalid_api_key', 'invalid_model', 'context_too_long', 'response_too_long', 'rate_limit', 'refusal', 'backend_error', 'internal_error', 'incomplete_stream', 'compaction_failed']) {
+    for (const code of ['invalid_api_key', 'invalid_model', 'context_too_long', 'response_too_long', 'rate_limit', 'refusal', 'backend_error', 'internal_error', 'incomplete_stream', 'compaction_failed', 'usage_limit', 'credential_unavailable', 'pricing_unavailable']) {
       expect(parse({ status: 'failed', error: { code, message: 'm', details: null } }).error).toEqual({ code, rawCode: code, message: 'm' });
       expect(isTurnErrorCode(code)).toBe(true);
     }
@@ -499,7 +499,9 @@ describe('notification parser', () => {
     expect(parseNotification('warning', { warning: { message: 'careful', code: 'w1', details: null } })).toEqual({ kind: 'warning', eventId: null, sessionId: null, message: 'careful', code: 'w1' });
     expect(parseNotification('error', { error: { message: 'bad' } })).toMatchObject({ kind: 'error', message: 'bad', code: null });
     expect(parseNotification('warning', {})).toMatchObject({ kind: 'warning', message: null, code: null });
-    expect(parseNotification('turn/retrying', { attempt: 2 })).toEqual({ kind: 'turn/retrying', eventId: null, sessionId: null });
+    expect(parseNotification('turn/retrying', { sessionId: 's1', category: 'rate_limited', detail: 'Rate limited.' })).toEqual({ kind: 'turn/retrying', eventId: null, sessionId: 's1', category: 'rate_limited', detail: 'Rate limited.' });
+    for (const category of ['server_error', 'timed_out', 'connection', 'unknown']) expect(parseNotification('turn/retrying', { category, detail: 'd' })).toMatchObject({ category });
+    expect(parseNotification('turn/retrying', { category: 'brand_new', detail: 7 })).toEqual({ kind: 'turn/retrying', eventId: null, sessionId: null, category: 'unknown', detail: null });
   });
 
   it('surfaces unknown methods as unknown, keeping the event id for the watermark', () => {

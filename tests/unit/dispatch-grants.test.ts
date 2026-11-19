@@ -94,8 +94,8 @@ describe('DispatchGrants', () => {
     });
     await expect(grants.consume({ ...start, binding: { ...fields, node_executable: 'e'.repeat(64) } })).rejects.toMatchObject({ message: expect.stringContaining('same vibe-supervisor install, Node executable and --config') });
     await expect(grants.consume({ ...start, requestSha256: digest, binding: fields, attemptId: '00000000-0000-4000-8000-000000000009' })).rejects.toMatchObject({ message: expect.stringContaining('does not belong to the authorization_id') });
-    const soon = await grants.issue(input(new Date(Date.now() + 10).toISOString()));
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    const soon = await grants.issue(input(new Date(Date.now() + 250).toISOString()));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     await expect(grants.consume({ authorizationId: soon.authorization_id, attemptId: soon.attempt_id, requestSha256: digest, binding: fields, runId: soon.attempt_id })).rejects.toMatchObject({ message: expect.stringContaining(`expired at ${soon.expires_at}`) });
     await grants.consume({ ...start, requestSha256: digest, binding: fields });
   });

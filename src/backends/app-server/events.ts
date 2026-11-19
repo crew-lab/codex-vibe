@@ -16,6 +16,7 @@ import {
   type MessageEntry,
   type PageParams,
   type PatchOp,
+  type RetryCategory,
   type ServerNotification,
   type SessionState,
   type Turn
@@ -62,7 +63,8 @@ export type EventSignal =
   | { type: 'turn_completed'; turn: Turn }
   | { type: 'stats'; stats: AgentStats; contextWindow: number | null }
   | { type: 'session_handoff'; kind: 'session/compacted' | 'session/contextCleared'; oldSessionId: string; newSessionId: string; eventId: number; historicalEffects: number }
-  | { type: 'turn_retrying' }
+  | { type: 'turn_retrying'; category: RetryCategory; detail: string | null }
+  | { type: 'model_output' }
   | { type: 'warning' | 'server_error'; message: string | null; code: string | null };
 
 export interface EventCounters {
@@ -180,6 +182,10 @@ export class EffectValidator {
 
 function redactedPath(filePath: string | null, secrets: readonly string[]): string | null {
   return filePath === null ? null : redactSecrets(filePath.slice(0, MAX_SIGNAL_PATH_CHARS), secrets);
+}
+
+function isModelOutput(entry: HistoryEntry): boolean {
+  return entry.kind === 'reasoning' || (entry.kind === 'message' && entry.role === 'assistant');
 }
 
 function pathOf(entry: EffectEntry): string | null {
@@ -470,6 +476,7 @@ export class EventProcessor {
   private readonly effects = new Map<string, RetainedEffect>();
   private readonly historical = new Map<string, HistoricalEffect>();
   private readonly openCallbacks = new Set<string>();
+  private readonly reasoningEntries = new Set<string>();
   private readonly sessions: string[];
   private readonly messages = new Map<string, MessageEntry>();
   private validator: EffectValidator;
@@ -702,7 +709,7 @@ export class EventProcessor {
         result.signals.push({ type: 'stats', stats: notification.stats, contextWindow: notification.contextWindow });
         return;
       case 'turn/retrying':
-        result.signals.push({ type: 'turn_retrying' });
+        result.signals.push({ type: 'turn_retrying', category: notification.category, detail: this.safeText(notification.detail) });
         return;
       case 'warning':
         result.signals.push({ type: 'warning', message: this.safeText(notification.message), code: notification.code });
@@ -713,16 +720,22 @@ export class EventProcessor {
       case 'history/entryAdded':
         if (this.gap !== null || this.latchedFatal) { this.counters.ignoredWhileAwaitingResync += 1; return; }
         this.ingest(notification.entry, isRecord(params.entry) ? params.entry : undefined, result);
+        if (isModelOutput(notification.entry)) this.noteModelOutput(result);
         return;
       case 'history/entryUpdated':
         if (this.gap !== null || this.latchedFatal) { this.counters.ignoredWhileAwaitingResync += 1; return; }
         this.update(notification.entryId, notification.patch, result);
+        if (this.reasoningEntries.has(notification.entryId) || this.messages.has(notification.entryId)) this.noteModelOutput(result);
         return;
       case 'unknown':
       case 'session/compacted':
       case 'session/contextCleared':
         return;
     }
+  }
+
+  private noteModelOutput(result: EventResult): void {
+    if (!this.latchedFatal) result.signals.push({ type: 'model_output' });
   }
 
   private safeText(message: string | null): string | null {
@@ -739,6 +752,7 @@ export class EventProcessor {
     switch (entry.kind) {
       case 'reasoning':
         this.counters.reasoningDropped += 1;
+        if (entry.id !== null && this.reasoningEntries.size < this.maxEffects) this.reasoningEntries.add(entry.id);
         return;
       case 'callback':
         this.counters.callbacksSeen += 1;

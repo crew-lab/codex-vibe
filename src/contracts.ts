@@ -438,6 +438,15 @@ export const REMEDIATION: Record<SupervisorErrorCode, string> = {
   VSUP_PREPARING: "The supervisor is refreshing its own worker records (pin manifest and no-inference preparation) after a worker update; nothing was started and no attempt was consumed. Check readiness again with vibe_status in workspace mode, passing wait_seconds up to 300 to wait for it, and repeat while this code is returned.",
 };
 
-export function supervisorError(code: SupervisorErrorCode, message: string, details?: Record<string, unknown>, retryable = false): SupervisorError {
-  return { code, message, remediation: REMEDIATION[code], retryable, ...(details ? { details } : {}) };
+export const REASON_REMEDIATION = {
+  provider_refused: "Set vibe_model in config.toml to a model this provider account can use, restart the supervisor, then authorize and start a new run. An unchanged request on the same model is refused the same way.",
+  model_not_selected: "Set vibe_model in config.toml to a model alias this Vibe version offers, restart the supervisor, then check readiness again.",
+  provider_usage_limit: "Top up the provider account behind MISTRAL_API_KEY, then authorize and start a new run. Until then every run fails the same way.",
+  credential_unavailable: "No request reached the provider. Wait until the credential can be read again (for example once the computer is awake), then authorize the same request again and start a new run.",
+  pricing_unavailable: "No supervisor setting causes this: the supervisor gives Vibe no price budget. Report details.message and details.error_code with the installed Vibe version; until Vibe reports a price for the model or stops applying a budget, a new run on this model fails the same way.",
+  provider_retrying: "The model provider was failing when the run ended, so a longer timeout will not help. Wait for the provider to recover (details.retry_category says how it failed), then authorize the same request again and start a new run."
+} as const;
+
+export function supervisorError(code: SupervisorErrorCode, message: string, details?: Record<string, unknown>, retryable = false, remediation: string = REMEDIATION[code]): SupervisorError {
+  return { code, message, remediation, retryable, ...(details ? { details } : {}) };
 }

@@ -24,7 +24,7 @@ const SCENARIO_KEYS = new Set([
   'badCursor', 'afterHandoff', 'notifyBeforeTurnResponse', 'historyListDelayMs', 'steps'
 ]);
 const STEP_OPS = new Set([
-  'say', 'reasoning', 'stats', 'call', 'unknownEntry', 'unknownNotification', 'staleEvent', 'delay', 'hold', 'wedge', 'crash',
+  'say', 'reasoning', 'stats', 'call', 'unknownEntry', 'unknownNotification', 'staleEvent', 'retrying', 'delay', 'hold', 'wedge', 'crash',
   'malformedLine', 'oversizedFrame', 'partialFrame', 'handoff', 'end'
 ]);
 const HANDOFF_KINDS = ['compacted', 'contextCleared'];
@@ -593,6 +593,9 @@ async function runStep(step, turn, raceInterrupt) {
       return undefined;
     case 'unknownNotification':
       await send(notification(step.method ?? 'session/futureThing', nextEventId(), step.params ?? {}));
+      return undefined;
+    case 'retrying':
+      await send({ jsonrpc: '2.0', method: 'turn/retrying', params: { sessionId: sessionId(), category: step.category ?? 'rate_limited', detail: step.detail ?? 'Rate limited by the provider.' } });
       return undefined;
     case 'staleEvent': {
       const frame = state.lastHistoryNotification ? clone(state.lastHistoryNotification) : notification('history/entryAdded', 0, {});

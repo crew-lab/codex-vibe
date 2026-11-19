@@ -1,4 +1,4 @@
-import { supervisorError, type RunState, type SupervisorError } from '../../contracts.js';
+import { REASON_REMEDIATION, supervisorError, type RunState, type SupervisorError } from '../../contracts.js';
 import type { EventFatal } from './events.js';
 import type { Turn, TurnError } from './protocol.js';
 
@@ -47,8 +47,8 @@ export const LATE_COMPLETION_WARNING = 'The turn finished as the run reached its
 export const TIMEOUT_RESULT_WARNING = 'The run reached its timeout before the turn finished; every effect was audited, but the result may be incomplete.';
 export const REFUSAL_WARNING = 'The model declined the request (error code refusal); the result is not a review or an edit.';
 
-function failure(code: Parameters<typeof supervisorError>[0], message: string, details?: Record<string, unknown>, retryable = false): RunOutcome {
-  return { state: 'failed', error: supervisorError(code, message, details, retryable), warnings: [] };
+function failure(code: Parameters<typeof supervisorError>[0], message: string, details?: Record<string, unknown>, retryable = false, remediation?: string): RunOutcome {
+  return { state: 'failed', error: supervisorError(code, message, details, retryable, remediation), warnings: [] };
 }
 
 function conditionOutcome(input: OutcomeInput): RunOutcome | null {
@@ -101,9 +101,15 @@ function errorOutcome(turn: Turn, model: string | undefined): RunOutcome | null 
   switch (error.code) {
     case 'invalid_api_key':
       if (providerRefusedForAnotherReason(error)) {
-        return failure('VSUP_BACKEND_ERROR', `The model provider refused the request${model === undefined ? '' : ` for model ${model}`} for a reason other than the API key; details.message carries the provider's reason. If the account cannot use this model, set vibe_model to one it can, then restart the supervisor.`, { ...details, classification: 'configuration', reason: 'provider_refused', ...(model === undefined ? {} : { model }) });
+        return failure('VSUP_BACKEND_ERROR', `The model provider refused the request${model === undefined ? '' : ` for model ${model}`} for a reason other than the API key; details.message carries the provider's reason. If the account cannot use this model, set vibe_model to one it can, then restart the supervisor.`, { ...details, classification: 'configuration', reason: 'provider_refused', ...(model === undefined ? {} : { model }) }, false, REASON_REMEDIATION.provider_refused);
       }
       return failure('VSUP_AUTH_REQUIRED', 'The Vibe provider rejected the API key.', details);
+    case 'usage_limit':
+      return failure('VSUP_BACKEND_ERROR', 'The model provider refused the request because the account has no credit left; a new run fails the same way until the account is topped up.', { ...details, reason: 'provider_usage_limit' }, false, REASON_REMEDIATION.provider_usage_limit);
+    case 'credential_unavailable':
+      return failure('VSUP_BACKEND_ERROR', 'Vibe could not check its sign-in (for example while the computer slept), so no request reached the provider; the same request may pass later.', { ...details, reason: 'credential_unavailable' }, true, REASON_REMEDIATION.credential_unavailable);
+    case 'pricing_unavailable':
+      return failure('VSUP_BACKEND_ERROR', `Vibe refused the turn because it applies a price budget but has no price${model === undefined ? '' : ` for model ${model}`}. The supervisor sets no price budget in Vibe, so the budget came from Vibe itself; details carry what Vibe reported.`, { ...details, reason: 'pricing_unavailable', ...(model === undefined ? {} : { model }) }, false, REASON_REMEDIATION.pricing_unavailable);
     case 'invalid_model':
       return failure('VSUP_BACKEND_ERROR', 'The Vibe provider rejected the configured model; this is a configuration failure.', { ...details, classification: 'configuration' });
     case 'context_too_long':

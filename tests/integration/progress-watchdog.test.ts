@@ -200,6 +200,31 @@ describe("worker activity and settle races", () => {
     } finally { await context.manager.shutdown(); }
   });
 
+  it("says the provider was failing when an app-server run goes silent after a retry notice", async () => {
+    const scenario = { name: "retrying-then-silent", steps: [{ op: "retrying", category: "rate_limited", detail: "Rate limited by the provider." }, { op: "hold" }] };
+    const context = await setup(1, { backend: (_data, source) => fakeAppServerBackend(path.dirname(source), source, scenario) });
+    try {
+      const started = await authorizedReviewStart(context.manager, { task: "review", cwd: context.source });
+      const status = await waitFor(() => context.manager.status({ run_id: started.run_id }), (value) => value.state === "failed", 20_000);
+      expect(status.error).toMatchObject({ code: "VSUP_NO_PROGRESS", details: { reason: "provider_retrying", retry_category: "rate_limited" }, message: expect.stringContaining("provider was failing") });
+      const events = await readEvents(context.data, started.run_id);
+      expect(events.find((event) => event.data.reason === "turn_retrying")?.data).toMatchObject({ category: "rate_limited" });
+    } finally { await context.manager.shutdown(); }
+  });
+
+  it("does not blame the provider when the model streamed an answer after the retry notice", async () => {
+    const scenario = { name: "retrying-then-answer", steps: [{ op: "retrying", category: "server_error" }, { op: "say", text: "A long answer that is still going", stream: true }, { op: "hold" }] };
+    const context = await setup(1, { backend: (_data, source) => fakeAppServerBackend(path.dirname(source), source, scenario) });
+    try {
+      const started = await authorizedReviewStart(context.manager, { task: "review", cwd: context.source });
+      const status = await waitFor(() => context.manager.status({ run_id: started.run_id }), (value) => value.state === "failed", 20_000);
+      expect(status.error).toMatchObject({ code: "VSUP_NO_PROGRESS" });
+      expect((status.error as { details?: Record<string, unknown> }).details?.reason).toBeUndefined();
+      const events = await readEvents(context.data, started.run_id);
+      expect(events.filter((event) => event.data.reason === "model_output")).toHaveLength(1);
+    } finally { await context.manager.shutdown(); }
+  });
+
   it("records the last activity kind and the silence in the no_progress diagnostic", async () => {
     const context = await setup(1);
     try {

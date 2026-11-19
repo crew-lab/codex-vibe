@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { REMEDIATION } from '../../src/contracts.js';
+import { REASON_REMEDIATION, REMEDIATION } from '../../src/contracts.js';
 import { MEANINGS, errorsDocPath, renderErrorsDoc } from '../../scripts/errors-doc.mjs';
 
 describe('docs/errors.md', () => {
@@ -11,5 +11,10 @@ describe('docs/errors.md', () => {
   it('matches the codes and remedies in the source', async () => {
     const current = await readFile(errorsDocPath, 'utf8');
     expect(current).toBe(renderErrorsDoc(REMEDIATION));
+  });
+
+  it('names every reason that carries its own remedy', () => {
+    const doc = renderErrorsDoc(REMEDIATION);
+    for (const reason of Object.keys(REASON_REMEDIATION)) expect(doc).toContain(`\`${reason}\``);
   });
 });

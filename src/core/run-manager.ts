@@ -12,7 +12,7 @@ import type {
   FindingsArtifact, ContextReads
 } from "../contracts.js";
 import { APP_VERSION } from "../version.js";
-import { SCHEMA_VERSION, supervisorError } from "../contracts.js";
+import { REASON_REMEDIATION, SCHEMA_VERSION, supervisorError } from "../contracts.js";
 import { closeSchema, dispatchRequestSchemas, editStartSchema, resultSchema, reviewStartSchema, statusSchema } from "../mcp/schemas.js";
 import { atomicWriteJson, sanitizeForPersistence } from "../persistence/atomic.js";
 import { readNdjsonRecovering } from "../persistence/ndjson.js";
@@ -101,7 +101,13 @@ interface Runtime {
   dispatchBinding?: DispatchBinding;
   waiters: Set<() => void>;
   refreshWarning?: string;
+  providerRetry?: ProviderRetry;
+  modelAnswered?: boolean;
 }
+
+interface ProviderRetry { category: string; detail?: string }
+const MAX_PROVIDER_TEXT = 200;
+interface ProviderRefusal { model: string; at: string; message: string }
 
 type SettleOutcome = { state: "completed" | "failed" | "cancelled"; error?: SupervisorError };
 type RequestedOutcome = { state: "failed" | "cancelled"; error?: SupervisorError };
@@ -239,6 +245,7 @@ export class RunManager {
   private readonly refreshDependencies: WorkerRefreshDependencies;
   private workerRefresh: ActiveRefresh | undefined;
   private lastRefresh: { outcome: RefreshOutcome; reported: boolean } | undefined;
+  private providerRefusal: ProviderRefusal | undefined;
   private pinFailure: { identity: string; error: SupervisorError; at: number } | undefined;
   private unsettled: { reason: string; identity: string | null; files: Record<string, unknown>; since: number; checkedAt: number; seenAt: number } | undefined;
   private readonly now: () => number;
@@ -830,7 +837,7 @@ export class RunManager {
     const taskAuthorize = this.policy.configPath ? await taskAuthorizeCommand({ configPath: this.policy.configPath, operation: input.operation, workspace: workspace ?? input.workspace, baseRef }) : null;
     const limits = this.dispatchLimits(input.operation);
     const refreshed = refreshedFacts(facts);
-    const warnings = [...(refreshed ? [refreshWarning(this.activeBackendKind, refreshed.from, workerVersion)] : []), ...(this.bootBuild === undefined ? [UNKNOWN_BUILD_WARNING] : [])];
+    const warnings = [...(refreshed ? [refreshWarning(this.activeBackendKind, refreshed.from, workerVersion)] : []), ...(this.bootBuild === undefined ? [UNKNOWN_BUILD_WARNING] : []), ...this.providerRefusalWarning()];
     const body = {
       server_version: APP_VERSION,
       supervisor_runtime: { node: process.version, executable: await realpath(process.execPath), platform: process.platform, arch: process.arch },
@@ -1616,6 +1623,7 @@ export class RunManager {
     return {
       onEvent: (event) => {
         if (this.stopping) return undefined;
+        noteProviderRetry(runtime, event);
         if (event.source === "vibe" || event.source === "antigravity") this.noteActivity(runtime, `${event.source}:${String(event.type).slice(0, 64)}`);
         return this.serial(runtime, async () => this.appendEvent(runtime, event)).catch((error: unknown) => this.noteEventFailure(runtime, error));
       },
@@ -1765,7 +1773,7 @@ export class RunManager {
     const current = runtime.record.state;
     if (isTerminal(current) || current === "closing") return;
     if (current === "completed") return;
-    let outcome = requested;
+    let outcome = withProviderRetry(requested, runtime.providerRetry);
     try {
       await this.ensureLoaded(runtime);
       this.endTranscriptTurn(runtime);
@@ -1786,6 +1794,7 @@ export class RunManager {
         await this.writeFallbackResult(runtime, outcome.state);
       }
       await this.setState(runtime, outcome.state, { ...(outcome.error ? { error: outcome.error } : {}), finishedAt: new Date().toISOString() });
+      this.noteProviderRefusal(runtime, outcome);
       delete runtime.requestedOutcome;
     } finally {
       if (!runtime.handle) this.releaseSlot(runtime);
@@ -2284,9 +2293,32 @@ export class RunManager {
     return record.executionState === "not_started" && (record.state === "failed" || record.state === "cancelled");
   }
 
+  private sentAndFailed(record: RunRecord): boolean {
+    return record.state === "failed" && record.executionState !== "not_started" && this.runs.get(record.runId)?.promptSent === true;
+  }
+
+  private noteProviderRefusal(runtime: Runtime, outcome: SettleOutcome): void {
+    if (runtime.record.backend !== "app-server") return;
+    const model = sessionModel(this.config.vibeModel);
+    const details = outcome.error?.details;
+    if (details?.reason === "provider_refused") {
+      this.providerRefusal = { model: typeof details.model === "string" ? details.model : model, at: new Date().toISOString(), message: typeof details.message === "string" ? details.message.slice(0, MAX_PROVIDER_TEXT) : "" };
+      return;
+    }
+    if (runtime.modelAnswered && this.providerRefusal?.model === model) this.providerRefusal = undefined;
+  }
+
+  private providerRefusalWarning(): string[] {
+    const refusal = this.providerRefusal;
+    if (!refusal || this.activeBackendKind !== "app-server" || refusal.model !== sessionModel(this.config.vibeModel)) return [];
+    const reason = refusal.message ? ` ("${refusal.message}")` : "";
+    return [`provider_refused: the model provider refused model ${refusal.model} at ${refusal.at} for a reason other than the API key${reason}, and no later run on it has had a model answer. A new run on this model is likely refused the same way unless the account's plan has changed; set vibe_model to a model the account can use, or start only if the plan has changed.`];
+  }
+
   private async retryAuthorization(runtime: Runtime): Promise<{ task_authorize?: Awaited<ReturnType<typeof taskAuthorizeCommand>> }> {
     const record = runtime.record;
-    if (!this.neverSent(record) || !this.policy.configPath) return {};
+    const offered = this.neverSent(record) || (this.sentAndFailed(record) && record.error?.retryable === true);
+    if (!offered || !this.policy.configPath) return {};
     const baseRef = record.mode === "edit" ? record.worktree?.baseRef ?? runtime.baseRef ?? "HEAD" : undefined;
     try { return { task_authorize: await taskAuthorizeCommand({ configPath: this.policy.configPath, operation: record.mode, workspace: record.sourceWorkspace, baseRef }) }; }
     catch { return {}; }
@@ -2297,8 +2329,8 @@ export class RunManager {
     switch (state) {
       case "awaiting_validation": return "This historical correction record cannot continue; inspect its preserved artifacts and close it.";
       case "completed": return "Check stop_reason and warnings before trusting the result; call vibe_close when done.";
-      case "failed":
-      case "cancelled": return "Read error and warnings; call vibe_close when done.";
+      case "failed": return record.state === state && this.sentAndFailed(record) ? spentGrantNextAction(record) : FAILED_NEXT_ACTION;
+      case "cancelled": return FAILED_NEXT_ACTION;
       case "closing":
       case "closed": return "The run is closed; start a new run for more work.";
       default: return afterSeq === undefined
@@ -2317,6 +2349,35 @@ export class RunManager {
 
 const NOT_SENT_NEXT_ACTION = "The task was never sent to the worker, so nothing ran. Read error and fix its cause, then authorize the same request again (task_authorize, when present, is the command for this run's workspace, operation and base) and start it with the new authorization_id and attempt_id; this run's grant stays spent. Call vibe_close on this run when done.";
 const NOT_STARTED_SUMMARY = "The worker never started, so the run never reached inference; read error for the launch failure.";
+
+const FAILED_NEXT_ACTION = "Read error and warnings; call vibe_close when done.";
+const PROVIDER_RETRY_STOPS: ReadonlySet<string> = new Set(["VSUP_TIMEOUT", "VSUP_NO_PROGRESS"]);
+
+function spentGrantNextAction(record: RunRecord): string {
+  const retry = record.error?.retryable === true
+    ? " error.retryable is true, so the same request may pass unchanged later; task_authorize, when present, is the command to authorize it again."
+    : " error.retryable is false, so change what error.remediation names before authorizing again.";
+  const patch = record.mode === "edit" && (record.result?.changedFiles?.length ?? 0) > 0 && record.result?.artifacts?.some((artifact) => artifact.name === "diff.patch") === true
+    ? " The worker's changed files are preserved in diff.patch; inspect them before a new start."
+    : "";
+  return `Read error and warnings. The task reached the worker, so this run's grant is spent: another attempt is a new task authorize and a full rerun from the base, never a continuation.${retry}${patch} Call vibe_close on this run when done.`;
+}
+
+function noteProviderRetry(runtime: Runtime, event: Parameters<BackendCallbacks["onEvent"]>[0]): void {
+  const reason = event.type === "diagnostic" ? event.data.reason : undefined;
+  if (event.source === "vibe" || reason === "model_output") { delete runtime.providerRetry; runtime.modelAnswered = true; return; }
+  if (reason !== "turn_retrying") return;
+  runtime.providerRetry = { category: typeof event.data.category === "string" ? event.data.category : "unknown", ...(typeof event.data.detail === "string" ? { detail: event.data.detail.slice(0, MAX_PROVIDER_TEXT) } : {}) };
+}
+
+function withProviderRetry(outcome: SettleOutcome, retry: ProviderRetry | undefined): SettleOutcome {
+  const error = outcome.error;
+  if (!retry || outcome.state !== "failed" || !error || !PROVIDER_RETRY_STOPS.has(error.code)) return outcome;
+  const stop = error.code === "VSUP_TIMEOUT" ? "reached its timeout" : "stopped making progress";
+  const message = `The run ${stop} while the model provider was failing: Vibe was retrying the turn (${retry.category}${retry.detail ? `: ${retry.detail}` : ""}).`;
+  const details = { ...error.details, reason: "provider_retrying", retry_category: retry.category, ...(retry.detail ? { retry_detail: retry.detail } : {}) };
+  return { ...outcome, error: supervisorError(error.code, message, details, true, REASON_REMEDIATION.provider_retrying) };
+}
 
 function launchFailure(error: SupervisorError): SupervisorError {
   return { ...error, message: `${error.message} The worker never started, so the run never reached inference.`, details: { ...error.details, launch_failed: true } };
@@ -2459,7 +2520,8 @@ function normalizeError(error: unknown): SupervisorError {
     const code = error.code as SupervisorErrorCode;
     const message = "message" in error && typeof error.message === "string" ? error.message : code;
     const details = "details" in error && typeof error.details === "object" && error.details !== null && !Array.isArray(error.details) ? error.details as Record<string, unknown> : undefined;
-    return supervisorError(code, message, details, "retryable" in error && error.retryable === true);
+    const remediation = "remediation" in error && typeof error.remediation === "string" ? error.remediation : undefined;
+    return supervisorError(code, message, details, "retryable" in error && error.retryable === true, remediation);
   }
   return { code: "VSUP_BACKEND_ERROR", message: "The backend failed. Check the run diagnostics for details.", remediation: DEFAULT_REMEDIATION, retryable: false };
 }

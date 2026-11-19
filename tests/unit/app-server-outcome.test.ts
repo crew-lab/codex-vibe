@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { REASON_REMEDIATION, REMEDIATION } from '../../src/contracts.js';
 import type { EventFatal } from '../../src/backends/app-server/events.js';
 import {
   INCOMPLETE_RESULT_WARNING,
@@ -50,6 +51,23 @@ describe('turn outcome mapping', () => {
     expect(refused({ message: 'The model provider refused this request (HTTP 403).' }).error?.message).not.toContain('for model');
     expect(refused({ message: 'Invalid API key (from env var MISTRAL_API_KEY). Please check your API key and try again.', details: { reason: 'http_unauthorized' } })).toMatchObject({ error: { code: 'VSUP_AUTH_REQUIRED' } });
     expect(refused({ message: null })).toMatchObject({ error: { code: 'VSUP_AUTH_REQUIRED' } });
+    expect(bySentence.error?.remediation).toBe(REASON_REMEDIATION.provider_refused);
+    expect(bySentence.error?.remediation).not.toBe(REMEDIATION.VSUP_BACKEND_ERROR);
+  });
+
+  it('names the account, the sign-in and the price for the three Vibe 3.1.3 provider codes', () => {
+    const mapped = (code: string) => mapOutcome({ turn: failedWith(code), hasFinalMessage: false, model: 'mistral-medium-3.5' }).error;
+    const usage = mapped('usage_limit');
+    expect(usage).toMatchObject({ code: 'VSUP_BACKEND_ERROR', retryable: false, remediation: REASON_REMEDIATION.provider_usage_limit, details: { reason: 'provider_usage_limit', error_code: 'usage_limit' } });
+    expect(usage?.message).toMatch(/no credit left.*fails the same way until the account is topped up/);
+    const credential = mapped('credential_unavailable');
+    expect(credential).toMatchObject({ code: 'VSUP_BACKEND_ERROR', retryable: true, remediation: REASON_REMEDIATION.credential_unavailable, details: { reason: 'credential_unavailable', error_code: 'credential_unavailable' } });
+    expect(credential?.message).toContain('no request reached the provider');
+    const pricing = mapped('pricing_unavailable');
+    expect(pricing).toMatchObject({ code: 'VSUP_BACKEND_ERROR', retryable: false, remediation: REASON_REMEDIATION.pricing_unavailable, details: { reason: 'pricing_unavailable', model: 'mistral-medium-3.5' } });
+    expect(pricing?.details?.classification).toBeUndefined();
+    expect(pricing?.message).toContain('The supervisor sets no price budget in Vibe');
+    expect(pricing?.remediation).not.toMatch(/max_cost_usd/);
   });
 
   it('maps turn error codes', () => {

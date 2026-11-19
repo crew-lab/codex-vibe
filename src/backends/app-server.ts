@@ -8,7 +8,7 @@ import type {
   AdmissionStage, ApprovalLedgerEntry, ApprovalLedgerSnapshot, BackendAdmission, BackendCallbacks, BackendCapabilities, BackendKind, BackendRunHandle, BackendStartResult, EventSeverity,
   PinIdentity, ProcessRecord, ResultSummary, RuntimeCheck, StartRunInput, SupervisorBackend, SupervisorConfig, SupervisorError, SupervisorErrorCode, ToolCallCounts
 } from '../contracts.js';
-import { MAX_APPROVAL_LEDGER_RECORDS, supervisorError, type WorkerIdentity, type WorkerPinTarget } from '../contracts.js';
+import { MAX_APPROVAL_LEDGER_RECORDS, REASON_REMEDIATION, supervisorError, type WorkerIdentity, type WorkerPinTarget } from '../contracts.js';
 import { describeFailure, reportBackgroundFailure } from '../diagnostics/background.js';
 import { sanitizeForPersistence } from '../persistence/atomic.js';
 import { spawnManaged, type ManagedProcess } from '../process/managed.js';
@@ -255,6 +255,7 @@ class AppServerRun {
   private readonly toolCalls: ToolCallCounts = { executed: 0, deniedByHandler: 0, deniedByPolicy: 0 };
   private readonly background = new Set<Promise<unknown>>();
   private readonly conditions: SupervisorCondition[] = [];
+  private modelOutputReported = false;
   private readonly warnings: string[] = [];
   private child: ManagedProcess | undefined;
   private client!: JsonRpcClient;
@@ -532,7 +533,7 @@ class AppServerRun {
       if (model) {
         throw supervisorError('VSUP_BACKEND_ERROR', modelNotSelectedMessage(model), {
           reason: 'model_not_selected', classification: 'configuration', configured_model: model.expected, active_model: model.actual ?? null, fields, total: mismatches.length
-        });
+        }, false, REASON_REMEDIATION.model_not_selected);
       }
       throw supervisorError('VSUP_BACKEND_ERROR', `Vibe did not apply the supervisor session configuration: ${formatReadbackMismatches(mismatches)}`, {
         reason: 'readback_mismatch', fields, total: mismatches.length
@@ -652,8 +653,14 @@ class AppServerRun {
         return;
       case 'session_handoff':
         return;
+      case 'model_output':
+        if (this.modelOutputReported) return;
+        this.modelOutputReported = true;
+        this.emit('diagnostic', 'info', { text: 'The model is producing output.', reason: 'model_output' }, 'supervisor');
+        return;
       case 'turn_retrying':
-        this.emit('diagnostic', 'warning', { text: 'Vibe is retrying the turn.', reason: 'turn_retrying' }, 'supervisor');
+        this.modelOutputReported = false;
+        this.emit('diagnostic', 'warning', { text: `Vibe is retrying the turn after a provider failure (${signal.category}).`, reason: 'turn_retrying', category: signal.category, ...(signal.detail === null ? {} : { detail: signal.detail.slice(0, 300) }) }, 'supervisor');
         return;
       case 'warning':
       case 'server_error':

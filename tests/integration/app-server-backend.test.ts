@@ -16,7 +16,7 @@ import { PROFILE_TOOLS, TOOL_PERMISSION, workspaceDenylist } from '../../src/bac
 import { denylistAnchors } from '../../src/security/globs.js';
 import { SUPPORTED_VIBE } from '../../src/backends/app-server/supported-vibe.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
-import type { BackendCallbacks, BackendRunHandle, BackendStartResult, PinIdentity, RunLimits, RunMode, RunState, StartRunInput, SupervisorConfig, SupervisorError } from '../../src/contracts.js';
+import { REASON_REMEDIATION, type BackendCallbacks, type BackendRunHandle, type BackendStartResult, type PinIdentity, type RunLimits, type RunMode, type RunState, type StartRunInput, type SupervisorConfig, type SupervisorError } from '../../src/contracts.js';
 import { RunManager } from '../../src/core/run-manager.js';
 import { workerRules } from '../../src/core/worker-context.js';
 import { exportReport } from '../../src/reporting/export.js';
@@ -661,10 +661,22 @@ describe('app-server backend: outcomes', () => {
     const refused = errorOf(await new Harness({ name: 'provider-refused', steps: [{ op: 'end', status: 'failed', error: { message: 'The model provider refused this request: This model is not available in your subscription tier.', code: 'invalid_api_key', details: null } }] }).run());
     expect(refused).toMatchObject({ code: 'VSUP_BACKEND_ERROR', retryable: false, details: { reason: 'provider_refused', classification: 'configuration', model: 'mistral-medium-3.5', error_code: 'invalid_api_key', message: expect.stringContaining('subscription tier') } });
     expect(refused.message).toContain('vibe_model');
+    expect(refused.remediation).toBe(REASON_REMEDIATION.provider_refused);
+    expect(errorOf(await new Harness({ name: 'usage-limit', steps: [{ op: 'end', status: 'failed', error: { message: 'Payment required', code: 'usage_limit', details: { httpStatus: 402 } } }] }).run())).toMatchObject({ code: 'VSUP_BACKEND_ERROR', retryable: false, remediation: REASON_REMEDIATION.provider_usage_limit, details: { reason: 'provider_usage_limit', http_status: 402 } });
+    expect(errorOf(await new Harness(withError('credential_unavailable')).run())).toMatchObject({ code: 'VSUP_BACKEND_ERROR', retryable: true, details: { reason: 'credential_unavailable' } });
     expect(errorOf(await new Harness(withError('rate_limit')).run()).code).toBe('VSUP_RATE_LIMITED');
     const refusal = await new Harness(withError('refusal')).run();
     expect(refusal.state).toBe('completed');
     expect(refusal.update?.result?.stopReason).toBe('refusal');
+  });
+
+  it('keeps the category and detail of an unnumbered retry notice in the turn_retrying diagnostic', async () => {
+    const harness = new Harness({ name: 'retrying', steps: [{ op: 'retrying', category: 'server_error', detail: 'Upstream answered 503.' }, { op: 'say', text: 'Done.' }] });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    const retrying = harness.eventsOfType('diagnostic').filter((event) => event.data.reason === 'turn_retrying');
+    expect(retrying).toEqual([expect.objectContaining({ source: 'supervisor', severity: 'warning', data: expect.objectContaining({ category: 'server_error', detail: 'Upstream answered 503.', text: expect.stringContaining('server_error') }) })]);
   });
 
   it('rebuilds usage from stats and cost from the snapshot prices', async () => {
@@ -868,6 +880,7 @@ describe('app-server backend: startup failures', () => {
 
     expect(failure).toMatchObject({ code: 'VSUP_BACKEND_ERROR', retryable: false, details: { reason: 'model_not_selected', classification: 'configuration', configured_model: 'mistral-medium-3.5', active_model: 'mistral-large-4-0' } });
     expect(failure.message).toContain('vibe_model');
+    expect(failure.remediation).toBe(REASON_REMEDIATION.model_not_selected);
     expect(failure.details?.fields).toEqual(expect.arrayContaining(['runtime.config.activeModel.alias', 'config.active_model']));
     expect(harness.frames('config/model/write')).toHaveLength(0);
     expect(harness.frames('turn/start')).toHaveLength(0);

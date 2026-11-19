@@ -23,9 +23,15 @@ export const TURN_ERROR_CODES = [
   'backend_error',
   'internal_error',
   'incomplete_stream',
-  'compaction_failed'
+  'compaction_failed',
+  'usage_limit',
+  'credential_unavailable',
+  'pricing_unavailable'
 ] as const;
 export type TurnErrorCode = (typeof TURN_ERROR_CODES)[number];
+
+export const RETRY_CATEGORIES = ['rate_limited', 'server_error', 'timed_out', 'connection', 'unknown'] as const;
+export type RetryCategory = (typeof RETRY_CATEGORIES)[number];
 
 export const PROTOCOL_ERROR_CODES = [
   'invalid_request',
@@ -699,7 +705,7 @@ export type ServerNotification =
   | (NotificationBase & { kind: 'turn/completed'; turn: Turn })
   | (NotificationBase & { kind: 'session/statsUpdated'; stats: AgentStats; contextWindow: number | null })
   | (NotificationBase & { kind: 'session/compacted' | 'session/contextCleared'; newSessionId: string; oldSessionId: string })
-  | (NotificationBase & { kind: 'turn/retrying' })
+  | (NotificationBase & { kind: 'turn/retrying'; category: RetryCategory; detail: string | null })
   | (NotificationBase & { kind: 'warning' | 'error'; message: string | null; code: string | null })
   | (NotificationBase & { kind: 'unknown'; method: string });
 
@@ -709,6 +715,10 @@ function diagnosticBody(params: Record<string, unknown>, key: string): { message
   const nested = params[key];
   const source = nested !== null && typeof nested === 'object' && !Array.isArray(nested) ? (nested as Record<string, unknown>) : params;
   return { message: typeof source.message === 'string' ? source.message : null, code: typeof source.code === 'string' ? source.code : null };
+}
+
+function retryCategory(value: unknown): RetryCategory {
+  return typeof value === 'string' && (RETRY_CATEGORIES as readonly string[]).includes(value) ? value as RetryCategory : 'unknown';
 }
 
 export function parseNotification(method: string, params: Record<string, unknown>): ServerNotification {
@@ -739,7 +749,7 @@ export function parseNotification(method: string, params: Record<string, unknown
       return { ...base, kind: method, newSessionId: raw.sessionId, oldSessionId: raw.oldSessionId };
     }
     case 'turn/retrying':
-      return { ...base, kind: 'turn/retrying' };
+      return { ...base, kind: 'turn/retrying', category: retryCategory(params.category), detail: typeof params.detail === 'string' ? params.detail : null };
     case 'warning':
     case 'error':
       return { ...base, kind: method, ...diagnosticBody(params, method) };

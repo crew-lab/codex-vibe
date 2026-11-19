@@ -176,6 +176,15 @@ describe('EventProcessor watermark', () => {
     expect(types(send(target, ['turn/completed', envelope(13, { turn })]))).toEqual(['turn_completed']);
   });
 
+  it('signals model output for streamed assistant text and reasoning, not for the user message', () => {
+    const target = processor();
+    expect(types(send(target, added(8, { type: 'message', id: 'u1', turnId: 't1', role: 'user', generationStatus: 'completed', content: [{ type: 'text', text: 'task' }] })))).toEqual([]);
+    expect(types(send(target, added(9, { type: 'reasoning', id: 'r1', turnId: 't1', text: 'thinking', summary: [] })))).toEqual(['model_output']);
+    expect(types(send(target, updated(10, 'r1', [{ op: 'append', path: '/text', value: ' more' }])))).toEqual(['model_output']);
+    expect(types(send(target, added(11, assistant('m1', 'Part', 'streaming'))))).toEqual(['model_output']);
+    expect(types(send(target, updated(12, 'm1', [{ op: 'append', path: '/content/0/text', value: ' two' }])))).toEqual(['model_output']);
+  });
+
   it('lets unnumbered notifications through without moving the watermark', () => {
     const target = processor();
     expect(types(send(target, ['turn/retrying', envelope(null)]))).toEqual(['turn_retrying']);
