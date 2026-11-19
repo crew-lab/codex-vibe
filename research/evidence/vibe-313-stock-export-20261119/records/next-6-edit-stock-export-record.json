@@ -1,0 +1,47 @@
+{
+  "task": "edit-stock-export",
+  "task_hash_matched": true,
+  "passed": true,
+  "checks": [
+    {
+      "id": "only-allowed-paths",
+      "passed": true,
+      "detail": "bin/orders.mjs, package.json, src/stock-export.mjs, tests/stock-export.test.mjs"
+    },
+    {
+      "id": "required-paths-changed",
+      "passed": true,
+      "detail": "all changed"
+    },
+    {
+      "id": "all-tests-pass",
+      "passed": true,
+      "detail": "20 passed, 0 failed"
+    }
+  ],
+  "stop_reason": null,
+  "execution_state": "failed",
+  "answer_present": false,
+  "usage": {
+    "prompt_tokens": 138679,
+    "completion_tokens": 5083,
+    "model_calls": 13,
+    "tool_calls": {
+      "executed": 21,
+      "deniedByHandler": 0,
+      "deniedByPolicy": 0
+    }
+  },
+  "thinking": {
+    "requested": "off",
+    "status": "matched",
+    "observed": [
+      "off"
+    ]
+  },
+  "supervisor_version": "2.2.2",
+  "worker": {
+    "backend": "app-server",
+    "version": "3.1.3"
+  }
+}
