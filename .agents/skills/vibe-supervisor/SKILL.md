@@ -60,7 +60,7 @@ Collect the desired outcome, concrete acceptance criteria, canonical allowed wor
 4. Start with exactly the same request plus `authorization_id`, `attempt_id` and the `readiness_receipt`, before `receipt_expires_at`, on the same connection. On `VSUP_AUTHORIZATION_INVALID`, inspect `details.differing_fields` and determine the cause; re-check readiness for runtime drift. Only after an identified correction and within the authorized attempt budget may a new grant be registered. Never retry blindly or reuse identifiers; stop if the cause or allowance is unclear.
 5. Follow the run with cursor-based `vibe_status` calls, read `vibe_result`, then close as described below.
 
-The readiness receipt is admission evidence and does not replace the grant; the grant authorizes one start of one exact request. One started run owns the instance's active slot until backend close verifies termination. If close reports termination unverified, keep the run inspectable and do not start another run on that slot. Do not queue, retry automatically, or replay a task after restart or failure. A correction after a failed check is a new, separately authorized task, not a replay ([After a failed check](#after-a-failed-check)). The Codex custom agent in [.codex/agents/vibe-reviewer.toml](../../../.codex/agents/vibe-reviewer.toml) runs this sequence for one bounded task.
+The readiness receipt is admission evidence and does not replace the grant; the grant authorizes one start of one exact request. One started run owns the instance's active slot until backend close verifies termination. If close reports termination unverified, keep the run inspectable and do not start another run on that slot. Do not queue, retry automatically, or replay a task after restart or failure. When a failed run's task reached the worker, its grant is spent: never resend it; if `error.retryable` is true, re-authorize the same request with the returned `task_authorize`, otherwise first change what `error.remediation` names. A correction after a failed check is a new, separately authorized task, not a replay ([After a failed check](#after-a-failed-check)). The Codex custom agent in [.codex/agents/vibe-reviewer.toml](../../../.codex/agents/vibe-reviewer.toml) runs this sequence for one bounded task.
 
 Files matched by the root's `excluded_globs` or the fixed secret denylist are refused to the worker; leave them out of the file scope. A root with a daily budget refuses a start with `VSUP_BUDGET_EXCEEDED` once its 24-hour spending reaches the ceiling; do not move the task to another root to get around it.
 
@@ -127,11 +127,11 @@ Type checking: <e.g. TypeScript strict with noUncheckedIndexedAccess: regex grou
 Final answer: what changed, then the files changed.
 ```
 
-Match the limits to the template: a review of two or three files fits `max_turns` 12; raise turns only with the number of files to read. Record whether the answer was accepted, so the template can be improved; `vibe-supervisor runs usefulness` summarizes the recorded assessments of edits and counts reviews without assessing them.
+Turn limits: `max_turns` 12 was measured on a review of two or three files; raise it only with the number of files to read. An edit, and a correction most of all, leaves `max_turns` unset so the configured default in `effective_limits` (25 unless the config changes it) applies; a correction given 12 ran out of turns after finishing its work. Record whether the answer was accepted, so the template can be improved; `vibe-supervisor runs usefulness` summarizes the recorded assessments of edits and counts reviews without assessing them.
 
 ## Check the result
 
-When a review or edit proposes a fix for a failure, accept it only after the failing command passes on the exported patch in a validation copy; a correct diagnosis is not a working fix. For a review, check the final answer, stop reason, warnings, integrity result, `usage.tool_calls` and `context_reads` (which named files it read, which it left unread, what else it read; a review that read nothing answered from nothing); `vibe-supervisor runs sarif <run-id>` exports its findings as SARIF. For an edit, inspect the result, fresh exported patch, changed and residual files, and hashes while the worktree remains available. Request a transcript only if needed to resolve a specific uncertainty; keep it private and out of reports. Verify the exact candidate in a separate disposable copy; do not run commands or tests inside the worker worktree or original source checkout. Accept only the reviewed delta. Coordinator verification does not turn an unsuccessful Vibe run into a Vibe success.
+**Before accepting an edit, run the task's focused tests and its documented reproduction on the exported patch in a validation copy, even when the acceptance contract passed.** A passed contract means the patch has the right shape, not that the code works: a rejected correction passed every contract check and still refused valid input. Likewise accept a fix a review proposes only after the failing command passes on it; a correct diagnosis is not a working fix. For a review, check the final answer, stop reason, warnings, integrity result, `usage.tool_calls` and `context_reads` (which named files it read, which it left unread, what else it read; a review that read nothing answered from nothing); `vibe-supervisor runs sarif <run-id>` exports its findings as SARIF. For an edit, inspect the result, fresh exported patch, changed and residual files, and hashes while the worktree remains available. Request a transcript only if needed to resolve a specific uncertainty; keep it private and out of reports. Verify the exact candidate in a separate disposable copy; do not run commands or tests inside the worker worktree or original source checkout. Accept only the reviewed delta. Coordinator verification does not turn an unsuccessful Vibe run into a Vibe success.
 
 Close the run after verification. Request cleanup only when the exported artifact is current. A pristine worktree can be removed after ownership checks; a dirty or uncertain one is retained with its path and reason for review. Keep the exported patch available and do not force-delete retained data. Report the server version, source/base, actual checks, stop reason, authentication outcome if observed, and any unresolved cleanup or acceptance gate. macOS Apple silicon is the supported platform; a clean-account installation is not yet verified. A run proves execution, not that the answer is correct.
 
@@ -139,11 +139,33 @@ Close the run after verification. Request cleanup only when the exported artifac
 
 Check an exported edit in a validation copy in this order: the project's compiler or type checker, then its linter and whitespace check, then the tests and the reproduction. Stop at the first failure; a patch that does not compile has nothing else to tell you.
 
-When a check fails on a patch that is otherwise on the right track, you may start one correction. It is a new task, not a replay:
+When a check fails on a patch that is otherwise on the right track, you may start one correction. It is a new task, not a replay, and it continues from the rejected patch rather than redoing it:
 
 - **Close the first run first.** Export its patch, validate it, and close the run as rejected with the failing check. A started run holds the one slot until it is closed, so the correction cannot start before that.
-- **A new start.** An ordinary edit from the same immutable base, with its own readiness call, request file and grant. It spends one hosted start from the user's allowance; if none remains, stop and report.
-- **The task text is the original task plus the failure:** the exact command, its exact output for the first few failures (file, line, message), the lines of the previous patch they point at, and one sentence on what the previous attempt got wrong, for example "the parsed month and day may be undefined under `noUncheckedIndexedAccess`; narrow them before use". Do not hand the worker the old patch to apply; it starts from the base.
+- **Its base is the rejected patch as an unreferenced commit.** Build it in a private index, so the owner's branches, refs, index and working tree stay as they are; the run's worktree keeps the commit alive without a ref:
+
+  ```sh
+  idx="$(mktemp -d)/index"
+  GIT_INDEX_FILE="$idx" git -C <repo> read-tree <base>
+  GIT_INDEX_FILE="$idx" git -C <repo> apply --cached --binary <rejected-patch>
+  tree="$(GIT_INDEX_FILE="$idx" git -C <repo> write-tree)"
+  git -C <repo> -c user.name=coordinator -c user.email=coordinator@localhost commit-tree "$tree" -p <base> -m "rejected patch"
+  ```
+
+  Pass the printed full SHA as `base_ref` to readiness and the start, with no `prepared_inputs` (they bind the source `HEAD`). The correction has its own request file and grant and spends one hosted start from the user's allowance; if none remains, stop and report.
+- **Its contract checks only the correction.** `$scope` and `$required_changes` compare with that base, so `allowed_changed_paths`, `required_changed_paths` and `allowed_write_paths` name only the files the correction must change. Keep the original text, hash and `node_test` checks: they read the whole tree, so they still check the finished change.
+- **The task text is the original task plus the failure:** the exact command, its exact output for the first few failures (file, line, message), the lines they point at, and one sentence on what the previous attempt got wrong, for example "the parsed month and day may be undefined under `noUncheckedIndexedAccess`; narrow them before use". Say that the earlier change is already in the tree and name what of it must stay untouched.
+- **Validate base plus both patches.** A validation copy cannot fetch the unreferenced commit, so combine the two patches in another private index, never the repository's own, and run `validation prepare` on the original base with the result:
+
+  ```sh
+  idx="$(mktemp -d)/index"
+  GIT_INDEX_FILE="$idx" git -C <repo> read-tree <base>
+  GIT_INDEX_FILE="$idx" git -C <repo> apply --cached --binary <rejected-patch>
+  GIT_INDEX_FILE="$idx" git -C <repo> apply --cached --binary <correction-patch>
+  GIT_INDEX_FILE="$idx" git -C <repo> diff --cached --binary <base> > <combined-patch>
+  ```
+
+  The assessment names the correction run's own patch hash; the combined patch is what the owner gets.
 - **At most one correction per task.** If its patch fails a check too, close it as rejected as well and fix the change yourself or report it. Do not start a third.
 
 ## References

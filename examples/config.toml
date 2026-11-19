@@ -17,20 +17,9 @@ allowed_workspace_roots = []
 # [budgets."~/src/project"]
 # max_cost_usd_per_day = 50.0
 
-[retention]
-days = 7
-
 [limits]
-review_timeout_seconds = 1800
-edit_timeout_seconds = 2400
-max_turns_review = 20
-max_turns_edit = 20
-max_event_bytes = 52428800
-max_transcript_bytes = 10485760
-max_artifact_bytes = 104857600
-worker_progress_timeout_seconds = 600
-max_mcp_result_chars = 8000
-# Optional budgets enforced by the supervisor from Vibe's usage statistics.
+# Omitted limits keep their built-in defaults (docs/reference.md), which a copied
+# value would freeze. Optional budgets enforced by the supervisor from Vibe's usage statistics.
 # max_tokens = 2000000
 # max_cost_usd = 5.0
 
