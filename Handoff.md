@@ -6,7 +6,7 @@
 
 - **Released.** v2.2.1 (2026-11-15) is the latest release ([changelog](CHANGELOG.md)); `agy` remains opt-in and experimental.
 - **Included in v2.2.1:** Vibe at or above 3.1.2 and agy at or above 1.5.8; the supervisor's worker rules as Vibe's system prompt and at the head of agy's prompt; no file listing in a review that names `context_files`; thinking `high` for Vibe reviews (`vibe_review_thinking`); default `max_turns` raised to `25` for reviews and edits (`4a0d0ed`); `allowed_write_paths` enforced in agy's `PreToolUse` hook (`75995d8`) with summarized write-tool ledger reconciliation (`0ed905e`); credential, pin and preparation checked before the grant is spent; review results that show which named files were read; `prepare check` that prints its report path, failing findings and what made a receipt stale; `runs export --include answer` and, in the source repository, `quality-pack.mjs record` and `prompt`; a finished or audited edit kept at the deadline; the correction rule after a failed check.
-- **Unreleased 2.2.2:** worker updates repair themselves at readiness (Vibe re-pin gated on `RECORD` hashes, re-preparation for both workers, `VSUP_PREPARING`), the running build in `boot_drift`, `effective_limits` and `worker` in readiness, a receipt bound to boot-bound settings only, the Vibe model named by the supervisor (`vibe_model`) and a provider refusal reported as itself ([changelog](CHANGELOG.md)).
+- **Unreleased 2.2.2:** worker updates repair themselves at readiness (Vibe re-pin gated on `RECORD` hashes, re-preparation for both workers, `VSUP_PREPARING`), the running build in `boot_drift`, `effective_limits` and `worker` in readiness, a receipt bound to boot-bound settings only, the Vibe model named by the supervisor (`vibe_model`), a provider refusal reported as itself, Vibe's provider waits and project context set by the supervisor, failures that name their cause and remedy, a hard edit task in the quality pack and a correction that continues from the rejected patch ([changelog](CHANGELOG.md)).
 - **Worker machine & verification:** `412d106` built the `2.2.1` RC archive cleanly (`127` test files, `1,830` passed, `1` skipped, checksums matched), passed `prepare check` from the installed archive for both Vibe `3.1.2` and `agy` `1.5.9` (`antigravity_skip_permissions = true`), passed the installed-RC Vibe calendar-date replay (`7ce9f997…`, `18.6s`, `end_turn`, default `25` turns confirmed), and passed both `agy` `1.5.9` quality-pack edits (`edit-shipping` `14/14`, `edit-reserve-all` `17/17`, both `end_turn`). Earlier `f783860` runs covered Vibe thinking-off sweeps and `agy` `review-total` (`9/9`).
 
 ## What works
@@ -55,38 +55,41 @@
 
 ## Next
 
-- **Copy-rules acceptance remains open.** The replay and its one correction are complete and rejected. Carry the exact CLI repro and fixture error into the owning project's next implementation, then rerun the documented exporter and focused tests in a disposable clone.
-- **Test refusal handling in the worker rules.** The correction included a stop-after-refusal instruction in its brief and still attempted shell. Test the shared worker rule as planned below. Keep `VSUP_TRACE_VIBE_WIRE=1` available for a recurrence of the long tail.
-- **Remaining live checks.** Observe `install_unsettled` during an in-flight Vibe upgrade if timing permits, verify automatic re-preparation on a newer agy when available, and check approval prompts through the native Codex connection. The 3.1.3 trial used a standalone MCP client and did not test the Codex approval UI. After worker updates, wait for eligibility and record the hosted quality pack.
+The order of work and the failure behind each step are in the [development strategy](planning/development-strategy.md#what-we-work-on). Written and tested here with the fake worker, none of it run on a worker yet: the hard edit task `edit-stock-export`, a correction that continues from the rejected patch, the coordinator's focused tests before acceptance, turn limits by mode, Vibe's waits and project context set by the supervisor, and failures that name their cause and remedy.
 
-### Development, in this order, each its own commit
+### On the worker machine, on a build from the current `main`
 
-1. **Turn limits by mode** in the skill and the Codex agent: the 12-turn figure is for a review of two or three files; an edit or a correction takes the configured default (`25`).
-2. **Stop after a refusal.** Worker rules: a refused tool will be refused again; do not retry it or look for another way to run something; give the final answer. If the approval reply can carry a reason to the worker, say it there too. Check with `quality-pack.mjs prompt` and stand-in workers, then on Vibe.
-3. **agy preparation runs the run's own audit:** the stream-shape probe requires a call ID or arguments for every executed call and verifies write-tool ledger reconciliation rules so stream changes fail at `prepare check`, before any inference.
-4. **agy diagnostics:** keep the whole remedy line from stderr and read the tool list from agy's real `init` shape.
-5. **agy strict mode:** try allow-rule target forms through the control probe on the worker machine until agy runs the allowed read without the bypass. The aim is two gates instead of one.
-6. **Candidates:** judging an agy edit that stopped at its turn limit (for explicit lower caps); fewer model calls for a review of small named files; `context_reads` and explicit model selection verification for agy; agy `--json-schema` for findings.
-7. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
+Record every run with `quality-pack.mjs record` and commit the records under `research/evidence/`. A new build needs its `prepare check --kit` once; that check also proves Vibe accepts the four new settings on the installed version, with no model call.
+
+1. **Preparation.** Run `prepare check` and keep its time. A read-back mismatch on `include_project_context`, `api_timeout`, `api_stream_idle_timeout` or `api_retry_max_elapsed_time` means Vibe did not take the setting: record the report, stop, and return to the build from `0e011cd`, which passed the whole pack. Saved preparation reports from a real Vibe list all four keys in its effective configuration, but the values have only been read back by the fake worker.
+2. **The pack again, for times and tokens.** Run the four existing tasks once each and compare model calls, tokens and seconds with the [3.1.3 records](research/evidence/vibe-313-model-pin-20261118/README.md). The project context is gone from the prompt, so tokens per call should fall a little; no task may get worse.
+3. **The hard edit, five times.** Run `edit-stock-export` five times and record the hidden-test result of each. This is the first edit pass rate that can move. Its brief has not been answered by stand-in workers yet, which the strategy asks for before a brief reaches a worker; if most runs fail in the same way, suspect the brief before the worker.
+4. **One correction that continues from the rejected patch.** Take a failed `edit-stock-export` run, or the rejected copy-rules correction, and correct it once as the skill now says: the base is the rejected patch as an unreferenced commit, the brief carries the exact failing command and output, the contract names only what the correction must change. Record model calls, seconds and the result beside the earlier correction from the base (18 model calls, rejected).
+5. **The idle five minutes.** Look in the events of run `397dbf8b-10fa-4245-9be7-7382f0eb750f` for a `turn_retrying` diagnostic between its last tool call and its end. It settles whether that tail was a stalled provider stream.
+6. **One preparation with Vibe's `strict_config` on** (`VIBE_STRICT_CONFIG=1` in the server's environment), to learn whether Vibe refuses any setting the supervisor sends. Report the outcome; do not leave it on.
+7. **Still open from the last trial:** `install_unsettled` during an in-flight Vibe upgrade, re-preparation on a newer agy, and the approval prompts through the native Codex connection.
+
+### Development still to do
+
+1. **agy preparation runs the run's own audit:** the stream-shape probe requires a call ID or arguments for every executed call and verifies write-tool ledger reconciliation rules so stream changes fail at `prepare check`, before any inference.
+2. **agy diagnostics:** keep the whole remedy line from stderr and read the tool list from agy's real `init` shape.
+3. **agy strict mode:** try allow-rule target forms through the control probe on the worker machine until agy runs the allowed read without the bypass. The aim is two gates instead of one.
+4. **Owner's decisions and candidates:** thinking for edits (fixed at `off`, never measured); wording that stops a refused tool being tried again, once the hard edit can show a difference; the named files' content in a review's prompt; the candidates from the review below.
+5. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
 
 ### From the architecture review of 2026-11-18: candidates, order not decided
 
 Three read-only reviews of `a035d77`: what the worker decides for the supervisor, what Codex is told when a run fails, and setup. The reviewers reported each line with file references in this repository or in the Vibe 3.1.3 source; not every line was read a second time, and the ones marked inferred were not confirmed. Crash recovery, locks and run state were not re-reviewed, and agy's own defaults were not reached.
 
-- **Vibe settings the supervisor neither sets nor reads back.** `include_project_context` is on, so Vibe runs Git and adds the path, the branch and recent commit subjects after the supervisor's rules. The provider waits are Vibe's (720 seconds for the first output, 300 seconds of retries) while the run's own no-progress limit is 600 seconds, and the retry category in `turn/retrying` is dropped, so a provider outage ends as a timeout; a link to the stalled turns is inferred.
 - **A read-back that knows only its own keys.** A new default-on Vibe setting passes it, and the automatic refresh then admits it. The preparation report already lists the effective keys, so a refresh could name the new ones in its warning.
 - **A sixth bundled skill fails every preparation.** The read-back compares five names, although `disabled_skills` already keeps all of them from the model.
 - **The preparation check is laxer than a run** on a missing hook or skill count.
 - **History entry kinds `checkpoint` and `notice`** are not in the wire table (inferred: a compaction would fail the run).
 - **Finished work is lost to a late failure.** A provider error after an edit's writes, or a timeout on the final read after a clean turn, fails the run and leaves the patch unassessable. The timeout and turn-limit stops are already judged by the contract and checks; this is the same decision.
-- **Three Vibe 3.1.3 error codes arrive as a generic backend error:** `usage_limit` (no credit), `credential_unavailable` (retryable, but reported as not) and `pricing_unavailable`.
-- **A retryable failure after the prompt was sent** does not say that the grant is spent and carries no `task_authorize`.
-- **The remedy field stays generic.** `model_not_selected` and `provider_refused` are `VSUP_BACKEND_ERROR`, whose remediation says to retry if the problem is transient; the action to take is only in the message.
 - **agy has no auth, quota or rate classification** of its own failures (reported by the review, not re-read).
 - **The Vibe key in the macOS Keychain is checked only at a start,** after the grant; agy's key is checked at readiness.
 - **Only `setup` writes the Codex registration with its 600-second tool timeout.** The README's walk-through does not show `setup`, the skill asks Codex to wait up to 300 seconds, and `doctor` does not check the registration (Codex's own default was not verified).
 - **`prepare check` requires `--kit`** although the script ships in the package, and the readiness blocker prints a placeholder for the kit path. The first `pin-manifest` is manual as well.
-- **`examples/config.toml` pins `max_turns` at 20;** the default is 25.
 
 ## Build, install and prepare
 
