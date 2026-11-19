@@ -123,7 +123,12 @@ describe('compareReadback on unit inputs', () => {
     ['a skill pattern that does not disable everything', (wire) => { assign(wire.effective as Json, ['config', 'disabled_skills'], ['other']); }, ['config.disabled_skills']],
     ['an MCP server in the effective config', (wire) => { assign(wire.effective as Json, ['config', 'mcp_servers'], [{ name: 'x' }]); }, ['config.mcp_servers']],
     ['a widened enabled tool list', (wire) => { assign(wire.effective as Json, ['config', 'enabled_tools'], ['read_file', 'write_file', 'edit', 'bash']); }, ['config.enabled_tools']],
-    ['a lost disabled tool', (wire) => { assign(wire.effective as Json, ['config', 'disabled_tools'], ['cron']); }, ['config.disabled_tools']]
+    ['a lost disabled tool', (wire) => { assign(wire.effective as Json, ['config', 'disabled_tools'], ['cron']); }, ['config.disabled_tools']],
+    ['project context appended to the prompt', (wire) => { assign(wire.effective as Json, ['config', 'include_project_context'], true); }, ['config.include_project_context']],
+    ['the default first-output wait', (wire) => { assign(wire.effective as Json, ['config', 'api_timeout'], 720); }, ['config.api_timeout']],
+    ['the default stream idle wait', (wire) => { assign(wire.effective as Json, ['config', 'api_stream_idle_timeout'], 300); }, ['config.api_stream_idle_timeout']],
+    ['the default retry window', (wire) => { assign(wire.effective as Json, ['config', 'api_retry_max_elapsed_time'], 300); }, ['config.api_retry_max_elapsed_time']],
+    ['a string where a number is expected', (wire) => { assign(wire.effective as Json, ['config', 'api_timeout'], '300'); }, ['config.api_timeout']]
   ];
   for (const [name, mutate, expected] of mutations) {
     it(`reports ${name}`, () => {

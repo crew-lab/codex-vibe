@@ -111,7 +111,7 @@ export function settingEnvironmentName(key: string): string {
 
 function encodeSettingValue(value: WireSettingValue): string {
   if (typeof value === 'string') return value;
-  return typeof value === 'boolean' ? String(value) : JSON.stringify(value);
+  return typeof value === 'boolean' || typeof value === 'number' ? String(value) : JSON.stringify(value);
 }
 
 function buildEnvironment(directories: SessionDirectories, agent: string, model: string): Record<string, string> {

@@ -13,7 +13,13 @@ export interface WireTool {
   fingerprint: ToolFingerprint;
 }
 
-export type WireSettingValue = boolean | string | readonly string[];
+export type WireSettingValue = boolean | number | string | readonly string[];
+
+export const PROVIDER_WAIT_SECONDS = {
+  untilFirstOutput: 300,
+  streamIdleBeforeRetry: 120,
+  retryingFailedCall: 180
+} as const;
 
 export interface WireSetting {
   key: string;
@@ -69,6 +75,10 @@ export const VIBE_WIRE: VibeWireFacts = {
     { key: 'enable_auto_update', value: false },
     { key: 'enable_pr_monitoring', value: false },
     { key: 'include_commit_signature', value: false },
+    { key: 'include_project_context', value: false },
+    { key: 'api_timeout', value: PROVIDER_WAIT_SECONDS.untilFirstOutput },
+    { key: 'api_stream_idle_timeout', value: PROVIDER_WAIT_SECONDS.streamIdleBeforeRetry },
+    { key: 'api_retry_max_elapsed_time', value: PROVIDER_WAIT_SECONDS.retryingFailedCall },
     { key: 'experimental_enable_model_catalog', value: false },
     { key: 'experimental_enable_registry_skills', value: false },
     { key: 'experiments.enable', value: false },
