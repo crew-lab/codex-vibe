@@ -154,6 +154,23 @@ function isObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function durationSeconds(timestamps) {
+  const start = Date.parse(timestamps?.created);
+  const end = Date.parse(timestamps?.finished);
+  return Number.isFinite(start) && Number.isFinite(end) && end >= start ? Math.round((end - start) / 100) / 10 : null;
+}
+
+function recordedError(error) {
+  if (!isObject(error)) return null;
+  const details = isObject(error.details) ? error.details : {};
+  return {
+    code: error.code ?? null,
+    reason: typeof details.reason === 'string' ? details.reason : null,
+    error_code: typeof details.error_code === 'string' ? details.error_code : null,
+    retryable: typeof error.retryable === 'boolean' ? error.retryable : null
+  };
+}
+
 async function verifyAgainstSums(root, name) {
   const sumsFile = path.join(root, 'SHA256SUMS');
   if (!await exists(sumsFile)) fail(`${sumsFile} not found; the export is incomplete.`);
@@ -202,11 +219,18 @@ async function record(id, args) {
     stop_reason: report.execution?.stop_reason ?? null,
     execution_state: report.execution?.state ?? null,
     answer_present: typeof report.answer_present === 'boolean' ? report.answer_present : null,
+    duration_seconds: durationSeconds(report.timestamps),
+    error: recordedError(report.error),
+    warnings: Array.isArray(report.warnings) ? report.warnings : null,
+    verification_status: report.verification?.status ?? null,
+    retries: isObject(report.retries) ? { count: report.retries.count ?? null, last_category: report.retries.last_category ?? null } : null,
     usage: {
       prompt_tokens: usage.promptTokens ?? null,
       completion_tokens: usage.completionTokens ?? null,
+      cached_tokens: usage.cachedTokens ?? null,
       model_calls: usage.modelCalls ?? null,
-      tool_calls: usage.toolCalls ?? null
+      tool_calls: usage.toolCalls ?? null,
+      tool_calls_by_kind: isObject(report.tool_calls_by_kind) ? report.tool_calls_by_kind : null
     },
     thinking: isObject(thinking) ? { requested: thinking.requested?.value ?? null, status: thinking.status ?? null, observed: (thinking.observations ?? []).map((item) => item.value) } : null,
     supervisor_version: report.supervisor_version ?? null,

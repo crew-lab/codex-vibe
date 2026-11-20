@@ -1,0 +1,139 @@
+diff --git a/bin/orders.mjs b/bin/orders.mjs
+index d6d62c9..042028a 100644
+--- a/bin/orders.mjs
++++ b/bin/orders.mjs
+@@ -1,6 +1,7 @@
+ #!/usr/bin/env node
+ import { parseArgs } from 'node:util';
+ import { readStockFile } from '../src/stock-file.mjs';
++import { writeStockExport } from '../src/stock-export.mjs';
+ 
+ function fail(message) {
+   process.stderr.write(`${message}\n`);
+@@ -17,7 +18,20 @@ function available(args) {
+   process.stdout.write(`${entry.available}\n`);
+ }
+ 
+-const commands = { available };
++function exportStock(args) {
++  const { values, positionals } = parseArgs({
++    args,
++    options: { 'out-dir': { type: 'string' } },
++    allowPositionals: true,
++  });
++  const [stockFile] = positionals;
++  if (!stockFile) fail('orders export: a stock file is required');
++  if (!values['out-dir']) fail('orders export: --out-dir is required');
++  const file = writeStockExport(readStockFile(stockFile), { outDir: values['out-dir'] });
++  process.stdout.write(`wrote ${file}\n`);
++}
++
++const commands = { available, export: exportStock };
+ const [name, ...rest] = process.argv.slice(2);
+ const command = commands[name];
+ if (!command) fail(`usage: orders <${Object.keys(commands).join('|')}> ...`);
+diff --git a/package.json b/package.json
+index 5df4dff..5c5b129 100644
+--- a/package.json
++++ b/package.json
+@@ -3,6 +3,7 @@
+   "private": true,
+   "type": "module",
+   "scripts": {
+-    "test": "node --test"
++    "test": "node --test",
++    "export-stock": "node bin/orders.mjs export"
+   }
+ }
+diff --git a/src/stock-export.mjs b/src/stock-export.mjs
+new file mode 100644
+index 0000000..3ff0e94
+--- /dev/null
++++ b/src/stock-export.mjs
+@@ -0,0 +1,17 @@
++import { mkdirSync, writeFileSync } from 'node:fs';
++import { join } from 'node:path';
++
++export function stockCsv(stock) {
++  const rows = [...stock.keys()].sort().map((sku) => {
++    const { available, reserved } = stock.get(sku);
++    return `${sku},${available},${reserved}\n`;
++  });
++  return `sku,available,reserved\n${rows.join('')}`;
++}
++
++export function writeStockExport(stock, { outDir }) {
++  mkdirSync(outDir, { recursive: true });
++  const file = join(outDir, 'stock.csv');
++  writeFileSync(file, stockCsv(stock));
++  return file;
++}
+diff --git a/tests/stock-export.test.mjs b/tests/stock-export.test.mjs
+new file mode 100644
+index 0000000..5926b92
+--- /dev/null
++++ b/tests/stock-export.test.mjs
+@@ -0,0 +1,63 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { spawnSync } from 'node:child_process';
++import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
++import { tmpdir } from 'node:os';
++import { join } from 'node:path';
++import { fileURLToPath } from 'node:url';
++import { createStock, reserve } from '../src/inventory.mjs';
++import { stockCsv } from '../src/stock-export.mjs';
++
++const cliPath = fileURLToPath(new URL('../bin/orders.mjs', import.meta.url));
++
++function runCli(args) {
++  return spawnSync(process.execPath, [cliPath, ...args], { encoding: 'utf8' });
++}
++
++test('stockCsv lists each SKU after a reservation', () => {
++  const stock = createStock([['pear', 3], ['apple', 5]]);
++  reserve(stock, 'apple', 2);
++  assert.equal(stockCsv(stock), 'sku,available,reserved\napple,3,2\npear,3,0\n');
++});
++
++test('export writes stock.csv into a new directory', () => {
++  const root = mkdtempSync(join(tmpdir(), 'orders-export-'));
++  try {
++    const stockFile = join(root, 'stock.json');
++    const outDir = join(root, 'out');
++    writeFileSync(stockFile, '{"pear": 3, "apple": 5}');
++    const result = runCli(['export', stockFile, '--out-dir', outDir]);
++    assert.equal(result.status, 0);
++    assert.equal(result.stdout, `wrote ${join(outDir, 'stock.csv')}\n`);
++    assert.equal(readFileSync(join(outDir, 'stock.csv'), 'utf8'), 'sku,available,reserved\napple,5,0\npear,3,0\n');
++  } finally {
++    rmSync(root, { recursive: true, force: true });
++  }
++});
++
++test('export without --out-dir fails with exit code 2 and writes nothing', () => {
++  const root = mkdtempSync(join(tmpdir(), 'orders-export-'));
++  try {
++    const stockFile = join(root, 'stock.json');
++    writeFileSync(stockFile, '{"apple": 5}');
++    const result = runCli(['export', stockFile]);
++    assert.equal(result.status, 2);
++    assert.equal(result.stderr, 'orders export: --out-dir is required\n');
++    assert.deepEqual(readdirSync(root), ['stock.json']);
++  } finally {
++    rmSync(root, { recursive: true, force: true });
++  }
++});
++
++test('export without a stock file fails with exit code 2 and writes nothing', () => {
++  const root = mkdtempSync(join(tmpdir(), 'orders-export-'));
++  try {
++    const outDir = join(root, 'out');
++    const result = runCli(['export', '--out-dir', outDir]);
++    assert.equal(result.status, 2);
++    assert.equal(result.stderr, 'orders export: a stock file is required\n');
++    assert.equal(existsSync(outDir), false);
++  } finally {
++    rmSync(root, { recursive: true, force: true });
++  }
++});

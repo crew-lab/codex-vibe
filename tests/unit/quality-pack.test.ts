@@ -290,7 +290,7 @@ const reviewForm = [
   'Input 3: 6000 cents with a 50% discount\nExpected: tax 600, shipping 0, total 3600\nActual: tax 1200, shipping 0, total 4200'
 ].join('\n\n');
 
-async function exportDirectory(root: string, id: string, files: Record<string, string>, taskHash?: string): Promise<string> {
+async function exportDirectory(root: string, id: string, files: Record<string, string>, taskHash?: string, extra: Record<string, unknown> = {}): Promise<string> {
   const definition = (await tasks()).find((candidate) => candidate.id === id) as Task;
   const directory = path.join(root, `export-${id}`);
   await mkdir(directory);
@@ -300,7 +300,8 @@ async function exportDirectory(root: string, id: string, files: Record<string, s
     provenance: { task_sha256: taskHash ?? createHash('sha256').update(definition.task).digest('hex'), base_commit: '/private/should/not/leak' },
     models: { thinking: { requested: { value: 'high', source: 'supervisor-session-config' }, status: 'matched', observations: [{ observed_at: 'x', value: 'high', source: 'runtime/read' }] } },
     usage: { promptTokens: 100, completionTokens: 20, modelCalls: 3, toolCalls: { executed: 4, deniedByHandler: 0, deniedByPolicy: 0 } },
-    context_reads: { named: 1, read: ['README.md'], unread: [], extra: [] }
+    context_reads: { named: 1, read: ['README.md'], unread: [], extra: [] },
+    ...extra
   };
   await writeFile(path.join(directory, 'report.json'), JSON.stringify(report));
   for (const [name, content] of Object.entries(files)) await writeFile(path.join(directory, name), content);
@@ -325,9 +326,40 @@ describe('quality pack record', () => {
       context_reads: { named: 1, read: ['README.md'], unread: [], extra: [] }
     });
     expect((record.checks as { id: string; detail: string }[]).map((item) => item.id)).toEqual(expect.arrayContaining(['tax-on-undiscounted', 'threshold-at-5000', 'cites-file', 'input-1-expected']));
+    expect(record).toMatchObject({
+      duration_seconds: null, error: null, warnings: null, verification_status: null, retries: null,
+      usage: { cached_tokens: null, tool_calls_by_kind: null }
+    });
     expect(JSON.stringify(record)).not.toContain('/private/should/not/leak');
     expect(JSON.parse(await readFile(out, 'utf8'))).toEqual(record);
     await expect(exec(process.execPath, [script, 'record', 'review-total', '--export', directory, '--out', out])).rejects.toMatchObject({ code: 2, stderr: expect.stringContaining('already exists') });
+  });
+
+  it('explains a failed run with its duration, error, warnings, verification, retries, cached tokens and tool kinds', async () => {
+    const root = await scratch();
+    const failed = {
+      execution: { state: 'failed', stop_reason: null },
+      timestamps: { created: '2026-11-19T19:20:00.000Z', launched: '2026-11-19T19:20:01.000Z', started: '2026-11-19T19:20:02.000Z', finished: '2026-11-19T19:25:43.420Z' },
+      error: { code: 'VSUP_BACKEND_ERROR', message: 'The model stopped producing output for 120 seconds and the call was stopped.', remediation: 'Wait and retry.', retryable: true, details: { reason: 'provider_retrying', error_code: 'stream_idle_timeout', retry_category: 'stream_idle', retry_detail: 'provider text' } },
+      warnings: ['Verification stayed incomplete.'],
+      verification: { status: 'incomplete', check_count: 4, failed_checks: ['named-tests'] },
+      retries: { count: 2, last_category: 'stream_idle' },
+      tool_calls_by_kind: { reads: 9, writes: 3, edits: 8, other: 0, denied: 1 },
+      usage: { promptTokens: 138679, completionTokens: 5083, cachedTokens: 120000, modelCalls: 13, toolCalls: { executed: 20, deniedByHandler: 1, deniedByPolicy: 0 } }
+    };
+    const directory = await exportDirectory(root, 'review-total', { 'answer.txt': `${reviewFindings}\n\n${reviewForm}\n` }, undefined, failed);
+    const record = JSON.parse((await exec(process.execPath, [script, 'record', 'review-total', '--export', directory])).stdout) as Record<string, unknown>;
+    expect(record).toMatchObject({
+      execution_state: 'failed',
+      duration_seconds: 343.4,
+      error: { code: 'VSUP_BACKEND_ERROR', reason: 'provider_retrying', error_code: 'stream_idle_timeout', retryable: true },
+      warnings: ['Verification stayed incomplete.'],
+      verification_status: 'incomplete',
+      retries: { count: 2, last_category: 'stream_idle' },
+      usage: { cached_tokens: 120000, tool_calls_by_kind: { reads: 9, writes: 3, edits: 8, other: 0, denied: 1 } }
+    });
+    expect(Object.keys(record.error as object).sort()).toEqual(['code', 'error_code', 'reason', 'retryable']);
+    expect(JSON.stringify(record)).not.toContain('provider text');
   });
 
   it('refuses an answer that is not the one listed in the bundle sums', async () => {

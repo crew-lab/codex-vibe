@@ -75,6 +75,37 @@ describe('runs export --include answer', () => {
     expect(report.backend).toBe('app-server');
   });
 
+  it('counts tool calls by kind and provider retry notices from the event log, without their text', async () => {
+    const { root, directory } = await savedRun({ summary: 'x' });
+    const events = [
+      { type: 'tool_call', data: { name: 'read_file', outcome: 'executed', path: 'src/a.mjs' } },
+      { type: 'tool_call', data: { name: 'read_file', outcome: 'executed', path: 'src/b.mjs' } },
+      { type: 'tool_call', data: { name: 'write_file', outcome: 'executed' } },
+      { type: 'tool_call', data: { name: 'edit', outcome: 'executed' } },
+      { type: 'tool_denied', data: { tool: 'bash', outcome: 'permission_denied_by_policy' } },
+      { type: 'diagnostic', data: { reason: 'turn_retrying', category: 'rate_limit', detail: 'secret provider text', text: 'Vibe is retrying' } },
+      { type: 'diagnostic', data: { reason: 'turn_retrying', category: 'stream_idle', detail: 'secret provider text' } },
+      { type: 'diagnostic', data: { reason: 'model_output' } }
+    ].map((event, index) => JSON.stringify({ seq: index + 1, timestamp: '2026-10-01T10:00:01.000Z', ...event })).join('\n');
+    await writeFile(path.join(directory, 'events.ndjson'), `${events}\n`, { mode: 0o600 });
+    const output = path.join(root, 'bundle');
+    await exportReport({ directory, output });
+    const text = await readFile(path.join(output, 'report.json'), 'utf8');
+    const report = JSON.parse(text) as Record<string, unknown>;
+    expect(report.tool_calls_by_kind).toEqual({ reads: 2, writes: 1, edits: 1, other: 0, denied: 1 });
+    expect(report.retries).toEqual({ count: 2, last_category: 'stream_idle' });
+    expect(text).not.toContain('secret provider text');
+  });
+
+  it('reports tool kinds and retries as unknown when the run has no event log', async () => {
+    const { root, directory } = await savedRun({ summary: 'x' });
+    const output = path.join(root, 'bundle');
+    await exportReport({ directory, output });
+    const report = JSON.parse(await readFile(path.join(output, 'report.json'), 'utf8')) as Record<string, unknown>;
+    expect(report.tool_calls_by_kind).toBeNull();
+    expect(report.retries).toBeNull();
+  });
+
   it('omits context_reads when the run has none', async () => {
     const { root, directory } = await savedRun({ summary: 'x' });
     const output = path.join(root, 'bundle');

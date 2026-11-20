@@ -98,10 +98,16 @@ async function approvalLedger(directory: string, record: RunRecord): Promise<{ l
   return { ledger, sha256: digest(bytes) };
 }
 
-async function diagnosticProjection(directory: string, record: RunRecord): Promise<{ events: unknown[]; counts: Record<string, number>; complete: boolean; gaps: number }> {
+interface ToolCallsByKind { reads: number; writes: number; edits: number; other: number; denied: number }
+interface RetryNotices { count: number; last_category: string | null }
+const TOOL_KIND_BY_NAME: Readonly<Record<string, 'reads' | 'writes' | 'edits'>> = { read_file: 'reads', write_file: 'writes', edit: 'edits' };
+
+async function diagnosticProjection(directory: string, record: RunRecord): Promise<{ events: unknown[]; counts: Record<string, number>; complete: boolean; gaps: number; toolCallsByKind: ToolCallsByKind | null; retries: RetryNotices | null }> {
   try {
     const bytes = await readOwnedFile(path.join(directory, 'events.ndjson'), record.limits.maxEventBytes);
     const events: unknown[] = []; const counts: Record<string, number> = Object.create(null) as Record<string, number>;
+    const toolCallsByKind: ToolCallsByKind = { reads: 0, writes: 0, edits: 0, other: 0, denied: 0 };
+    const retries: RetryNotices = { count: 0, last_category: null };
     let previous = 0; let gaps = 0;
     for (const line of bytes.toString('utf8').split('\n').filter(Boolean)) {
       const e = JSON.parse(line) as Record<string, unknown>; const data = e.data && typeof e.data === 'object' ? e.data as Record<string, unknown> : {};
@@ -111,6 +117,9 @@ async function diagnosticProjection(directory: string, record: RunRecord): Promi
       const outcome = typeof data.outcome === 'string' ? data.outcome.slice(0, 100) : 'unknown';
       const type = typeof e.type === 'string' ? e.type.slice(0, 100) : 'unknown';
       const key = `${type}:${name}:${outcome}`; counts[key] = (counts[key] ?? 0) + 1;
+      if (type === 'tool_call' && outcome === 'executed') toolCallsByKind[TOOL_KIND_BY_NAME[name] ?? 'other']++;
+      if (type === 'tool_denied') toolCallsByKind.denied++;
+      if (type === 'diagnostic' && data.reason === 'turn_retrying') { retries.count++; retries.last_category = typeof data.category === 'string' ? data.category.slice(0, 100) : 'unknown'; }
       if (events.length < 10_000) events.push({ seq: e.seq, timestamp: e.timestamp, type, severity: e.severity, name, outcome,
         ...(typeof data.reason === 'string' ? { reason: data.reason.slice(0, 100) } : {}),
         ...(data.reason === 'reasoning_observation' ? {
@@ -120,8 +129,8 @@ async function diagnosticProjection(directory: string, record: RunRecord): Promi
         } : {})
       });
     }
-    return { events, counts, complete: events.length === previous && gaps === 0, gaps };
-  } catch { return { events: [], counts: {}, complete: false, gaps: 0 }; }
+    return { events, counts, complete: events.length === previous && gaps === 0, gaps, toolCallsByKind: record.backend === 'app-server' ? toolCallsByKind : null, retries };
+  } catch { return { events: [], counts: {}, complete: false, gaps: 0, toolCallsByKind: null, retries: null }; }
 }
 
 function answerAsPatch(answer: string): string {
@@ -191,7 +200,7 @@ export async function exportReport(options: { directory: string; output: string;
     durations_ms: { inference: null, finalization: null, preparation: elapsed(record.createdAt, record.launchedAt), startup: elapsed(record.launchedAt, record.startedAt), execution_and_finalization: elapsed(record.startedAt, record.finishedAt), total: elapsed(record.createdAt, record.finishedAt) },
     ...(record.pin ? { pin: pinToWire(record.pin) } : {}),
     ...(approvals && exportedApprovals ? { approvals: { file: 'approvals.json', source_sha256: approvals.sha256, exported_sha256: digest(exportedApprovals), records: approvals.ledger.records.length, truncated: approvals.ledger.truncated } } : {}),
-    usage: reportUsage(record.usage), ...(contextReads ? { context_reads: contextReads } : {}), limits: record.limits, warnings: record.result?.warnings ?? [], error: record.error ?? null,
+    usage: reportUsage(record.usage), tool_calls_by_kind: diagnostics.toolCallsByKind, retries: diagnostics.retries, ...(contextReads ? { context_reads: contextReads } : {}), limits: record.limits, warnings: record.result?.warnings ?? [], error: record.error ?? null,
     cleanup: record.cleanup ?? { worktree: 'unknown', reason: 'Cleanup evidence was not recorded or the run has not settled' }, external_validation: external
   }) as Record<string, unknown>;
   const files: Record<string, Buffer> = {

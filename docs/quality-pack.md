@@ -64,6 +64,20 @@ For an edit task, export with `--include patch` instead. `--include answer` is r
 
 It runs the same check as `check` on `answer.txt` or `changes.patch`, prints the record and, with `--out`, also writes it; an existing file is never overwritten. The record holds the task id, the verdict and every check with its detail, the answer text (reviews), the stop reason, usage (tokens, model calls, tool calls), the thinking level, the supervisor version, the worker backend and version, `context_reads` when the run recorded it, `execution_state`, `answer_present` and `task_hash_matched`. It holds no path, prompt, transcript or reasoning.
 
+These fields explain a slow or failed run. Each is `null` when the export does not carry it, as in exports and records made before they were added:
+
+| Field | From the export's `report.json` |
+|---|---|
+| `duration_seconds` | `timestamps.finished` minus `timestamps.created`, to a tenth of a second |
+| `error` | `error.code`, `error.details.reason`, `error.details.error_code` and `error.retryable`; the message, remediation and provider text are left out |
+| `warnings` | `warnings` |
+| `verification_status` | `verification.status` |
+| `retries` | `retries`: the number of provider retry notices (`turn_retrying`) in the run's event log and the category of the last one |
+| `usage.cached_tokens` | `usage.cachedTokens` |
+| `usage.tool_calls_by_kind` | `tool_calls_by_kind`: executed `read_file` (`reads`), `write_file` (`writes`), `edit` (`edits`) and other calls, and denied calls, counted from the event log |
+
+`runs export` writes `retries` and `tool_calls_by_kind` from the run's event log, and `null` when the log cannot be read; `tool_calls_by_kind` is `null` for an agy run, whose events do not name the tool kinds. They hold counts and category names only.
+
 ## Inspect the brief
 
 `prompt` prints what the worker receives, without a worker:
@@ -82,7 +96,7 @@ The checker reads the answer form and ignores the same labels in the working. Sc
 
 ## What the edits measure
 
-`edit-shipping` and `edit-reserve-all` are small and pass on the real worker, while a real multi-file edit passed its static contract with code that did not work. `edit-stock-export` has the same shape. Its static contract is easy to meet, so its hidden tests judge behaviour: they run the command with `--out-dir <directory>` and `--out-dir=<directory>` and compare the written `stock.csv`, compare the two error messages and exit codes exactly, run the `export-stock` package script, run the worker's own test file on its own and require at least four passing cases, and reject trailing whitespace in the four changed files. A flag read under another key than `parseArgs` stores it (`values.outDir` for `--out-dir`), a `mkdtempSync()` without a prefix and a trailing space each fail by the named hidden test. The brief gives what the coordinator observed by running the command before the change and a fixed answer form, and pins no turn or time limit, so the configured defaults apply.
+`edit-shipping` and `edit-reserve-all` are small and pass on the real worker, while a real multi-file edit passed its static contract with code that did not work. `edit-stock-export` has the same shape. Its static contract is easy to meet, so its hidden tests judge behaviour: they run the command with `--out-dir <directory>` and `--out-dir=<directory>` and compare the written `stock.csv`, compare the two error messages and exit codes exactly, run the `export-stock` package script, run the worker's own test file on its own and require at least four passing cases, and reject trailing whitespace in the four changed files. A flag read under another key than `parseArgs` stores it (`values.outDir` for `--out-dir`), a `mkdtempSync()` without a prefix and a trailing space each fail by the named hidden test. The brief gives what the coordinator observed by running the command before the change and a fixed answer form, and pins no turn or time limit, so the configured defaults apply. Since 2026-11-20 it also spells out, as literals to copy, the `parseArgs` option key `'out-dir'` and how its value is read, the fixture's exact `stock.csv` content as a JavaScript string and the two exact standard-error strings; the hidden tests and the contract are unchanged, but the task hash changed, so earlier exports of this task no longer `record`.
 
 The fixture gained `bin/`, `docs/cli.md` and `src/stock-file.mjs` with this task, and the review tasks do not name them. An edit run's workspace listing is longer than before.
 
