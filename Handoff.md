@@ -64,33 +64,50 @@ Tested the installed 2.2.2 archive from `093cee5` with Vibe 3.1.3 and `mistral-m
 
 ## Next
 
-The order of work is in the [development strategy](planning/development-strategy.md#what-we-work-on).
+The order of work and the failure behind each step are in the [development strategy](planning/development-strategy.md#what-we-work-on). Written and tested here with the fake worker on 2026-11-20, none of it run on a worker yet:
 
-1. **Address the failed hard-edit cases.** Use the recorded flag mismatch and malformed test expectation to assess the stock-export brief with stand-ins before another hosted sample. Preserve the independent checker so the five-run result remains comparable.
-2. **Investigate late provider errors after useful writes.** Sample 2 passed all 20 independent tests but ended with a provider idle error and incomplete supervisor verification. Preserve the distinction between execution and patch quality. Use the saved retry and wire timing to investigate settlement and error guidance.
-3. **Copy-rules remains open in the owning project.** The correction from the rejected patch fixed argument parsing and the first fixture setup error. Carry forward the undefined digest reference, missing snapshot parent, and stdout/stderr assertion mismatch. Reproduce the documented CLI and run the focused tests before acceptance.
-4. **Remaining live checks.** Observe `install_unsettled` during an in-flight Vibe upgrade, verify re-preparation with a newer agy, and check approval prompts through the native Codex connection. The November 19 trial used a standalone MCP client. After worker updates, wait for eligibility and record the quality pack.
+- an edit keeps its audited writes after a late provider failure (`stop_reason: provider_error`), for `backend_error`, `incomplete_stream` and `rate_limit` with no HTTP status or a 5xx, 408, 409, 425 or 429;
+- records with the duration, cached tokens, tool kinds, error, warnings and retry notices;
+- the stock-export brief with exact spellings and bytes, passed by four stand-in workers ([answers](research/evidence/stock-export-brief-standin-20261120/README.md));
+- compaction checkpoints dropped, where a compaction would have failed the run, with a check that the final history still holds every earlier entry (never seen on a worker: if Vibe trims its history, a run that compacts still fails closed);
+- a refresh that names the Vibe settings a new version added or removed;
+- `vibe_edit_thinking`, `off` by default;
+- `doctor` checking the Codex registration;
+- the coordinator skill and agent file with one home for each rule.
+
+### On the worker machine, on a build from the current `main`
+
+Record every run with `quality-pack.mjs record` and commit the records under `research/evidence/`. A new build needs its `prepare check --kit` once.
+
+1. **The wire code of the stall.** Export the failed stock-export sample of 2026-11-19 (the record `next-6`) and report `error.details.error_code`. The new rule keeps an edit only for `backend_error`, `incomplete_stream` and `rate_limit`; if the stall arrived with another code, say so before anything else.
+2. **Preparation and the pack.** `prepare check`, then the four existing tasks once each. No task may get worse; the records now show seconds, cached tokens and tool kinds.
+3. **The hard edit with the new brief, five times.** Record the hidden-test result of each. The earlier brief passed 3 of 5 on its patch and 2 of 5 end to end. Change nothing else in this set.
+4. **A stall after the writes.** When one happens in step 3, the run must end `completed` with `stop_reason: provider_error`, a warning naming the provider code, and a verification that ran. It cannot be forced; report it when it is seen. Also report how long each stall lasted, and whether a thinking-`high` review is ever cut at the 120-second idle wait.
+5. **Thinking for edits, its own five runs.** Set `vibe_edit_thinking = "high"`, restart, let readiness re-prepare, and run the hard edit five times. Compare the pass rate, tokens and seconds with step 3. Remove the setting afterwards.
+6. **One delegation through Codex itself,** a review and an edit, once on the build from `719e21c` and once on this one, with the skill and the agent file of each: note whether the skill loads, the approval prompts, and the tool timeout in force. `doctor` should report the registration items. This is the test for the skill changes and for the read-only mark on `vibe_status`.
+7. **After the next Vibe update:** the refresh warning should name any setting the new version added or removed.
+8. **Still open:** `install_unsettled` during an in-flight Vibe upgrade, and re-preparation on a newer agy.
+
+Copy-rules stays open in the owning project: carry forward the undefined digest reference, the missing snapshot parent and the stdout/stderr assertion, reproduce the documented command and run the focused tests before acceptance.
 
 ### Development still to do
 
-1. **agy preparation runs the run's own audit:** the stream-shape probe requires a call ID or arguments for every executed call and verifies write-tool ledger reconciliation rules so stream changes fail at `prepare check`, before any inference.
-2. **agy diagnostics:** keep the whole remedy line from stderr and read the tool list from agy's real `init` shape.
-3. **agy strict mode:** try allow-rule target forms through the control probe on the worker machine until agy runs the allowed read without the bypass. The aim is two gates instead of one.
-4. **Owner's decisions and candidates:** thinking for edits (fixed at `off`, never measured); wording that stops a refused tool being tried again, once the hard edit can show a difference; the named files' content in a review's prompt; the candidates from the review below.
-5. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
+1. **Release 2.2.2** once steps 1 to 4 above have run.
+2. **A worker rule that spellings agree** where an option, key or field is defined, parsed and used, as its own five-run set after the brief's.
+3. **The correction's turn budget,** once a record shows where its 25 turns went.
+4. **The skill's templates and correction procedure as reference files,** after the delegation through Codex.
+5. **agy preparation runs the run's own audit:** the stream-shape probe requires a call ID or arguments for every executed call and verifies write-tool ledger reconciliation rules so stream changes fail at `prepare check`, before any inference.
+6. **agy diagnostics and strict mode:** keep the whole remedy line from stderr, read the tool list from agy's real `init` shape, and find the allow-rule form agy accepts, so two gates stand instead of one.
+7. **Owner:** ask GitHub Support to purge the pre-rewrite commits ([rewrite notes](research/history-rewrite-2026-11-04.md)).
 
 ### From the architecture review of 2026-11-18: candidates, order not decided
 
 Three read-only reviews of `a035d77`: what the worker decides for the supervisor, what Codex is told when a run fails, and setup. The reviewers reported each line with file references in this repository or in the Vibe 3.1.3 source; not every line was read a second time, and the ones marked inferred were not confirmed. Crash recovery, locks and run state were not re-reviewed, and agy's own defaults were not reached.
 
-- **A read-back that knows only its own keys.** A new default-on Vibe setting passes it, and the automatic refresh then admits it. The preparation report already lists the effective keys, so a refresh could name the new ones in its warning.
 - **A sixth bundled skill fails every preparation.** The read-back compares five names, although `disabled_skills` already keeps all of them from the model.
 - **The preparation check is laxer than a run** on a missing hook or skill count.
-- **History entry kinds `checkpoint` and `notice`** are not in the wire table (inferred: a compaction would fail the run).
-- **Finished work is lost to a late failure.** A provider error after an edit's writes, or a timeout on the final read after a clean turn, fails the run and leaves the patch unassessable. The timeout and turn-limit stops are already judged by the contract and checks; this is the same decision.
 - **agy has no auth, quota or rate classification** of its own failures (reported by the review, not re-read).
 - **The Vibe key in the macOS Keychain is checked only at a start,** after the grant; agy's key is checked at readiness.
-- **Only `setup` writes the Codex registration with its 600-second tool timeout.** The README's walk-through does not show `setup`, the skill asks Codex to wait up to 300 seconds, and `doctor` does not check the registration (Codex's own default was not verified).
 - **`prepare check` requires `--kit`** although the script ships in the package, and the readiness blocker prints a placeholder for the kit path. The first `pin-manifest` is manual as well.
 
 ## Build, install and prepare
