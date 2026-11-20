@@ -248,6 +248,9 @@ describe('compareReadback on unit inputs', () => {
     expect(paths(compareReadback(high.expectation, observe(cleanWire(high.expectation, 'off')), { checkThinking: true }))).toEqual(thinkingPaths);
     expect(compareReadback(off.expectation, observe(cleanWire(off.expectation, 'off')), { checkThinking: true })).toEqual([]);
     expect(paths(compareReadback(off.expectation, observe(cleanWire(off.expectation, 'high')), { checkThinking: true }))).toEqual(thinkingPaths);
+    const editHigh = buildSessionConfig({ mode: 'edit', workspace, runDirectory: '/srv/runs/run-0003', maxTurns: 5, editThinking: 'high' });
+    expect(compareReadback(editHigh.expectation, observe(cleanWire(editHigh.expectation, 'high')), { checkThinking: true })).toEqual([]);
+    expect(paths(compareReadback(editHigh.expectation, observe(cleanWire(editHigh.expectation, 'off')), { checkThinking: true }))).toEqual(thinkingPaths);
     const runtimeOnly = cleanWire(high.expectation, 'high');
     assign(runtimeOnly.effective as Json, ['config', 'models', alias, 'thinking'], 'off');
     expect(paths(compareReadback(high.expectation, observe(runtimeOnly), { checkThinking: true }))).toEqual([`config.models["${alias}"].thinking`]);

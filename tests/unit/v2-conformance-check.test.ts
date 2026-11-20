@@ -272,6 +272,22 @@ describe('v2 conformance check against the scripted fake app-server', () => {
     expect(at(result.report, 'gates.thinking-effect.setting_read_back')).toBe(true);
   }, 60_000);
 
+  it('requests and reads back thinking high for an edit when the selected configuration names it', async () => {
+    const fake = await makeLaunchableFakeVibe(path.join(scratch, 'fake'), { scenario: { name: 'edit-thinking-high' } });
+    const config = path.join(scratch, 'config.toml');
+    await writeFile(config, `version = 1\nvibe_edit_thinking = "high"\n\n[paths]\napp_server = ${JSON.stringify(fake.appServer)}\nvibe_pin_manifest = ${JSON.stringify(fake.manifest)}\n`, { mode: 0o600 });
+    const result = await runCheck(['--config', config, '--mode', 'edit']);
+
+    expect(result.code, result.stderr).toBe(0);
+    const run = (result.report.runs as Json[])[0]!;
+    expect(at(run, 'mode')).toBe('edit');
+    expect(at(run, 'thinking.requested')).toBe('high');
+    expect(at(run, 'thinking.after')).toBe('high');
+    expect(at(run, 'thinking.effective_models_thinking')).toBe('high');
+    expect(at(run, 'readback.after_thinking.total')).toBe(0);
+    expect(at(result.report, 'gates.thinking-effect.setting_read_back')).toBe(true);
+  }, 60_000);
+
   it('names the default model, reads it back and records the selection when Vibe defaults to another one', async () => {
     const fake = await makeLaunchableFakeVibe(path.join(scratch, 'fake'), { scenario: { name: 'default-model-moved', models: ['mistral-large-4-0', 'mistral-medium-3.5'], defaultModel: 'mistral-large-4-0' } });
     const result = await runCheck(['--manifest', fake.manifest, '--executable', fake.appServer, '--mode', 'review']);

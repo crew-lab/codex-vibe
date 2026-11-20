@@ -1,6 +1,6 @@
 import { configFingerprint, loadConfig } from "./config.js";
 import { SUPPORTED_VIBE } from "../backends/app-server/supported-vibe.js";
-import { DEFAULT_REVIEW_THINKING } from "../backends/app-server/thinking.js";
+import { DEFAULT_EDIT_THINKING, DEFAULT_REVIEW_THINKING } from "../backends/app-server/thinking.js";
 import { sessionModel } from "../backends/app-server/model.js";
 import type { SupervisorConfig } from "../contracts.js";
 import { inspectWorkspaceRoots } from "../security/paths.js";
@@ -30,6 +30,7 @@ const BOOT_BOUND_SETTINGS: ReadonlyArray<readonly [string, (config: SupervisorCo
   ["version", (config) => config.version],
   ["vibe_version", (config) => config.vibeVersion ?? SUPPORTED_VIBE],
   ["vibe_review_thinking", (config) => config.vibeReviewThinking ?? DEFAULT_REVIEW_THINKING],
+  ["vibe_edit_thinking", (config) => config.vibeEditThinking ?? DEFAULT_EDIT_THINKING],
   ["vibe_model", (config) => sessionModel(config.vibeModel)],
   ["retention.days", (config) => config.retention.days],
   ["limits.review_timeout_seconds", (config) => config.limits.reviewTimeoutSeconds],

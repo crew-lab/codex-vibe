@@ -215,20 +215,24 @@ describe('child process environment additions', () => {
 describe('session thinking', () => {
   const runDirectory = '/srv/runs/run-thinking';
   const workspace = '/srv/work/space';
-  const plan = (mode: 'review' | 'edit', reviewThinking?: 'off' | 'high') => buildSessionConfig({ mode, workspace, runDirectory, maxTurns: 5, ...(reviewThinking === undefined ? {} : { reviewThinking }) });
+  const plan = (mode: 'review' | 'edit', reviewThinking?: 'off' | 'high', editThinking?: 'off' | 'high') => buildSessionConfig({ mode, workspace, runDirectory, maxTurns: 5, ...(reviewThinking === undefined ? {} : { reviewThinking }), ...(editThinking === undefined ? {} : { editThinking }) });
 
-  it('thinks high in a review by default, takes off when configured, and never thinks in an edit', () => {
+  it('thinks high in a review by default, takes off when configured, and leaves an edit off unless the edit setting names high', () => {
     expect(plan('review').expectation.thinking).toBe('high');
     expect(plan('review', 'off').expectation.thinking).toBe('off');
     expect(plan('review', 'high').expectation.thinking).toBe('high');
+    expect(plan('review', undefined, 'off').expectation.thinking).toBe('high');
     expect(plan('edit').expectation.thinking).toBe('off');
     expect(plan('edit', 'high').expectation.thinking).toBe('off');
+    expect(plan('edit', undefined, 'high').expectation.thinking).toBe('high');
+    expect(plan('edit', 'high', 'off').expectation.thinking).toBe('off');
   });
 
   it('writes the plan level as a config/model/write that only sets the reasoning effort', () => {
     expect(buildThinkingWrite('session-1', plan('review'))).toEqual({ method: 'config/model/write', params: { sessionId: 'session-1', reasoningEffort: 'high' } });
     expect(buildThinkingWrite('session-1', plan('review', 'off'))).toEqual({ method: 'config/model/write', params: { sessionId: 'session-1', reasoningEffort: 'off' } });
     expect(buildThinkingWrite('session-1', plan('edit', 'high'))).toEqual({ method: 'config/model/write', params: { sessionId: 'session-1', reasoningEffort: 'off' } });
+    expect(buildThinkingWrite('session-1', plan('edit', undefined, 'high'))).toEqual({ method: 'config/model/write', params: { sessionId: 'session-1', reasoningEffort: 'high' } });
     expect(() => buildThinkingWrite('', plan('review'))).toThrow(TypeError);
   });
 });

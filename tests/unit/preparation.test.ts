@@ -22,6 +22,8 @@ it('binds the candidate to distribution bytes and configuration while allowing r
     expect(await preparationIdentity({...config,limits:{...config.limits,maxTurnsEdit:99}},before)).not.toBe(identity);
     expect(await preparationIdentity({...config,vibeReviewThinking:'off'},before)).not.toBe(identity);
     expect((await preparationComponents({...config,vibeReviewThinking:'off'},before)).policy).not.toBe((await preparationComponents(config,before)).policy);
+    expect(await preparationIdentity({...config,vibeEditThinking:'high'},before)).not.toBe(identity);
+    expect(await preparationIdentity({...config,vibeEditThinking:'off'},before)).toBe(identity);
     expect(await preparationIdentity(config,'a'.repeat(64))).not.toBe(identity);
     expect(receiptPath(config)).toBe(path.join(root,'preparation-receipt.json'));
   } finally {await rm(root,{recursive:true,force:true});}

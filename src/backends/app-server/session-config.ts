@@ -42,6 +42,7 @@ export interface SessionConfigInput {
   maxTurns: number;
   excludedGlobs?: readonly DenylistExclusion[];
   reviewThinking?: SessionThinking;
+  editThinking?: SessionThinking;
   model?: string;
 }
 
@@ -155,7 +156,7 @@ export function buildSessionConfig(input: SessionConfigInput): SessionConfigPlan
     agentConfig: { cwd: workspace, agent, enabledTools: [...tools], disabledTools: [...DISABLED_TOOLS], maxTurns: input.maxTurns, systemPrompt: workerRules('vibe', input.mode) },
     profile: { directory: profileDirectory, file: path.join(profileDirectory, `${agent}.toml`), document, content: stringify(document) },
     environment: buildEnvironment(directories, agent, model),
-    expectation: buildExpectation(workspace, agent, tools, denylist, sessionThinking(input.mode, input.reviewThinking), model)
+    expectation: buildExpectation(workspace, agent, tools, denylist, sessionThinking(input.mode, input.reviewThinking, input.editThinking), model)
   };
 }
 

@@ -376,7 +376,7 @@ async function main(argv) {
       server_requests: [], server_warnings: [], stats_after: null, stderr: { bytes: 0, tail: '' }, shutdown: null, blocked: null
     };
     const note = (id, severity, message, details) => addFinding(id, severity, message, label, details);
-    const plan = sessionConfig.buildSessionConfig({ mode, workspace, runDirectory, maxTurns: MAX_TURNS, excludedGlobs: options.excludedGlobs, ...(config.vibeReviewThinking === undefined ? {} : { reviewThinking: config.vibeReviewThinking }), ...(config.vibeModel === undefined ? {} : { model: config.vibeModel }) });
+    const plan = sessionConfig.buildSessionConfig({ mode, workspace, runDirectory, maxTurns: MAX_TURNS, excludedGlobs: options.excludedGlobs, ...(config.vibeReviewThinking === undefined ? {} : { reviewThinking: config.vibeReviewThinking }), ...(config.vibeEditThinking === undefined ? {} : { editThinking: config.vibeEditThinking }),...(config.vibeModel === undefined ? {} : { model: config.vibeModel }) });
     await sessionConfig.writeSessionFiles(plan);
     const childEnvironment = { ...environment.buildChildEnvironment(process.env), ...plan.environment };
     delete childEnvironment.MISTRAL_API_KEY;

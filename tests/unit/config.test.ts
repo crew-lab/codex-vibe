@@ -254,6 +254,27 @@ describe("app-server keys", () => {
     expect(bootBoundDrift(validateConfig(appServer), high)).toEqual([]);
   });
 
+  it("takes vibe_edit_thinking as off or high only and leaves it unset when absent", () => {
+    expect(validateConfig(appServer)).not.toHaveProperty("vibeEditThinking");
+    expect(bootBoundSettings(validateConfig(appServer)).vibe_edit_thinking).toBe("off");
+    expect(validateConfig({ ...appServer, vibe_edit_thinking: "off" })).toMatchObject({ vibeEditThinking: "off" });
+    expect(validateConfig({ ...appServer, vibe_edit_thinking: "high" })).toMatchObject({ vibeEditThinking: "high" });
+    for (const value of ["medium", "max", "HIGH", "", true, 1]) {
+      expect(() => validateConfig({ ...appServer, vibe_edit_thinking: value }), String(value)).toThrow(/vibe_edit_thinking/);
+    }
+  });
+
+  it("treats a change of vibe_edit_thinking between off and high as a boot-bound policy change", () => {
+    const unset = validateConfig(appServer);
+    const off = validateConfig({ ...appServer, vibe_edit_thinking: "off" });
+    const high = validateConfig({ ...appServer, vibe_edit_thinking: "high" });
+    expect(configFingerprint(off)).not.toBe(configFingerprint(high));
+    expect(configFingerprint(high)).not.toBe(configFingerprint(unset));
+    expect(bootBoundDrift(off, high)).toEqual(["vibe_edit_thinking"]);
+    expect(bootBoundDrift(unset, high)).toEqual(["vibe_edit_thinking"]);
+    expect(bootBoundDrift(unset, off)).toEqual([]);
+  });
+
   it("takes vibe_model as a model alias, leaves it unset when absent and treats a change as a boot-bound policy change", () => {
     const unset = validateConfig(appServer);
     expect(unset).not.toHaveProperty("vibeModel");
@@ -307,7 +328,9 @@ describe("app-server keys", () => {
       validateConfig({ ...appServer, paths: { ...appServer.paths, antigravity: "/opt/bin/agy" } }),
       validateConfig({ ...appServer, vibe_version: "3.1.2" }),
       validateConfig({ ...appServer, vibe_review_thinking: "off" }),
-      validateConfig({ ...appServer, vibe_review_thinking: "high" })
+      validateConfig({ ...appServer, vibe_review_thinking: "high" }),
+      validateConfig({ ...appServer, vibe_edit_thinking: "high" }),
+      validateConfig({ ...appServer, vibe_edit_thinking: "off" })
     ];
     for (const variant of variants) expect(configFingerprint(variant)).not.toBe(revision);
     expect(variants.map((variant) => bootBoundDrift(base, variant))).toEqual([
@@ -319,6 +342,8 @@ describe("app-server keys", () => {
       ["paths.antigravity"],
       [],
       ["vibe_review_thinking"],
+      [],
+      ["vibe_edit_thinking"],
       []
     ]);
     expect(bootBoundDrift(base, validateConfig(appServer))).toEqual([]);

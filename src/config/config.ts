@@ -88,6 +88,7 @@ export function configFingerprint(config: SupervisorConfig): string {
     version: config.version,
     ...(config.vibeVersion ? { vibeVersion: config.vibeVersion } : {}),
     ...(config.vibeReviewThinking ? { vibeReviewThinking: config.vibeReviewThinking } : {}),
+    ...(config.vibeEditThinking ? { vibeEditThinking: config.vibeEditThinking } : {}),
     ...(config.vibeModel ? { vibeModel: config.vibeModel } : {}),
     allowedWorkspaceRoots: config.allowedWorkspaceRoots.map(resolveConfiguredRoot),
     ...excludedGlobsSemantics(config),
