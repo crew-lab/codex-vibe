@@ -1,0 +1,63 @@
+{
+  "task": "edit-shipping",
+  "task_hash_matched": true,
+  "passed": true,
+  "checks": [
+    {
+      "id": "only-allowed-paths",
+      "passed": true,
+      "detail": "src/cart.mjs, tests/shipping.test.mjs"
+    },
+    {
+      "id": "required-paths-changed",
+      "passed": true,
+      "detail": "all changed"
+    },
+    {
+      "id": "all-tests-pass",
+      "passed": true,
+      "detail": "14 passed, 0 failed"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "execution_state": "completed",
+  "answer_present": true,
+  "duration_seconds": 9.9,
+  "error": null,
+  "warnings": [],
+  "verification_status": "passed",
+  "retries": {
+    "count": 0,
+    "last_category": null
+  },
+  "usage": {
+    "prompt_tokens": 28665,
+    "completion_tokens": 1029,
+    "cached_tokens": 20224,
+    "model_calls": 4,
+    "tool_calls": {
+      "executed": 7,
+      "deniedByHandler": 0,
+      "deniedByPolicy": 0
+    },
+    "tool_calls_by_kind": {
+      "reads": 5,
+      "writes": 1,
+      "edits": 1,
+      "other": 0,
+      "denied": 0
+    }
+  },
+  "thinking": {
+    "requested": "off",
+    "status": "matched",
+    "observed": [
+      "off"
+    ]
+  },
+  "supervisor_version": "2.2.2",
+  "worker": {
+    "backend": "app-server",
+    "version": "3.1.3"
+  }
+}

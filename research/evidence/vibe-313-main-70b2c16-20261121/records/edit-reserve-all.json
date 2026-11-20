@@ -1,0 +1,63 @@
+{
+  "task": "edit-reserve-all",
+  "task_hash_matched": true,
+  "passed": true,
+  "checks": [
+    {
+      "id": "only-allowed-paths",
+      "passed": true,
+      "detail": "src/errors.mjs, src/inventory.mjs, tests/reserve-all.test.mjs"
+    },
+    {
+      "id": "required-paths-changed",
+      "passed": true,
+      "detail": "all changed"
+    },
+    {
+      "id": "all-tests-pass",
+      "passed": true,
+      "detail": "17 passed, 0 failed"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "execution_state": "completed",
+  "answer_present": true,
+  "duration_seconds": 16.6,
+  "error": null,
+  "warnings": [],
+  "verification_status": "passed",
+  "retries": {
+    "count": 0,
+    "last_category": null
+  },
+  "usage": {
+    "prompt_tokens": 57236,
+    "completion_tokens": 2105,
+    "cached_tokens": 46976,
+    "model_calls": 7,
+    "tool_calls": {
+      "executed": 11,
+      "deniedByHandler": 0,
+      "deniedByPolicy": 0
+    },
+    "tool_calls_by_kind": {
+      "reads": 7,
+      "writes": 1,
+      "edits": 3,
+      "other": 0,
+      "denied": 0
+    }
+  },
+  "thinking": {
+    "requested": "off",
+    "status": "matched",
+    "observed": [
+      "off"
+    ]
+  },
+  "supervisor_version": "2.2.2",
+  "worker": {
+    "backend": "app-server",
+    "version": "3.1.3"
+  }
+}
