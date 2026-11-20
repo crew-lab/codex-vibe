@@ -36,6 +36,10 @@ describe('artifact acceptance', () => {
         ['turn-limit-fail', {...contract, checks:[{id:'required',kind:'text_contains',path:'page.txt',value:'MISSING DISCLOSURE'}]}, 'completed', 'turn_limit', 'failed', 'app-server'],
         ['turn-limit-agy', contract, 'completed', 'turn_limit', 'incomplete', 'antigravity'],
         ['turn-limit-unrecorded-engine', contract, 'completed', 'turn_limit', 'incomplete'],
+        ['provider-error-pass', contract, 'completed', 'provider_error', 'passed', 'app-server'],
+        ['provider-error-fail', {...contract, checks:[{id:'required',kind:'text_contains',path:'page.txt',value:'MISSING DISCLOSURE'}]}, 'completed', 'provider_error', 'failed', 'app-server'],
+        ['provider-error-agy', contract, 'completed', 'provider_error', 'incomplete', 'antigravity'],
+        ['provider-error-unrecorded-engine', contract, 'completed', 'provider_error', 'incomplete'],
         ['token-limit', contract, 'completed', 'token_limit', 'incomplete', 'app-server'],
         ['price-limit', contract, 'completed', 'price_limit', 'incomplete', 'app-server'],
         ['refusal', contract, 'completed', 'refusal', 'incomplete', 'app-server']

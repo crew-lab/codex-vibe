@@ -41,9 +41,16 @@ process.exitCode = 1;
 `;
 const HANGING_CHILD = `setInterval(() => undefined, 1000);
 `;
+const KEYED_CHILD = `import { readFileSync, writeFileSync } from 'node:fs';
+const output = process.argv[process.argv.indexOf('--output') + 1];
+const keys = JSON.parse(readFileSync(new URL('./effective-keys.json', import.meta.url), 'utf8'));
+const run = (mode) => ({ label: mode, mode, role: 'subject', observed: { effective_top_level_keys: keys } });
+writeFileSync(output, JSON.stringify({ result: 'pass', network_observation: { verdict: 'none-observed-control-validated' }, runs: [run('review'), run('edit'), { label: 'control-experiments-on', mode: 'review', role: 'control', observed: { effective_top_level_keys: [...keys, 'control_only'] } }], findings: [] }), { mode: 0o600 });
+`;
+const BASE_KEYS = ['active_model', 'enable_telemetry', 'models', 'tools'];
 
 type Blocker = { code: string; message: string; retryable: boolean; details?: Record<string, unknown> };
-type Readiness = Record<string, unknown> & { eligible: boolean; blockers: Blocker[]; readiness_receipt?: string; warnings?: string[]; worker: { backend: string; version: string | null; model?: string; refreshed?: { at: string; from?: string } }; worker_refresh?: Record<string, unknown>; boot_drift: string[]; effective_limits: { max_turns: number; timeout_seconds: number } };
+type Readiness = Record<string, unknown> & { eligible: boolean; blockers: Blocker[]; readiness_receipt?: string; warnings?: string[]; worker: { backend: string; version: string | null; model?: string; refreshed?: { at: string; from?: string; settings?: Record<string, unknown> } }; worker_refresh?: Record<string, unknown>; boot_drift: string[]; effective_limits: { max_turns: number; timeout_seconds: number } };
 
 interface Gate { promise: Promise<void>; open(): void }
 function gate(): Gate {
@@ -66,7 +73,7 @@ function scenario(version: string, steps: unknown[] = [{ op: 'say', text: 'No fi
   return { name: 'answer', serverVersion: version, steps };
 }
 
-async function vibeBox(options: { versions: string[]; initial: string; minimum?: string }) {
+async function vibeBox(options: { versions: string[]; initial: string; minimum?: string; initialScript?: 'passing' | 'keyed' }) {
   const root = await mkdtemp(path.join(await realpath(tmpdir()), 'vsup-refresh-')); roots.push(root);
   const workspace = path.join(root, 'workspace');
   await mkdir(workspace);
@@ -90,9 +97,11 @@ async function vibeBox(options: { versions: string[]; initial: string; minimum?:
   };
   await writeConfig();
   const config = await loadConfig({ configPath });
-  const scripts = { passing: path.join(root, 'passing.mjs'), failing: path.join(root, 'failing.mjs'), hanging: path.join(root, 'hanging.mjs') };
-  await writeFile(scripts.passing, PASSING_CHILD); await writeFile(scripts.failing, FAILING_CHILD); await writeFile(scripts.hanging, HANGING_CHILD);
-  expect((await runPreparation({ config, configPath, dataDir: state, stderr: 'ignore', conformanceScript: scripts.passing })).status).toBe('passed');
+  const scripts = { passing: path.join(root, 'passing.mjs'), failing: path.join(root, 'failing.mjs'), hanging: path.join(root, 'hanging.mjs'), keyed: path.join(root, 'keyed.mjs') };
+  await writeFile(scripts.passing, PASSING_CHILD); await writeFile(scripts.failing, FAILING_CHILD); await writeFile(scripts.hanging, HANGING_CHILD); await writeFile(scripts.keyed, KEYED_CHILD);
+  const effectiveKeys = async (keys: string[]): Promise<void> => { await writeFile(path.join(root, 'effective-keys.json'), JSON.stringify(keys)); };
+  await effectiveKeys(BASE_KEYS);
+  expect((await runPreparation({ config, configPath, dataDir: state, stderr: 'ignore', conformanceScript: scripts[options.initialScript ?? 'passing'] })).status).toBe('passed');
   const swap = async (version: string): Promise<void> => { await unlink(link); await symlink(environments[version]!.appServer, link); };
   const calls: RunPreparationInput[] = [];
   const pins = { count: 0 };
@@ -114,7 +123,7 @@ async function vibeBox(options: { versions: string[]; initial: string; minimum?:
     return created;
   };
   const sitePackages = (version: string): string => path.join(environments[version]!.directory, 'tools', 'mistral-vibe', 'lib', 'python3.12', 'site-packages');
-  return { root, workspace, state, manifest, configPath, config, environments, swap, manager, calls, pins, writeConfig, sitePackages };
+  return { root, workspace, state, manifest, configPath, config, environments, swap, manager, calls, pins, writeConfig, sitePackages, effectiveKeys };
 }
 
 async function readiness(manager: RunManager, workspace: string, waitSeconds = 0): Promise<Readiness> {
@@ -157,6 +166,44 @@ describe('Vibe worker refresh at readiness', () => {
     expect(started.state).toBe('completed');
     expect((started.result as { warnings: string[] }).warnings).toContain(WARNING);
     expect(box.calls).toHaveLength(1);
+  }, 60_000);
+
+  it('names the Vibe settings a new version adds, in readiness and in the run, and again after a restart', async () => {
+    const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2', initialScript: 'keyed' });
+    const manager = box.manager({ script: 'keyed' });
+    await box.effectiveKeys([...BASE_KEYS, 'goal_mode', 'auto_compact_threshold']);
+    await box.swap('3.1.3');
+    const named = `${WARNING} New Vibe settings the supervisor neither sets nor checks, so their defaults apply: auto_compact_threshold, goal_mode.`;
+    const ready = await readiness(manager, box.workspace, 60);
+    expect(ready).toMatchObject({ eligible: true, worker: { version: '3.1.3', refreshed: { from: '3.1.2', settings: { added: { names: ['auto_compact_threshold', 'goal_mode'], total: 2 } } } }, warnings: [named] });
+    expect(ready.worker.refreshed?.settings).not.toHaveProperty('removed');
+    const started = await (await grant(manager, box.workspace))();
+    expect((started.result as { warnings: string[] }).warnings).toContain(named);
+    await manager.shutdown();
+    expect((await readiness(box.manager(), box.workspace)).warnings).toEqual([named]);
+  }, 60_000);
+
+  it('says nothing about settings when the keys are the same or there is no earlier report to compare with', async () => {
+    for (const initialScript of ['keyed', 'passing'] as const) {
+      const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2', initialScript });
+      const manager = box.manager({ script: 'keyed' });
+      await box.swap('3.1.3');
+      const ready = await readiness(manager, box.workspace, 60);
+      expect(ready, initialScript).toMatchObject({ eligible: true, worker: { refreshed: { from: '3.1.2' } }, warnings: [WARNING] });
+      expect(ready.worker.refreshed, initialScript).not.toHaveProperty('settings');
+    }
+  }, 60_000);
+
+  it('still compares with the report before an interrupted refresh', async () => {
+    const box = await vibeBox({ versions: ['3.1.2', '3.1.3'], initial: '3.1.2', initialScript: 'keyed' });
+    const first = box.manager({ script: 'hanging' });
+    await box.swap('3.1.3');
+    expect(codes(await readiness(first, box.workspace))).toEqual(['VSUP_PREPARING']);
+    await vi.waitFor(async () => expect(await readPreparationFacts(box.config, box.state)).toMatchObject({ interrupted: true }), { timeout: 10_000 });
+    await first.shutdown();
+    await box.effectiveKeys(BASE_KEYS.filter((key) => key !== 'enable_telemetry'));
+    const ready = await readiness(box.manager({ script: 'keyed' }), box.workspace, 60);
+    expect(ready).toMatchObject({ eligible: true, worker: { refreshed: { settings: { removed: { names: ['enable_telemetry'], total: 1 } } } }, warnings: [`${WARNING} Vibe settings no longer present: enable_telemetry.`] });
   }, 60_000);
 
   it('refreshes a downgrade that stays at or above the minimum', async () => {

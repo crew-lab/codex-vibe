@@ -9,6 +9,7 @@ export const STOP_REASON_PRICE_LIMIT = 'price_limit';
 export const STOP_REASON_REFUSAL = 'refusal';
 export const STOP_REASON_CANCELLED = 'cancelled';
 export const STOP_REASON_TIMEOUT = 'timeout';
+export const STOP_REASON_PROVIDER_ERROR = 'provider_error';
 
 export type SupervisorCondition =
   | { kind: 'backend_crashed'; detail?: string }
@@ -26,6 +27,7 @@ export interface OutcomeInput {
   auditClean?: boolean;
   auditedWrites?: number;
   model?: string;
+  mode?: 'review' | 'edit';
 }
 
 export interface RunOutcome {
@@ -46,6 +48,21 @@ export const INCOMPLETE_RESULT_WARNING = 'The run stopped at a limit before a fi
 export const LATE_COMPLETION_WARNING = 'The turn finished as the run reached its timeout; the final history audit confirmed every effect.';
 export const TIMEOUT_RESULT_WARNING = 'The run reached its timeout before the turn finished; every effect was audited, but the result may be incomplete.';
 export const REFUSAL_WARNING = 'The model declined the request (error code refusal); the result is not a review or an edit.';
+const TRANSIENT_PROVIDER_CODES: ReadonlySet<string> = new Set(['backend_error', 'incomplete_stream', 'rate_limit']);
+const MAX_PROVIDER_MESSAGE_CHARS = 300;
+const TRANSIENT_HTTP_STATUSES: ReadonlySet<number> = new Set([408, 409, 425, 429]);
+const SUPERVISOR_STOP_REASONS: ReadonlySet<string> = new Set([STOP_REASON_END_TURN, STOP_REASON_TURN_LIMIT, STOP_REASON_TOKEN_LIMIT, STOP_REASON_PRICE_LIMIT, STOP_REASON_REFUSAL, STOP_REASON_CANCELLED, STOP_REASON_TIMEOUT, STOP_REASON_PROVIDER_ERROR]);
+export const WORKER_STOP_REASON_PREFIX = 'worker:';
+const HISTORY_INCOMPLETE_AFTER_COMPACTION = 'history_incomplete_after_compaction';
+
+function printable(text: string, limit: number): string {
+  return text.replace(/[^\x20-\x7e]/g, '?').slice(0, limit);
+}
+
+export function providerErrorWarning(rawCode: string | null, message: string | null): string {
+  const reported = message === null ? '' : `: ${printable(message, MAX_PROVIDER_MESSAGE_CHARS)}`;
+  return `The model provider failed the turn after the edit's writes (error code ${printable(rawCode ?? 'unknown', 64)}${reported}); every effect was audited, but the result may be incomplete and is judged by the acceptance contract and checks.`;
+}
 
 function failure(code: Parameters<typeof supervisorError>[0], message: string, details?: Record<string, unknown>, retryable = false, remediation?: string): RunOutcome {
   return { state: 'failed', error: supervisorError(code, message, details, retryable, remediation), warnings: [] };
@@ -59,6 +76,9 @@ function conditionOutcome(input: OutcomeInput): RunOutcome | null {
   const overflow = find('output_limit');
   if (overflow) return failure('VSUP_OUTPUT_LIMIT', 'The Vibe app-server produced more output than the configured limit allows.', overflow.detail ? { detail: overflow.detail } : undefined);
   const unsafe = find('unsafe_event');
+  if (unsafe?.fatal.code === HISTORY_INCOMPLETE_AFTER_COMPACTION) {
+    return failure('VSUP_BACKEND_ERROR', `Vibe compacted its context and the history read at the end of the run no longer holds entries streamed before the compaction, so a hidden effect cannot be ruled out; the run failed closed: ${unsafe.fatal.message}`, { reason: HISTORY_INCOMPLETE_AFTER_COMPACTION, ...(unsafe.fatal.entryId === null ? {} : { entry_id: unsafe.fatal.entryId }) });
+  }
   if (unsafe) {
     return failure('VSUP_BACKEND_ERROR', `The run was stopped because of an unsafe or unrecognized backend event: ${unsafe.fatal.message}`, {
       reason: unsafe.fatal.code,
@@ -79,7 +99,7 @@ function deadlineOutcome(input: OutcomeInput): RunOutcome {
   if (input.auditClean !== true) return failure('VSUP_TIMEOUT', 'The run exceeded its configured timeout.');
   const turn = input.turn;
   if (turn !== null && turn.status === 'completed' && turn.error === null) {
-    const finished = turnOutcome(turn, input.hasFinalMessage, input.model);
+    const finished = turnOutcome(input);
     return { ...finished, warnings: [...finished.warnings, LATE_COMPLETION_WARNING] };
   }
   if ((input.auditedWrites ?? 0) > 0) return { state: 'completed', stopReason: STOP_REASON_TIMEOUT, warnings: [TIMEOUT_RESULT_WARNING] };
@@ -94,9 +114,19 @@ function providerRefusedForAnotherReason(error: TurnError): boolean {
   return error.reason === PROVIDER_REFUSAL_REASON || error.httpStatus === HTTP_FORBIDDEN || (error.message !== null && PROVIDER_REFUSAL_SENTENCE.test(error.message));
 }
 
-function errorOutcome(turn: Turn, model: string | undefined): RunOutcome | null {
+function transientHttpStatus(status: number | undefined): boolean {
+  return status === undefined || (status >= 500 && status <= 599) || TRANSIENT_HTTP_STATUSES.has(status);
+}
+
+function auditedEditSurvivesProviderFailure(input: OutcomeInput, error: TurnError): boolean {
+  return input.mode === 'edit' && input.auditClean === true && (input.auditedWrites ?? 0) > 0 && TRANSIENT_PROVIDER_CODES.has(error.code) && transientHttpStatus(error.httpStatus) && !providerRefusedForAnotherReason(error);
+}
+
+function errorOutcome(input: OutcomeInput, turn: Turn): RunOutcome | null {
   const error = turn.error;
   if (error === null) return null;
+  const model = input.model;
+  if (auditedEditSurvivesProviderFailure(input, error)) return { state: 'completed', stopReason: STOP_REASON_PROVIDER_ERROR, warnings: [providerErrorWarning(error.rawCode, error.message)] };
   const details = { error_code: error.rawCode ?? 'unknown', ...(error.message === null ? {} : { message: error.message.slice(0, 300) }), ...(error.httpStatus === undefined ? {} : { http_status: error.httpStatus }) };
   switch (error.code) {
     case 'invalid_api_key':
@@ -124,11 +154,12 @@ function errorOutcome(turn: Turn, model: string | undefined): RunOutcome | null 
   }
 }
 
-function turnOutcome(turn: Turn | null, hasFinalMessage: boolean, model?: string): RunOutcome {
+function turnOutcome(input: OutcomeInput): RunOutcome {
+  const { turn, hasFinalMessage } = input;
   if (turn === null) return failure('VSUP_BACKEND_ERROR', 'The Vibe backend never reported a completed turn.');
   if (turn.status === 'in_progress') return failure('VSUP_BACKEND_ERROR', 'The Vibe backend reported the turn as still in progress at the end of the run.');
   if (turn.status === 'interrupted') return failure('VSUP_BACKEND_ERROR', 'The turn was interrupted by something other than the supervisor.', { classification: 'unrequested_interrupt' });
-  const fromError = errorOutcome(turn, model);
+  const fromError = errorOutcome(input, turn);
   if (fromError) return fromError;
   if (turn.status === 'failed') return failure('VSUP_BACKEND_ERROR', 'The Vibe backend failed the turn without an error code.');
   switch (turn.stopReason) {
@@ -137,11 +168,11 @@ function turnOutcome(turn: Turn | null, hasFinalMessage: boolean, model?: string
     case 'length': return failure('VSUP_OUTPUT_LIMIT', 'The model stopped because the response reached its length limit.', { classification: 'length' });
     default: {
       const raw = (turn.rawStopReason ?? 'unknown').replace(/[^\x20-\x7e]/g, '?').slice(0, 64);
-      return { state: 'completed', stopReason: raw, warnings: [INCOMPLETE_RESULT_WARNING] };
+      return { state: 'completed', stopReason: SUPERVISOR_STOP_REASONS.has(raw) || raw.startsWith(WORKER_STOP_REASON_PREFIX) ? `${WORKER_STOP_REASON_PREFIX}${raw}` : raw, warnings: [INCOMPLETE_RESULT_WARNING] };
     }
   }
 }
 
 export function mapOutcome(input: OutcomeInput): RunOutcome {
-  return conditionOutcome(input) ?? turnOutcome(input.turn, input.hasFinalMessage, input.model);
+  return conditionOutcome(input) ?? turnOutcome(input);
 }

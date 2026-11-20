@@ -5,7 +5,9 @@ import {
   INCOMPLETE_RESULT_WARNING,
   NO_FINAL_MESSAGE_WARNING,
   REFUSAL_WARNING,
+  STOP_REASON_PROVIDER_ERROR,
   mapOutcome,
+  providerErrorWarning,
   type SupervisorCondition, LATE_COMPLETION_WARNING, TIMEOUT_RESULT_WARNING } from '../../src/backends/app-server/outcome.js';
 import { parseTurnStartResult, type Turn } from '../../src/backends/app-server/protocol.js';
 import { runScenario } from './support/app-server-driver.js';
@@ -33,6 +35,14 @@ describe('turn outcome mapping', () => {
 
   it('keeps an unrecognized stop reason visible instead of calling it a normal end', () => {
     expect(mapOutcome({ turn: turn({ stopReason: 'something_new' }), hasFinalMessage: true })).toEqual({ state: 'completed', stopReason: 'something_new', warnings: [INCOMPLETE_RESULT_WARNING] });
+  });
+
+  it('marks a worker stop reason that collides with a supervisor stop reason so it cannot be read as one', () => {
+    for (const reason of ['provider_error', 'timeout', 'turn_limit', 'end_turn', 'token_limit', 'price_limit', 'refusal', 'cancelled', 'worker:end_turn']) {
+      const outcome = mapOutcome({ turn: turn({ stopReason: reason }), hasFinalMessage: true, mode: 'edit', auditClean: true, auditedWrites: 2 });
+      expect(outcome, reason).toEqual({ state: 'completed', stopReason: `worker:${reason}`, warnings: [INCOMPLETE_RESULT_WARNING] });
+      expect(['end_turn', 'timeout', 'turn_limit', 'provider_error'], reason).not.toContain(outcome.stopReason);
+    }
   });
 
   it('fails an interrupt the supervisor did not request, whatever the stop reason says', () => {
@@ -140,6 +150,48 @@ describe('supervisor conditions', () => {
     expect(cut(1)).toEqual({ state: 'completed', stopReason: 'timeout', warnings: [TIMEOUT_RESULT_WARNING] });
     expect(cut(0)).toMatchObject({ state: 'failed', error: { code: 'VSUP_TIMEOUT' } });
     expect(mapOutcome({ turn: null, conditions: [{ kind: 'deadline' }], hasFinalMessage: false, auditClean: true, auditedWrites: 1 })).toMatchObject({ state: 'completed', stopReason: 'timeout' });
+  });
+});
+
+describe('a provider failure after an audited edit', () => {
+  const settle = (code: string, overrides: Partial<Parameters<typeof mapOutcome>[0]> = {}) => mapOutcome({ turn: failedWith(code), hasFinalMessage: false, mode: 'edit', auditClean: true, auditedWrites: 2, model: 'mistral-medium-3.5', ...overrides });
+
+  it.each(['backend_error', 'incomplete_stream', 'rate_limit'])('completes %s with the provider_error stop reason and a warning naming the code', (code) => {
+    expect(settle(code)).toEqual({ state: 'completed', stopReason: STOP_REASON_PROVIDER_ERROR, warnings: [providerErrorWarning(code, `m-${code}`)] });
+    expect(settle(code).warnings[0]).toMatch(new RegExp(`error code ${code}: m-${code}.*may be incomplete.*acceptance contract and checks`));
+  });
+
+  it.each(['backend_error', 'incomplete_stream', 'rate_limit'])('keeps %s a failure without an audited write, with an unclean or missing audit, or in a review', (code) => {
+    for (const overrides of [{ auditedWrites: 0 }, { auditClean: false }, { auditClean: undefined }, { mode: 'review' as const }, { mode: undefined }]) {
+      expect(settle(code, overrides).state, JSON.stringify(overrides)).toBe('failed');
+    }
+  });
+
+  it('keeps configuration, account, length and unknown failures as failures', () => {
+    for (const code of ['invalid_api_key', 'invalid_model', 'usage_limit', 'pricing_unavailable', 'credential_unavailable', 'context_too_long', 'internal_error', 'compaction_failed', 'brand_new_code']) {
+      expect(settle(code).state, code).toBe('failed');
+    }
+    expect(mapOutcome({ turn: turn({ status: 'failed', error: { code: 'backend_error', message: 'The model provider refused this request.' } }), hasFinalMessage: false, mode: 'edit', auditClean: true, auditedWrites: 1 }).state).toBe('failed');
+    expect(mapOutcome({ turn: turn({ status: 'failed', error: { code: 'backend_error', message: 'forbidden', details: { httpStatus: 403 } } }), hasFinalMessage: false, mode: 'edit', auditClean: true, auditedWrites: 1 }).state).toBe('failed');
+    expect(mapOutcome({ turn: turn({ status: 'failed', error: { code: 'invalid_api_key', message: 'The model provider refused this request.' } }), hasFinalMessage: false, mode: 'edit', auditClean: true, auditedWrites: 1 })).toMatchObject({ state: 'failed', error: { details: { reason: 'provider_refused' } } });
+  });
+
+  it('keeps only a provider failure without an HTTP status or with a retryable one', () => {
+    const withStatus = (code: string, httpStatus?: number) => mapOutcome({ turn: turn({ status: 'failed', error: { code, message: 'provider failed', ...(httpStatus === undefined ? {} : { details: { httpStatus } }) } }), hasFinalMessage: false, mode: 'edit', auditClean: true, auditedWrites: 2 });
+    for (const status of [400, 401, 402, 404]) {
+      expect(withStatus('backend_error', status), String(status)).toMatchObject({ state: 'failed', error: { code: 'VSUP_BACKEND_ERROR', details: { http_status: status } } });
+    }
+    for (const status of [500, 503, 408, 409, 425, 429, undefined]) {
+      expect(withStatus('backend_error', status), String(status)).toMatchObject({ state: 'completed', stopReason: STOP_REASON_PROVIDER_ERROR });
+    }
+    expect(withStatus('rate_limit', 429).state).toBe('completed');
+    expect(withStatus('incomplete_stream', 401).state).toBe('failed');
+  });
+
+  it('bounds the provider message and strips control characters', () => {
+    const warning = providerErrorWarning('backend_error', `line\u0007${'x'.repeat(1000)}`);
+    expect(warning).toContain('line?');
+    expect(warning.length).toBeLessThan(600);
   });
 });
 

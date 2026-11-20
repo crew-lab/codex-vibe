@@ -174,6 +174,41 @@ describe("a run that ends while the provider is failing", () => {
   });
 });
 
+describe("an edit whose turn the provider failed after audited writes", () => {
+  const contract = { schema_version: 1, allowed_changed_paths: ["a.txt"], required_changed_paths: ["a.txt"], checks: [{ id: "two", kind: "text_contains", path: "a.txt", value: "two" }] };
+
+  it.each([
+    ["passes", "two\n", "passed"],
+    ["fails", "three\n", "failed"]
+  ] as const)("runs verification on the patch, which %s, and points a failed check at a correction", async (_name, content, expected) => {
+    const context = await box();
+    const started = await authorizedEditStart(context.manager, { task: "Change a.txt.", cwd: context.workspace, acceptance_contract: contract });
+    const { input, callbacks } = await context.callbacksOf(started.run_id);
+    await writeFile(path.join(input.workerWorkspace, "a.txt"), content);
+    await callbacks.onEvent({ source: "supervisor", type: "diagnostic", severity: "warning", data: { reason: "turn_retrying", category: "server_error", detail: "Upstream stalled." } });
+    await callbacks.onEvent({ source: "vibe", type: "message", severity: "info", data: { text: "late" } });
+    await callbacks.onState("completed", { result: { stopReason: "provider_error", summary: "", warnings: ["The model provider failed the turn after the edit's writes (error code backend_error)."] } });
+    const status = await context.settled(started.run_id);
+    expect(status.state).toBe("completed");
+    expect(status.next_action).toMatch(/provider failed the turn after the worker's audited writes.*acceptance contract.*correction that continues from this patch/);
+    const result = await context.manager.result({ run_id: started.run_id }) as Status & { stop_reason?: string; verification?: { status: string }; warnings?: string[] };
+    expect(result.stop_reason).toBe("provider_error");
+    expect(result.verification).toMatchObject({ status: expected });
+    expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining("error code backend_error"), expect.stringContaining("(server_error)")]));
+  });
+
+  it("adds no retry warning when no retry notice was seen", async () => {
+    const context = await box();
+    const started = await authorizedEditStart(context.manager, { task: "Change a.txt.", cwd: context.workspace, acceptance_contract: contract });
+    const { input, callbacks } = await context.callbacksOf(started.run_id);
+    await writeFile(path.join(input.workerWorkspace, "a.txt"), "two\n");
+    await callbacks.onState("completed", { result: { stopReason: "provider_error", summary: "" } });
+    await context.settled(started.run_id);
+    const result = await context.manager.result({ run_id: started.run_id }) as Status & { warnings?: string[] };
+    expect(result.warnings ?? []).not.toEqual(expect.arrayContaining([expect.stringContaining("Vibe retried the turn")]));
+  });
+});
+
 describe("a provider refusal seen by an earlier run", () => {
   it("warns at readiness without blocking, until a later run on the model gets a model answer", async () => {
     const context = await box();

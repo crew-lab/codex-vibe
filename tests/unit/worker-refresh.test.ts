@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { REMEDIATION, supervisorError } from '../../src/contracts.js';
 import { PinCheckError, type PinManifest } from '../../src/backends/app-server/pin.js';
 import type { OwnerLock } from '../../src/core/owner-lock.js';
-import type { PreparationFacts } from '../../src/preparation/evidence.js';
+import { effectiveTopLevelKeys, settingsChange, type PreparationFacts } from '../../src/preparation/evidence.js';
 import type { RunPreparationInput } from '../../src/preparation/run.js';
 import { decideRefresh, refreshHold, refreshSummary, refreshWarning, runWorkerRefresh, type WorkerRefreshDependencies, type WorkerRefreshPlan } from '../../src/preparation/worker-refresh.js';
 import { DEFAULT_CONFIG } from '../../src/config/defaults.js';
@@ -75,6 +75,26 @@ describe('refresh wording', () => {
     expect(refreshWarning('antigravity', '1.5.8', '1.6.0')).toBe('Antigravity CLI 1.5.8 -> 1.6.0 was refreshed automatically; no-inference preparation passed; hosted quality has not been re-run on this version.');
     expect(refreshSummary('app-server', { kind: 'prepared', passed: true, repinned: true, from: '3.1.2', to: '3.1.3', reportPath: '/private/report.json', findings: [] })).toBe('Vibe 3.1.2 -> 3.1.3: re-pinned, preparation passed');
     expect(refreshSummary('app-server', { kind: 'not_needed' })).toBeUndefined();
+  });
+
+  it('names the settings a new version added or removed, bounded, and says nothing when they are the same', () => {
+    const base = 'Vibe 3.1.2 -> 3.1.3 was refreshed automatically; no-inference preparation passed; hosted quality has not been re-run on this version.';
+    const change = settingsChange(['active_model', 'old_flag', 'tools'], ['active_model', 'auto_compact', 'goal_mode', 'tools']);
+    expect(change).toEqual({ added: { names: ['auto_compact', 'goal_mode'], total: 2 }, removed: { names: ['old_flag'], total: 1 } });
+    expect(refreshWarning('app-server', '3.1.2', '3.1.3', change)).toBe(`${base} New Vibe settings the supervisor neither sets nor checks, so their defaults apply: auto_compact, goal_mode. Vibe settings no longer present: old_flag.`);
+    expect(settingsChange(['a', 'b'], ['b', 'a'])).toBeUndefined();
+    expect(refreshWarning('app-server', '3.1.2', '3.1.3', undefined)).toBe(base);
+    const many = settingsChange([], Array.from({ length: 25 }, (_, index) => `setting_${String(index).padStart(2, '0')}_${'x'.repeat(100)}\u0007`));
+    expect(many?.added?.names).toHaveLength(20);
+    expect(many?.added?.total).toBe(25);
+    expect(many?.added?.names.every((name) => name.length <= 64 && /^[\x20-\x7e]+$/.test(name))).toBe(true);
+    expect(refreshWarning('app-server', '3.1.2', '3.1.3', many)).toMatch(/ and 5 more\.$/);
+  });
+
+  it('reads the keys of the subject runs only, and none from a report without them', () => {
+    expect(effectiveTopLevelKeys({ runs: [{ role: 'subject', observed: { effective_top_level_keys: ['b', 'a'] } }, { role: 'subject', observed: { effective_top_level_keys: ['c'] } }, { role: 'control', observed: { effective_top_level_keys: ['control_only'] } }] })).toEqual(['a', 'b', 'c']);
+    expect(effectiveTopLevelKeys({ result: 'incomplete' })).toBeNull();
+    expect(effectiveTopLevelKeys({ runs: [{ role: 'subject', observed: null }] })).toBeNull();
   });
 });
 

@@ -10,7 +10,7 @@ import { publicValue } from '../reporting/export.js';
 import { readOwnedFile } from '../reporting/private-files.js';
 import { createPrivateDir, createPrivateFile } from '../security/paths.js';
 import { runAntigravityPreparationCheck, type PreparedReceiptIdentity } from './antigravity-prepare.js';
-import { candidateIdentity, packageRoot, preparationComponents, preparationIdentity, receiptPath, receiptProvenance, type PreparationOrigin, type PreparationProvenance } from './evidence.js';
+import { candidateIdentity, effectiveTopLevelKeys, packageRoot, preparationComponents, preparationIdentity, receiptPath, receiptProvenance, settingsBaseline, settingsChange, type PreparationOrigin, type PreparationProvenance, type SettingsChange } from './evidence.js';
 
 export type { PreparedReceiptIdentity } from './antigravity-prepare.js';
 
@@ -91,8 +91,9 @@ async function runVibePreparation(input: RunPreparationInput, provenance: Prepar
     const reports = path.join(path.dirname(receipt), 'preparation-reports');
     await createPrivateDir(reports);
     const started = Buffer.from(JSON.stringify({ result: 'incomplete', stage: 'no-inference-check-started', checked_at: new Date().toISOString() }) + '\n');
+    const baseline = provenance.origin === 'automatic' ? await settingsBaseline(receipt) : null;
     await createPrivateFile(path.join(reports, `${digest(started)}.json`), started, 'wx');
-    await atomicWriteJson(receipt, { schema_version: 1, result: 'failed', identity, checked_at: new Date().toISOString(), report_sha256: digest(started), components, ...facts });
+    await atomicWriteJson(receipt, { schema_version: 1, result: 'failed', identity, checked_at: new Date().toISOString(), report_sha256: digest(started), components, ...facts, ...(baseline ? { baseline_report_sha256: baseline.reportSha256 } : {}) });
     const timeoutMs = input.conformanceTimeoutMs ?? CONFORMANCE_TIMEOUT_MS;
     const exit = await runConformanceChild(argv, temporary, input.stderr, signal, timeoutMs);
     signal?.throwIfAborted();
@@ -107,9 +108,17 @@ async function runVibePreparation(input: RunPreparationInput, provenance: Prepar
     const passed = produced !== undefined && exit.code === 0 && report.result === 'pass' && report.network_observation?.verdict === 'none-observed-control-validated';
     const savedReport = path.join(reports, `${digest(bytes)}.json`);
     try { await createPrivateFile(savedReport, bytes, 'wx'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST' || digest(await readOwnedFile(savedReport)) !== digest(bytes)) throw error; }
-    await atomicWriteJson(receipt, { schema_version: 1, result: passed ? 'passed' : 'failed', identity, checked_at: new Date().toISOString(), report_sha256: digest(bytes), components, ...facts });
+    const changed = baseline ? newSettings(baseline.keys, report) : undefined;
+    await atomicWriteJson(receipt, { schema_version: 1, result: passed ? 'passed' : 'failed', identity, checked_at: new Date().toISOString(), report_sha256: digest(bytes), components, ...facts, ...(changed ? { settings_change: changed } : {}) });
     return { status: passed ? 'passed' : 'failed', candidate_sha256: candidate, hosted_acceptance: 'unverified', report_sha256: digest(bytes), report_path: savedReport, findings: failingFindings(report) };
   } finally { await rm(temporary, { recursive: true, force: true }); }
+}
+
+function newSettings(before: readonly string[], report: ConformanceReport): SettingsChange | undefined {
+  try {
+    const after = effectiveTopLevelKeys(report);
+    return after ? settingsChange(before, after) : undefined;
+  } catch { return undefined; }
 }
 
 interface ConformanceReport { result?: string; network_observation?: { verdict?: string } }

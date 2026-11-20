@@ -12,12 +12,12 @@ const snapshotSchema = z.object({ schema_version: z.literal(1), contract_sha256:
 type Snapshot = z.infer<typeof snapshotSchema>;
 const MAX_INPUTS = 16 * 1024 * 1024;
 const ASSESSABLE_STOP_REASONS = new Set(['end_turn', 'timeout']);
-const AUDITED_LIMIT_STOP = { backend: 'app-server', stopReason: 'turn_limit' } as const;
+const APP_SERVER_AUDITED_STOP_REASONS = new Set(['turn_limit', 'provider_error']);
 
 function stopIsAssessable(snapshot: Snapshot): boolean {
   if (snapshot.execution_state !== 'completed' || snapshot.stop_reason === null) return false;
   if (ASSESSABLE_STOP_REASONS.has(snapshot.stop_reason)) return true;
-  return snapshot.stop_reason === AUDITED_LIMIT_STOP.stopReason && snapshot.backend === AUDITED_LIMIT_STOP.backend;
+  return snapshot.backend === 'app-server' && APP_SERVER_AUDITED_STOP_REASONS.has(snapshot.stop_reason);
 }
 
 export async function captureVerification(options: { directory: string; source: string; base: string; patch: Buffer; contract: AcceptanceContract; executionState: 'completed' | 'failed' | 'cancelled' | 'not_started'; stopReason?: string; backend?: Snapshot['backend']; maxBytes: number }): Promise<Verification> {

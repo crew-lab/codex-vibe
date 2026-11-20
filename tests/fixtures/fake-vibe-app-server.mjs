@@ -25,7 +25,7 @@ const SCENARIO_KEYS = new Set([
 ]);
 const STEP_OPS = new Set([
   'say', 'reasoning', 'stats', 'call', 'unknownEntry', 'unknownNotification', 'staleEvent', 'retrying', 'delay', 'hold', 'wedge', 'crash',
-  'malformedLine', 'oversizedFrame', 'partialFrame', 'handoff', 'end'
+  'malformedLine', 'oversizedFrame', 'partialFrame', 'handoff', 'trimHistory', 'end'
 ]);
 const HANDOFF_KINDS = ['compacted', 'contextCleared'];
 const DECISION_TYPES = ['approve', 'approve_for_session', 'approve_permanently', 'deny', 'cancel_turn'];
@@ -588,6 +588,7 @@ async function runStep(step, turn, raceInterrupt) {
     }
     case 'call': return runCall(step, turn, raceInterrupt, silent);
     case 'handoff': await handoff(step); return undefined;
+    case 'trimHistory': state.history = []; return undefined;
     case 'unknownEntry':
       await addEntry(baseEntry(turn, { type: step.kind ?? 'hologram', ...(step.entry ?? {}) }), { silent });
       return undefined;

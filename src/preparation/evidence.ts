@@ -19,7 +19,12 @@ export type PreparationComponents = z.infer<typeof componentsSchema>;
 const componentLabels: Record<keyof PreparationComponents, string> = { candidate: 'candidate', pin: 'pin', node_major: 'Node major version', policy: 'policy' };
 export type PreparationComponentName = keyof PreparationComponents;
 export type PreparationOrigin = 'manual' | 'automatic';
-const receiptSchema = z.object({ schema_version: z.literal(1), result: z.enum(['passed','failed']), identity: z.string().regex(/^[a-f0-9]{64}$/), checked_at: z.string().datetime(), report_sha256: z.string().regex(/^[a-f0-9]{64}$/), components: componentsSchema.optional(), origin: z.enum(['manual','automatic']).optional(), previous_worker_version: z.string().min(1).max(64).optional(), worker_version: z.string().min(1).max(64).optional() }).strict();
+const MAX_SETTING_NAMES = 20;
+const MAX_SETTING_NAME_CHARS = 64;
+const settingNamesSchema = z.object({ names: z.array(z.string().min(1).max(MAX_SETTING_NAME_CHARS)).min(1).max(MAX_SETTING_NAMES), total: z.number().int().positive() }).strict();
+const settingsChangeSchema = z.object({ added: settingNamesSchema.optional(), removed: settingNamesSchema.optional() }).strict();
+export type SettingsChange = z.infer<typeof settingsChangeSchema>;
+const receiptSchema = z.object({ schema_version: z.literal(1), result: z.enum(['passed','failed']), identity: z.string().regex(/^[a-f0-9]{64}$/), checked_at: z.string().datetime(), report_sha256: z.string().regex(/^[a-f0-9]{64}$/), components: componentsSchema.optional(), origin: z.enum(['manual','automatic']).optional(), previous_worker_version: z.string().min(1).max(64).optional(), worker_version: z.string().min(1).max(64).optional(), baseline_report_sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(), settings_change: settingsChangeSchema.optional() }).strict();
 type PreparationReceipt = z.infer<typeof receiptSchema>;
 export interface PreparationProvenance { origin?: PreparationOrigin | undefined; previousWorkerVersion?: string | undefined; workerVersion?: string | undefined }
 export function receiptProvenance(provenance: PreparationProvenance): Pick<PreparationReceipt, 'origin' | 'previous_worker_version' | 'worker_version'> {
@@ -33,6 +38,51 @@ export interface PreparationFacts {
   previous_worker_version?: string;
   worker_version?: string;
   checked_at?: string;
+  settings_change?: SettingsChange;
+}
+export interface SettingsBaseline { reportSha256: string; keys: string[] }
+export function effectiveTopLevelKeys(report: unknown): string[] | null {
+  const runs = (report as { runs?: unknown } | null)?.runs;
+  if (!Array.isArray(runs)) return null;
+  const keys = new Set<string>();
+  let observed = false;
+  for (const run of runs) {
+    const item = run as { role?: unknown; observed?: { effective_top_level_keys?: unknown } | null } | null;
+    const listed = item?.role === 'subject' ? item.observed?.effective_top_level_keys : undefined;
+    if (!Array.isArray(listed)) continue;
+    observed = true;
+    for (const key of listed) if (typeof key === 'string' && key.length > 0) keys.add(key);
+  }
+  return observed ? [...keys].sort() : null;
+}
+function settingNames(keys: readonly string[]): SettingsChange['added'] {
+  if (keys.length === 0) return undefined;
+  return { names: keys.slice(0, MAX_SETTING_NAMES).map((key) => key.replace(/[^\x20-\x7e]/g, '?').slice(0, MAX_SETTING_NAME_CHARS)), total: keys.length };
+}
+export function settingsChange(before: readonly string[], after: readonly string[]): SettingsChange | undefined {
+  const previous = new Set(before);
+  const current = new Set(after);
+  const added = settingNames([...current].filter((key) => !previous.has(key)).sort());
+  const removed = settingNames([...previous].filter((key) => !current.has(key)).sort());
+  if (!added && !removed) return undefined;
+  return settingsChangeSchema.parse({ ...(added ? { added } : {}), ...(removed ? { removed } : {}) });
+}
+async function savedReportKeys(reports: string, sha256: string): Promise<string[] | null> {
+  const bytes = await readOwnedFile(path.join(reports, `${sha256}.json`), 4*1024*1024).catch(() => null);
+  if (!bytes || digest(bytes) !== sha256) return null;
+  try { return effectiveTopLevelKeys(JSON.parse(bytes.toString('utf8'))); } catch { return null; }
+}
+export async function settingsBaseline(receiptFile: string): Promise<SettingsBaseline | null> {
+  try {
+    const receipt = receiptSchema.parse(JSON.parse((await readOwnedFile(receiptFile, 16*1024)).toString('utf8')));
+    const reports = path.join(path.dirname(receiptFile), 'preparation-reports');
+    for (const sha256 of [receipt.report_sha256, receipt.baseline_report_sha256]) {
+      if (!sha256) continue;
+      const keys = await savedReportKeys(reports, sha256);
+      if (keys) return { reportSha256: sha256, keys };
+    }
+    return null;
+  } catch { return null; }
 }
 export async function candidateIdentity(root = packageRoot): Promise<string> {
   const files: [string,string][] = [];
@@ -105,8 +155,8 @@ function isIncompleteReport(bytes: Buffer): boolean {
   try { return (JSON.parse(bytes.toString('utf8')) as { result?: unknown } | null)?.result === 'incomplete'; }
   catch { return false; }
 }
-function receiptFacts(receipt: PreparationReceipt): Pick<PreparationFacts, 'origin' | 'previous_worker_version' | 'worker_version' | 'checked_at'> {
-  return { ...(receipt.origin ? { origin: receipt.origin } : {}), ...(receipt.previous_worker_version ? { previous_worker_version: receipt.previous_worker_version } : {}), ...(receipt.worker_version ? { worker_version: receipt.worker_version } : {}), checked_at: receipt.checked_at };
+function receiptFacts(receipt: PreparationReceipt): Pick<PreparationFacts, 'origin' | 'previous_worker_version' | 'worker_version' | 'checked_at' | 'settings_change'> {
+  return { ...(receipt.origin ? { origin: receipt.origin } : {}), ...(receipt.previous_worker_version ? { previous_worker_version: receipt.previous_worker_version } : {}), ...(receipt.worker_version ? { worker_version: receipt.worker_version } : {}), checked_at: receipt.checked_at, ...(receipt.settings_change ? { settings_change: receipt.settings_change } : {}) };
 }
 export async function readPreparationFacts(config: SupervisorConfig, dataDirOverride?: string): Promise<PreparationFacts> {
   let candidate: string | null = null;

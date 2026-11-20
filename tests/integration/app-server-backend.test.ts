@@ -11,7 +11,7 @@ import { AppServerBackend, type AppServerBackendOptions, type AppServerTiming } 
 import { ResolvedCredential, type CredentialResolution } from '../../src/backends/app-server/credentials.js';
 import { PinCheckError } from '../../src/backends/app-server/pin.js';
 import { CLIENT_ENTRYPOINT } from '../../src/backends/app-server/protocol.js';
-import { TIMEOUT_RESULT_WARNING } from '../../src/backends/app-server/outcome.js';
+import { providerErrorWarning, TIMEOUT_RESULT_WARNING } from '../../src/backends/app-server/outcome.js';
 import { PROFILE_TOOLS, TOOL_PERMISSION, workspaceDenylist } from '../../src/backends/app-server/session-config.js';
 import { denylistAnchors } from '../../src/security/globs.js';
 import { SUPPORTED_VIBE } from '../../src/backends/app-server/supported-vibe.js';
@@ -317,7 +317,7 @@ describe('app-server backend: clean runs', () => {
     expect(session.initializedNotificationSeen).toBe(true);
   });
 
-  it('runs a review with thinking off when configured, an edit always with thinking off, and reports the level it requested', async () => {
+  it('runs a review with thinking off when configured, an edit with thinking off by default, and reports the level it requested', async () => {
     const observed = (harness: Harness) => harness.states.flatMap((item) => item.update?.modelObservations ?? []);
     const offReview = new Harness('allowed-call', { config: { vibeReviewThinking: 'off' } });
     expect((await offReview.run()).state).toBe('completed');
@@ -329,6 +329,15 @@ describe('app-server backend: clean runs', () => {
     expect(edit.frames('config/model/write').map((frame) => (frame.params as Json).reasoningEffort)).toEqual(['off']);
     expect(observed(edit).length).toBeGreaterThan(0);
     expect(observed(edit).every((observation) => observation.thinking === 'off' && observation.requested_thinking === 'off')).toBe(true);
+  });
+
+  it('runs an edit with thinking high when vibe_edit_thinking names it', async () => {
+    const observed = (harness: Harness) => harness.states.flatMap((item) => item.update?.modelObservations ?? []);
+    const edit = new Harness('edit-call', { mode: 'edit', config: { vibeEditThinking: 'high' } });
+    expect((await edit.run()).state).toBe('completed');
+    expect(edit.frames('config/model/write').map((frame) => (frame.params as Json).reasoningEffort)).toEqual(['high']);
+    expect(observed(edit).length).toBeGreaterThan(0);
+    expect(observed(edit).every((observation) => observation.thinking === 'high' && observation.requested_thinking === 'high')).toBe(true);
   });
 
   it('completes an edit with an approved search_replace and reports it as a write', async () => {
@@ -1466,6 +1475,44 @@ describe('app-server backend: audit after a forced limit stop', () => {
     harness.expectCleanedUp();
   }, 40_000);
 
+  const STREAM_STALLED = { op: 'end', status: 'failed', error: { message: 'Stream stalled after retry.', code: 'backend_error', details: null } };
+
+  it('completes an edit whose turn the provider failed after approved writes, with a provider_error stop reason', async () => {
+    const harness = new Harness({
+      name: 'provider-error-after-write',
+      steps: [
+        { op: 'call', tool: 'file_system.write_file', mode: 'approval', input: { filePath: '${cwd}/src/added.ts', content: 'export const b = 2;\n' } },
+        { op: 'retrying', category: 'server_error', detail: 'Upstream stalled.' },
+        STREAM_STALLED
+      ]
+    }, { mode: 'edit' });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(terminal.update?.result).toMatchObject({ stopReason: 'provider_error', warnings: [providerErrorWarning('backend_error', 'Stream stalled after retry.')] });
+    expect(terminal.update?.error).toBeUndefined();
+    expect(harness.eventsOfType('tool_call').map((event) => event.data.name)).toEqual(['write_file']);
+    harness.expectCleanedUp();
+  });
+
+  it('keeps the failure for an edit whose turn the provider failed before any write', async () => {
+    const harness = new Harness({ name: 'provider-error-no-write', steps: [STREAM_STALLED] }, { mode: 'edit' });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', retryable: true, details: { error_code: 'backend_error' } });
+    harness.expectCleanedUp();
+  });
+
+  it('reports the hidden write, not a provider error, when the audit rejects a write before a provider failure', async () => {
+    const harness = new Harness({ name: 'provider-error-hidden-write', steps: [SILENT_WRITE, STREAM_STALLED] }, { mode: 'edit' });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'unapproved_effect' } });
+    harness.expectCleanedUp();
+  });
+
   it('audits the history at the deadline and reports the unapproved write instead of a plain timeout', async () => {
     const harness = new Harness({ name: 'deadline-hidden-write', interrupt: 'ignore', steps: [SILENT_WRITE, { op: 'hold' }] }, { limits: { timeoutSeconds: 8 } });
     const terminal = await harness.run();
@@ -1564,6 +1611,30 @@ describe('app-server backend: protocol failures outrank a later stop request', (
 
     expect(errorOf(terminal).code).toBe('VSUP_TIMEOUT');
   }, 40_000);
+});
+
+describe('app-server backend: a compaction checkpoint in the turn', () => {
+  const COMPACTION = { op: 'unknownEntry', kind: 'checkpoint', entry: { kind: 'compaction', message: 'Context compacted', details: { trigger: 'automatic' } } };
+
+  it('fails closed when the final history lost entries streamed before the compaction', async () => {
+    const harness = new Harness({ name: 'compaction-trimmed', steps: [{ op: 'say', text: 'Looking.' }, SILENT_WRITE, { op: 'trimHistory' }, COMPACTION, { op: 'say', text: 'No findings.' }] });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('failed');
+    expect(errorOf(terminal)).toMatchObject({ code: 'VSUP_BACKEND_ERROR', details: { reason: 'history_incomplete_after_compaction' } });
+    expect(errorOf(terminal).message).toMatch(/compacted its context/);
+    harness.expectCleanedUp();
+  });
+
+  it('completes and counts the dropped checkpoint when the history is complete', async () => {
+    const harness = new Harness({ name: 'compaction-complete', steps: [{ op: 'say', text: 'Looking.' }, COMPACTION, { op: 'say', text: 'No findings.' }] });
+    const terminal = await harness.run();
+
+    expect(terminal.state).toBe('completed');
+    expect(terminal.update?.result?.summary).toBe('No findings.');
+    expect(harness.eventsOfType('diagnostic').find((event) => event.data.reason === 'ignored_notifications')?.data).toMatchObject({ dropped_compaction_checkpoints: 1 });
+    harness.expectCleanedUp();
+  });
 });
 
 describe('app-server backend: notifications in the turn/start response chunk', () => {

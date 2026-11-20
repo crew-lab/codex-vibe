@@ -27,7 +27,7 @@ import {
   JsonRpcClient, JsonRpcClosedError, JsonRpcFatalError, JsonRpcServerError, JsonRpcTimeoutError,
   type JsonObject, type NotificationHandler
 } from './app-server/jsonrpc.js';
-import { mapOutcome, type RunOutcome, type SupervisorCondition } from './app-server/outcome.js';
+import { mapOutcome, STOP_REASON_PROVIDER_ERROR, type RunOutcome, type SupervisorCondition } from './app-server/outcome.js';
 import { DEFAULT_PIN_LIMITS, PinCheckError, locateEnvironment, parsePinManifest, readPinManifestBytes, verifyPinnedInstall } from './app-server/pin.js';
 import {
   MAX_PAGE_LIMIT, ProtocolParseError, buildCallbackResult, buildConfigEffectiveRead, buildConfigRead, buildInitialize,
@@ -934,7 +934,7 @@ class AppServerRun {
         async (page) => this.rpc(buildSessionHistoryList(this.sessionId, page), parseHistoryListResult, timeout),
         {
           mode: this.input.mode, ledger: this.handler.ledger, turnId, secrets: this.secrets, maxMessageChars: Math.min(200_000, this.input.limits.maxTranscriptBytes),
-          sessionIds: this.processor.sessionIds, historical: this.processor.historicalEffects
+          sessionIds: this.processor.sessionIds, historical: this.processor.historicalEffects, entryIdsBeforeCompaction: this.processor.entryIdsBeforeCompaction, streamedEntryIds: this.processor.streamedEntryIds
         }
       );
     } catch (error) {
@@ -949,7 +949,8 @@ class AppServerRun {
       const error = (budgetOnly ? this.failure : this.integrityFailure) ?? this.gapError();
       if (error) return { state: 'failed', error: this.mentionStops(error), warnings: [] };
     }
-    const outcome = mapOutcome({ turn: this.completedTurn, conditions: this.conditions, hasFinalMessage: audit?.finalMessage != null, auditClean: audit !== null && audit.fatal === null && audit.pendingEffects.length === 0, auditedWrites: audit?.effects.filter((effect) => effect.outcome === 'executed' && isWriteTool(effect.tool)).length ?? 0, model: this.plan.expectation.model });
+    const outcome = mapOutcome({ turn: this.completedTurn, conditions: this.conditions, hasFinalMessage: audit?.finalMessage != null, auditClean: audit !== null && audit.fatal === null && audit.pendingEffects.length === 0, auditedWrites: audit?.effects.filter((effect) => effect.outcome === 'executed' && isWriteTool(effect.tool)).length ?? 0, model: this.plan.expectation.model, mode: this.input.mode });
+    if (outcome.stopReason === STOP_REASON_PROVIDER_ERROR) return { ...outcome, warnings: outcome.warnings.map((warning) => redactSecrets(warning, this.secrets)) };
     if (outcome.state === 'completed' && audit === null && this.hasCondition('budget')) {
       return {
         state: 'failed', warnings: [],
@@ -988,13 +989,15 @@ class AppServerRun {
       history_entries: audit?.reasoningDropped ?? null,
       history_audited: audit !== null && audit.fatal === null
     }, 'supervisor');
-    if (counters.unknownNotifications === 0 && counters.staleEvents === 0 && counters.foreignSessionNotifications === 0) return;
+    const droppedEntries = Math.max(counters.droppedEntries, audit?.droppedEntries ?? 0);
+    if (counters.unknownNotifications === 0 && counters.staleEvents === 0 && counters.foreignSessionNotifications === 0 && droppedEntries === 0) return;
     this.emit('diagnostic', 'info', {
       reason: 'ignored_notifications',
       unknown_notifications: counters.unknownNotifications,
       unknown_methods: counters.unknownMethods,
       stale_events: counters.staleEvents,
-      foreign_session_notifications: counters.foreignSessionNotifications
+      foreign_session_notifications: counters.foreignSessionNotifications,
+      dropped_compaction_checkpoints: droppedEntries
     }, 'supervisor');
   }
 
@@ -1254,7 +1257,7 @@ export class AppServerBackend implements SupervisorBackend {
     let anchors: ReturnType<typeof workspaceAnchors>;
     try {
       anchors = workspaceAnchors(input.exclusions, input.cwd);
-      plan = buildSessionConfig({ mode: input.mode, workspace: input.workerWorkspace, runDirectory: input.runDirectory, maxTurns: input.limits.maxTurns, excludedGlobs: denylistAnchors(input.exclusions, input.cwd, input.workerWorkspace), ...(this.config.vibeReviewThinking === undefined ? {} : { reviewThinking: this.config.vibeReviewThinking }), ...(this.config.vibeModel === undefined ? {} : { model: this.config.vibeModel }) });
+      plan = buildSessionConfig({ mode: input.mode, workspace: input.workerWorkspace, runDirectory: input.runDirectory, maxTurns: input.limits.maxTurns, excludedGlobs: denylistAnchors(input.exclusions, input.cwd, input.workerWorkspace), ...(this.config.vibeReviewThinking === undefined ? {} : { reviewThinking: this.config.vibeReviewThinking }), ...(this.config.vibeEditThinking === undefined ? {} : { editThinking: this.config.vibeEditThinking }), ...(this.config.vibeModel === undefined ? {} : { model: this.config.vibeModel }) });
     } catch (error) { throw toSupervisorError(error, []); }
     const listing = promptTakesListing(input) ? await buildWorkspaceListing(input.workerWorkspace, this.options.listing, anchors) : NO_LISTING;
     const run = new AppServerRun({

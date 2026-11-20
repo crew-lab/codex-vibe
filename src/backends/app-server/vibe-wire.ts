@@ -46,6 +46,7 @@ export interface VibeWireFacts {
   configRead: { harnessSelectionSourceOptional: boolean };
   bundledSkills: { names: readonly string[]; provenance: WireSkillProvenance };
   historyEntryKinds: readonly string[];
+  droppedCheckpointKinds: readonly string[];
   notificationMethods: readonly string[];
 }
 
@@ -95,6 +96,7 @@ export const VIBE_WIRE: VibeWireFacts = {
     provenance: { source: 'plugin', scope: 'builtin', registry: null }
   },
   historyEntryKinds: ['message', 'reasoning', 'effect', 'callback'],
+  droppedCheckpointKinds: ['compaction'],
   notificationMethods: ['history/entryAdded', 'history/entryUpdated', 'turn/started', 'turn/completed', 'session/statsUpdated', 'session/compacted', 'session/contextCleared', 'turn/retrying', 'warning', 'error']
 };
 

@@ -46,7 +46,7 @@ import type { OwnerLock } from "./owner-lock.js";
 import { DispatchGrants, registrationStorageError } from "./dispatch-grants.js";
 import { bindingMismatchError, dispatchBinding, type DispatchBinding } from "./dispatch-binding.js";
 import { candidateEntrypoint, taskAuthorizeCommand } from "./dispatch-command.js";
-import { candidateIdentity, type PreparationFacts, type PreparationStatus } from "../preparation/evidence.js";
+import { candidateIdentity, type PreparationFacts, type PreparationStatus, type SettingsChange } from "../preparation/evidence.js";
 import { inspectPreparationLock } from "../preparation/lock.js";
 import { agyBinaryChangedWithoutVersion, decideRefresh, defaultWorkerRefreshDependencies, installIdentity, isUnsettledReadinessPinReason, pinFileLists, refreshHold, refreshSummary, refreshWarning, runWorkerRefresh, workerDisplayName, workerUnreadableAfterRunWarning, workerUpdatedDuringRunWarning, type RefreshAction, type RefreshHold, type RefreshOutcome, type RefreshStage, type WorkerRefreshDependencies } from "../preparation/worker-refresh.js";
 import { verifyTaskInputs, taskInputManifestSchema, type TaskInputManifest } from "../preparation/task-inputs.js";
@@ -102,6 +102,7 @@ interface Runtime {
   waiters: Set<() => void>;
   refreshWarning?: string;
   providerRetry?: ProviderRetry;
+  providerRetrySeen?: ProviderRetry;
   modelAnswered?: boolean;
 }
 
@@ -668,7 +669,7 @@ export class RunManager {
     const refreshed = refreshedFacts(facts);
     if (!refreshed) return undefined;
     const version = await this.backends.get(this.activeBackendKind)?.workerVersion?.().catch(() => null) ?? null;
-    return refreshWarning(this.activeBackendKind, refreshed.from, version);
+    return refreshWarning(this.activeBackendKind, refreshed.from, version, refreshed.settings);
   }
 
   private refreshingError(refresh: Pick<ActiveRefresh, "stage" | "from" | "to">, extra: Record<string, unknown> = {}): Error {
@@ -837,7 +838,7 @@ export class RunManager {
     const taskAuthorize = this.policy.configPath ? await taskAuthorizeCommand({ configPath: this.policy.configPath, operation: input.operation, workspace: workspace ?? input.workspace, baseRef }) : null;
     const limits = this.dispatchLimits(input.operation);
     const refreshed = refreshedFacts(facts);
-    const warnings = [...(refreshed ? [refreshWarning(this.activeBackendKind, refreshed.from, workerVersion)] : []), ...(this.bootBuild === undefined ? [UNKNOWN_BUILD_WARNING] : []), ...this.providerRefusalWarning()];
+    const warnings = [...(refreshed ? [refreshWarning(this.activeBackendKind, refreshed.from, workerVersion, refreshed.settings)] : []), ...(this.bootBuild === undefined ? [UNKNOWN_BUILD_WARNING] : []), ...this.providerRefusalWarning()];
     const body = {
       server_version: APP_VERSION,
       supervisor_runtime: { node: process.version, executable: await realpath(process.execPath), platform: process.platform, arch: process.arch },
@@ -860,7 +861,7 @@ export class RunManager {
       candidate: { version: APP_VERSION, sha256: servingCandidate },
       preparation: preparation ?? { status: "not_reported" },
       admission: admission ? { credential: admission.credential, pin: admission.pin } : { status: "not_reported" },
-      worker: { backend: this.activeBackendKind, version: workerVersion, ...(this.activeBackendKind === "app-server" ? { model: sessionModel(this.config.vibeModel) } : {}), ...(refreshed ? { refreshed: { at: refreshed.at, from: refreshed.from } } : {}) },
+      worker: { backend: this.activeBackendKind, version: workerVersion, ...(this.activeBackendKind === "app-server" ? { model: sessionModel(this.config.vibeModel) } : {}), ...(refreshed ? { refreshed: { at: refreshed.at, from: refreshed.from, ...(refreshed.settings ? { settings: refreshed.settings } : {}) } } : {}) },
       ...(refresh.field ? { worker_refresh: refresh.field } : {}),
       effective_limits: { max_turns: limits.maxTurns, timeout_seconds: limits.timeoutSeconds },
       blockers: blockers.map((error) => ({ code: error.code, message: error.message, remediation: error.remediation, retryable: error.retryable, ...(error.details ? { details: error.details } : {}) })),
@@ -1774,6 +1775,7 @@ export class RunManager {
     if (isTerminal(current) || current === "closing") return;
     if (current === "completed") return;
     let outcome = withProviderRetry(requested, runtime.providerRetry);
+    if (outcome.state === "completed") noteRetryBeforeProviderError(runtime);
     try {
       await this.ensureLoaded(runtime);
       this.endTranscriptTurn(runtime);
@@ -2328,7 +2330,7 @@ export class RunManager {
     if (this.neverSent(record) && record.state === state) return NOT_SENT_NEXT_ACTION;
     switch (state) {
       case "awaiting_validation": return "This historical correction record cannot continue; inspect its preserved artifacts and close it.";
-      case "completed": return "Check stop_reason and warnings before trusting the result; call vibe_close when done.";
+      case "completed": return record.result?.stopReason === STOP_REASON_PROVIDER_ERROR ? PROVIDER_ERROR_NEXT_ACTION : "Check stop_reason and warnings before trusting the result; call vibe_close when done.";
       case "failed": return record.state === state && this.sentAndFailed(record) ? spentGrantNextAction(record) : FAILED_NEXT_ACTION;
       case "cancelled": return FAILED_NEXT_ACTION;
       case "closing":
@@ -2351,6 +2353,8 @@ const NOT_SENT_NEXT_ACTION = "The task was never sent to the worker, so nothing 
 const NOT_STARTED_SUMMARY = "The worker never started, so the run never reached inference; read error for the launch failure.";
 
 const FAILED_NEXT_ACTION = "Read error and warnings; call vibe_close when done.";
+const STOP_REASON_PROVIDER_ERROR = "provider_error";
+const PROVIDER_ERROR_NEXT_ACTION = "The model provider failed the turn after the worker's audited writes, so the patch may be unfinished. The acceptance contract and your checks judge it: read verification and warnings, run the focused checks, and if they fail, start a correction that continues from this patch rather than a rerun from the base. Call vibe_close when done.";
 const PROVIDER_RETRY_STOPS: ReadonlySet<string> = new Set(["VSUP_TIMEOUT", "VSUP_NO_PROGRESS"]);
 
 function spentGrantNextAction(record: RunRecord): string {
@@ -2368,6 +2372,16 @@ function noteProviderRetry(runtime: Runtime, event: Parameters<BackendCallbacks[
   if (event.source === "vibe" || reason === "model_output") { delete runtime.providerRetry; runtime.modelAnswered = true; return; }
   if (reason !== "turn_retrying") return;
   runtime.providerRetry = { category: typeof event.data.category === "string" ? event.data.category : "unknown", ...(typeof event.data.detail === "string" ? { detail: event.data.detail.slice(0, MAX_PROVIDER_TEXT) } : {}) };
+  runtime.providerRetrySeen = runtime.providerRetry;
+}
+
+function noteRetryBeforeProviderError(runtime: Runtime): void {
+  const result = runtime.record.result;
+  const retry = runtime.providerRetrySeen;
+  if (!retry || result?.stopReason !== STOP_REASON_PROVIDER_ERROR) return;
+  const warning = `Vibe retried the turn after a provider failure (${retry.category}) before the provider failed it.`;
+  const warnings = result.warnings ?? [];
+  if (!warnings.includes(warning)) runtime.record.result = { ...result, warnings: [...warnings, warning] };
 }
 
 function withProviderRetry(outcome: SettleOutcome, retry: ProviderRetry | undefined): SettleOutcome {
@@ -2399,9 +2413,9 @@ function pinReasonOf(blocker: SupervisorError | undefined): string | null {
   return typeof reason === "string" ? reason : blocker.code;
 }
 
-function refreshedFacts(facts: PreparationFacts | undefined): { from: string; at: string } | undefined {
+function refreshedFacts(facts: PreparationFacts | undefined): { from: string; at: string; settings?: SettingsChange } | undefined {
   if (!facts || facts.status.status !== "passed" || facts.origin !== "automatic" || !facts.previous_worker_version || !facts.checked_at) return undefined;
-  return { from: facts.previous_worker_version, at: facts.checked_at };
+  return { from: facts.previous_worker_version, at: facts.checked_at, ...(facts.settings_change ? { settings: facts.settings_change } : {}) };
 }
 
 function preparationBlocker(preparation: PreparationStatus | undefined): SupervisorError | undefined {
@@ -2558,6 +2572,7 @@ function completedSummary(stopReason: string | undefined, _backend: RunRecord["b
     case "price_limit": return "Vibe stopped at the configured cost limit before giving a final answer. Inspect the artifacts and stop_reason before trusting the result; start a fresh run from a reviewed base if more work is needed.";
     case "refusal": return "Vibe declined the request. Inspect the artifacts and stop_reason before trusting the result.";
     case "cancelled": return "The Vibe task was cancelled before it finished. Inspect the artifacts and stop_reason before starting a fresh run.";
+    case STOP_REASON_PROVIDER_ERROR: return "The model provider failed the turn after Vibe's audited writes. The patch may be unfinished; the acceptance contract and checks judge it.";
     default: return `Vibe stopped with reason ${printableStopReason(stopReason)} instead of a normal final answer. Inspect the artifacts and stop_reason before trusting the result.`;
   }
 }

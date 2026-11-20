@@ -6,7 +6,7 @@ import { supervisorError } from '../contracts.js';
 import type { OwnerLock } from '../core/owner-lock.js';
 import { generatePinManifest, loadPinManifest, locateEnvironment, PinCheckError, type PinGenerateOptions, type PinManifest } from '../backends/app-server/pin.js';
 import { replacePinManifest, type PinReplacement } from '../backends/app-server/pin-replace.js';
-import { type PreparationComponentName, type PreparationFacts } from './evidence.js';
+import { type PreparationComponentName, type PreparationFacts, type SettingsChange } from './evidence.js';
 import { acquirePreparationLock } from './lock.js';
 import { runPreparation, type PreparationResult, type ReportedFinding, type RunPreparationInput } from './run.js';
 
@@ -70,9 +70,17 @@ export function workerDisplayName(backend: BackendKind): string {
   return backend === 'antigravity' ? 'Antigravity CLI' : 'Vibe';
 }
 
-export function refreshWarning(backend: BackendKind, from: string, to: string | null): string {
+export function refreshWarning(backend: BackendKind, from: string, to: string | null, settings?: SettingsChange): string {
   const target = to ?? 'the installed version';
-  return `${workerDisplayName(backend)} ${from} -> ${target} was refreshed automatically; no-inference preparation passed; hosted quality has not been re-run on this version.`;
+  const base = `${workerDisplayName(backend)} ${from} -> ${target} was refreshed automatically; no-inference preparation passed; hosted quality has not been re-run on this version.`;
+  const added = settings?.added ? ` New ${workerDisplayName(backend)} settings the supervisor neither sets nor checks, so their defaults apply: ${listedNames(settings.added)}.` : '';
+  const removed = settings?.removed ? ` ${workerDisplayName(backend)} settings no longer present: ${listedNames(settings.removed)}.` : '';
+  return `${base}${added}${removed}`;
+}
+
+function listedNames(listed: { names: string[]; total: number }): string {
+  const rest = listed.total - listed.names.length;
+  return `${listed.names.join(', ')}${rest > 0 ? ` and ${rest} more` : ''}`;
 }
 
 export const WORKER_UPDATED_DURING_RUN = 'worker_updated_during_run';

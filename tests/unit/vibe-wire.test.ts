@@ -126,6 +126,14 @@ describe('modules read the pinned facts from the table', () => {
     expect(parseHistoryEntry({ type: 'artifact', id: 'e2' }).kind).toBe('unknown');
   });
 
+  it('drops only the compaction checkpoint, which the parser leaves to the event validator with its own kind', () => {
+    expect(PINNED_WIRE.droppedCheckpointKinds).toEqual(['compaction']);
+    expect(PINNED_WIRE.historyEntryKinds).not.toContain('checkpoint');
+    for (const kind of PINNED_WIRE.droppedCheckpointKinds) {
+      expect(parseHistoryEntry({ type: 'checkpoint', id: 'c1', kind })).toMatchObject({ kind: 'unknown', type: 'checkpoint', checkpointKind: kind });
+    }
+  });
+
   it('recognizes exactly the notification methods the table lists', () => {
     for (const method of PINNED_WIRE.notificationMethods) {
       try {

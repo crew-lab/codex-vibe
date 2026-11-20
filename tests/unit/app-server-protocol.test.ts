@@ -423,6 +423,15 @@ describe('history entries', () => {
     expectParseError(() => parseHistoryEntry('message'));
   });
 
+  it('keeps a checkpoint entry its own kind, and null when the kind is missing or not text', () => {
+    for (const kind of ['compaction', 'model_change', 'agent_change', 'relocation']) {
+      expect(parseHistoryEntry({ type: 'checkpoint', id: `c-${kind}`, turnId: 't', kind, message: null, details: null })).toEqual({ kind: 'unknown', type: 'checkpoint', id: `c-${kind}`, turnId: 't', checkpointKind: kind });
+    }
+    expect(parseHistoryEntry({ type: 'checkpoint', id: 'c' })).toEqual({ kind: 'unknown', type: 'checkpoint', id: 'c', turnId: null, checkpointKind: null });
+    expect(parseHistoryEntry({ type: 'checkpoint', id: 'c', kind: 7 })).toMatchObject({ checkpointKind: null });
+    expect(parseHistoryEntry({ type: 'hologram', id: 'h', kind: 'compaction' })).not.toHaveProperty('checkpointKind');
+  });
+
   it('parses a callback entry and its approval effect', () => {
     const callback = {
       type: 'callback',

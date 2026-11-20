@@ -19,7 +19,8 @@ import {
   type RetryCategory,
   type ServerNotification,
   type SessionState,
-  type Turn
+  type Turn,
+  type UnknownEntry
 } from './protocol.js';
 import { PINNED_WIRE } from './vibe-wire.js';
 
@@ -33,6 +34,9 @@ const MAX_UNKNOWN_METHODS = 32;
 const MAX_POINTER_SEGMENTS = 16;
 const FORBIDDEN_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
 const PENDING_EFFECT_STATUSES = new Set(['running', 'pending', 'blocked', 'queued', 'in_progress']);
+const DROPPED_CHECKPOINT_KINDS = new Set(PINNED_WIRE.droppedCheckpointKinds);
+const MAX_TRACKED_ENTRY_IDS = 20_000;
+const MAX_NAMED_MISSING_ENTRIES = 3;
 
 export type FatalCode =
   | 'unapproved_effect'
@@ -44,7 +48,8 @@ export type FatalCode =
   | 'history_paging_failed'
   | 'session_handoff_unsafe'
   | 'historical_effect_changed'
-  | 'unfinished_effect';
+  | 'unfinished_effect'
+  | 'history_incomplete_after_compaction';
 
 export interface EventFatal {
   code: FatalCode;
@@ -77,6 +82,7 @@ export interface EventCounters {
   skippedPatchOps: number;
   updatesToUnretainedEntries: number;
   ignoredWhileAwaitingResync: number;
+  droppedEntries: number;
   handoffs: number;
 }
 
@@ -115,6 +121,16 @@ function fatalOf(code: FatalCode, message: string, tool: string | null = null, e
 
 function printable(value: string, limit = 80): string {
   return value.replace(/[^\x20-\x7e]/g, '?').slice(0, limit);
+}
+
+function isDroppedEntry(entry: UnknownEntry): boolean {
+  return entry.type === 'checkpoint' && typeof entry.checkpointKind === 'string' && DROPPED_CHECKPOINT_KINDS.has(entry.checkpointKind);
+}
+
+function unknownEntryFatal(entry: UnknownEntry, unknownKindMessage: string): EventFatal {
+  if (entry.type !== 'checkpoint') return fatalOf('unknown_entry_kind', unknownKindMessage, null, entry.id);
+  const subkind = typeof entry.checkpointKind === 'string' ? `a ${printable(entry.checkpointKind)} checkpoint` : 'a checkpoint without a kind';
+  return fatalOf('unknown_entry_kind', `history contains ${subkind}; the supervisor sets the model, agent and workspace itself, so only a ${[...DROPPED_CHECKPOINT_KINDS].join(' or ')} checkpoint is accepted`, null, entry.id);
 }
 
 export function unfinishedEffectFatal(entryIds: readonly string[]): EventFatal {
@@ -223,12 +239,15 @@ export interface HistoryAuditOptions {
   maxMessageChars?: number;
   sessionIds?: readonly string[];
   historical?: ReadonlyMap<string, HistoricalEffect>;
+  entryIdsBeforeCompaction?: ReadonlySet<string> | null;
+  streamedEntryIds?: ReadonlySet<string> | null;
 }
 
 export interface HistoryAudit {
   fatal: EventFatal | null;
   entries: number;
   reasoningDropped: number;
+  droppedEntries: number;
   effects: EffectRecord[];
   pendingEffects: string[];
   finalMessage: FinalMessage | null;
@@ -238,12 +257,13 @@ export function auditHistory(entries: readonly HistoryEntry[], options: HistoryA
   const validator = new EffectValidator(options.mode, options.ledger);
   const secrets = options.secrets ?? [];
   const sessionIds = options.sessionIds === undefined ? undefined : new Set(options.sessionIds);
-  const audit: HistoryAudit = { fatal: null, entries: entries.length, reasoningDropped: 0, effects: [], pendingEffects: [], finalMessage: null };
+  const audit: HistoryAudit = { fatal: null, entries: entries.length, reasoningDropped: 0, droppedEntries: 0, effects: [], pendingEffects: [], finalMessage: null };
   const messages: MessageEntry[] = [];
   for (const entry of entries) {
     if (entry.kind === 'reasoning') { audit.reasoningDropped += 1; continue; }
     if (entry.kind === 'unknown') {
-      audit.fatal = fatalOf('unknown_entry_kind', `history contains an entry of unknown kind ${printable(entry.type)}`, null, entry.id);
+      if (isDroppedEntry(entry)) { audit.droppedEntries += 1; continue; }
+      audit.fatal = unknownEntryFatal(entry, `history contains an entry of unknown kind ${printable(entry.type)}`);
       return audit;
     }
     if (entry.kind === 'message') { messages.push(entry); continue; }
@@ -263,8 +283,24 @@ export function auditHistory(entries: readonly HistoryEntry[], options: HistoryA
     if (inspection.status === 'pending') audit.pendingEffects.push(entry.id);
     else audit.effects.push({ entryId: entry.id, tool: entry.detail.toolName, outcome: inspection.outcome, path: redactedPath(pathOf(entry), secrets) });
   }
+  const missing = missingAfterCompaction(entries, audit.droppedEntries > 0, options);
+  if (missing) { audit.fatal = missing; return audit; }
   audit.finalMessage = finalMessageOf(messages, options.turnId ?? null, secrets, options.maxMessageChars ?? DEFAULT_MAX_MESSAGE_CHARS);
   return audit;
+}
+
+function missingAfterCompaction(entries: readonly HistoryEntry[], compactedInHistory: boolean, options: HistoryAuditOptions): EventFatal | null {
+  const seenLive = options.entryIdsBeforeCompaction !== undefined && options.entryIdsBeforeCompaction !== null;
+  if (!compactedInHistory && !seenLive) return null;
+  const required = compactedInHistory ? options.streamedEntryIds : options.entryIdsBeforeCompaction;
+  if (!required || required.size === 0) {
+    return fatalOf('history_incomplete_after_compaction', 'Vibe compacted the context but the supervisor has no entries streamed before the compaction to check the final history against, so an effect hidden by the compaction cannot be ruled out');
+  }
+  const present = new Set(entries.flatMap((entry) => entry.id === null ? [] : [entry.id]));
+  const missing = [...required].filter((id) => !present.has(id));
+  if (missing.length === 0) return null;
+  const named = missing.slice(0, MAX_NAMED_MISSING_ENTRIES).map((id) => printable(id)).join(', ');
+  return fatalOf('history_incomplete_after_compaction', `the final history lacks ${missing.length} entr${missing.length === 1 ? 'y' : 'ies'} streamed before a compaction checkpoint (${named}); an effect hidden by the compaction cannot be ruled out`, null, missing[0] ?? null);
 }
 
 export interface HistoryPagingOptions {
@@ -296,7 +332,7 @@ export async function collectHistory(fetchPage: (page: PageParams) => Promise<Hi
 
 export async function auditSessionHistory(fetchPage: (page: PageParams) => Promise<HistoryPage>, options: HistoryAuditOptions & HistoryPagingOptions): Promise<HistoryAudit> {
   const collected = await collectHistory(fetchPage, options);
-  if (!collected.ok) return { fatal: collected.fatal, entries: 0, reasoningDropped: 0, effects: [], pendingEffects: [], finalMessage: null };
+  if (!collected.ok) return { fatal: collected.fatal, entries: 0, reasoningDropped: 0, droppedEntries: 0, effects: [], pendingEffects: [], finalMessage: null };
   return auditHistory(collected.entries, options);
 }
 
@@ -477,6 +513,9 @@ export class EventProcessor {
   private readonly historical = new Map<string, HistoricalEffect>();
   private readonly openCallbacks = new Set<string>();
   private readonly reasoningEntries = new Set<string>();
+  private seenEntryIds = new Set<string>();
+  private seenEntryIdsOverflowed = false;
+  private compactedEntryIds: Set<string> | null = null;
   private readonly sessions: string[];
   private readonly messages = new Map<string, MessageEntry>();
   private validator: EffectValidator;
@@ -496,6 +535,7 @@ export class EventProcessor {
     skippedPatchOps: 0,
     updatesToUnretainedEntries: 0,
     ignoredWhileAwaitingResync: 0,
+    droppedEntries: 0,
     handoffs: 0
   };
 
@@ -533,6 +573,14 @@ export class EventProcessor {
 
   get historicalEffects(): ReadonlyMap<string, HistoricalEffect> {
     return this.historical;
+  }
+
+  get entryIdsBeforeCompaction(): ReadonlySet<string> | null {
+    return this.compactedEntryIds;
+  }
+
+  get streamedEntryIds(): ReadonlySet<string> | null {
+    return this.seenEntryIdsOverflowed ? null : this.seenEntryIds;
   }
 
   advanceWatermark(eventId: number): void {
@@ -647,6 +695,9 @@ export class EventProcessor {
     }
     this.currentSessionId = notification.newSessionId;
     this.sessions.push(notification.newSessionId);
+    this.seenEntryIds = new Set();
+    this.seenEntryIdsOverflowed = false;
+    this.compactedEntryIds = null;
     this.lastEventId = notification.eventId;
     this.counters.handoffs += 1;
     result.signals.push({
@@ -748,7 +799,24 @@ export class EventProcessor {
     result.signals.push({ type: 'fatal', fatal });
   }
 
+  private noteEntryId(entry: HistoryEntry): void {
+    if (entry.id === null) return;
+    if (this.seenEntryIds.size >= MAX_TRACKED_ENTRY_IDS && !this.seenEntryIds.has(entry.id)) { this.seenEntryIdsOverflowed = true; return; }
+    this.seenEntryIds.add(entry.id);
+  }
+
+  private noteCompaction(result: EventResult): void {
+    this.counters.droppedEntries += 1;
+    if (this.seenEntryIdsOverflowed) {
+      this.latch(fatalOf('retention_exceeded', `more than ${MAX_TRACKED_ENTRY_IDS} history entries were streamed before a compaction checkpoint, so the final history cannot be checked against them`), result);
+      return;
+    }
+    this.compactedEntryIds = new Set(this.seenEntryIds);
+  }
+
   private ingest(entry: HistoryEntry, raw: Json | undefined, result: EventResult): void {
+    if (entry.kind === 'unknown' && isDroppedEntry(entry)) { this.noteCompaction(result); return; }
+    this.noteEntryId(entry);
     switch (entry.kind) {
       case 'reasoning':
         this.counters.reasoningDropped += 1;
@@ -760,7 +828,7 @@ export class EventProcessor {
         else this.openCallbacks.delete(entry.id);
         return;
       case 'unknown':
-        this.latch(fatalOf('unknown_entry_kind', `history entry of unknown kind ${printable(entry.type)}`, null, entry.id), result);
+        this.latch(unknownEntryFatal(entry, `history entry of unknown kind ${printable(entry.type)}`), result);
         return;
       case 'message':
         if (entry.role === 'assistant') this.retain(raw ?? toWire(entry), result);

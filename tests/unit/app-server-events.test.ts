@@ -227,6 +227,84 @@ describe('EventProcessor notifications and entries', () => {
     expect(target.counters.ignoredWhileAwaitingResync).toBe(1);
   });
 
+  it('drops a compaction checkpoint and its update without a fatal or a model output signal', () => {
+    const target = processor();
+    const checkpoint = { type: 'checkpoint', id: 'checkpoint-compaction-c1', sessionId: SESSION, turnId: 't1', generationStatus: 'in_progress', kind: 'compaction', message: 'Compacting context', details: { trigger: 'automatic', attempt: 1 } };
+    expect(send(target, added(8, checkpoint)).signals).toEqual([]);
+    const settled = send(target, updated(9, 'checkpoint-compaction-c1', [{ op: 'replace', path: '/generationStatus', value: 'completed' }, { op: 'replace', path: '/message', value: 'Context compacted' }]));
+    expect(settled.signals).toEqual([]);
+    expect(target.fatal).toBeNull();
+    expect(target.counters.droppedEntries).toBe(1);
+    expect(target.counters.updatesToUnretainedEntries).toBe(1);
+    expect(types(send(target, added(10, assistant('m1', 'after compaction'))))).toEqual(['model_output']);
+    expect(target.finalMessage()?.text).toBe('after compaction');
+  });
+
+  it('remembers the entries streamed before a compaction checkpoint and requires them in the final history', async () => {
+    const read = 'file_system.read_file';
+    const ledger = ledgerWith(['cb', 'e1', read, 'approve']);
+    const target = processor({}, ledger);
+    send(target, added(8, assistant('m1', 'before')));
+    send(target, added(9, effectWire('e1', read, completed())));
+    expect(target.entryIdsBeforeCompaction).toBeNull();
+    send(target, added(10, { type: 'checkpoint', id: 'cp1', turnId: 't1', kind: 'compaction', message: null, details: null }));
+    send(target, added(11, assistant('m2', 'after')));
+    expect(target.fatal).toBeNull();
+    expect([...target.entryIdsBeforeCompaction!].sort()).toEqual(['e1', 'm1']);
+    const options = { mode: 'review' as const, ledger, turnId: 't1', entryIdsBeforeCompaction: target.entryIdsBeforeCompaction, streamedEntryIds: target.streamedEntryIds };
+    const checkpoint = { type: 'checkpoint', id: 'cp1', turnId: 't1', kind: 'compaction', message: null, details: null };
+    const complete = parseHistoryListResult({ items: [assistant('m1', 'before'), effectWire('e1', read, completed()), checkpoint, assistant('m2', 'after')], nextCursor: null, previousCursor: null });
+    expect((await auditSessionHistory(async () => complete, options)).fatal).toBeNull();
+    const trimmed = parseHistoryListResult({ items: [checkpoint, assistant('m2', 'after')], nextCursor: null, previousCursor: null });
+    expect((await auditSessionHistory(async () => trimmed, options)).fatal).toMatchObject({ code: 'history_incomplete_after_compaction', message: expect.stringContaining('lacks 2 entries') });
+    const trimmedWithoutCheckpoint = parseHistoryListResult({ items: [assistant('m2', 'after')], nextCursor: null, previousCursor: null });
+    expect((await auditSessionHistory(async () => trimmedWithoutCheckpoint, options)).fatal).toMatchObject({ code: 'history_incomplete_after_compaction', message: expect.stringContaining('lacks 2 entries') });
+  });
+
+  it('checks the final history against every streamed entry when the compaction appears only there', async () => {
+    const checkpoint = { type: 'checkpoint', id: 'cp1', turnId: 't1', kind: 'compaction', message: null, details: null };
+    const target = processor();
+    send(target, added(8, assistant('m1', 'before')));
+    expect(target.entryIdsBeforeCompaction).toBeNull();
+    const options = { mode: 'review' as const, ledger: new ApprovalLedger(), turnId: 't1', entryIdsBeforeCompaction: target.entryIdsBeforeCompaction, streamedEntryIds: target.streamedEntryIds };
+    const trimmed = parseHistoryListResult({ items: [checkpoint, assistant('m2', 'after')], nextCursor: null, previousCursor: null });
+    expect((await auditSessionHistory(async () => trimmed, options)).fatal).toMatchObject({ code: 'history_incomplete_after_compaction', entryId: 'm1' });
+    const complete = parseHistoryListResult({ items: [assistant('m1', 'before'), checkpoint, assistant('m2', 'after')], nextCursor: null, previousCursor: null });
+    expect((await auditSessionHistory(async () => complete, options)).fatal).toBeNull();
+  });
+
+  it('fails closed when a compaction is known but nothing was streamed before it to check against', async () => {
+    const checkpoint = { type: 'checkpoint', id: 'cp1', turnId: 't1', kind: 'compaction', message: null, details: null };
+    const live = processor();
+    send(live, added(8, checkpoint));
+    expect(live.entryIdsBeforeCompaction?.size).toBe(0);
+    const history = parseHistoryListResult({ items: [assistant('m2', 'after')], nextCursor: null, previousCursor: null });
+    const base = { mode: 'review' as const, ledger: new ApprovalLedger(), turnId: 't1' };
+    expect((await auditSessionHistory(async () => history, { ...base, entryIdsBeforeCompaction: live.entryIdsBeforeCompaction, streamedEntryIds: live.streamedEntryIds })).fatal).toMatchObject({ code: 'history_incomplete_after_compaction', message: expect.stringContaining('no entries streamed before the compaction') });
+    const onlyInHistory = parseHistoryListResult({ items: [checkpoint, assistant('m2', 'after')], nextCursor: null, previousCursor: null });
+    for (const streamedEntryIds of [new Set<string>(), null, undefined]) {
+      expect((await auditSessionHistory(async () => onlyInHistory, { ...base, streamedEntryIds })).fatal).toMatchObject({ code: 'history_incomplete_after_compaction' });
+    }
+  });
+
+  it('fails closed on every checkpoint other than compaction and names its kind', () => {
+    for (const kind of ['model_change', 'agent_change', 'relocation']) {
+      const target = processor();
+      const result = send(target, added(8, { type: 'checkpoint', id: `checkpoint-${kind}`, sessionId: SESSION, turnId: 't1', generationStatus: 'completed', kind, message: null, details: null }));
+      expect(result.signals, kind).toMatchObject([{ type: 'fatal', fatal: { code: 'unknown_entry_kind', entryId: `checkpoint-${kind}`, message: expect.stringContaining(`a ${kind} checkpoint`) } }]);
+      expect(target.counters.droppedEntries, kind).toBe(0);
+    }
+    const unnamed = processor();
+    expect(send(unnamed, added(8, { type: 'checkpoint', id: 'checkpoint-x', turnId: 't1' })).signals).toMatchObject([{ type: 'fatal', fatal: { code: 'unknown_entry_kind', message: expect.stringContaining('a checkpoint without a kind') } }]);
+  });
+
+  it('still fails closed on a notice entry, which needs a user hook or goal the supervisor never configures', () => {
+    const target = processor();
+    const result = send(target, added(8, { type: 'notice', id: 'hook-notice-1', turnId: null, level: 'info', message: 'Running hooks', detail: { kind: 'hook_run_started', scope: 'pre_tool' } }));
+    expect(result.signals).toMatchObject([{ type: 'fatal', fatal: { code: 'unknown_entry_kind', entryId: 'hook-notice-1' } }]);
+    expect(target.counters.droppedEntries).toBe(0);
+  });
+
   it('drops reasoning entries and keeps no text from them', () => {
     const target = processor();
     send(target, added(8, { type: 'reasoning', id: 'r1', turnId: 't1', text: 'secret thoughts', summary: [] }));
@@ -398,6 +476,20 @@ describe('history audit', () => {
     expect(hidden.fatal).toMatchObject({ code: 'unapproved_effect', entryId: 'e9' });
     const unknown = auditHistory(entries({ type: 'hologram', id: 'h1' }), { mode: 'review', ledger: new ApprovalLedger() });
     expect(unknown.fatal).toMatchObject({ code: 'unknown_entry_kind', entryId: 'h1' });
+  });
+
+  it('drops a checkpoint in a history page and still fails closed on a notice', async () => {
+    const checkpoint = { type: 'checkpoint', id: 'checkpoint-compaction-c1', turnId: 't1', generationStatus: 'completed', kind: 'compaction', message: 'Context compacted', details: { trigger: 'automatic', attempt: 1, summaryLength: 42 } };
+    const page = parseHistoryListResult({ items: [effectWire('e1', read, completed()), checkpoint, assistant('m1', 'final answer')], nextCursor: null, previousCursor: null });
+    const audit = await auditSessionHistory(async () => page, { mode: 'review', ledger: ledgerWith(['cb', 'e1', read, 'approve']), turnId: 't1', streamedEntryIds: new Set(['e1']) });
+    expect(audit.fatal).toBeNull();
+    expect(audit.effects).toEqual([{ entryId: 'e1', tool: read, outcome: 'executed', path: 'src/index.ts' }]);
+    expect(audit.finalMessage).toMatchObject({ entryId: 'm1', text: 'final answer' });
+    expect(audit.droppedEntries).toBe(1);
+    const modelChange = parseHistoryListResult({ items: [{ ...checkpoint, id: 'checkpoint-model-c2', kind: 'model_change' }], nextCursor: null, previousCursor: null });
+    expect((await auditSessionHistory(async () => modelChange, { mode: 'review', ledger: new ApprovalLedger() })).fatal).toMatchObject({ code: 'unknown_entry_kind', entryId: 'checkpoint-model-c2', message: expect.stringContaining('a model_change checkpoint') });
+    const notice = parseHistoryListResult({ items: [{ type: 'notice', id: 'n1', level: 'info', message: 'Hooks completed', detail: { kind: 'hook_run_completed', scope: 'pre_tool' } }], nextCursor: null, previousCursor: null });
+    expect((await auditSessionHistory(async () => notice, { mode: 'review', ledger: new ApprovalLedger() })).fatal).toMatchObject({ code: 'unknown_entry_kind', entryId: 'n1' });
   });
 
   it('falls back to the last non-empty assistant message when none is complete and ignores other turns', () => {

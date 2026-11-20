@@ -401,6 +401,7 @@ export interface UnknownEntry {
   type: string;
   id: string | null;
   turnId: string | null;
+  checkpointKind?: string | null;
 }
 
 export type HistoryEntry = MessageEntry | ReasoningEntry | EffectEntry | CallbackEntry | UnknownEntry;
@@ -477,7 +478,13 @@ export function parseHistoryEntry(raw: unknown, context = 'history entry'): Hist
       };
     }
     default:
-      return { kind: 'unknown', type: record.type, id: typeof record.id === 'string' ? record.id : null, turnId: typeof record.turnId === 'string' ? record.turnId : null };
+      return {
+        kind: 'unknown',
+        type: record.type,
+        id: typeof record.id === 'string' ? record.id : null,
+        turnId: typeof record.turnId === 'string' ? record.turnId : null,
+        ...(record.type === 'checkpoint' ? { checkpointKind: typeof record.kind === 'string' ? record.kind : null } : {})
+      };
   }
 }
 
