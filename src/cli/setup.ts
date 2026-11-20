@@ -220,7 +220,7 @@ export async function runSetup(options: SetupOptions): Promise<void> {
   for (const note of update.notes) say(note);
   reportUpdate(update);
   const resolved = await loadResolvedConfig({ configPath: configPlan.file });
-  const report = await runDoctor(resolved.config, { configPath: resolved.configPath, configSource: resolved.source, dataDir: resolved.dataDir, fingerprint: resolved.fingerprint });
+  const report = await runDoctor(resolved.config, { configPath: resolved.configPath, configSource: resolved.source, dataDir: resolved.dataDir, fingerprint: resolved.fingerprint }, { codex: { skip: true } });
   say(`Provenance: ${JSON.stringify({ executable: report.provenance.executable, application_version: report.provenance.app_version, vibe_version: report.provenance.vibe_version ?? null, config_path: resolved.configPath, config_source: selection.source, config_fingerprint: resolved.fingerprint, data_directory: resolved.dataDir, storage_role: 'configuration-template' })}`);
   const lines = report.checks.map(formatDoctorCheck).filter((line) => !line.startsWith('PASS '));
   say(lines.length ? `Doctor (non-PASS checks only):\n${lines.join('\n')}` : 'Doctor: all checks PASS.');

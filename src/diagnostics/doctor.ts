@@ -5,14 +5,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPrivateDir, expandHome, isPathWithinRoot } from '../security/paths.js';
-import { configFingerprint, executableSearchPath, getDataDir } from '../config/config.js';
+import { configFingerprint, executableSearchPath, getDataDir, resolveConfigSelection } from '../config/config.js';
 import { inspectOwnerLock } from '../core/owner-lock.js';
 import type { BackendKind, SupervisorBackend, SupervisorConfig } from '../contracts.js';
 import { APP_VERSION } from '../version.js';
 import { nodeVersionAtLeast } from '../runtime/node-version.js';
+import { CODEX_TOOL_TIMEOUT_SECONDS, DEFAULT_SERVER_NAME, MAX_TOOL_WAIT_SECONDS, MIN_CODEX_TOOL_TIMEOUT_SECONDS, codexConfigFile, installationLaunch, readCodexServers, type CodexLaunch, type CodexScope } from '../cli/codex.js';
 
-export interface DoctorCheck { name: string; ok: boolean; status?: 'ok' | 'missing' | 'unverified'; version?: string; message: string; stderr_tail?: string }
-export interface DoctorDependencies { backend?: SupervisorBackend }
+export interface DoctorCheck { name: string; ok: boolean; status?: 'ok' | 'missing' | 'unverified' | 'warning'; version?: string; message: string; stderr_tail?: string }
+export interface CodexRegistrationOptions { skip?: boolean; projectPath?: string; launch?: CodexLaunch }
+export interface DoctorDependencies { backend?: SupervisorBackend; codex?: CodexRegistrationOptions }
 export interface DoctorReport { ok: boolean; generatedAt: string; provenance: { backend: BackendKind; backend_experimental: boolean; antigravity_permission_layer?: 'enforced' | 'bypassed'; executable: string; application_entrypoint: string; runtime_module: string; app_version: string; vibe_version?: string; config_path: string; config_source: 'explicit' | 'environment' | 'default'; config_fingerprint: string; data_directory: string; storage_mode: 'selected-template' }; checks: DoctorCheck[] }
 
 export function nodeRuntimeCheck(version: string): DoctorCheck {
@@ -61,7 +63,7 @@ async function probe(executable: string, args: string[], cwd: string, timeoutMs 
 }
 
 export function formatDoctorCheck(check: DoctorCheck): string {
-  return `${check.status === 'unverified' ? 'UNVERIFIED' : check.ok ? 'PASS' : 'CHECK'} ${check.name}: ${check.message}${check.version ? ` (${check.version})` : ''}${check.stderr_tail ? `\n  Diagnostic detail: ${check.stderr_tail}` : ''}`;
+  return `${check.status === 'unverified' ? 'UNVERIFIED' : check.status === 'warning' ? 'WARN' : check.ok ? 'PASS' : 'CHECK'} ${check.name}: ${check.message}${check.version ? ` (${check.version})` : ''}${check.stderr_tail ? `\n  Diagnostic detail: ${check.stderr_tail}` : ''}`;
 }
 
 async function antigravityCheck(config: SupervisorConfig, injected: SupervisorBackend | undefined): Promise<DoctorCheck> {
@@ -90,6 +92,142 @@ async function appServerCheck(config: SupervisorConfig, injected: SupervisorBack
   const reason = typeof capabilities.details?.reason === 'string' ? capabilities.details.reason : 'The app-server pin check failed.';
   const code = typeof capabilities.details?.code === 'string' ? ` [${capabilities.details.code}]` : '';
   return { name: 'vibe', ok: false, message: `${reason}${code}${capabilities.executable ? ` (vibe-app-server: ${capabilities.executable})` : ''}` };
+}
+
+interface RegisteredServer { name: string; file: string; scope: CodexScope; command: unknown; args: string[]; entry: Record<string, unknown> }
+
+function shellArg(value: string): string {
+  return /^[\w@%+=:,./-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+async function canonicalPath(file: string): Promise<string> {
+  try { return await realpath(file); } catch { return path.resolve(file); }
+}
+
+async function samePath(left: string, right: string): Promise<boolean> {
+  return await canonicalPath(left) === await canonicalPath(right);
+}
+
+async function isExecutableFile(file: string): Promise<boolean> {
+  try { await access(file, fsConstants.X_OK); return (await stat(file)).isFile(); } catch { return false; }
+}
+
+function registeredConfigPath(args: string[]): string | undefined {
+  const index = args.indexOf('--config');
+  return index >= 0 ? args[index + 1] : undefined;
+}
+
+function registeredCliPath(server: RegisteredServer): string | undefined {
+  const serveIndex = server.args.indexOf('serve');
+  if (serveIndex > 0) return server.args[serveIndex - 1];
+  return typeof server.command === 'string' ? server.command : undefined;
+}
+
+async function readRegisteredServers(projectPath: string): Promise<{ servers: RegisteredServer[]; problems: string[] }> {
+  const layers: Array<{ scope: CodexScope; file: string }> = [{ scope: 'user', file: codexConfigFile('user', projectPath).file }];
+  const projectFile = codexConfigFile('project', projectPath).file;
+  if (!await samePath(projectFile, layers[0]!.file)) layers.push({ scope: 'project', file: projectFile });
+  const byName = new Map<string, RegisteredServer>();
+  const problems: string[] = [];
+  for (const { scope, file } of layers) {
+    try {
+      const { servers } = await readCodexServers(file);
+      for (const [name, entry] of Object.entries(servers)) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+        const table = entry as Record<string, unknown>;
+        const args = Array.isArray(table.args) && table.args.every((arg) => typeof arg === 'string') ? table.args as string[] : [];
+        byName.set(name, { name, file, scope, command: table.command, args, entry: table });
+      }
+    } catch (error) { problems.push(error instanceof Error ? error.message : String(error)); }
+  }
+  return { servers: [...byName.values()], problems };
+}
+
+interface RegisteredConfig { path: string; via: string; flag?: string }
+
+function registeredServerEnv(server: RegisteredServer): NodeJS.ProcessEnv {
+  const { VIBE_SUPERVISOR_HOME: _codexDoesNotPassIt, ...inherited } = process.env;
+  const declared = server.entry.env;
+  const overrides = declared && typeof declared === 'object' && !Array.isArray(declared)
+    ? Object.fromEntries(Object.entries(declared as Record<string, unknown>).filter((pair): pair is [string, string] => typeof pair[1] === 'string'))
+    : {};
+  return { ...inherited, ...overrides };
+}
+
+function resolveRegisteredConfig(server: RegisteredServer): RegisteredConfig {
+  const flag = registeredConfigPath(server.args);
+  if (flag !== undefined) return { path: path.resolve(flag), via: `--config ${flag}`, flag };
+  const env = registeredServerEnv(server);
+  const selection = resolveConfigSelection(undefined, env);
+  return { path: selection.configPath, via: selection.source === 'environment' ? `no --config and env VIBE_SUPERVISOR_HOME = ${env.VIBE_SUPERVISOR_HOME}, so ${selection.configPath}` : `no --config, so the default configuration ${selection.configPath}` };
+}
+
+async function servesThisConfig(server: RegisteredServer, configPath: string, launch: CodexLaunch): Promise<boolean> {
+  const registered = resolveRegisteredConfig(server);
+  if (!await samePath(registered.path, configPath)) return false;
+  return registered.flag !== undefined || await looksLikeThisSupervisor(server, launch);
+}
+
+const MANAGED_ENTRY_KEYS = new Set(['command', 'args', 'startup_timeout_sec', 'tool_timeout_sec']);
+
+async function looksLikeThisSupervisor(server: RegisteredServer, launch: CodexLaunch): Promise<boolean> {
+  if (server.name === DEFAULT_SERVER_NAME || server.name.startsWith(`${DEFAULT_SERVER_NAME}-`)) return true;
+  const cli = registeredCliPath(server);
+  return cli !== undefined && (path.basename(cli) === DEFAULT_SERVER_NAME || await samePath(cli, launch.cliPath));
+}
+
+function setupCommandFor(config: SupervisorConfig, configPath: string, launch: CodexLaunch, server?: RegisteredServer): string {
+  const workspace = server?.scope === 'project' ? path.dirname(path.dirname(server.file)) : config.allowedWorkspaceRoots[0] ?? '<workspace>';
+  const parts = [launch.executable, launch.cliPath, 'setup', '--workspace', workspace, '--config', configPath];
+  if (server && server.name !== DEFAULT_SERVER_NAME) parts.push('--name', server.name);
+  if (server?.scope === 'project') parts.push('--codex', 'project');
+  return parts.map((part) => part === '<workspace>' ? part : shellArg(part)).join(' ');
+}
+
+async function codexRegistrationChecks(config: SupervisorConfig, configPath: string, options: CodexRegistrationOptions): Promise<DoctorCheck[]> {
+  const launch = options.launch ?? installationLaunch();
+  const { servers, problems } = await readRegisteredServers(options.projectPath ?? process.cwd());
+  const candidates = servers.filter((server) => server.args.includes('serve'));
+  const matching: RegisteredServer[] = [];
+  for (const server of candidates) if (await servesThisConfig(server, configPath, launch)) matching.push(server);
+  const ours: RegisteredServer[] = [];
+  if (matching.length === 0) for (const server of candidates) if (await looksLikeThisSupervisor(server, launch)) ours.push(server);
+  const server = matching[0] ?? ours[0];
+  const problemText = problems.length ? ` Unreadable Codex config: ${problems.join('; ')}; fix it by hand.` : '';
+  if (!server) {
+    return [{ name: 'codex-registration', ok: true, status: 'warning', message: `No Codex MCP registration runs this supervisor's serve with ${configPath}; Codex cannot reach it until one does. Another MCP client may use it without one. To register it for Codex, run: ${setupCommandFor(config, configPath, launch)}${problemText}` }];
+  }
+  const handAdded = Object.keys(server.entry).filter((key) => !MANAGED_ENTRY_KEYS.has(key));
+  const fix = `run: ${setupCommandFor(config, configPath, launch, server)}${handAdded.length ? ` (setup rewrites this entry: check that ${handAdded.join(', ')} is still set afterwards and add it again if not)` : ''}`;
+  const checks: DoctorCheck[] = [{ name: 'codex-registration', ok: problems.length === 0, message: `Codex registers [mcp_servers.${server.name}] in ${server.file} to run this supervisor's serve.${problemText}` }];
+  const command = typeof server.command === 'string' ? server.command : undefined;
+  const cli = registeredCliPath(server);
+  const cliIsCommand = cli !== undefined && cli === command;
+  if (command !== undefined && !path.isAbsolute(command)) checks.push({ name: 'codex-command', ok: false, message: `The registered command ${command} is not an absolute path, so Codex resolves it from its own PATH and doctor cannot verify it; ${fix}` });
+  else if (command === undefined || !await isExecutableFile(command)) checks.push({ name: 'codex-command', ok: false, message: `The registered command ${command ?? '(none)'} does not exist or is not executable, so Codex cannot start the server (a Node upgrade or a moved install does this); ${fix}` });
+  else if (!cliIsCommand && !await samePath(command, launch.executable)) checks.push({ name: 'codex-command', ok: false, message: `The registered command ${command} is not this installation's Node (${launch.executable}); ${fix}` });
+  else checks.push({ name: 'codex-command', ok: true, message: `The registered command ${command} exists${cliIsCommand ? '' : " and is this installation's Node"}.` });
+  if (cli !== undefined && !path.isAbsolute(cli)) checks.push({ name: 'codex-cli', ok: false, message: `The registered CLI ${cli} is not an absolute path, so it depends on the directory and PATH Codex starts in and doctor cannot verify it; ${fix}` });
+  else if (cli === undefined || !await isFile(cli)) checks.push({ name: 'codex-cli', ok: false, message: `The registered CLI ${cli ?? '(none)'} does not exist, so Codex cannot start the server; ${fix}` });
+  else if (!await samePath(cli, launch.cliPath)) checks.push({ name: 'codex-cli', ok: false, message: `The registered CLI ${cli} is not this installation's (${launch.cliPath}); ${fix}` });
+  else checks.push({ name: 'codex-cli', ok: true, message: `The registered CLI ${cli} is this installation's.` });
+  const registeredConfig = resolveRegisteredConfig(server);
+  if (matching.includes(server)) checks.push({ name: 'codex-config', ok: true, message: `The registration passes ${registeredConfig.via}, the configuration doctor checked.` });
+  else {
+    const rerunDoctor = `run doctor with --config ${shellArg(registeredConfig.path)}`;
+    const remedy = server.name === DEFAULT_SERVER_NAME ? `${rerunDoctor} to check that configuration, or, to point it at this one, ${fix}` : `${rerunDoctor} to check that server; a configuration of its own is how a second server stays separate`;
+    checks.push({ name: 'codex-config', ok: false, message: `The registration passes ${registeredConfig.via}, not ${configPath}, which doctor checked; ${remedy}` });
+  }
+  const timeout = server.entry.tool_timeout_sec;
+  const minimum = `at least ${MIN_CODEX_TOOL_TIMEOUT_SECONDS} seconds, since a call can wait up to ${MAX_TOOL_WAIT_SECONDS}; setup writes ${CODEX_TOOL_TIMEOUT_SECONDS}`;
+  if (typeof timeout !== 'number') checks.push({ name: 'codex-tool-timeout', ok: false, message: `The registration sets no tool_timeout_sec, so Codex's default applies and a long wait can time out; it needs ${minimum}. Set it by hand or ${fix}` });
+  else if (timeout < MIN_CODEX_TOOL_TIMEOUT_SECONDS) checks.push({ name: 'codex-tool-timeout', ok: false, message: `The registration sets tool_timeout_sec = ${timeout}; it needs ${minimum}. Set it by hand or ${fix}` });
+  else checks.push({ name: 'codex-tool-timeout', ok: true, message: `tool_timeout_sec = ${timeout} covers the longest wait a call can make (${MAX_TOOL_WAIT_SECONDS} seconds).` });
+  return checks;
+}
+
+async function isFile(file: string): Promise<boolean> {
+  try { return (await stat(file)).isFile(); } catch { return false; }
 }
 
 export async function runDoctor(config: SupervisorConfig, provenance?: { configPath?: string; configSource?: 'explicit' | 'environment' | 'default'; dataDir?: string; fingerprint?: string }, dependencies: DoctorDependencies = {}): Promise<DoctorReport> {
@@ -145,12 +283,12 @@ export async function runDoctor(config: SupervisorConfig, provenance?: { configP
     else checks.push({ name: 'lock', ok: true, message: `The data directory lock belongs to pid ${lock.pid}, which is gone or was reused (stale); the next supervisor start takes it over.` });
   } catch { checks.push({ name: 'lock', ok: false, message: 'The supervisor owner lock could not be inspected.' }); }
   checks.push({ name: 'authentication', ok: true, status: 'unverified', message: 'The Mistral credential is resolved from the environment or the macOS Keychain when a run starts; doctor does not read it.' });
-  checks.push({ name: 'codex-registration', ok: true, status: 'unverified', message: 'Codex desktop visibility is not verified by doctor; run `vibe-supervisor setup` and restart Codex after reviewing its changes.' });
+  const selectedConfig = provenance?.configPath ?? path.join(dataDir, 'config.toml');
+  if (dependencies.codex?.skip !== true) checks.push(...await codexRegistrationChecks(config, selectedConfig, dependencies.codex ?? {}));
   try { await import('@modelcontextprotocol/server'); checks.push({ name: 'mcp-server', ok: true, message: 'The MCP SDK dependency is installed.' }); }
   catch { checks.push({ name: 'mcp-server', ok: false, message: 'The MCP SDK dependency is unavailable.' }); }
   const backendCheckName = config.backend === 'antigravity' ? 'antigravity' : 'vibe';
   const requiredFailure = checks.some((check) => !check.ok && ['node', 'git', backendCheckName, 'workspace-roots', 'data-directory', 'mcp-server'].includes(check.name));
-  const selectedPath = provenance?.configPath ?? path.join(dataDir, 'config.toml');
   const vibeVersion = checks.find((check) => check.name === 'vibe')?.version;
   return { ok: !requiredFailure, generatedAt: new Date().toISOString(), provenance: {
     backend: config.backend ?? 'app-server',
@@ -161,7 +299,7 @@ export async function runDoctor(config: SupervisorConfig, provenance?: { configP
     runtime_module: fileURLToPath(import.meta.url),
     app_version: APP_VERSION,
     ...(vibeVersion ? { vibe_version: vibeVersion } : {}),
-    config_path: selectedPath,
+    config_path: selectedConfig,
     config_source: provenance?.configSource ?? 'default',
     config_fingerprint: provenance?.fingerprint ?? configFingerprint(config),
     data_directory: dataDir,

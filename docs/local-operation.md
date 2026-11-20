@@ -19,6 +19,10 @@ vibe-supervisor setup --workspace "$WORKSPACE" --config "$SUPERVISOR_HOME/agy/co
 
 The first registers as `vibe-supervisor` (Vibe, the default backend). In the second configuration set `backend = "antigravity"` and `[experimental] antigravity = true`, then run `prepare check` with that configuration. Codex lists each server's five tools under its own name; take the `task authorize` command from the readiness reply of the server that will run the task, because a grant is bound to that server's configuration.
 
+### Check the Codex registration
+
+`vibe-supervisor doctor --config "$CONFIG"` reads the Codex registration that loads `$CONFIG` (through its `--config`, else the `VIBE_SUPERVISOR_HOME` in its `env` table, else the default), in `~/.codex/config.toml` or the current directory's `.codex/config.toml`, and checks that its Node (`codex-command`) and CLI (`codex-cli`) exist and are this installation's, that it passes `$CONFIG` (`codex-config`), and that `tool_timeout_sec` covers the longest tool wait, 300 seconds, plus a margin (`codex-tool-timeout`). A Node upgrade, a moved install or a hand-written entry shows up there before a tool call fails or times out. Each failing item names what to run: the `setup` command that rewrites the entry (add again any key you set in it by hand, such as `env`), or, when a server registered under another name loads another configuration, the doctor run that checks that server. Run doctor once per configuration when two servers are registered. No registration is a warning, not a failure.
+
 ### Worker updates
 
 After `vibe update` (to any stable version at or above the minimum, up or down) or an `agy` version update, the next workspace readiness check re-pins Vibe and re-runs the no-inference preparation itself; an agy binary changed under the same version needs `prepare check`. Readiness returns `VSUP_PREPARING` meanwhile; call it again with `wait_seconds: 300` until it is eligible. No hosted re-qualification is needed for a new worker release; each run's export names the version it ran. Run one quality-pack review after an update, because the automatic refresh does not re-run hosted quality.

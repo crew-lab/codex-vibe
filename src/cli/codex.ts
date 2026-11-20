@@ -1,27 +1,75 @@
-import { chmod, copyFile, lstat, open, readFile, rename } from 'node:fs/promises';
+import { chmod, copyFile, lstat, open, readFile, rename, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { parse } from 'smol-toml';
+import { editStartSchema, reviewStartSchema, statusSchema } from '../mcp/schemas.js';
 import { createPrivateDir } from '../security/paths.js';
 import { fail } from './fail.js';
 
 export type CodexScope = 'user' | 'project';
 export interface CodexPlan { file: string; baseDir: string; block: string; changed: boolean; original: string; updated: string }
+export interface CodexConfigFile { file: string; baseDir: string }
+export interface CodexServers { original: string; servers: Record<string, unknown> }
+export interface CodexLaunch { executable: string; cliPath: string }
 
-const CODEX_TOOL_TIMEOUT_SECONDS = 600;
+export const CODEX_TOOL_TIMEOUT_SECONDS = 600;
 const CODEX_STARTUP_TIMEOUT_SECONDS = 30;
+const TOOL_TIMEOUT_MARGIN_SECONDS = 60;
 export const DEFAULT_SERVER_NAME = 'vibe-supervisor';
 const SERVER_NAME = /^[A-Za-z0-9_-]{1,64}$/;
+
+function longestWaitSeconds(): number {
+  const limits = [reviewStartSchema, editStartSchema, statusSchema].map((schema) => schema.shape.wait_seconds.unwrap().maxValue);
+  if (limits.some((limit) => limit === null || !Number.isFinite(limit))) throw new Error('A tool wait_seconds schema has no finite maximum.');
+  return Math.max(...(limits as number[]));
+}
+
+export const MAX_TOOL_WAIT_SECONDS = longestWaitSeconds();
+export const MIN_CODEX_TOOL_TIMEOUT_SECONDS = MAX_TOOL_WAIT_SECONDS + TOOL_TIMEOUT_MARGIN_SECONDS;
+
+export class CodexConfigProblem extends Error {}
 
 function quoteToml(value: string): string { return JSON.stringify(value); }
 
 async function assertSafeFile(file: string): Promise<void> {
-  try { const info = await lstat(file); if (info.isSymbolicLink() || !info.isFile()) fail(`Refusing unsafe Codex config path: ${file}`, 2); }
+  try { const info = await lstat(file); if (info.isSymbolicLink() || !info.isFile()) throw new CodexConfigProblem(`Refusing unsafe Codex config path: ${file}`); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
 }
 
 export function isServerName(value: string): boolean {
   return SERVER_NAME.test(value);
+}
+
+export function codexConfigFile(scope: CodexScope, projectPath: string): CodexConfigFile {
+  const baseDir = scope === 'user' ? path.join(process.env.HOME ?? homedir(), '.codex') : path.join(path.resolve(projectPath), '.codex');
+  return { baseDir, file: path.join(baseDir, 'config.toml') };
+}
+
+export function installationLaunch(): CodexLaunch {
+  return { executable: process.execPath, cliPath: path.resolve(process.argv[1] ?? 'dist/cli.js') };
+}
+
+export function serveArgs(cliPath: string, isolated: boolean, configPath?: string): string[] {
+  return [cliPath, 'serve', '--stdio', ...(isolated ? ['--isolated'] : []), ...(configPath ? ['--config', path.resolve(configPath)] : [])];
+}
+
+async function assertReadableFile(file: string): Promise<void> {
+  try { if (!(await stat(file)).isFile()) throw new CodexConfigProblem(`Codex config path is not a regular file: ${file}`); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+}
+
+export async function readCodexServers(file: string): Promise<CodexServers> {
+  await assertReadableFile(file);
+  let original = '';
+  try { original = await readFile(file, 'utf8'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  let parsedExisting: Record<string, unknown> = {};
+  if (original.trim()) {
+    try { parsedExisting = parse(original) as Record<string, unknown>; }
+    catch (error) { throw new CodexConfigProblem(`Codex config ${file} is not valid TOML (${(error as Error).message.split('\n')[0]})`); }
+  }
+  const servers = parsedExisting.mcp_servers;
+  if (servers !== undefined && (!servers || typeof servers !== 'object' || Array.isArray(servers))) throw new CodexConfigProblem(`Codex config ${file}: mcp_servers must be a table`);
+  return { original, servers: (servers ?? {}) as Record<string, unknown> };
 }
 
 export async function planCodexConfig(scope: CodexScope, projectPath: string, isolated: boolean, configPath?: string, serverName: string = DEFAULT_SERVER_NAME): Promise<CodexPlan> {
@@ -30,23 +78,15 @@ export async function planCodexConfig(scope: CodexScope, projectPath: string, is
     const info = await lstat(path.resolve(projectPath));
     if (info.isSymbolicLink() || !info.isDirectory()) fail('Project path must be an existing real directory.', 2);
   }
-  const baseDir = scope === 'user' ? path.join(process.env.HOME ?? homedir(), '.codex') : path.join(path.resolve(projectPath), '.codex');
-  const file = path.join(baseDir, 'config.toml');
-  await assertSafeFile(file);
-  const executable = process.execPath;
-  const cliPath = path.resolve(process.argv[1] ?? 'dist/cli.js');
-  const launchArgs = [cliPath, 'serve', '--stdio', ...(isolated ? ['--isolated'] : []), ...(configPath ? ['--config', path.resolve(configPath)] : [])];
+  const { baseDir, file } = codexConfigFile(scope, projectPath);
+  const { executable, cliPath } = installationLaunch();
+  const launchArgs = serveArgs(cliPath, isolated, configPath);
   const block = `[mcp_servers.${serverName}]\ncommand = ${quoteToml(executable)}\nargs = [${launchArgs.map(quoteToml).join(', ')}]\nstartup_timeout_sec = ${CODEX_STARTUP_TIMEOUT_SECONDS}\ntool_timeout_sec = ${CODEX_TOOL_TIMEOUT_SECONDS}\n`;
-  let original = '';
-  try { original = await readFile(file, 'utf8'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-  let parsedExisting: Record<string, unknown> = {};
-  if (original.trim()) {
-    try { parsedExisting = parse(original) as Record<string, unknown>; }
-    catch (error) { fail(`Codex config ${file} is not valid TOML (${(error as Error).message.split('\n')[0]}); no changes were made.`, 2); }
-  }
-  const servers = parsedExisting.mcp_servers;
-  if (servers !== undefined && (!servers || typeof servers !== 'object' || Array.isArray(servers))) fail('Codex config mcp_servers must be a table; no changes were made.', 2);
-  const existingEntry = servers && typeof servers === 'object' ? (servers as Record<string, unknown>)[serverName] : undefined;
+  let read: CodexServers;
+  try { await assertSafeFile(file); read = await readCodexServers(file); }
+  catch (error) { if (error instanceof CodexConfigProblem) fail(`${error.message}; no changes were made.`, 2); throw error; }
+  const { original, servers } = read;
+  const existingEntry = Object.hasOwn(servers, serverName) ? servers[serverName] : undefined;
   const target = { command: executable, args: launchArgs, startup_timeout_sec: CODEX_STARTUP_TIMEOUT_SECONDS, tool_timeout_sec: CODEX_TOOL_TIMEOUT_SECONDS };
   if (existingEntry && typeof existingEntry === 'object' && !Array.isArray(existingEntry)) {
     const entry = existingEntry as Record<string, unknown>;
@@ -75,7 +115,8 @@ export async function planCodexConfig(scope: CodexScope, projectPath: string, is
 
 export async function applyCodexPlan(plan: CodexPlan): Promise<{ backup?: string }> {
   await createPrivateDir(plan.baseDir);
-  await assertSafeFile(plan.file);
+  try { await assertSafeFile(plan.file); }
+  catch (error) { if (error instanceof CodexConfigProblem) fail(error.message, 2); throw error; }
   let backup: string | undefined;
   if (plan.original) {
     backup = `${plan.file}.bak-${new Date().toISOString().replace(/[:.]/g, '-')}`;
