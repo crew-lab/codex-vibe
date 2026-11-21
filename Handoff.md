@@ -77,6 +77,8 @@ The order of work and the failure behind each step are in the [development strat
 
 **Partial trial on `70b2c16` (2026-11-21).** Clean release verification passed 2,012 tests with one skip across 134 files; the installed candidate passed preparation on Vibe 3.1.3. The four existing quality-pack tasks passed (reviews 4/4 and 9/9, edits 14/14 and 17/17). Both reviews read exactly their three named files. The earlier `next-6` wire error code was not found on this machine. The hard-edit sets and native Codex checks remain open. [Records](research/evidence/vibe-313-main-70b2c16-20261121/README.md)
 
+**Antigravity 1.5.11 (2026-11-21).** Manual no-inference preparation passed with the documented skip-permissions configuration. Strict mode still failed to execute the allowed control read. Hosted testing was blocked at readiness by a missing Google API key; automatic refresh on upgrade was not tested. [Evidence](research/evidence/agy-1511-preparation-20261121/README.md)
+
 ### On the worker machine, on a build from the current `main`
 
 Record every run with `quality-pack.mjs record` and commit the records under `research/evidence/`. A new build needs its `prepare check --kit` once.
